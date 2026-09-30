@@ -19,7 +19,7 @@ FONT_REGULAR = ["NotoSans-Regular"]
 FONT_MEDIUM = ["NotoSans-Medium"]
 FONT_ITALIC = ["NotoSans-Italic"]
 
-ATTRIBUTION = "© OpenStreetMap contributors"
+ATTRIBUTION = "© OpenMapTiles © OpenStreetMap contributors"
 
 PALETTES = {
     "light": {

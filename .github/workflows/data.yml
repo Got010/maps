@@ -53,5 +53,5 @@ jobs:
             pipeline/data/out/basemap-nyc.pmtiles \
             pipeline/data/out/basemap-nyc.pmtiles.sha256 \
             --title "Map data $(date -u +%Y-%m-%d)" \
-            --notes "NYC basemap built from the Geofabrik New York extract. Download basemap-nyc.pmtiles on your phone, then open Southbound and tap Import map file. Map data © OpenStreetMap contributors, ODbL." \
+            --notes "NYC basemap built from the Geofabrik New York extract. Download basemap-nyc.pmtiles on your phone, then open Southbound and tap Import map file. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL." \
             --prerelease --latest=false
