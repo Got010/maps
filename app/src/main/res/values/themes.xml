@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Southbound" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Matches the light map background so launch has no white flash. -->
+        <item name="android:windowBackground">@color/map_background</item>
+    </style>
+</resources>
