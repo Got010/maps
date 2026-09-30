@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "name": "NYS Maps light",
+  "name": "Southbound light",
   "metadata": {
     "generated-by": "pipeline/styles/build_styles.py"
   },

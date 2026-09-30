@@ -1,10 +1,10 @@
 plugins {
-    alias(libs.plugins.nysmaps.android.library)
-    alias(libs.plugins.nysmaps.android.compose)
+    alias(libs.plugins.southbound.android.library)
+    alias(libs.plugins.southbound.android.compose)
 }
 
 android {
-    namespace = "org.nysmaps.core.map"
+    namespace = "app.southbound.core.map"
     // Bundle styles/ (light.json, dark.json, glyphs/) as assets.
     sourceSets.getByName("main").assets.srcDir(rootProject.file("styles"))
 }

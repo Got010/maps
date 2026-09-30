@@ -15,7 +15,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "nys-maps"
+rootProject.name = "southbound"
 
 include(":app")
 
