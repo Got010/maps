@@ -1,0 +1,19 @@
+# Gradle and Android
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Pipeline outputs and downloads
+pipeline/data/
+*.pmtiles
+*.osm.pbf
+
+.DS_Store
