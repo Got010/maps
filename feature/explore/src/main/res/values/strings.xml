@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="explore_my_location">Center on my location</string>
+    <string name="explore_finding_location">Finding your location…</string>
+    <string name="explore_location_needed">Allow precise location to see where you are</string>
+    <string name="explore_location_allow">Allow</string>
+    <string name="explore_location_settings">Open settings</string>
+    <string name="explore_pack_missing_title">NYC map not installed</string>
+    <string name="explore_pack_invalid_title">NYC map file is damaged</string>
+    <string name="explore_pack_body">Copy basemap-nyc.pmtiles to this path, then tap Check again:</string>
+    <string name="explore_pack_retry">Check again</string>
+</resources>
