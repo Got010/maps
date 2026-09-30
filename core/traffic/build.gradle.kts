@@ -1,8 +1,8 @@
 // Empty until its phase in HANDOFF.md.
 plugins {
-    alias(libs.plugins.nysmaps.android.library)
+    alias(libs.plugins.southbound.android.library)
 }
 
 android {
-    namespace = "org.nysmaps.core.traffic"
+    namespace = "app.southbound.core.traffic"
 }

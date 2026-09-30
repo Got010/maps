@@ -32,6 +32,6 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 # Convention plugins from build-logic
-nysmaps-android-application = { id = "nysmaps.android.application" }
-nysmaps-android-library = { id = "nysmaps.android.library" }
-nysmaps-android-compose = { id = "nysmaps.android.compose" }
+southbound-android-application = { id = "southbound.android.application" }
+southbound-android-library = { id = "southbound.android.library" }
+southbound-android-compose = { id = "southbound.android.compose" }

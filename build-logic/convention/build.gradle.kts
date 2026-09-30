@@ -16,15 +16,15 @@ dependencies {
 gradlePlugin {
     plugins {
         register("androidApplication") {
-            id = "nysmaps.android.application"
+            id = "southbound.android.application"
             implementationClass = "AndroidApplicationConventionPlugin"
         }
         register("androidLibrary") {
-            id = "nysmaps.android.library"
+            id = "southbound.android.library"
             implementationClass = "AndroidLibraryConventionPlugin"
         }
         register("androidCompose") {
-            id = "nysmaps.android.compose"
+            id = "southbound.android.compose"
             implementationClass = "AndroidComposeConventionPlugin"
         }
     }

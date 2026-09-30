@@ -358,7 +358,7 @@ def build(name, p):
     layers += label_layers(p)
     return {
         "version": 8,
-        "name": f"NYS Maps {name}",
+        "name": f"Southbound {name}",
         "metadata": {"generated-by": "pipeline/styles/build_styles.py"},
         "sources": {SOURCE: {"type": "vector", "url": "{{PMTILES_URL}}",
                              "attribution": ATTRIBUTION}},

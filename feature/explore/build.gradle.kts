@@ -1,10 +1,10 @@
 plugins {
-    alias(libs.plugins.nysmaps.android.library)
-    alias(libs.plugins.nysmaps.android.compose)
+    alias(libs.plugins.southbound.android.library)
+    alias(libs.plugins.southbound.android.compose)
 }
 
 android {
-    namespace = "org.nysmaps.feature.explore"
+    namespace = "app.southbound.feature.explore"
 }
 
 dependencies {
