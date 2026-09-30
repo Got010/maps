@@ -8,7 +8,7 @@
     "openmaptiles": {
       "type": "vector",
       "url": "{{PMTILES_URL}}",
-      "attribution": "\u00a9 OpenStreetMap contributors"
+      "attribution": "\u00a9 OpenMapTiles \u00a9 OpenStreetMap contributors"
     }
   },
   "glyphs": "asset://glyphs/{fontstack}/{range}.pbf",

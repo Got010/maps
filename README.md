@@ -135,6 +135,8 @@ Don't edit the JSON by hand; CI fails if the JSON doesn't match the script.
 
 ## Third-party data
 
-- Map data © OpenStreetMap contributors, ODbL.
+- Map data © OpenStreetMap contributors, ODbL. Tiles use the OpenMapTiles
+  schema, whose license requires the visible credit
+  "© OpenMapTiles © OpenStreetMap contributors"; the styles carry it.
 - Noto Sans glyphs in `styles/glyphs`, SIL Open Font License 1.1, taken from
   [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets).
