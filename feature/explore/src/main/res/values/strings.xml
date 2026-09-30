@@ -7,6 +7,11 @@
     <string name="explore_location_settings">Open settings</string>
     <string name="explore_pack_missing_title">NYC map not installed</string>
     <string name="explore_pack_invalid_title">NYC map file is damaged</string>
-    <string name="explore_pack_body">Copy basemap-nyc.pmtiles here with adb push, then tap Check again:</string>
+    <string name="explore_pack_body">Download basemap-nyc.pmtiles from the Southbound map data release on GitHub, then import it here. The map stays on this phone.</string>
+    <string name="explore_import">Import map file</string>
+    <string name="explore_importing">Importing map…</string>
+    <string name="explore_import_not_a_map">That file isn\'t a Southbound map. Pick basemap-nyc.pmtiles.</string>
+    <string name="explore_import_failed">Import failed.</string>
+    <string name="explore_pack_adb">Or copy it here with adb, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>
 </resources>

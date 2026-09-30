@@ -1,6 +1,8 @@
 package app.southbound.core.packs
 
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 
 /**
  * Where data packs live on the device. MapLibre reads PMTiles through
@@ -28,8 +30,31 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         return PackStatus.Missing(candidates.last())
     }
 
+    /**
+     * Copies a basemap from [source] (e.g. a file the user picked) into private
+     * storage. The copy lands under a temp name and is renamed only once its
+     * header checks out, so a failed or cancelled import never replaces a
+     * working pack.
+     *
+     * @throws NotAPmtilesFileException if [source] isn't a PMTiles v3 archive.
+     */
+    fun importBasemap(region: String, source: InputStream): PackStatus.Installed {
+        packsDir.mkdirs()
+        val target = File(packsDir, basemapFileName(region))
+        val temp = File(packsDir, "${target.name}.part")
+        try {
+            source.use { input -> temp.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) } }
+            if (!hasPmtilesV3Header(temp)) throw NotAPmtilesFileException()
+            if (!temp.renameTo(target)) throw IOException("Couldn't move the map into place")
+            return PackStatus.Installed(target)
+        } finally {
+            temp.delete()
+        }
+    }
+
     companion object {
         const val PACKS_DIR = "packs"
+        private const val COPY_BUFFER_BYTES = 1 shl 20
 
         fun basemapFileName(region: String): String = "basemap-$region.pmtiles"
 
@@ -46,6 +71,8 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         }
     }
 }
+
+class NotAPmtilesFileException : IOException("Not a PMTiles map file")
 
 sealed interface PackStatus {
     val file: File

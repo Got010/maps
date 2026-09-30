@@ -2,6 +2,7 @@ package app.southbound.core.packs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -76,5 +77,37 @@ class PackStoreTest {
         val store = store()
         write(store.importPacksDir!!, "PMT".toByteArray())
         assertTrue(store.basemapStatus("nyc") is PackStatus.Invalid)
+    }
+
+    @Test
+    fun importCopiesIntoPrivateStorage() {
+        val store = store()
+        val status = store.importBasemap("nyc", validPack.inputStream())
+        assertEquals(store.packsDir.resolve("basemap-nyc.pmtiles"), status.file)
+        assertTrue(validPack.contentEquals(status.file.readBytes()))
+        assertEquals(status, store.basemapStatus("nyc"))
+        assertEquals(listOf("basemap-nyc.pmtiles"), store.packsDir.list()!!.toList())
+    }
+
+    @Test
+    fun importReplacesAnOlderPack() {
+        val store = store()
+        write(store.packsDir, validPack)
+        val newer = validPack + ByteArray(10)
+        store.importBasemap("nyc", newer.inputStream())
+        assertTrue(newer.contentEquals(store.packsDir.resolve("basemap-nyc.pmtiles").readBytes()))
+    }
+
+    @Test
+    fun importRejectsNonPmtilesAndKeepsExistingPack() {
+        val store = store()
+        write(store.packsDir, validPack)
+        try {
+            store.importBasemap("nyc", "<html>not a map</html>".byteInputStream())
+            fail("expected NotAPmtilesFileException")
+        } catch (expected: NotAPmtilesFileException) {
+        }
+        assertTrue(validPack.contentEquals(store.packsDir.resolve("basemap-nyc.pmtiles").readBytes()))
+        assertEquals(listOf("basemap-nyc.pmtiles"), store.packsDir.list()!!.toList())
     }
 }
