@@ -19,6 +19,9 @@ The app is named Southbound. Application ID and Kotlin package: `app.southbound`
   publishes the APK. versionCode comes from the tag, so tags must only go up.
 - Anything a user does on the phone must work on the signed release build,
   not only debug builds (no `run-as` workflows).
+- The owner has no computer, only a phone with Termux and the GitHub app.
+  Every step they take (building packs, loading them, releasing) must work from
+  the phone: heavy work runs in GitHub Actions, packs load via in-app import.
 
 ## Stack
 - MapLibre Native Android; basemap via pmtiles://file:// from app files storage.

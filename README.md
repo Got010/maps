@@ -9,35 +9,34 @@ pack, in light and dark styles, with a GPS location puck.
 
 ## Install
 
+Everything below works from a phone. No computer needed.
+
 Point [Obtainium](https://github.com/ImranR98/Obtainium) at this repo, or
 download `southbound-<version>.apk` from the latest release. Each release also
 has a `.sha256` file.
 
-## Load the NYC map pack
+## Load the NYC map
 
-The app ships without map data. Build the pack (below), plug the phone in with
-USB debugging on, open Southbound once, then run:
+The app ships without map data.
 
-```sh
-make -C pipeline push-nyc
-```
+1. On GitHub, open the repo's **Releases** and find the newest **Map data**
+   pre-release. If there isn't one, go to **Actions > Map data > Run workflow**
+   and wait about 15 minutes.
+2. Download `basemap-nyc.pmtiles` from it in your phone's browser.
+3. Open Southbound, tap **Import map file** and pick the download. The app copies
+   it into its private storage; you can delete the download afterwards.
 
-This runs `adb push` into the app's import folder,
-`/sdcard/Android/data/app.southbound/files/packs/`. The release APK can read
-that folder and other apps can't. By hand:
+The Map data workflow also runs on the 2nd of every month. For now the Import
+button only appears while no map is installed; swapping in a newer map from
+inside the app comes with the Phase 3 pack manager.
 
-```sh
-adb shell mkdir -p /sdcard/Android/data/app.southbound/files/packs
-adb push pipeline/data/out/basemap-nyc.pmtiles /sdcard/Android/data/app.southbound/files/packs/
-```
+With a computer and adb you can instead push the pack straight to the app's
+import folder: `make -C pipeline push-nyc`.
 
-The app checks for the pack every time it comes to the foreground. Until one is
-there, it shows the exact path it expects. Phase 3's pack manager adds
-download and import from a file on the phone.
+## Build the NYC basemap pack yourself
 
-## Build the NYC basemap pack
-
-You need Docker, curl and about 3 GB free disk.
+The Map data workflow does this on GitHub. To run it locally you need Docker,
+curl and about 3 GB free disk.
 
 ```sh
 make -C pipeline nyc
@@ -52,38 +51,45 @@ the end. Set `PLANETILER_HEAP=8g` if Planetiler runs out of memory.
 
 ## Releasing
 
-Push a tag and GitHub Actions does the rest:
-
-```sh
-git tag v0.1.0 && git push origin v0.1.0
-```
-
+Push a tag (`git tag v0.1.0 && git push origin v0.1.0`) and GitHub Actions
+does the rest.
 `.github/workflows/release.yml` runs the tests, builds the release APK signed
 with your key, verifies the signature and publishes
 `southbound-0.1.0.apk` plus its checksum as a GitHub release. Tags must look
 like `v1.2.3` (each part 0-99). The version code is derived from the tag, so each
 new tag must be higher than the last or phones will refuse the update.
 
-### One-time signing setup
+### One-time signing setup (in Termux)
 
 Android only installs an update signed with the same key as the installed app.
-**If you lose this key, every user has to uninstall and reinstall.** Back it up
-somewhere outside GitHub.
+**If you lose this key, every user has to uninstall and reinstall.** Keep a
+backup somewhere other than GitHub and this phone, such as a password manager.
 
 ```sh
+pkg install openjdk-17
+termux-setup-storage          # lets Termux save to your phone's shared storage
 keytool -genkeypair -v -keystore southbound-release.jks -alias southbound \
-  -keyalg RSA -keysize 4096 -validity 36500
-base64 -w0 southbound-release.jks   # on macOS: base64 -i southbound-release.jks
+  -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Southbound"
+cp southbound-release.jks ~/storage/shared/Download/   # the backup copy
+base64 -w0 southbound-release.jks > ~/storage/shared/Download/southbound-key.txt
 ```
 
-Add these in GitHub under Settings > Secrets and variables > Actions:
+`keytool` asks for a password twice; use the same one for both secrets below.
+Open `southbound-key.txt` in a text editor, copy all of it, then in the GitHub
+app or website go to the repo's Settings > Secrets and variables > Actions and add:
 
 | Secret | Value |
 | --- | --- |
-| `SOUTHBOUND_KEYSTORE_BASE64` | The base64 output above |
-| `SOUTHBOUND_KEYSTORE_PASSWORD` | Keystore password |
+| `SOUTHBOUND_KEYSTORE_BASE64` | The contents of `southbound-key.txt` |
+| `SOUTHBOUND_KEYSTORE_PASSWORD` | The password you gave keytool |
 | `SOUTHBOUND_KEY_ALIAS` | `southbound` |
-| `SOUTHBOUND_KEY_PASSWORD` | Key password |
+| `SOUTHBOUND_KEY_PASSWORD` | The same password |
+
+Then delete `southbound-key.txt`; the `.jks` backup is what matters.
+
+To release, create a tag from the repo's Releases page (Draft a new release >
+Choose a tag > type `v0.1.0` > Create new tag > Publish), or push one with git.
+The Release workflow builds and attaches the APK within a few minutes.
 
 ## Developing
 
@@ -118,7 +124,7 @@ Don't edit the JSON by hand; CI fails if the JSON doesn't match the script.
 
 ## Phase 0 exit test
 
-1. Install the release APK and load the NYC pack as above.
+1. Install the release APK and import the NYC map as above.
 2. On the phone, open Settings > Apps > Southbound > Permissions and turn
    **Network** off (GrapheneOS). On other Android builds, use airplane mode.
 3. Open the app and grant precise location.
