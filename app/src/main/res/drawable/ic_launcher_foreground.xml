@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Map pin centered in the 72dp safe zone of a 108dp adaptive icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,30c-9.94,0 -18,8.06 -18,18c0,13.5 18,32 18,32s18,-18.5 18,-32c0,-9.94 -8.06,-18 -18,-18zM54,55a7,7 0,1 1,0 -14a7,7 0,1 1,0 14z" />
+</vector>
