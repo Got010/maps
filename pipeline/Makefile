@@ -1,13 +1,17 @@
 # Data pipeline. Run from the repo root as: make -C pipeline <target>
 # Outputs land in pipeline/data/out (git-ignored).
 
-.PHONY: nyc state release tiles-nyc styles glyphs clean
+.PHONY: nyc state release tiles-nyc push-nyc styles glyphs clean
 
 ## nyc: every NYC pack built so far (Phase 0: basemap only)
 nyc: tiles-nyc
 
 tiles-nyc:
 	tiles/build.sh nyc
+
+## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone (debug build)
+push-nyc:
+	./push-pack.sh data/out/basemap-nyc.pmtiles
 
 ## state: statewide regional packs (Phase 3)
 state:
