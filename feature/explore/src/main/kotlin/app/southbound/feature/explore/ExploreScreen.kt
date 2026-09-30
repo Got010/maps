@@ -12,6 +12,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -24,8 +25,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,9 +56,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
+import app.southbound.core.packs.NotAPmtilesFileException
 import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 private const val REGION = "nyc"
 
@@ -72,7 +81,12 @@ fun ExploreScreen() {
 
     when (val status = packStatus) {
         is PackStatus.Installed -> MapWithLocation(status.file)
-        else -> MissingPack(status, onRetry = { packStatus = packStore.basemapStatus(REGION) })
+        else -> MissingPack(
+            status = status,
+            packStore = packStore,
+            onImported = { packStatus = it },
+            onRetry = { packStatus = packStore.basemapStatus(REGION) },
+        )
     }
 }
 
@@ -193,7 +207,41 @@ private fun LocationPermissionPrompt(settingsOnly: Boolean, onAllow: () -> Unit)
 }
 
 @Composable
-private fun MissingPack(status: PackStatus, onRetry: () -> Unit) {
+private fun MissingPack(
+    status: PackStatus,
+    packStore: PackStore,
+    onImported: (PackStatus) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val notAMap = stringResource(R.string.explore_import_not_a_map)
+    val failed = stringResource(R.string.explore_import_failed)
+
+    // The system file picker: no storage permission, and works on release builds.
+    val picker = rememberLauncherForActivityResult(OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        importing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: throw IOException("Couldn't open the file")
+                    packStore.importBasemap(REGION, input)
+                }
+            }
+            importing = false
+            result
+                .onSuccess(onImported)
+                .onFailure { e ->
+                    error = if (e is NotAPmtilesFileException) notAMap else "$failed ${e.message.orEmpty()}"
+                }
+        }
+    }
+
     Surface(Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -212,12 +260,30 @@ private fun MissingPack(status: PackStatus, onRetry: () -> Unit) {
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(stringResource(R.string.explore_pack_body), style = MaterialTheme.typography.bodyLarge)
+            Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !importing) {
+                Text(stringResource(R.string.explore_import))
+            }
+            if (importing) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(stringResource(R.string.explore_importing))
+                }
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Text(
+                stringResource(R.string.explore_pack_adb),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 status.file.absolutePath,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onRetry) { Text(stringResource(R.string.explore_pack_retry)) }
+            TextButton(onClick = onRetry, enabled = !importing) {
+                Text(stringResource(R.string.explore_pack_retry))
+            }
         }
     }
 }
