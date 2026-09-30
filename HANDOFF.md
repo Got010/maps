@@ -1,0 +1,333 @@
+# Private NYS Maps - Claude Code Handoff
+
+Last updated: 2026-09-29
+
+## Overview
+
+This is a privacy-first Android maps app for all of New York State. Maps, search, driving, walking and cycling navigation, and NYC transit routing all run on-device, and live traffic is an opt-in layer. It ships as an APK on GitHub and runs on GrapheneOS with no Google Play Services.
+
+**Goals**
+
+- Google Maps-grade UI and navigation for NYS: a fast vector map, search, and turn-by-turn directions with voice.
+- Every core feature works offline once the data packs are installed.
+- NYC transit covers subway, bus, LIRR and Metro-North, with on-device trip planning and realtime arrivals.
+- Live traffic and incidents come from public feeds, fetched in bulk so no server learns where you are.
+
+**Non-goals for v1**
+
+- Reviews, photos, popular times and Street View. No open source for these exists.
+- Other states, iOS, accounts and cloud sync.
+
+**Privacy rules.** These are hard constraints and go into CLAUDE.md verbatim.
+
+1. No Google Play Services, Firebase, analytics or crash-reporting SDKs.
+2. No request ever carries your location, search text or route. The one exception is opt-in TomTom traffic, which is off by default.
+3. Live data is fetched as whole-region feeds, and all filtering happens on the phone.
+4. Every network feature has its own toggle. Once packs are installed, the app works with Android's Network permission revoked.
+5. History and saved places stay on-device, encrypted at rest.
+
+## Tech stack and architecture
+
+The app is a Kotlin and Compose shell around four proven open-source engines, each reading a data pack from local storage. Two open Android projects, [Vialix](https://github.com/igalmarino/vialix) and [NavMaster](https://github.com/francescobuzle-a11y/navmaster), already run this exact MapLibre + Valhalla + Ferrostar combination with PMTiles, so the integration path is known.
+
+| Layer | Choice | Notes |
+| --- | --- | --- |
+| Language and UI | Kotlin, Jetpack Compose, Material 3 | arm64 only, minSdk 31 |
+| Map rendering | [MapLibre Native Android](https://maplibre.org/maplibre-native/android/examples/data/PMTiles/) | Reads PMTiles via `pmtiles://file://` since 11.7. `pmtiles://asset://` is not supported, so packs live in app files storage |
+| Basemap | PMTiles built by Planetiler from OSM | One file per region, no tile server |
+| Routing | Valhalla on-device via valhalla-mobile | Car, bike and foot costing, fully offline |
+| Navigation | [Ferrostar](https://stadiamaps.github.io/ferrostar/android-getting-started.html) | Guidance state, rerouting, timing of spoken instructions |
+| Voice | System TTS plus a bundled Piper voice | See Voice guidance |
+| Search | SQLite FTS5 | Addresses and places, offline |
+| Transit | GTFS compiled to SQLite, RAPTOR router in Kotlin | Offline trip planning |
+| Location | `android.location.LocationManager` | No Google fused location |
+| User data | Room DB, encrypted with an Android Keystore key | Saved places, history, settings |
+
+```
+Build pipeline (your computer)
+  OSM extract | NYS addresses | Overture places | MTA GTFS
+        |
+        |  make release
+        v
+Data packs (GitHub Releases, SHA-256 verified)
+  Basemap tiles | Routing graph | Search DBs | Transit DB
+        |
+        |  download once, or import a file
+        v
+Phone app (works with Network permission off)
+  MapLibre map | Valhalla routing | Ferrostar guidance
+  FTS5 search  | RAPTOR transit   | Voice: TTS + Piper
+        ^
+        |  bulk pulls, no location sent *
+        |
+Live feeds (opt-in, each behind its own toggle)
+  511NY incidents | NYC DOT speeds | MTA realtime | TomTom flow *
+
+* TomTom tile requests reveal the map area viewed, so that layer is off by default
+```
+
+The pipeline builds packs once a month, and the phone needs nothing else to map, search, route and speak. Live feeds only add traffic and realtime transit on top.
+
+## Data pipeline
+
+A build pipeline on your computer turns public datasets into six data packs, which the phone downloads once and refreshes monthly. Start with an NYC-only extract so each build takes minutes, then point the same scripts at the full state.
+
+| Pack | Built from | Tool | Refresh | Est. size, statewide |
+| --- | --- | --- | --- | --- |
+| `basemap-<region>.pmtiles` | OSM New York extract (Geofabrik) | Planetiler, OpenMapTiles or Protomaps schema | Monthly | 300-800 MB |
+| `routing.tar` | Same OSM extract | Valhalla tile builder | Monthly | 300-600 MB |
+| `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | DuckDB script into FTS5 | Monthly | 200-400 MB |
+| `places.sqlite` | OSM POIs plus [Overture Places](https://docs.overturemaps.org/guides/places/) | DuckDB script into FTS5 | Monthly | 100-250 MB |
+| `transit-nyc.sqlite` | MTA GTFS: subway, 6 bus files, LIRR, Metro-North | Python compiler | Weekly | 50-150 MB |
+| Voice model | Piper voice for sherpa-onnx | Bundled in the APK | Rarely | about 55 MB with libs |
+
+The sizes are guesses to replace after the first real build. Expect 1 to 2.5 GB for the whole state.
+
+- **Regions.** Split the basemap into NYC, Long Island, Hudson Valley, Capital and North Country, and Central and Western NY, so you install only what you need. Keep routing as one statewide graph so cross-region trips work.
+- **Addresses.** NYS Address Points is the state's 911-grade address file. It is CC0-licensed, refreshed twice a month, and fills OSM's upstate address gaps.
+- **Places.** Overture is CDLA Permissive 2.0, with Foursquare rows under Apache 2.0 and AllThePlaces rows under CC0. Keep it in its own table and dedupe against OSM at query time, because Overture notes that a database joined with OSM may inherit ODbL.
+- **Hours.** Opening hours come from OSM's `opening_hours` tag.
+- **Search.** Use FTS5 with a trigram tokenizer for typo tolerance, ranked by distance and category. Skip libpostal, whose model is gigabytes.
+- **Integrity.** Each release ships a manifest with a SHA-256 per pack. The app verifies a pack before swapping it in.
+- **Attribution.** An About screen credits OSM (ODbL), Overture, the Foursquare notice, NYS GIS and MTA.
+
+## Voice guidance
+
+Voice runs fully offline through either the phone's system TTS engine or a Piper voice bundled in the app. GrapheneOS ships no TTS engine yet. Its own on-device [Speech Services](https://grapheneos.social/@GrapheneOS/116608395761254464) went public in May 2026 with one US English voice, and it must be picked as the preferred engine until it is bundled with the OS. The bundled voice guarantees directions still speak if no system engine is set.
+
+All toggles live in Settings > Navigation > Voice. The first one also sits on the navigation screen.
+
+| Toggle | Options | Default |
+| --- | --- | --- |
+| Voice guidance (nav screen button) | On, Alerts only, Muted | On |
+| Per travel mode | Driving, cycling, walking, transit, each on or off | Walking off, rest on |
+| Voice engine | System TTS, Built-in voice | System if one is active |
+| Street names | On, Off | On |
+| Detail level | Full, Brief | Full |
+| Traffic and incident alerts | On, Off | On |
+| Speed limit warnings | On, Off | Off |
+| Reroute announcement | On, Off | On |
+| Transit stop alerts | On, Off | On |
+| Guidance volume | Softer, Normal, Louder | Normal |
+| Other audio | Lower it, Pause it | Lower it |
+| Output | Phone speaker, Bluetooth media, Bluetooth as call | Bluetooth media |
+| Speech rate | Slider | 1.0x |
+| Test voice | Button | - |
+
+"Alerts only" speaks incidents, reroutes and arrival, nothing else.
+
+- Ferrostar ships `AndroidTtsObserver`, which fires Android TTS at the right moment. Wrap it in a `GuidanceVoice` observer that checks the toggles, then sends text to the system engine or to sherpa-onnx.
+- Request audio focus as transient-may-duck for "Lower it" and plain transient for "Pause it".
+- Store settings in DataStore. The nav-screen button cycles On, Alerts only, Muted.
+- Walking with voice off falls back to vibration cues at turns.
+- The bundled Piper voice costs about 25 MB of sherpa-onnx native libs plus about 30 MB per voice ([source](https://medium.com/@patare.vivek/running-neural-text-to-speech-on-device-with-piper-and-sherpa-onnx-58f4eed29247)).
+
+## Live traffic
+
+Live traffic is doable from free public feeds, and three of the four sources can be pulled whole so no server learns where you are. Only TomTom, the one source with flow speeds on nearly every road, sees which map area you request, so it stays opt-in and off by default.
+
+| Source | What it gives | Coverage | Access | Privacy |
+| --- | --- | --- | --- | --- |
+| [511NY API](https://511ny.org/developers/doc) | Incidents, closures, construction, cameras, message signs, winter road conditions, WZDx work zones | Statewide | Free developer key, 10 calls per 60 seconds | Bulk statewide pull, no location sent |
+| [NYC DOT Traffic Speeds](https://data.cityofnewyork.us/Transportation/DOT-Traffic-Speeds/i4gi-tjb9) | Speed and travel time per sensor link | Five boroughs, mostly highways and major arterials | Open data API, no key for light use | Bulk pull, no location sent |
+| [MTA service alerts](https://api.mta.info/) | Transit disruptions | MTA system | No key | Bulk pull, no location sent |
+| [TomTom Traffic](https://docs.tomtom.com/pricing) | Flow and incident vector tiles | Nearly all roads statewide | Free tier of 200K tile requests a month | Tile requests reveal the area you view |
+
+**How traffic reaches the user, in build order**
+
+1. **Show it.** A traffic layer colors road segments by speed, with incident pins that open details and camera stills.
+2. **Avoid closures.** 511NY closures on or near the route become Valhalla `exclude_polygons` on the route request. A new incident on your route triggers a spoken reroute offer.
+3. **Honest ETAs.** Adjust the ETA from live speeds on the links your route covers.
+4. **Traffic-aware routing.** Map-match speed links to Valhalla edges and write live speeds into Valhalla's traffic data. This is the hard step: confirm valhalla-mobile supports live traffic on-device before committing to it.
+
+**Rules**
+
+- Poll only while navigating or while the traffic layer is visible. 511NY every 2 to 5 minutes to stay under its throttle, NYC DOT every 1 to 2 minutes.
+- API keys for 511NY, MTA Bus Time and TomTom are entered in Settings, never committed to the public repo.
+- The NYC DOT open-data copy looked stale when checked: on Sep 29 its newest row was from Sep 25. Measure its real refresh rate before relying on it.
+- A TomTom request can go through an optional personal relay, such as your own server, so TomTom sees the relay's IP instead of the phone's. It still sees which tiles are requested.
+
+## Transit
+
+NYC transit trip planning runs on-device from MTA schedules, and realtime arrivals layer on top from MTA's public feeds. Subway, LIRR, Metro-North and service-alert feeds [need no key](https://api.mta.info/). Bus realtime comes from [MTA Bus Time](https://bustime.mta.info/wiki/Developers/GTFSRt), which requires a free key.
+
+**Schedules (offline)**
+
+- The pipeline compiles MTA GTFS into `transit-nyc.sqlite`: supplemented subway, the six borough bus files, LIRR and Metro-North.
+- It precomputes walking transfers between nearby stops and station entrances from OSM footpaths.
+- A RAPTOR router in Kotlin plans trips on the phone: earliest arrival, fewest transfers and least walking, shown as alternatives.
+
+**Realtime (online, opt-in)**
+
+- Subway feeds are split by line group. Fetch all groups, not just the lines on your trip, since fetching only those would reveal which lines you ride.
+- Arrival boards per station, delays applied to planned trips, and alerts pinned to affected lines.
+- MTA also publishes elevator and escalator status, useful for step-free routing.
+
+**UI**
+
+- Trip planner with depart-at and arrive-by, line bullets in MTA colors, and live countdowns.
+- Station view with the next departures in each direction.
+- Voice or vibration alerts for "your stop is next" and "get off now", tied to the transit stop toggle.
+
+**Later**
+
+- NYC Ferry, PATH and NJ Transit for cross-river trips.
+- Upstate systems such as CDTA, NFTA, RTS and Centro. Find and verify their GTFS feeds through the Mobility Database catalog.
+
+## Roadmap
+
+Build NYC end to end first, then scale the same pipeline to the state. Each phase ends with a test you can run on the phone.
+
+**Phase 0: map on screen, NYC only**
+
+- [ ] Scaffold the Gradle multi-module project from the repo layout below
+- [ ] Pipeline: NYC extract through Planetiler into `basemap-nyc.pmtiles`
+- [ ] App loads the pack from files storage, with light and dark styles
+- [ ] Location puck from `LocationManager` GPS
+
+Exit test: the map renders and follows you with Network permission revoked.
+
+**Phase 1: search and directions, NYC**
+
+- [ ] Valhalla tiles for NYC and valhalla-mobile wired in
+- [ ] Address and place search with a place-card bottom sheet
+- [ ] Route preview for drive, walk and bike, with alternatives
+- [ ] Ferrostar turn-by-turn with rerouting
+- [ ] Voice guidance with every toggle, on system TTS and the bundled voice
+
+Exit test: a full drive with spoken directions works in airplane mode.
+
+**Phase 2: NYC transit**
+
+- [ ] GTFS compiler and RAPTOR router
+- [ ] Trip planner and station departure boards
+- [ ] Realtime subway, LIRR, Metro-North and alerts, plus Bus Time with your key
+
+Exit test: planner results match MTA's published schedule on 10 sample trips.
+
+**Phase 3: statewide and live traffic**
+
+- [ ] Point the pipeline at the full NYS extract and cut regional basemap packs
+- [ ] Pack manager: download, verify, update, and import from a file
+- [ ] 511NY incidents with closure avoidance, and the NYC DOT speed layer
+- [ ] Optional TomTom flow layer
+
+Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident appears within 5 minutes.
+
+**Phase 4: polish toward Google-grade**
+
+- [ ] Lane guidance, speed limits and 3D buildings
+- [ ] Saved places, lists and recents, encrypted
+- [ ] Traffic-aware routing
+- [ ] Upstate transit systems
+- [ ] GitHub Actions: APK on each tag, monthly data rebuild
+
+## Repo layout and distribution
+
+One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
+
+```
+nys-maps/
+  CLAUDE.md               project rules for Claude Code
+  HANDOFF.md              this document
+  app/                    Android application module
+  core/
+    network/              NetworkGate: every request, per-feature toggles
+    map/                  MapLibre wrapper, pack loading, layers
+    routing/              valhalla-mobile + Ferrostar
+    voice/                GuidanceVoice, system TTS, sherpa-onnx
+    search/               FTS5 queries and ranking
+    transit/              GTFS reader, RAPTOR, GTFS-RT client
+    traffic/              511NY, NYC DOT, TomTom clients
+    packs/                download, verify, import, update
+    userdata/             encrypted saved places and history
+  feature/
+    explore/ search/ directions/ navigation/ transit/ settings/
+  pipeline/
+    Makefile              make nyc, make state, make release
+    tiles/ routing/ search/ places/ transit/
+  styles/                 MapLibre style JSON, light and dark
+```
+
+- **APK.** Sign with your own release key, attach to a tagged release, and point Obtainium at the repo.
+- **Packs.** Publish a separate data release each month with a signed manifest. Each GitHub release asset must stay under 2 GB, which the regional split already handles.
+- **Offline install.** The pack manager can import packs from a file, so you can load them over USB and keep Network permission off entirely.
+- **Secrets.** No keys in the repo. Keys live in encrypted app settings.
+
+## Claude Code kickoff
+
+Create the repo, save this document as `HANDOFF.md`, add the `CLAUDE.md` below, then paste the first prompt. Keep each session to one phase so reviews stay small.
+
+**CLAUDE.md**
+
+```markdown
+# NYS Maps - project rules
+
+## Hard constraints
+- Android, Kotlin, Jetpack Compose. minSdk 31, arm64-v8a only.
+- NO Google Play Services, Firebase, GMS location, analytics or crash SDKs.
+- Location comes from android.location.LocationManager (GPS provider).
+- Every network request goes through :core:network NetworkGate. Each feature
+  has its own toggle, off by default except pack downloads.
+- No request may contain the user's location, search text or route,
+  except the opt-in TomTom traffic layer.
+- The app must work with the Network permission revoked once packs are installed.
+- API keys are user-entered in Settings and stored encrypted. Never commit keys.
+
+## Stack
+- MapLibre Native Android; basemap via pmtiles://file:// from app files storage.
+- Valhalla on-device via valhalla-mobile; guidance via Ferrostar.
+- Voice: system TTS first, bundled sherpa-onnx Piper voice as fallback.
+- Search: SQLite FTS5 (trigram). Transit: RAPTOR over transit-nyc.sqlite.
+
+## Working rules
+- Follow HANDOFF.md phases in order. Stop at each phase's exit test and report.
+- Unit-test every parser: GTFS, GTFS-RT, 511NY, NYC DOT, pack manifest.
+- Pipeline is reproducible: make -C pipeline nyc | state | release.
+- Commit small, with clear messages.
+```
+
+**First prompt**
+
+```
+Read CLAUDE.md and HANDOFF.md. Do Phase 0 only.
+1. Scaffold the multi-module Gradle project from the repo layout.
+2. Build pipeline/tiles: download the Geofabrik New York extract, clip to the
+   five boroughs, run Planetiler in Docker, output basemap-nyc.pmtiles.
+3. App: load that file from app files storage with a light and dark style,
+   show a GPS location puck.
+4. Tell me how to push the pack to the phone with adb for testing.
+Stop when the Phase 0 exit test passes and show me what you built.
+```
+
+## Risks and open questions
+
+The biggest gap to Google isn't code, it's data: no reviews, photos or popular times, and thinner business coverage upstate. Everything below is solvable but worth checking early.
+
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| Ferrostar drops Valhalla lane data, reading lanes only from banner sub-components ([discussion](https://github.com/stadiamaps/ferrostar/discussions/932)) | No lane guidance | Patch the parser or upstream a fix in Phase 4 |
+| Live traffic in on-device Valhalla is unverified | Traffic-aware routing may need another approach | Prove it in a spike before Phase 4 |
+| NYC DOT open-data copy may lag | Stale speeds | Measure refresh, and look for the direct DOT feed |
+| TomTom terms on caching tiles and using data with another routing engine | Terms violation | Read the terms before shipping that layer |
+| Pack sizes of 1 to 2.5 GB | Storage, first-run download | Regional packs, file import |
+| GPS plus rendering during long drives | Battery and heat | Profile in Phase 1, cap frame rate while navigating |
+| Cartography quality | Looks cheap next to Google | Start from a proven OpenMapTiles or Protomaps style and iterate |
+| Upstate transit feeds unverified | Gaps outside NYC | Check each agency in the Mobility Database |
+
+- [ ] Read the 511NY Developer Access Agreement before requesting a key
+- [ ] Decide whether packs will be public. If yes, handle ODbL share-alike for OSM-derived packs
+
+## Sources
+
+- [511NY API documentation](https://511ny.org/developers/doc)
+- [NYC DOT Traffic Speeds, NYC Open Data](https://data.cityofnewyork.us/Transportation/DOT-Traffic-Speeds/i4gi-tjb9)
+- [MTA realtime feeds](https://api.mta.info/) and [MTA Bus Time GTFS-RT](https://bustime.mta.info/wiki/Developers/GTFSRt)
+- [TomTom pricing](https://docs.tomtom.com/pricing)
+- [MapLibre Android PMTiles example](https://maplibre.org/maplibre-native/android/examples/data/PMTiles/)
+- [Ferrostar Android guide](https://stadiamaps.github.io/ferrostar/android-getting-started.html)
+- [Vialix](https://github.com/igalmarino/vialix) and [NavMaster](https://github.com/francescobuzle-a11y/navmaster)
+- [GrapheneOS Speech Services announcement](https://grapheneos.social/@GrapheneOS/116608395761254464)
+- [Piper with sherpa-onnx on Android](https://medium.com/@patare.vivek/running-neural-text-to-speech-on-device-with-piper-and-sherpa-onnx-58f4eed29247)
+- [Overture Places guide](https://docs.overturemaps.org/guides/places/)
+- [NYS Streets and Address Points](https://gis.ny.gov/streets-addresses)
