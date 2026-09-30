@@ -7,6 +7,6 @@
     <string name="explore_location_settings">Open settings</string>
     <string name="explore_pack_missing_title">NYC map not installed</string>
     <string name="explore_pack_invalid_title">NYC map file is damaged</string>
-    <string name="explore_pack_body">Copy basemap-nyc.pmtiles to this path, then tap Check again:</string>
+    <string name="explore_pack_body">Copy basemap-nyc.pmtiles here with adb push, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>
 </resources>

@@ -1,7 +1,7 @@
 plugins {
-    alias(libs.plugins.nysmaps.android.library)
+    alias(libs.plugins.southbound.android.library)
 }
 
 android {
-    namespace = "org.nysmaps.core.packs"
+    namespace = "app.southbound.core.packs"
 }

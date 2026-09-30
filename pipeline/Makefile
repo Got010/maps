@@ -9,7 +9,7 @@ nyc: tiles-nyc
 tiles-nyc:
 	tiles/build.sh nyc
 
-## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone (debug build)
+## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
 	./push-pack.sh data/out/basemap-nyc.pmtiles
 
