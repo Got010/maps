@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests, lint and debug APK
+        run: ./gradlew testDebugUnitTest lintDebug :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: '**/build/reports/'
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: southbound-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Styles are regenerated from build_styles.py
+        run: |
+          python3 pipeline/styles/build_styles.py
+          git diff --exit-code styles/
+      - name: Styles pass the MapLibre style spec
+        run: |
+          for style in styles/light.json styles/dark.json; do
+            npx --yes -p @maplibre/maplibre-gl-style-spec@26 gl-style-validate "$style"
+          done
+      - name: Shellcheck
+        run: shellcheck pipeline/*.sh pipeline/*/*.sh
