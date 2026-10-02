@@ -46,6 +46,7 @@ android {
 
 dependencies {
     implementation(project(":feature:explore"))
+    implementation(project(":feature:settings"))
     implementation(libs.maplibre.android)
     implementation(libs.androidx.activity.compose)
 }
