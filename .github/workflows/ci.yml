@@ -12,6 +12,9 @@ concurrency:
 jobs:
   android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -31,6 +34,20 @@ jobs:
         with:
           name: southbound-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      # GitHub Free's 500 MB Actions storage fills up with saved build files, so delete the ones from
+      # earlier runs (an hour's grace for runs still going). This run's files are kept.
+      - name: Delete build files from earlier runs
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cutoff=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
+          ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.workflow_run.id != $GITHUB_RUN_ID and .created_at < \"$cutoff\") | .id")
+          for id in $ids; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "Deleted build file $id"
+          done
 
   pipeline:
     runs-on: ubuntu-latest
