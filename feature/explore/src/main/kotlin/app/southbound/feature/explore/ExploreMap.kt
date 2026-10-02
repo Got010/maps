@@ -230,9 +230,10 @@ internal fun ExploreMap(
             following = true
         }
     }
+    val reroutingSpoken = stringResource(R.string.explore_rerouting_spoken)
     LaunchedEffect(navState.isCalculatingNewRoute) {
         if (navState.isCalculatingNewRoute && inTrip) {
-            services.voice.announce(UtteranceKind.REROUTE, context.getString(R.string.explore_rerouting_spoken))
+            services.voice.announce(UtteranceKind.REROUTE, reroutingSpoken)
         }
     }
 
@@ -280,6 +281,7 @@ internal fun ExploreMap(
     // While on route, the puck sits on the road rather than wandering with GPS noise.
     val shownLocation = (trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location
     val sheetOpen = !inTrip && (panel is Panel.PlaceShown || panel is Panel.Directions)
+    val droppedPin = stringResource(R.string.explore_dropped_pin)
 
     Box(Modifier.fillMaxSize()) {
         SouthboundMap(
@@ -297,7 +299,7 @@ internal fun ExploreMap(
                 null
             } else {
                 { point ->
-                    showPlace(Place.pin(point.lat, point.lon, context.getString(R.string.explore_dropped_pin)))
+                    showPlace(Place.pin(point.lat, point.lon, droppedPin))
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
