@@ -1,0 +1,170 @@
+package app.southbound.feature.directions
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import app.southbound.core.map.Units
+import app.southbound.core.routing.RouteSummary
+import app.southbound.core.routing.TravelMode
+
+/** Route preview's progress: computing, routes to choose from, or why there are none. */
+sealed interface RoutePreviewState {
+    data object Loading : RoutePreviewState
+    data class Ready(val summaries: List<RouteSummary>, val selected: Int) : RoutePreviewState
+    data class Failed(val reason: Reason) : RoutePreviewState
+
+    enum class Reason { NO_ROUTE, NO_LOCATION }
+}
+
+/**
+ * The sheet under the map while choosing a route: travel mode, the route
+ * options (the selected one is blue on the map), and Start.
+ */
+@Composable
+fun RoutePreviewSheet(
+    destinationName: String,
+    mode: TravelMode,
+    state: RoutePreviewState,
+    onModeChange: (TravelMode) -> Unit,
+    onSelect: (Int) -> Unit,
+    onStart: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.directions_to, destinationName),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.directions_close))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(end = 8.dp)) {
+                TravelMode.entries.forEach { option ->
+                    FilterChip(
+                        selected = option == mode,
+                        onClick = { onModeChange(option) },
+                        label = { Text(stringResource(option.label())) },
+                        leadingIcon = { Icon(option.icon(), contentDescription = null, Modifier.size(18.dp)) },
+                    )
+                }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 8.dp, end = 8.dp),
+            ) {
+                when (state) {
+                    RoutePreviewState.Loading -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    ) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text(stringResource(R.string.directions_finding))
+                    }
+                    is RoutePreviewState.Failed -> Text(
+                        stringResource(
+                            when (state.reason) {
+                                RoutePreviewState.Reason.NO_ROUTE -> R.string.directions_no_route
+                                RoutePreviewState.Reason.NO_LOCATION -> R.string.directions_no_location
+                            },
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    )
+                    is RoutePreviewState.Ready -> {
+                        state.summaries.forEachIndexed { i, summary ->
+                            RouteOption(summary, selected = i == state.selected, fastest = i == 0, onClick = { onSelect(i) })
+                        }
+                        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
+                            Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteOption(summary: RouteSummary, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+    OutlinedCard(
+        border = BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    Units.duration(summary.durationSeconds),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (fastest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                )
+                summary.via?.let {
+                    Text(
+                        stringResource(R.string.directions_via, it),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+fun TravelMode.label(): Int = when (this) {
+    TravelMode.DRIVE -> R.string.mode_drive
+    TravelMode.WALK -> R.string.mode_walk
+    TravelMode.BIKE -> R.string.mode_bike
+}
+
+fun TravelMode.icon(): ImageVector = when (this) {
+    TravelMode.DRIVE -> Icons.Filled.DirectionsCar
+    TravelMode.WALK -> Icons.Filled.DirectionsWalk
+    TravelMode.BIKE -> Icons.Filled.DirectionsBike
+}
