@@ -10,38 +10,13 @@
 set -euo pipefail
 
 REGION="${1:?usage: build.sh <region>}"
-PIPELINE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DATA_DIR="${DATA_DIR:-$PIPELINE_DIR/data}"
+# shellcheck source=pipeline/lib/common.sh
+source "$(dirname "$0")/../lib/common.sh"
 PLANETILER_IMAGE="${PLANETILER_IMAGE:-ghcr.io/onthegomap/planetiler:0.10.2}"
 PLANETILER_HEAP="${PLANETILER_HEAP:-4g}"
-EXTRACT_URL="https://download.geofabrik.de/north-america/us/new-york-latest.osm.pbf"
-EXTRACT="$DATA_DIR/sources/new-york-latest.osm.pbf"
 
-case "$REGION" in
-  # Bounding box of the five boroughs. The extract holds only NY State data,
-  # so the box adds no New Jersey features, just a sliver of Nassau County.
-  nyc) BOUNDS="-74.2591,40.4774,-73.7004,40.9176" ;;
-  *) echo "Unknown region '$REGION'. Statewide regions arrive in Phase 3." >&2; exit 2 ;;
-esac
-
-md5_of() {
-  if command -v md5sum >/dev/null; then md5sum "$1" | cut -d' ' -f1; else md5 -q "$1"; fi
-}
-
-mkdir -p "$DATA_DIR/sources" "$DATA_DIR/out" "$DATA_DIR/tmp"
-
-echo "==> Fetching $EXTRACT_URL"
-# -z only re-downloads when Geofabrik has a newer extract.
-curl -fL --retry 3 -z "$EXTRACT" -o "$EXTRACT" "$EXTRACT_URL"
-curl -fsSL --retry 3 -o "$EXTRACT.md5" "$EXTRACT_URL.md5"
-expected="$(cut -d' ' -f1 "$EXTRACT.md5")"
-actual="$(md5_of "$EXTRACT")"
-if [[ "$expected" != "$actual" ]]; then
-  echo "Checksum mismatch for $EXTRACT (expected $expected, got $actual)." >&2
-  echo "Delete it and rerun; Geofabrik may have published mid-download." >&2
-  exit 1
-fi
-echo "    md5 ok"
+region_bounds "$REGION"
+fetch_extract
 
 OUTPUT="basemap-$REGION.pmtiles"
 echo "==> Planetiler ($PLANETILER_IMAGE) -> $OUTPUT"
@@ -59,9 +34,4 @@ docker run --rm \
   --output="/data/out/$OUTPUT" \
   --force
 
-out="$DATA_DIR/out/$OUTPUT"
-if command -v sha256sum >/dev/null; then sha="$(sha256sum "$out" | cut -d' ' -f1)"
-else sha="$(shasum -a 256 "$out" | cut -d' ' -f1)"; fi
-echo "==> Done: $out"
-echo "    size   $(du -h "$out" | cut -f1)"
-echo "    sha256 $sha"
+report_pack "$DATA_DIR/out/$OUTPUT"

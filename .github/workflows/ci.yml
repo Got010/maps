@@ -63,4 +63,8 @@ jobs:
             npx --yes -p @maplibre/maplibre-gl-style-spec@26 gl-style-validate "$style"
           done
       - name: Shellcheck
-        run: shellcheck pipeline/*.sh pipeline/*/*.sh
+        run: shellcheck -x pipeline/*.sh pipeline/*/*.sh
+      - name: Pipeline unit tests
+        run: |
+          pip install osmium==4.3.1
+          make -C pipeline test
