@@ -23,6 +23,8 @@ docker run --rm \
   -v "$PIPELINE_DIR/search:/search:ro" \
   "$PYTHON_IMAGE" bash -c "
     set -e
+    # pyosmium's wheel links against libexpat, which the slim image lacks.
+    apt-get update -qq >/dev/null && apt-get install -y -qq libexpat1 >/dev/null
     pip install -q --root-user-action=ignore osmium==$PYOSMIUM_VERSION
     python /search/build_search.py /data/tmp/$REGION.osm.pbf /data/out/$OUTPUT $REGION
     chown $(id -u):$(id -g) /data/out/$OUTPUT
