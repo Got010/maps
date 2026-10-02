@@ -25,10 +25,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +36,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,22 +56,33 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
-import app.southbound.core.packs.NotAPmtilesFileException
+import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 
 private const val REGION = "nyc"
 
+/**
+ * The first screen: the map, or the setup screen while no map is installed.
+ *
+ * [sharedPack] is a file another app shared to Southbound (Share > Southbound).
+ * It is imported as soon as it arrives, then [onSharedPackHandled] clears it.
+ */
 @Composable
-fun ExploreScreen() {
+fun ExploreScreen(sharedPack: Uri? = null, onSharedPackHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val packStore = remember { PackStore(context.filesDir, context.getExternalFilesDir(null)) }
     var packStatus by remember { mutableStateOf(packStore.basemapStatus(REGION)) }
+    var importState by remember { mutableStateOf<ImportState>(ImportState.Idle) }
+    // Bumped when a new basemap replaces the old one at the same path, so the map reloads.
+    var basemapGeneration by remember { mutableIntStateOf(0) }
+    fun onImportFinished(result: ImportState) {
+        importState = result
+        if (result is ImportState.Done && result.pack.kind == PackKind.BASEMAP) basemapGeneration++
+        packStatus = packStore.basemapStatus(REGION)
+    }
 
     // Pick up a pack pushed with adb while the app was in the background.
     LifecycleResumeEffect(packStore) {
@@ -79,13 +90,32 @@ fun ExploreScreen() {
         onPauseOrDispose { }
     }
 
-    when (val status = packStatus) {
-        is PackStatus.Installed -> MapWithLocation(status.file)
-        else -> MissingPack(
-            status = status,
-            packStore = packStore,
-            onImported = { packStatus = it },
-            onRetry = { packStatus = packStore.basemapStatus(REGION) },
+    LaunchedEffect(sharedPack) {
+        val uri = sharedPack ?: return@LaunchedEffect
+        importState = ImportState.Importing
+        onImportFinished(importPackFrom(context, packStore, uri))
+        onSharedPackHandled()
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (val status = packStatus) {
+            is PackStatus.Installed -> key(basemapGeneration) { MapWithLocation(status.file) }
+            else -> MissingPack(
+                status = status,
+                importing = importState is ImportState.Importing,
+                onPicked = { importState = ImportState.Importing },
+                onImported = ::onImportFinished,
+                packStore = packStore,
+                onRetry = { packStatus = packStore.basemapStatus(REGION) },
+            )
+        }
+        ImportBanner(
+            state = importState,
+            onDismiss = { importState = ImportState.Idle },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .safeDrawingPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
         )
     }
 }
@@ -209,37 +239,20 @@ private fun LocationPermissionPrompt(settingsOnly: Boolean, onAllow: () -> Unit)
 @Composable
 private fun MissingPack(
     status: PackStatus,
+    importing: Boolean,
+    onPicked: (Uri) -> Unit,
+    onImported: (ImportState) -> Unit,
     packStore: PackStore,
-    onImported: (PackStatus) -> Unit,
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var importing by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val notAMap = stringResource(R.string.explore_import_not_a_map)
-    val failed = stringResource(R.string.explore_import_failed)
 
     // The system file picker: no storage permission, and works on release builds.
     val picker = rememberLauncherForActivityResult(OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        importing = true
-        error = null
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val input = context.contentResolver.openInputStream(uri)
-                        ?: throw IOException("Couldn't open the file")
-                    packStore.importBasemap(REGION, input)
-                }
-            }
-            importing = false
-            result
-                .onSuccess(onImported)
-                .onFailure { e ->
-                    error = if (e is NotAPmtilesFileException) notAMap else "$failed ${e.message.orEmpty()}"
-                }
-        }
+        onPicked(uri)
+        scope.launch { onImported(importPackFrom(context, packStore, uri)) }
     }
 
     Surface(Modifier.fillMaxSize()) {
@@ -263,13 +276,11 @@ private fun MissingPack(
             Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !importing) {
                 Text(stringResource(R.string.explore_import))
             }
-            if (importing) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text(stringResource(R.string.explore_importing))
-                }
-            }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Text(
+                stringResource(R.string.explore_pack_share_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 stringResource(R.string.explore_pack_adb),
                 style = MaterialTheme.typography.bodySmall,

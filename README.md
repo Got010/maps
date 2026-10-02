@@ -23,13 +23,18 @@ The app ships without map data.
 1. On GitHub, open the repo's **Releases** and find the newest **Map data**
    pre-release. If there isn't one, go to **Actions > Map data > Run workflow**
    and wait about 15 minutes.
-2. Download `basemap-nyc.pmtiles` from it in your phone's browser.
-3. Open Southbound, tap **Import map file** and pick the download. The app copies
-   it into its private storage; you can delete the download afterwards.
+2. Download `basemap-nyc.pmtiles` from it in your phone's browser. Don't open
+   it with a file manager, which may try to unpack it.
+3. Get it into Southbound, either way:
+   - In the browser's downloads, share the file and pick **Southbound**. This
+     works with browsers such as DuckDuckGo that keep downloads to themselves.
+   - Or open Southbound, tap **Import map file** and pick the download.
 
-The Map data workflow also runs on the 2nd of every month. For now the Import
-button only appears while no map is installed; swapping in a newer map from
-inside the app comes with the Phase 3 pack manager.
+   The app copies the file into its private storage, so you can delete the
+   download afterwards.
+
+The Map data workflow also runs on the 2nd of every month. To swap in a newer
+map, share the new file to Southbound the same way; it replaces the old one.
 
 With a computer and adb you can instead push the pack straight to the app's
 import folder: `make -C pipeline push-nyc`.
