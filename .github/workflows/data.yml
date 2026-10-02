@@ -1,0 +1,57 @@
+# Builds the map data packs on GitHub's machines, so no computer is needed.
+# Run it from the Actions tab (Run workflow), or wait for the monthly schedule.
+# Each run publishes a "Map data" pre-release with basemap-nyc.pmtiles; download
+# it on the phone and use Import map file in Southbound.
+#
+# On pull requests that touch the pipeline it only builds, to prove the
+# pipeline still works, and publishes nothing.
+name: Map data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 2 * *'   # 06:17 UTC on the 2nd of each month
+  pull_request:
+    paths:
+      - 'pipeline/tiles/**'
+      - 'pipeline/Makefile'
+      - '.github/workflows/data.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: map-data-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nyc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build basemap-nyc.pmtiles
+        env:
+          PLANETILER_HEAP: 8g
+        run: make -C pipeline nyc
+
+      - name: Checksum
+        run: |
+          cd pipeline/data/out
+          sha256sum basemap-nyc.pmtiles | tee basemap-nyc.pmtiles.sha256
+          ls -lh basemap-nyc.pmtiles
+
+      - name: Publish map data release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="data-$(date -u +%Y.%m.%d-%H%M)"
+          # Pre-release and not "latest", so Obtainium keeps tracking APK releases only.
+          gh release create "$TAG" \
+            pipeline/data/out/basemap-nyc.pmtiles \
+            pipeline/data/out/basemap-nyc.pmtiles.sha256 \
+            --title "Map data $(date -u +%Y-%m-%d)" \
+            --notes "NYC basemap built from the Geofabrik New York extract. Download basemap-nyc.pmtiles on your phone, then open Southbound and tap Import map file. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL." \
+            --prerelease --latest=false
