@@ -29,6 +29,8 @@ ferrostar-core = { module = "com.stadiamaps.ferrostar:core", version.ref = "ferr
 ferrostar-ui-compose = { module = "com.stadiamaps.ferrostar:ui-compose", version.ref = "ferrostar" }
 ferrostar-ui-formatters = { module = "com.stadiamaps.ferrostar:ui-formatters", version.ref = "ferrostar" }
 valhalla-mobile = { module = "io.github.rallista:valhalla-mobile", version.ref = "valhallaMobile" }
+# valhalla-mobile exposes these config types in its API but only depends on them at runtime.
+valhalla-models-config = { module = "io.github.rallista:valhalla-models-config", version = "0.5.2" }
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 sherpa-onnx = { module = "com.k2fsa:sherpa-onnx", version.ref = "sherpaOnnx" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }

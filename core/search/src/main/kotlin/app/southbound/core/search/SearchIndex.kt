@@ -2,7 +2,7 @@ package app.southbound.core.search
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
-import androidx.sqlite.driver.bundled.BundledSQLite
+import androidx.sqlite.driver.bundled.SQLITE_OPEN_READONLY
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.Closeable
 import java.io.File
@@ -62,7 +62,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
             )
             val kmPerDegLat2 = KM_PER_DEGREE * KM_PER_DEGREE
             val kmPerDegLon2 = kmPerDegLat2 * cos(Math.toRadians(near.lat)).let { it * it }
-            args += listOf(SearchRanking.POINTS_PER_KM, near.lat, near.lat, kmPerDegLat2, near.lon, near.lon, kmPerDegLon2)
+            args.addAll(listOf(SearchRanking.POINTS_PER_KM, near.lat, near.lat, kmPerDegLat2, near.lon, near.lon, kmPerDegLon2))
         } else {
             sql.append(" ORDER BY f.importance DESC")
         }
@@ -91,7 +91,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
 
         /** Opens [file] read-only. Throws if it isn't a search pack. */
         fun open(file: File): SearchIndex {
-            val connection = BundledSQLiteDriver().open(file.path, BundledSQLite.SQLITE_OPEN_READONLY)
+            val connection = BundledSQLiteDriver().open(file.path, SQLITE_OPEN_READONLY)
             try {
                 val appId = connection.prepare("PRAGMA application_id").use { if (it.step()) it.getLong(0) else 0L }
                 require(appId == SEARCH_APPLICATION_ID) { "${file.name} is not a search pack" }

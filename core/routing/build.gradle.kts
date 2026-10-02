@@ -12,5 +12,6 @@ dependencies {
     implementation(libs.ferrostar.ui.compose)
     // Valhalla on the device.
     implementation(libs.valhalla.mobile)
+    implementation(libs.valhalla.models.config)
     implementation(libs.kotlinx.coroutines.android)
 }
