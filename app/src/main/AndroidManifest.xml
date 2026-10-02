@@ -17,10 +17,30 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Share > Southbound: import a map or data pack from another app,
+                 such as a browser's downloads. Packs are PMTiles, SQLite or tar
+                 files, which apps label application/octet-stream or similar. -->
+            <intent-filter android:label="@string/share_import_label">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/*" />
+            </intent-filter>
+            <!-- Open with > Southbound, for the same pack files. -->
+            <intent-filter android:label="@string/share_import_label">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-tar" />
+                <data android:mimeType="application/vnd.sqlite3" />
+                <data android:mimeType="application/x-sqlite3" />
+                <data android:mimeType="application/vnd.pmtiles" />
             </intent-filter>
         </activity>
     </application>
