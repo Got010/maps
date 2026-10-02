@@ -20,3 +20,6 @@ pipeline/data/
 
 .DS_Store
 __pycache__/
+
+# Downloaded by scripts/fetch-voice.sh
+third-party/
