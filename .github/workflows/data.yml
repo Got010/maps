@@ -1,7 +1,8 @@
 # Builds the map data packs on GitHub's machines, so no computer is needed.
 # Run it from the Actions tab (Run workflow), or wait for the monthly schedule.
-# Each run publishes a "Map data" pre-release with basemap-nyc.pmtiles; download
-# it on the phone and use Import map file in Southbound.
+# Each run publishes a "Map data" pre-release with the NYC packs: the map
+# (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search
+# (search-nyc.sqlite). Download them on the phone and share each to Southbound.
 #
 # On pull requests that touch the pipeline it only builds, to prove the
 # pipeline still works, and publishes nothing.
@@ -14,6 +15,9 @@ on:
   pull_request:
     paths:
       - 'pipeline/tiles/**'
+      - 'pipeline/routing/**'
+      - 'pipeline/search/**'
+      - 'pipeline/lib/**'
       - 'pipeline/Makefile'
       - '.github/workflows/data.yml'
 
@@ -34,13 +38,21 @@ jobs:
       - name: Build basemap-nyc.pmtiles
         env:
           PLANETILER_HEAP: 8g
-        run: make -C pipeline nyc
+        run: make -C pipeline tiles-nyc
+
+      - name: Build routing-nyc.tar
+        run: make -C pipeline routing-nyc
+
+      - name: Build search-nyc.sqlite
+        run: make -C pipeline search-nyc
 
       - name: Checksum
         run: |
           cd pipeline/data/out
-          sha256sum basemap-nyc.pmtiles | tee basemap-nyc.pmtiles.sha256
-          ls -lh basemap-nyc.pmtiles
+          for pack in basemap-nyc.pmtiles routing-nyc.tar search-nyc.sqlite; do
+            sha256sum "$pack" | tee "$pack.sha256"
+          done
+          ls -lh
 
       - name: Publish map data release
         if: github.event_name != 'pull_request'
@@ -49,9 +61,11 @@ jobs:
         run: |
           TAG="data-$(date -u +%Y.%m.%d-%H%M)"
           # Pre-release and not "latest", so Obtainium keeps tracking APK releases only.
+          cd pipeline/data/out
           gh release create "$TAG" \
-            pipeline/data/out/basemap-nyc.pmtiles \
-            pipeline/data/out/basemap-nyc.pmtiles.sha256 \
+            basemap-nyc.pmtiles basemap-nyc.pmtiles.sha256 \
+            routing-nyc.tar routing-nyc.tar.sha256 \
+            search-nyc.sqlite search-nyc.sqlite.sha256 \
             --title "Map data $(date -u +%Y-%m-%d)" \
-            --notes "NYC basemap built from the Geofabrik New York extract. Download basemap-nyc.pmtiles on your phone, then open Southbound and tap Import map file. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL." \
+            --notes "NYC packs built from the Geofabrik New York extract: the map (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search (search-nyc.sqlite). Download each on your phone and share it to Southbound. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL." \
             --prerelease --latest=false

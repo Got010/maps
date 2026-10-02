@@ -1,13 +1,23 @@
 # Data pipeline. Run from the repo root as: make -C pipeline <target>
 # Outputs land in pipeline/data/out (git-ignored).
 
-.PHONY: nyc state release tiles-nyc push-nyc styles glyphs clean
+.PHONY: nyc state release tiles-nyc routing-nyc search-nyc push-nyc styles glyphs test clean
 
-## nyc: every NYC pack built so far (Phase 0: basemap only)
-nyc: tiles-nyc
+## nyc: every NYC pack built so far: basemap, routing and search
+nyc: tiles-nyc routing-nyc search-nyc
 
 tiles-nyc:
 	tiles/build.sh nyc
+
+routing-nyc:
+	routing/build.sh nyc
+
+search-nyc:
+	search/build.sh nyc
+
+## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium)
+test:
+	python3 -m unittest discover -s search/tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
