@@ -34,6 +34,9 @@ ABBREVIATIONS = {
     "saint": "st",
     "mount": "mt",
     "fort": "ft",
+    "building": "bldg",
+    "center": "ctr",
+    "centre": "ctr",
 }
 
 ORDINAL = re.compile(r"\b(\d+)(st|nd|rd|th)\b")

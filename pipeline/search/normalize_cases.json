@@ -13,5 +13,7 @@
   ["Brooklyn-Queens Expressway", "brooklyn queens expy"],
   ["123 Main St, Brooklyn, NY 11201", "123 main st brooklyn ny 11201"],
   ["ÅÉÎÕÜ", "aeiou"],
+  ["Empire State Building", "empire state bldg"],
+  ["Lincoln Center", "lincoln ctr"],
   ["", ""]
 ]
