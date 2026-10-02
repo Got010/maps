@@ -11,9 +11,10 @@ pack, in light and dark styles, with a GPS location puck.
 
 Everything below works from a phone. No computer needed.
 
-Point [Obtainium](https://github.com/ImranR98/Obtainium) at this repo, or
-download `southbound-<version>.apk` from the latest release. Each release also
-has a `.sha256` file.
+Download `southbound-<version>.apk` from the latest release and open it to
+install. Each release also has a `.sha256` file. A newer APK installs over the
+old one and keeps your data. [Obtainium](https://github.com/ImranR98/Obtainium)
+is optional: it watches this repo's releases and installs new ones for you.
 
 ## Load the NYC map
 
@@ -89,7 +90,8 @@ Then delete `southbound-key.txt`; the `.jks` backup is what matters.
 
 To release, create a tag from the repo's Releases page (Draft a new release >
 Choose a tag > type `v0.1.0` > Create new tag > Publish), or push one with git.
-The Release workflow builds and attaches the APK within a few minutes.
+The Release workflow builds the APK and attaches it to that release within a
+few minutes; until then the release has no APK.
 
 ## Developing
 
