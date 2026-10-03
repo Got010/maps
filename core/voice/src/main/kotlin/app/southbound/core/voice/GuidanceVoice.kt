@@ -171,6 +171,10 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
 
     private suspend fun play(action: GuidanceAction.Speak) {
         val current = settings.value
+        if (action.isChimeOnly) {
+            action.chime?.let { player.play(Chime.only(it, CHIME_ONLY_SAMPLE_RATE), current) }
+            return
+        }
         val ready = synchronized(prepared) { prepared.remove(cacheKey(action.text, current)) }
         val pcm = ready?.await() ?: synthesize(action.text, current) ?: return
         player.play(action.chime?.let { Chime.before(it, pcm) } ?: pcm, current)
@@ -234,5 +238,8 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
     companion object {
         const val TEST_SENTENCE = "This is Southbound. In a quarter mile, turn left onto Broadway."
         private const val PREPARED_MAX = 2
+
+        /** Sample rate of a tone played without speech, e.g. the speed limit beep. */
+        private const val CHIME_ONLY_SAMPLE_RATE = 24_000
     }
 }
