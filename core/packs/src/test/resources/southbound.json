@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "version": "0.1.1",
+  "versionCode": 101,
+  "app": {
+    "file": "southbound-0.1.1.apk",
+    "size": 3,
+    "sha256": "dd37c2d7274f7ea982cb83390c36918fee9ce8889073c44b68cdc00bdb8c3e04"
+  },
+  "packs": [
+    {
+      "kind": "basemap",
+      "region": "nyc",
+      "file": "basemap-nyc.pmtiles",
+      "size": 7,
+      "sha256": "1d34761baf6b2ddf969d913d7f3fd59d3b4d46ef9fefec80a565e7f1ebeebc8e"
+    },
+    {
+      "kind": "transit",
+      "region": "nyc",
+      "file": "transit-nyc.sqlite",
+      "size": 1,
+      "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    }
+  ]
+}
