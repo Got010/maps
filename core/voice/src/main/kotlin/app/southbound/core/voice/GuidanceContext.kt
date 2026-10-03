@@ -18,6 +18,13 @@ interface GuidanceContext {
     fun followUpFor(instruction: SpokenInstruction): String?
 
     /**
+     * Lane advice to add to [instruction], e.g. "use the left two lanes":
+     * for the turn it announces, on one early prompt only ([LanePrompt]);
+     * null for none.
+     */
+    fun lanesFor(instruction: SpokenInstruction): String? = null
+
+    /**
      * False once the turn the prompt [utteranceId] announces is behind the
      * driver, or so close that the prompt would be heard during it. Asked
      * again just before the prompt plays.

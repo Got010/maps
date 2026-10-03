@@ -3,7 +3,9 @@ package app.southbound.feature.explore
 import android.content.Context
 import android.os.SystemClock
 import app.southbound.core.map.Eta
+import app.southbound.core.routing.LaneWording
 import app.southbound.core.routing.Navigator
+import app.southbound.core.routing.StepLanes
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.search.AlertKind
@@ -19,6 +21,7 @@ import app.southbound.core.voice.GuidanceContext
 import app.southbound.core.voice.GuidancePolicy
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.InstructionText
+import app.southbound.core.voice.LanePrompt
 import app.southbound.core.voice.NextInstruction
 import app.southbound.core.voice.SpokenUnits
 import app.southbound.core.voice.TurnTiming
@@ -50,6 +53,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   pack's landmark table, fetched once per route and reroute;
  * - a quick second turn chained onto the first ("Take exit 14S, then turn
  *   left"), the second then not announced again in full ([TurnTiming]);
+ * - lane advice ("..., use the right two lanes") on one early prompt per
+ *   turn, from Valhalla's lanes in the route ([StepLanes], [LaneWording]);
  * - the "now" prompt said a few seconds ahead at speed, and prompts for a
  *   turn already under way dropped;
  * - the arrival time as the trip starts ([startTrip]), each stop and the
@@ -367,6 +372,16 @@ class GuidanceSupport(
         val text = next.spokenInstructions.getOrNull(now)?.text ?: return null
         // Arriving isn't chained ("..., then you have arrived"), so its own prompts stay.
         return text.takeIf { GuidancePolicy.kindOf(it) != UtteranceKind.ARRIVAL }
+    }
+
+    override fun lanesFor(instruction: SpokenInstruction): String? {
+        val current = steps
+        val id = instruction.utteranceId.toString()
+        val step = current.getOrNull(stepIn(current, id) ?: return null) ?: return null
+        // One early prompt per turn says it; the "now" prompt stays short.
+        val index = step.spokenInstructions.indexOfFirst { it.utteranceId.toString() == id }
+        if (index < 0 || index != LanePrompt.indexFor(prompts(step))) return null
+        return LaneWording.phrase(StepLanes.of(step))
     }
 
     override fun isCurrent(utteranceId: String): Boolean {

@@ -71,6 +71,28 @@ object InstructionText {
         return "$first, then ${second.replaceFirstChar { it.lowercaseChar() }}."
     }
 
+    private val LANE_WORD = Regex("""\blanes?\b""", RegexOption.IGNORE_CASE)
+
+    /** Valhalla's own two-maneuver prompt: "Turn left onto Elm Street. Then turn right onto Oak Street." */
+    private val THEN_SENTENCE = Regex("""\.\s+(?=then\b)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * "In 500 feet, Turn left onto Elm Street." + "use the left two lanes" ->
+     * "In 500 feet, Turn left onto Elm Street, use the left two lanes." The
+     * advice is for the first maneuver, so it goes before Valhalla's own
+     * ". Then ..." sentence. Unchanged when the sentence already talks about lanes.
+     */
+    fun withLanes(text: String, phrase: String): String {
+        val advice = phrase.trim().trimEnd('.', ' ', ',').replaceFirstChar { it.lowercaseChar() }
+        if (advice.isEmpty() || LANE_WORD.containsMatchIn(text)) return text
+        val then = THEN_SENTENCE.find(text)
+        if (then != null) {
+            val head = text.substring(0, then.range.first).trimEnd('.', ' ', ',')
+            return "$head, $advice" + text.substring(then.range.first)
+        }
+        return "${text.trim().trimEnd('.', ' ', ',')}, $advice."
+    }
+
     private val ARRIVED = Regex("""\barrived\b""", RegexOption.IGNORE_CASE)
 
     /**
