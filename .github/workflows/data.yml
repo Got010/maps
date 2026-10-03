@@ -37,8 +37,8 @@ jobs:
 
       - name: Build search-nyc.sqlite
         env:
-          # Overture Places too, as release.yml builds them: for NYC a ~90 MB
-          # read from Overture's bucket that adds about 160 MB to the pack.
+          # Overture Places too, as release.yml builds them: for NYC about a
+          # 90 MB read from Overture's bucket, adding about 165 MB to the pack.
           OVERTURE: 1
         run: make -C pipeline search-nyc
 
