@@ -1,8 +1,9 @@
 # Builds the map data packs on GitHub's machines, so no computer is needed.
 # Run it from the Actions tab (Run workflow), or wait for the monthly schedule.
 # Each run publishes a "Map data" pre-release with the NYC packs: the map
-# (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search
-# (search-nyc.sqlite). Download them on the phone and share each to Southbound.
+# (basemap-nyc.pmtiles), directions (routing-nyc.tar), search
+# (search-nyc.sqlite) and transit schedules (transit-nyc.sqlite). Download
+# them on the phone and share each to Southbound.
 #
 # On pull requests that touch the pipeline it only builds, to prove the
 # pipeline still works, and publishes nothing.
@@ -17,6 +18,7 @@ on:
       - 'pipeline/tiles/**'
       - 'pipeline/routing/**'
       - 'pipeline/search/**'
+      - 'pipeline/transit/**'
       - 'pipeline/lib/**'
       - 'pipeline/Makefile'
       - '.github/workflows/data.yml'
@@ -46,10 +48,13 @@ jobs:
       - name: Build search-nyc.sqlite
         run: make -C pipeline search-nyc
 
+      - name: Build transit-nyc.sqlite
+        run: make -C pipeline transit-nyc
+
       - name: Checksum
         run: |
           cd pipeline/data/out
-          for pack in basemap-nyc.pmtiles routing-nyc.tar search-nyc.sqlite; do
+          for pack in basemap-nyc.pmtiles routing-nyc.tar search-nyc.sqlite transit-nyc.sqlite; do
             sha256sum "$pack" | tee "$pack.sha256"
           done
           ls -lh
@@ -66,6 +71,7 @@ jobs:
             basemap-nyc.pmtiles basemap-nyc.pmtiles.sha256 \
             routing-nyc.tar routing-nyc.tar.sha256 \
             search-nyc.sqlite search-nyc.sqlite.sha256 \
+            transit-nyc.sqlite transit-nyc.sqlite.sha256 \
             --title "Map data $(date -u +%Y-%m-%d)" \
-            --notes "NYC packs built from the Geofabrik New York extract: the map (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search (search-nyc.sqlite). Download each on your phone and share it to Southbound. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL." \
+            --notes "NYC packs built from the Geofabrik New York extract: the map (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search (search-nyc.sqlite), plus transit schedules (transit-nyc.sqlite) from MTA GTFS. Download each on your phone and share it to Southbound. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA." \
             --prerelease --latest=false
