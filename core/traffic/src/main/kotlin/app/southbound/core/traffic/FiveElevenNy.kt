@@ -77,12 +77,21 @@ object FiveElevenNy {
             t.startsWith("closure") || sub.contains("closure") || sub.contains("closed") ||
                 ("all lanes" in lanesLower && "closed" in lanesLower) ||
                 d.startsWith("road closed") || d.startsWith("ramp closed") || " is closed" in d -> IncidentKind.CLOSURE
+            // Before accidents: the feed files police activity under accidentsAndIncidents.
+            isPolice(t) || isPolice(sub) -> IncidentKind.POLICE
             t.startsWith("accident") || sub.contains("accident") || sub.contains("crash") || sub.contains("disabled") -> IncidentKind.ACCIDENT
             t.startsWith("roadwork") || t.startsWith("construction") || sub.contains("work") || sub.contains("construction") -> IncidentKind.ROADWORK
             t.startsWith("special") || sub.contains("event") -> IncidentKind.EVENT
+            // Wording alone only decides otherwise-unclassified events, so a crash with "police on scene" stays a crash.
+            isPolice(d) -> IncidentKind.POLICE
             else -> IncidentKind.OTHER
         }
     }
+
+    private val POLICE_WORDS = listOf("police", "law enforcement", "traffic stop", "speed enforcement", "radar")
+
+    /** [lowercase] mentions police, law enforcement, a traffic stop or speed enforcement. */
+    private fun isPolice(lowercase: String): Boolean = POLICE_WORDS.any { it in lowercase }
 
     /** 511NY's local Eastern timestamps to POSIX millis; null when unreadable. */
     fun parseDate(text: String?): Long? {

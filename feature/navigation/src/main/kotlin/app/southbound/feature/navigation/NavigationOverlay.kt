@@ -240,9 +240,10 @@ private fun FasterRouteBanner(offer: FasterRouteOffer) {
  * traffic adds more than two minutes the headline turns red with "+X min" and
  * the trip's typical duration follows. This replaces Ferrostar's own progress
  * bar, which led with the arrival clock, so there is one clock on screen.
+ * [distanceMeters] and [onEnd] are optional: without them the bar has no distance and no End button.
  */
 @Composable
-private fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMeters: Double, onEnd: () -> Unit) {
+private fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMeters: Double? = null, onEnd: (() -> Unit)? = null) {
     val late = Eta.isLate(delaySeconds)
     val leftSeconds = remainingSeconds + delaySeconds
     // Recomputed whenever Ferrostar updates the remaining time (about once a second).
@@ -250,7 +251,7 @@ private fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMete
     val color = if (late) Color(0xFFD93025) else MaterialTheme.colorScheme.onSurface
     val arriveText = stringResource(R.string.navigation_arrive_clock, arrival)
     val typicalText = if (delaySeconds >= 60) stringResource(R.string.navigation_typical, Units.duration(remainingSeconds)) else null
-    val details = listOfNotNull(Units.distance(distanceMeters), arriveText, typicalText).joinToString(" \u00B7 ")
+    val details = listOfNotNull(distanceMeters?.let { Units.distance(it) }, arriveText, typicalText).joinToString(" \u00B7 ")
     Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -267,8 +268,10 @@ private fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMete
                 }
                 Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onEnd) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.navigation_end))
+            if (onEnd != null) {
+                IconButton(onClick = onEnd) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.navigation_end))
+                }
             }
         }
     }
