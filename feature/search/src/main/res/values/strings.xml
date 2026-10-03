@@ -21,4 +21,14 @@
     <string name="search_set_work_hint">Search for your work place, then pick it to set Work.</string>
     <string name="place_add_stop">Add stop</string>
     <string name="search_approximate">Approximate: nearest number on this street</string>
+    <string name="hours_open_24">Open 24 hours</string>
+    <string name="hours_open_until">Open · closes %1$s</string>
+    <string name="hours_closes_soon">Closes soon · %1$s</string>
+    <string name="hours_closed">Closed</string>
+    <string name="hours_closed_opens_today">Closed · opens %1$s</string>
+    <string name="hours_closed_opens_tomorrow">Closed · opens %1$s tomorrow</string>
+    <!-- %1$s is a short weekday such as "Mon", %2$s the time -->
+    <string name="hours_closed_opens_later">Closed · opens %1$s %2$s</string>
+    <string name="search_row_open">Open</string>
+    <string name="search_row_closed">Closed</string>
 </resources>
