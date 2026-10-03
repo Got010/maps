@@ -51,6 +51,31 @@ class TrafficFeedTest {
     }
 
     @Test
+    fun `NYC DOT readings that are all too old are flagged stale, not an error`() = runBlocking {
+        val feed = feed(ny511 = false, dot = true)
+        val newest = NycDotSpeeds.parseDate("2026-10-02T22:16:04.000")!!
+        now = newest + 3 * 24 * 60 * 60_000L
+        val snapshot = feed.refresh()
+        assertTrue(snapshot.speeds.isEmpty())
+        assertTrue(snapshot.errors.isEmpty())
+        assertTrue(snapshot.speedsStale)
+        // Still flagged while the cached result is served.
+        now += 10_000
+        assertTrue(feed.refresh().speedsStale)
+        // Fresh readings clear it.
+        now = newest + 60_000
+        assertFalse(feed.refresh(force = true).speedsStale)
+    }
+
+    @Test
+    fun `a missing 511NY key is visible`() {
+        assertTrue(feed(ny511 = true, dot = false, key = null).needsIncidentsKey)
+        assertTrue(feed(ny511 = true, dot = false, key = "  ").needsIncidentsKey)
+        assertFalse(feed(ny511 = true, dot = false).needsIncidentsKey)
+        assertFalse(feed(ny511 = false, dot = false, key = null).needsIncidentsKey)
+    }
+
+    @Test
     fun `each feed is cached for its own interval`() = runBlocking {
         val feed = feed(ny511 = true, dot = true)
         feed.refresh()

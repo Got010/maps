@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -791,13 +792,38 @@ internal fun ExploreMap(
                             Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = if (shownIncident != null) 190.dp else 28.dp),
                         )
                     }
-                    if (trafficVisible && traffic.errors.isNotEmpty()) {
-                        Text(
-                            traffic.errors.joinToString("\n"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
-                        )
+                    // Why the traffic layer may look empty: say so instead of showing nothing.
+                    val trafficNeedsKey = remember(resumes, trafficVisible) { services.traffic.needsIncidentsKey }
+                    val trafficNote = when {
+                        !trafficVisible || !trafficOn -> null
+                        trafficNeedsKey -> R.string.explore_traffic_needs_key
+                        traffic.speedsStale -> R.string.explore_traffic_stale
+                        traffic.fetchedAt > 0 && traffic.isEmpty && traffic.errors.isEmpty() -> R.string.explore_traffic_empty
+                        else -> null
+                    }
+                    if (trafficVisible && (traffic.errors.isNotEmpty() || trafficNote != null)) {
+                        Column(
+                            Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            if (traffic.errors.isNotEmpty()) {
+                                Text(
+                                    traffic.errors.joinToString("\n"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                            if (trafficNote != null) {
+                                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+                                    Text(
+                                        stringResource(trafficNote),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Panel.Search -> SearchPanel(
@@ -1026,10 +1052,11 @@ private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
     FloatingActionButton(
         onClick = onClick,
         modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = if (shown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        // On reads clearly in dynamic dark mode too, where primary and onSurfaceVariant look alike.
+        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Icon(Icons.Filled.Traffic, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
+        Icon(if (shown) Icons.Filled.Traffic else Icons.Outlined.TrafficOutlined, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
     }
 }
 
@@ -1072,8 +1099,8 @@ private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Mo
     FloatingActionButton(
         onClick = onClick,
         modifier = modifier.safeDrawingPadding().padding(16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        containerColor = if (following) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (following) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_my_location),
