@@ -3,6 +3,7 @@ package app.southbound.core.map
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import android.view.MotionEvent
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -29,6 +30,9 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.gestures.MoveGestureDetector
+import org.maplibre.android.gestures.RotateGestureDetector
+import org.maplibre.android.gestures.ShoveGestureDetector
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.OnCameraTrackingChangedListener
@@ -52,6 +56,7 @@ private const val NAVIGATION_TILT = 45.0
 private const val CAMERA_ANIMATION_MS = 800
 private const val TAP_SLOP_PX = 24f
 private val FIT_PADDING = 64.dp
+private val NAVIGATION_COMPASS_OFFSET = 120.dp
 
 /**
  * The basemap, drawn from local PMTiles packs (one per installed region),
@@ -66,6 +71,12 @@ private val FIT_PADDING = 64.dp
  * tilted, as turn-by-turn apps do. A long press reports the spot to
  * [onLongPress], e.g. to drop a pin; a tap on an incident pin reports its id
  * to [onIncidentTap].
+ *
+ * Two-finger rotate and tilt, double-tap zoom and one-finger "double tap and
+ * drag" zoom are on, with MapLibre's compass (it fades when facing north and
+ * snaps back to north when tapped). Rotating, tilting or panning while
+ * following calls [onFollowingDismissed], so the screen can offer Re-center;
+ * [onTouchChanged] lets it time an automatic return while navigating.
  */
 @Composable
 fun SouthboundMap(
@@ -86,6 +97,8 @@ fun SouthboundMap(
     /** Where the map opens before the first fix, e.g. the middle of the installed regions. */
     initialCenter: MapPoint = NYC_CENTER,
     initialZoom: Double = START_ZOOM,
+    /** True when a finger goes down on the map, false when the last one lifts; drives auto-recenter. */
+    onTouchChanged: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -114,6 +127,68 @@ fun SouthboundMap(
             activateLocationPuck(context, loadedMap, loaded) { currentOnFollowingDismissed() }
             OverlayLayers.install(loaded)
             style = loaded
+        }
+    }
+
+    val currentNavigating by rememberUpdatedState(navigating)
+    val currentOnTouchChanged by rememberUpdatedState(onTouchChanged)
+    DisposableEffect(mapView) {
+        // Watches touches without consuming them; the map still handles every gesture itself.
+        mapView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> currentOnTouchChanged?.invoke(true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> currentOnTouchChanged?.invoke(false)
+            }
+            false
+        }
+        onDispose { mapView.setOnTouchListener(null) }
+    }
+
+    // Gestures: rotate, tilt and one-finger zoom are on, with the compass.
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        with(loadedMap.uiSettings) {
+            isRotateGesturesEnabled = true
+            isTiltGesturesEnabled = true
+            isZoomGesturesEnabled = true
+            isDoubleTapGesturesEnabled = true
+            isQuickZoomGesturesEnabled = true
+            isCompassEnabled = true
+            setCompassFadeFacingNorth(true)
+        }
+        // A user gesture (not an animation or API move) that turns or tilts the map ends following:
+        // heading-up and tilted navigation would otherwise fight the user's hands.
+        val rotate = object : MapLibreMap.OnRotateListener {
+            override fun onRotateBegin(detector: RotateGestureDetector) = currentOnFollowingDismissed()
+            override fun onRotate(detector: RotateGestureDetector) = Unit
+            override fun onRotateEnd(detector: RotateGestureDetector) = Unit
+        }
+        val shove = object : MapLibreMap.OnShoveListener {
+            override fun onShoveBegin(detector: ShoveGestureDetector) = currentOnFollowingDismissed()
+            override fun onShove(detector: ShoveGestureDetector) = Unit
+            override fun onShoveEnd(detector: ShoveGestureDetector) = Unit
+        }
+        val move = object : MapLibreMap.OnMoveListener {
+            override fun onMoveBegin(detector: MoveGestureDetector) = currentOnFollowingDismissed()
+            override fun onMove(detector: MoveGestureDetector) = Unit
+            override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+        }
+        // While navigating any touch-driven camera move (a pinch too) detaches the camera, and the
+        // reason tells it apart from the puck's own animations and from our camera requests.
+        val moveStarted = MapLibreMap.OnCameraMoveStartedListener { reason ->
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE && currentNavigating) {
+                currentOnFollowingDismissed()
+            }
+        }
+        loadedMap.addOnCameraMoveStartedListener(moveStarted)
+        loadedMap.addOnRotateListener(rotate)
+        loadedMap.addOnShoveListener(shove)
+        loadedMap.addOnMoveListener(move)
+        onDispose {
+            loadedMap.removeOnCameraMoveStartedListener(moveStarted)
+            loadedMap.removeOnRotateListener(rotate)
+            loadedMap.removeOnShoveListener(shove)
+            loadedMap.removeOnMoveListener(move)
         }
     }
 
@@ -223,7 +298,7 @@ fun SouthboundMap(
         }
     }
 
-    LaunchedEffect(map, contentPadding) {
+    LaunchedEffect(map, contentPadding, navigating) {
         val ui = map?.uiSettings ?: return@LaunchedEffect
         with(density) {
             val start = (contentPadding.calculateStartPadding(layoutDirection) + 8.dp).roundToPx()
@@ -232,7 +307,8 @@ fun SouthboundMap(
             val bottom = (contentPadding.calculateBottomPadding() + 8.dp).roundToPx()
             ui.setLogoMargins(start, 0, 0, bottom)
             ui.setAttributionMargins(start + 88.dp.roundToPx(), 0, 0, bottom)
-            ui.setCompassMargins(0, top, end, 0)
+            // The turn banner sits across the top while navigating; the compass goes below it.
+            ui.setCompassMargins(0, top + if (navigating) NAVIGATION_COMPASS_OFFSET.roundToPx() else 0, end, 0)
         }
     }
 

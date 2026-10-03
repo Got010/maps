@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:map"))
     implementation(project(":core:routing"))
     implementation(project(":core:voice"))
     implementation(libs.ferrostar.ui.compose)
