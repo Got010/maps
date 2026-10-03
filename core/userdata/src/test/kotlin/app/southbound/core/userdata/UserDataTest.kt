@@ -255,13 +255,21 @@ class UserDataTest {
     }
 
     @Test
-    fun `refused saves are counted`() {
+    fun `refused explicit saves are counted but automatic recents are not`() {
         val file = tmp.root.resolve("places.sealed")
         file.writeBytes("garbage".toByteArray())
         val store = UserDataStore(file, PlainSealer)
         assertEquals(0, store.refusedSaves.value)
         repeat(2) { try { store.save(cafe, UserData.FAVORITES_ID) } catch (expected: UserDataUnreadableException) { } }
         assertEquals(2, store.refusedSaves.value)
+        // A recent is recorded automatically on every place viewed: refused, but not counted.
+        try {
+            store.recordRecent(pin)
+            fail("recorded a recent over an unreadable file")
+        } catch (expected: UserDataUnreadableException) {
+        }
+        assertEquals(2, store.refusedSaves.value)
+        assertEquals("garbage", file.readText())
     }
 
     @Test
