@@ -13,10 +13,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import app.southbound.core.updates.UpdateNotifications
+import app.southbound.core.updates.UpdateStatus
 import app.southbound.feature.explore.ExploreScreen
 import app.southbound.feature.explore.ExploreServices
 import app.southbound.feature.settings.SettingsScreen
 import app.southbound.theme.SouthboundTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -28,6 +34,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         // After process death Android re-delivers the original intent; it was already imported.
         if (savedInstanceState == null) sharedPack = intent.sharedPackUri()
+        showInstallPrompts()
         setContent {
             SouthboundTheme {
                 var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -50,6 +57,21 @@ class MainActivity : ComponentActivity() {
                             network = services.networkToggles,
                             secrets = services.secrets,
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    /** Android's "Update Southbound?" screen, shown as soon as the app is in front. */
+    private fun showInstallPrompts() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                UpdateStatus.confirm.collect { confirm ->
+                    if (confirm != null) {
+                        UpdateStatus.confirmShown()
+                        UpdateNotifications.cancelConfirm(this@MainActivity)
+                        runCatching { startActivity(confirm) }
                     }
                 }
             }

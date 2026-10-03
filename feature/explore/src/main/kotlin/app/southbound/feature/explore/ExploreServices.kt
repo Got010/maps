@@ -44,7 +44,7 @@ class ExploreServices private constructor(context: Context) {
     val voice = GuidanceVoice(appContext, voiceSettings)
 
     /** Network toggles (all off but pack downloads until the user turns one on) and API keys. */
-    val networkToggles = PreferenceNetworkToggles(appContext)
+    val networkToggles = PreferenceNetworkToggles.get(appContext)
     val networkGate = NetworkGate(networkToggles)
     val secrets = SecretStore(appContext)
     val realtime = TransitRealtime(networkGate, busKey = { secrets.get(ApiKey.MTA_BUS_TIME) })

@@ -10,6 +10,7 @@ android {
 dependencies {
     implementation(project(":core:voice"))
     implementation(project(":core:network"))
+    implementation(project(":core:updates"))
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)

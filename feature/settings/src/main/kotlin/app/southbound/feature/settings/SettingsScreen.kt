@@ -162,6 +162,8 @@ fun SettingsScreen(
 
             if (network != null && secrets != null) {
                 HorizontalDivider(Modifier.padding(top = 24.dp))
+                UpdatesSection(network, secrets)
+                HorizontalDivider(Modifier.padding(top = 24.dp))
                 LiveDataSection(network, secrets)
             }
 
@@ -225,7 +227,7 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
 }
 
 @Composable
-private fun Section(@StringRes title: Int) {
+internal fun Section(@StringRes title: Int) {
     Text(
         stringResource(title),
         style = MaterialTheme.typography.titleSmall,
@@ -244,7 +246,7 @@ private fun Subheading(@StringRes title: Int) {
 }
 
 @Composable
-private fun Toggle(@StringRes title: Int, checked: Boolean, @StringRes note: Int? = null, onChange: (Boolean) -> Unit) {
+internal fun Toggle(@StringRes title: Int, checked: Boolean, @StringRes note: Int? = null, onChange: (Boolean) -> Unit) {
     ListItem(
         headlineContent = { Text(stringResource(title)) },
         supportingContent = note?.let { { Text(stringResource(it)) } },
