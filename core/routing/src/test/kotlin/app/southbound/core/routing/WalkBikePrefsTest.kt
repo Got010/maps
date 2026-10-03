@@ -29,9 +29,9 @@ class WalkBikePrefsTest {
     }
 
     @Test
-    fun `step free adds flat grades, no rough trails and a slower pace to the stairs penalty`() {
+    fun `step free is the wheelchair type with the stairs penalty, flat grades and no tracks`() {
         assertEquals(
-            """{"walking_speed":4,"step_penalty":600,"use_hills":0.1,"use_tracks":0,"max_hiking_difficulty":0}""",
+            """{"type":"wheelchair","step_penalty":600,"use_hills":0.1,"use_tracks":0}""",
             WalkPrefs(stepFree = true).costingOptionsJson(),
         )
         // Asking for both is the same as step free alone.
@@ -45,12 +45,16 @@ class WalkBikePrefsTest {
             """{"step_penalty":600,"walkway_factor":0.5,"sidewalk_factor":0.7}""",
             WalkPrefs(avoidStairs = true, preferPaths = true).costingOptionsJson(),
         )
+        assertEquals(
+            """{"type":"wheelchair","step_penalty":600,"walkway_factor":0.5,"sidewalk_factor":0.7,"use_hills":0.1,"use_tracks":0}""",
+            WalkPrefs(stepFree = true, preferPaths = true).costingOptionsJson(),
+        )
     }
 
     @Test
     fun `walking prefs go under pedestrian only for walk mode`() {
         val prefs = RoutePrefs(walk = WalkPrefs(stepFree = true), avoidTolls = true)
-        assertTrue(RouteOptions.withPrefs(walkBody, TravelMode.WALK, prefs).contains(""""costing_options":{"pedestrian":{"walking_speed":4,"""))
+        assertTrue(RouteOptions.withPrefs(walkBody, TravelMode.WALK, prefs).contains(""""costing_options":{"pedestrian":{"type":"wheelchair","""))
         // Driving ignores the walking prefs, and its own body only carries its own options.
         val auto = """{"costing":"auto"}"""
         assertEquals("""{"costing_options":{"auto":{"use_tolls":0}},"costing":"auto"}""", RouteOptions.withPrefs(auto, TravelMode.DRIVE, prefs))
