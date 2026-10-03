@@ -88,6 +88,15 @@ class RouteAlertsTest {
     }
 
     @Test
+    fun pointAtWalksAlongTheLine() {
+        val mid = route.pointAt(1500.0)!!
+        assertEquals(0.0, RouteLine.distanceMeters(mid, Hand.at(500.0, 1000.0)), 1.0)
+        assertEquals(route.points.first(), route.pointAt(-5.0))
+        assertEquals(route.points.last(), route.pointAt(9999.0))
+        assertNull(RouteLine(emptyList()).pointAt(10.0))
+    }
+
+    @Test
     fun boxesCoverTheRouteInPieces() {
         // Pieces end at the line's own points, so this one makes one box per leg.
         val boxes = route.boxes(chunkMeters = 500.0, padMeters = 50.0)
