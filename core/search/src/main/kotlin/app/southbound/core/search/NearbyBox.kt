@@ -9,6 +9,14 @@ data class NearbyBox(val south: Double, val north: Double, val west: Double, val
     companion object {
         private const val KM_PER_DEGREE = 111.195
 
+        /** The [places] within [radiusMeters] of [center] (the box is square, the radius is not), nearest first, at most [limit]. */
+        fun within(places: List<Place>, center: LatLon, radiusMeters: Double, limit: Int): List<SearchResult> =
+            places
+                .map { SearchResult(it, SearchRanking.distanceMeters(center, it.lat, it.lon)) }
+                .filter { it.distanceMeters!! <= radiusMeters }
+                .sortedBy { it.distanceMeters }
+                .take(limit)
+
         fun around(center: LatLon, km: Double): NearbyBox {
             val dLat = km / KM_PER_DEGREE
             val dLon = km / (KM_PER_DEGREE * cos(Math.toRadians(center.lat)).coerceAtLeast(0.01))

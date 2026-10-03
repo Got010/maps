@@ -9,6 +9,13 @@ FTS5 trigram index over a normalised copy of each row's text:
   kind 2  street    named roads, one row per name per ~2 km cell
   kind 3  address   house number + street
 
+A second table, `landmark`, holds points that guidance talks about rather
+than things to search for: traffic signals and stop signs, prominent roadside
+places ("past the gas station"), and what the driver is warned about (speed
+and licence-plate cameras, school zones). The app reads it with small
+bounding-box queries along the route (see core/search Landmarks). Packs built
+before it existed simply lack the table, and the app then skips landmarks.
+
 The app reads it with SQLite's FTS5 (see core/search). PRAGMA
 application_id marks the file as a search pack so an import can recognise
 it whatever its name.
@@ -61,6 +68,21 @@ STREET_HIGHWAYS = {
     "residential", "living_street", "pedestrian",
 }
 MAJOR_HIGHWAYS = {"motorway", "trunk", "primary"}
+
+# Roadside places that make good landmarks in spoken directions: easy to see
+# from the car and common enough to matter. Category is what the app speaks.
+LANDMARK_POIS = {
+    ("amenity", "fuel"): "fuel",
+    ("amenity", "fast_food"): "fast_food",
+    ("amenity", "bank"): "bank",
+    ("amenity", "pharmacy"): "pharmacy",
+    ("shop", "chemist"): "pharmacy",
+    ("shop", "supermarket"): "supermarket",
+    ("amenity", "school"): "school",
+}
+# Signals and signs: position only, no name.
+LANDMARK_SIGNS = {"traffic_signals": "traffic_signals", "stop": "stop"}
+SCHOOL_SIGNS = ("S5-1", "S1-1", "school")
 STREET_CELL_DEGREES = 0.02  # about 2 km; one search row per street name per cell
 
 SCHEMA = f"""
@@ -84,11 +106,19 @@ CREATE TABLE feature (
   cuisine TEXT,
   osm_ref TEXT
 );
+CREATE TABLE landmark (
+  id INTEGER PRIMARY KEY,
+  category TEXT NOT NULL,
+  name TEXT,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL
+);
 """
 
 # Built after the bulk insert, which is much faster than indexing as we go.
 INDEXES = """
 CREATE INDEX feature_name_key ON feature(name_key);
+CREATE INDEX landmark_lat_lon ON landmark(lat, lon);
 CREATE VIRTUAL TABLE feature_fts USING fts5(
   search_text, content='', tokenize='trigram', detail='none'
 );
@@ -122,6 +152,56 @@ def place_importance(tags, category):
     return score
 
 
+def landmark_category(tags):
+    """What guidance would call this object, e.g. "traffic_signals", or None.
+
+    Alerts come first: a camera mapped on a signal pole is worth a warning
+    more than a landmark.
+    """
+    if tags.get("highway") == "speed_camera" or tags.get("enforcement") == "maxspeed":
+        return "speed_camera"
+    if is_alpr(tags):
+        return "alpr_camera"
+    if is_school_zone(tags):
+        return "school_zone"
+    sign = LANDMARK_SIGNS.get(tags.get("highway"))
+    if sign:
+        return sign
+    for (key, value), category in LANDMARK_POIS.items():
+        if tags.get(key) == value:
+            return category
+    if tags.get("amenity") == "place_of_worship" and tags.get("religion") == "christian":
+        return "church"
+    return None
+
+
+def is_alpr(tags):
+    """Licence-plate readers as DeFlock maps them (Flock Safety and others)."""
+    if tags.get("man_made") != "surveillance" and tags.get("surveillance") is None:
+        return False
+    kind = (tags.get("surveillance:type") or "").upper()
+    camera = (tags.get("camera:type") or "").upper()
+    operator = " ".join(tags.get(k, "") for k in ("operator", "manufacturer", "brand")).lower()
+    return kind == "ALPR" or camera == "ALPR" or "flock" in operator
+
+
+def is_school_zone(tags):
+    """A mapped school zone: hazard=school_zone, or a school warning or speed sign."""
+    if tags.get("hazard") == "school_zone":
+        return True
+    sign = tags.get("traffic_sign") or ""
+    if sign and any(s.lower() in sign.lower() for s in SCHOOL_SIGNS):
+        return True
+    return "school" in (tags.get("maxspeed:conditional") or "").lower()
+
+
+def landmark_name(tags, category):
+    """Signals, signs and alerts are spoken by category; places by name or brand."""
+    if category in ("traffic_signals", "stop", "speed_camera", "alpr_camera", "school_zone"):
+        return None
+    return tags.get("brand") or tags.get("name")
+
+
 def format_address(tags, with_street=True):
     """'123 Main Street, Brooklyn 11201' from addr:* tags, or None."""
     street = tags.get("addr:street") or tags.get("addr:place")
@@ -145,6 +225,8 @@ class Collector:
         self.rows = []
         self.streets = {}  # (name_key, cell) -> row
         self.counts = {LOCALITY: 0, PLACE: 0, STREET: 0, ADDRESS: 0}
+        self.landmarks = []
+        self.landmark_count = 0
 
     def add(self, kind, name, lat, lon, importance, osm_ref, tags, category=None, address=None):
         cuisine = tags.get("cuisine")
@@ -178,6 +260,23 @@ class Collector:
             self.rows,
         )
         self.rows.clear()
+        if self.landmarks:
+            self.db.executemany(
+                "INSERT INTO landmark (category, name, lat, lon) VALUES (?,?,?,?)", self.landmarks
+            )
+            self.landmarks.clear()
+
+    def landmark(self, tags, lat, lon, nodes_only=False):
+        """Adds a landmark row if the object is one. Signals and signs count only as nodes."""
+        category = landmark_category(tags)
+        if category is None:
+            return
+        if nodes_only and category in ("traffic_signals", "stop"):
+            return
+        self.landmarks.append((category, landmark_name(tags, category), round(lat, 6), round(lon, 6)))
+        self.landmark_count += 1
+        if len(self.landmarks) >= 50_000:
+            self.flush()
 
     def point(self, tags, lat, lon, osm_ref):
         """A node or an area's centre: locality, place or address."""
@@ -227,6 +326,13 @@ def way_middle(way):
     return middle.lat, middle.lon
 
 
+def way_start(way):
+    for n in way.nodes:
+        if n.location.valid():
+            return n.lat, n.lon
+    return None
+
+
 def build(pbf, output, region):
     if os.path.exists(output):
         os.remove(output)
@@ -248,11 +354,17 @@ def build(pbf, output, region):
         tags = obj.tags
         if obj.is_node():
             collector.point(tags, obj.location.lat, obj.location.lon, f"n{obj.id}")
+            collector.landmark(tags, obj.location.lat, obj.location.lon)
         elif obj.is_way():
             if "highway" in tags:
                 middle = way_middle(obj)
                 if middle:
                     collector.street(tags, *middle, f"w{obj.id}")
+                # A road with a school speed limit: warn where the zone starts.
+                if is_school_zone(tags):
+                    start = way_start(obj)
+                    if start:
+                        collector.landmark(tags, *start)
         elif obj.is_area():
             # Roads come through as ways; an area tagged highway is a plaza.
             if "highway" in tags and place_category(tags) is None:
@@ -261,6 +373,7 @@ def build(pbf, output, region):
             if centre:
                 prefix = "w" if obj.from_way() else "r"
                 collector.point(tags, *centre, f"{prefix}{obj.orig_id()}")
+                collector.landmark(tags, *centre, nodes_only=True)
     collector.flush()
 
     db.executemany(
@@ -282,7 +395,7 @@ def build(pbf, output, region):
     counts = collector.counts
     print(
         f"    {counts[LOCALITY]} localities, {counts[PLACE]} places, {counts[STREET]} streets, "
-        f"{counts[ADDRESS]} addresses in {time.time() - started:.0f}s",
+        f"{counts[ADDRESS]} addresses, {collector.landmark_count} landmarks in {time.time() - started:.0f}s",
         file=sys.stderr,
     )
     return counts

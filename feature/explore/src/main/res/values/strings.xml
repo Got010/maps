@@ -22,6 +22,7 @@
     <string name="explore_imported_routing">Directions data installed.</string>
     <string name="explore_imported_search">Search data installed.</string>
     <string name="explore_imported_transit">Transit data installed.</string>
+    <string name="explore_imported_voice">Voice installed. Pick it in Settings &gt; Voice.</string>
     <string name="explore_pack_share_hint">Or, in your browser\'s downloads, share the file to Southbound.</string>
     <string name="explore_pack_adb">Or copy a basemap here with adb, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>
@@ -32,6 +33,9 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_traffic_hide">Hide live traffic</string>
+    <string name="explore_alert_speed_camera">Speed camera ahead.</string>
+    <string name="explore_alert_school_zone">School zone ahead.</string>
+    <string name="explore_alert_alpr_camera">License plate reader ahead.</string>
     <string name="explore_closure_spoken">Road closed ahead on %1$s. Finding another way.</string>
     <string name="explore_incident_severity">Severity: %1$s</string>
     <string name="explore_incident_updated">Updated %1$s</string>
@@ -42,4 +46,5 @@
     <string name="explore_save_add">Add</string>
     <string name="explore_save_done">Done</string>
     <string name="explore_speeding_spoken">The speed limit is %1$d miles per hour.</string>
+    <string name="explore_recenter">Re-center</string>
 </resources>

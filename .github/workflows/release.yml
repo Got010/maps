@@ -45,7 +45,7 @@ concurrency:
 
 env:
   # What a release ships; `make -C pipeline state` builds the same list.
-  PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite
+  PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite voice-norman.zip
 
 jobs:
   plan:
@@ -146,7 +146,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third-party
-          key: voice-${{ hashFiles('scripts/fetch-voice.sh') }}
+          key: voice-${{ hashFiles('scripts/fetch-voice.sh', 'pipeline/lib/voices.sh') }}
       - name: Fetch the offline voice (sherpa-onnx and Piper)
         run: scripts/fetch-voice.sh
 
@@ -203,7 +203,8 @@ jobs:
 
       - name: Build ${{ matrix.pack }}
         run: |
-          # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys
+          # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys;
+          # voice-norman.zip -> voice-norman
           name="${PACK%%.*}"
           kind="${name%%-*}"; region="${name#*-}"
           [[ "$kind" == basemap ]] && kind=tiles
@@ -269,7 +270,7 @@ jobs:
           else
             data_note="Map data unchanged since $PREVIOUS."
           fi
-          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-<region>.pmtiles (the map, one per region: nyc, li, hudson, capital, western), search-nys.sqlite (search, whole state), routing-nys.tar (directions, whole state) and transit-nyc.sqlite (NYC transit schedules). $data_note
+          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-<region>.pmtiles (the map, one per region: nyc, li, hudson, capital, western), search-nys.sqlite (search, whole state), routing-nys.tar (directions, whole state), transit-nyc.sqlite (NYC transit schedules) and voice-norman.zip (an extra built-in voice, downloaded only if picked in Settings > Voice). $data_note
 
           Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA."
           # Tags made with this token don't start another run, so no loop.
