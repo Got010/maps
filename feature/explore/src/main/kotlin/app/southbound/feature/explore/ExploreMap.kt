@@ -60,6 +60,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -131,6 +132,9 @@ import app.southbound.feature.directions.RoutePreviewState
 import app.southbound.feature.directions.StopsEditor
 import app.southbound.feature.navigation.FasterRouteOffer
 import app.southbound.feature.navigation.NavigationOverlay
+import app.southbound.feature.navigation.drivingMapBottomCenter
+import app.southbound.feature.navigation.rememberDrivingLandscape
+import app.southbound.feature.navigation.rememberDrivingPanelWidth
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.SearchPanel
 import app.southbound.feature.search.ShortcutSlot
@@ -841,6 +845,23 @@ internal fun ExploreMap(
     val systemDark = isSystemInDarkTheme()
     val darkTheme = NightMode.useDark(systemDark, inTrip, nightBySunset, location?.latitude, location?.longitude, clockMs)
     val sheetOpen = !inTrip && (panel is Panel.PlaceShown || panel is Panel.Directions)
+    // Phase 8: a phone on its side during a trip gets the driving column on the left (NavigationOverlay),
+    // and the map shrinks to the rest of the screen so the column covers nothing.
+    val landscape = rememberDrivingLandscape()
+    val drivingPanelWidth = rememberDrivingPanelWidth()
+    val drivingLandscape = inTrip && landscape
+    val systemBars = WindowInsets.systemBars.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    // The column covers the left system inset, so only the other edges still pad the map's controls.
+    val mapPadding = if (drivingLandscape) {
+        PaddingValues(
+            top = systemBars.calculateTopPadding(),
+            end = systemBars.calculateEndPadding(layoutDirection),
+            bottom = systemBars.calculateBottomPadding(),
+        )
+    } else {
+        systemBars
+    }
     val droppedPin = stringResource(R.string.explore_dropped_pin)
 
     // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
@@ -868,8 +889,8 @@ internal fun ExploreMap(
             location = shownLocation,
             following = following,
             onFollowingDismissed = { following = false },
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = WindowInsets.systemBars.asPaddingValues(),
+            modifier = if (drivingLandscape) Modifier.fillMaxSize().padding(start = drivingPanelWidth) else Modifier.fillMaxSize(),
+            contentPadding = mapPadding,
             overlays = overlays.copy(
                 cameras = cameraPins,
                 trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
@@ -957,7 +978,14 @@ internal fun ExploreMap(
             )
             if (!following && location != null) {
                 // Above the ETA and trip progress at the bottom.
-                RecenterPill({ following = true }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp))
+                RecenterPill(
+                    { following = true },
+                    if (drivingLandscape) {
+                        drivingMapBottomCenter(drivingPanelWidth)
+                    } else {
+                        Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp)
+                    },
+                )
             }
         } else {
             when (val current = panel) {
