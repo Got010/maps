@@ -9,6 +9,9 @@ enum class UtteranceKind {
     ARRIVAL,
     REROUTE,
     TRAFFIC_ALERT,
+
+    /** A speed camera, licence-plate reader or school zone ahead, from the pack. */
+    HAZARD_ALERT,
     SPEED_LIMIT,
     TRANSIT_STOP,
 
@@ -18,7 +21,8 @@ enum class UtteranceKind {
 
 /** What to do with one utterance. */
 sealed interface GuidanceAction {
-    data class Speak(val text: String) : GuidanceAction
+    /** [vibrate]: buzz as well (Haptic turns). [chime]: the tone to play first, if any. */
+    data class Speak(val text: String, val vibrate: Boolean = false, val chime: ChimeKind? = null) : GuidanceAction
 
     /** Walking with voice off: buzz at the turn instead. */
     data object Vibrate : GuidanceAction
@@ -34,33 +38,79 @@ object GuidancePolicy {
     /** Early warnings ("In half a mile, ...") are further out than this; Brief skips them. */
     const val BRIEF_MAX_TRIGGER_METERS = 250.0
 
+    /**
+     * [landmark] ("after the next light") and [followUp] (the next turn's
+     * sentence when it comes right after this one) only apply to route
+     * instructions; see [InstructionText].
+     */
     fun decide(
         settings: VoiceSettings,
         mode: GuidanceMode,
         kind: UtteranceKind,
         text: String,
         triggerDistanceMeters: Double = 0.0,
+        landmark: String? = null,
+        followUp: String? = null,
     ): GuidanceAction {
-        if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text)
+        if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text, chime = chimeFor(settings, kind))
         val modeOn = settings.enabledFor(mode)
         val voiceOn = modeOn && settings.mode != VoiceMode.MUTED
+        val atTurn = triggerDistanceMeters <= BRIEF_MAX_TRIGGER_METERS
         val wanted = when (kind) {
             UtteranceKind.INSTRUCTION -> settings.mode == VoiceMode.ON &&
-                (settings.detail == DetailLevel.FULL || triggerDistanceMeters <= BRIEF_MAX_TRIGGER_METERS)
+                (settings.detail == DetailLevel.FULL || atTurn)
             UtteranceKind.ARRIVAL -> true
             UtteranceKind.REROUTE -> settings.rerouteAnnouncement
             UtteranceKind.TRAFFIC_ALERT -> settings.trafficAlerts
+            // Which alerts (cameras, school zones) is decided by the app, per toggle.
+            UtteranceKind.HAZARD_ALERT -> true
             UtteranceKind.SPEED_LIMIT -> settings.speedLimitWarnings && settings.mode == VoiceMode.ON
             UtteranceKind.TRANSIT_STOP -> settings.transitStopAlerts && settings.mode == VoiceMode.ON
             UtteranceKind.TEST -> true
         }
-        return when {
-            voiceOn && wanted -> GuidanceAction.Speak(if (settings.streetNames) text else withoutStreetNames(text))
+        // The prompt at the turn itself buzzes with Haptic turns on, voice or not.
+        val buzz = kind == UtteranceKind.INSTRUCTION && atTurn && (settings.hapticTurns ||
             // HANDOFF: walking with voice off falls back to vibration cues at turns.
-            mode == GuidanceMode.WALKING && !modeOn && kind == UtteranceKind.INSTRUCTION &&
-                triggerDistanceMeters <= BRIEF_MAX_TRIGGER_METERS -> GuidanceAction.Vibrate
+            (mode == GuidanceMode.WALKING && !modeOn))
+        return when {
+            voiceOn && wanted -> GuidanceAction.Speak(
+                compose(settings, kind, text, atTurn, landmark, followUp),
+                vibrate = buzz,
+                chime = chimeFor(settings, kind),
+            )
+            buzz -> GuidanceAction.Vibrate
             else -> GuidanceAction.Silent
         }
+    }
+
+    /** The sentence as spoken: street names and distance per the settings, then landmark and follow-up. */
+    private fun compose(
+        settings: VoiceSettings,
+        kind: UtteranceKind,
+        text: String,
+        atTurn: Boolean,
+        landmark: String?,
+        followUp: String?,
+    ): String {
+        fun plain(sentence: String): String {
+            var out = if (settings.streetNames) sentence else withoutStreetNames(sentence)
+            if (settings.distanceStyle == DistanceStyle.SHORT && atTurn) out = InstructionText.withoutLeadingDistance(out)
+            return out
+        }
+        if (kind != UtteranceKind.INSTRUCTION) return if (settings.streetNames) text else withoutStreetNames(text)
+        var out = plain(text)
+        if (landmark != null) out = InstructionText.withLandmark(out, landmark)
+        if (followUp != null) out = InstructionText.withFollowUp(out, plain(followUp))
+        return out
+    }
+
+    /** Turn prompts get the instruction tone, warnings the alert tone, each behind its toggle. */
+    fun chimeFor(settings: VoiceSettings, kind: UtteranceKind): ChimeKind? = when (kind) {
+        UtteranceKind.INSTRUCTION, UtteranceKind.ARRIVAL, UtteranceKind.TEST ->
+            ChimeKind.INSTRUCTION.takeIf { settings.instructionChime }
+        UtteranceKind.TRAFFIC_ALERT, UtteranceKind.HAZARD_ALERT, UtteranceKind.SPEED_LIMIT ->
+            ChimeKind.ALERT.takeIf { settings.alertChime }
+        UtteranceKind.REROUTE, UtteranceKind.TRANSIT_STOP -> null
     }
 
     /** Valhalla sentences carry street names after "onto", "on", "toward" or "at". */
