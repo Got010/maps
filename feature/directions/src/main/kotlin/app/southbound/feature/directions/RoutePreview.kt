@@ -1,15 +1,19 @@
 package app.southbound.feature.directions
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -30,12 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Eta
+import app.southbound.core.map.RouteColors
 import app.southbound.core.map.Units
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
@@ -52,7 +58,7 @@ sealed interface RoutePreviewState {
 
 /**
  * The sheet under the map while choosing a route: travel mode, the route
- * options (the selected one is blue on the map), and Start.
+ * options (each marked with its line colour on the map), and Start.
  */
 @Composable
 fun RoutePreviewSheet(
@@ -131,6 +137,7 @@ fun RoutePreviewSheet(
                                 delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
                                 selected = i == state.selected,
                                 fastest = i == 0,
+                                rank = i,
                                 onClick = { onSelect(i) },
                             )
                         }
@@ -182,7 +189,9 @@ fun ModeChips(
 }
 
 @Composable
-private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, rank: Int, onClick: () -> Unit) {
+    // The route's line colour on the map. Outside a trip the map follows the system theme.
+    val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
     val late = Eta.isLate(delaySeconds)
     val total = summary.durationSeconds + delaySeconds
     val red = MaterialTheme.colorScheme.error
@@ -194,6 +203,7 @@ private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: B
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.padding(end = 12.dp).size(12.dp).background(lineColor, CircleShape))
             Column(Modifier.weight(1f)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     Text(
