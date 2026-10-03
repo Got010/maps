@@ -103,6 +103,8 @@ fun SouthboundMap(
     initialZoom: Double = START_ZOOM,
     /** True when a finger goes down on the map, false when the last one lifts; drives auto-recenter. */
     onTouchChanged: ((Boolean) -> Unit)? = null,
+    /** A tap on a plate-reader dot ([MapOverlays.cameras]) reports its id. */
+    onCameraTap: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -199,6 +201,25 @@ fun SouthboundMap(
     LaunchedEffect(style, overlays) {
         val loaded = style ?: return@LaunchedEffect
         OverlayLayers.update(loaded, overlays)
+    }
+
+    // Plate-reader taps get their own listener, added before the incident one so a camera
+    // sitting on a route line or next to an incident wins the tap.
+    val currentOnCameraTap by rememberUpdatedState(onCameraTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val handler = currentOnCameraTap ?: return@OnMapClickListener false
+            if (loadedMap.style?.getLayer(OverlayLayers.CAMERAS) == null) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.CAMERAS).firstOrNull() ?: return@OnMapClickListener false
+            val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
+            handler(id)
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
     }
 
     val currentOnLongPress by rememberUpdatedState(onLongPress)
