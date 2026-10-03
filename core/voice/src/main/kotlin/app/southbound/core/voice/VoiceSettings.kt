@@ -39,15 +39,16 @@ enum class DistanceStyle {
 }
 
 /**
- * The Piper voices bundled in the APK (scripts/fetch-voice.sh). [assetDir]
- * is the voice's folder under the APK's `piper` assets.
+ * The Piper voices the built-in engine can speak with. [id] names the
+ * voice's folder under the `piper` assets (when [bundled]) or its pack,
+ * `voice-<id>.zip`, which the updater downloads only once it's picked.
  */
-enum class BuiltInVoice(val assetDir: String) {
-    /** US English, female (Piper "amy", low). The default, bundled since Phase 1. */
-    AMY("amy"),
+enum class BuiltInVoice(val id: String, val bundled: Boolean) {
+    /** US English, female (Piper "amy", low). Bundled in the APK, so it always works. */
+    AMY("amy", bundled = true),
 
-    /** US English, male (Piper "norman", medium; public domain LibriVox recordings). */
-    NORMAN("norman"),
+    /** US English, male (Piper "norman", medium; public domain LibriVox recordings). A download. */
+    NORMAN("norman", bundled = false),
 }
 
 enum class GuidanceVolume(val gain: Float, val boostMillibels: Int) {
