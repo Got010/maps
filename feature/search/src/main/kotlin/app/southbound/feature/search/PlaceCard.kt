@@ -4,7 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TripOrigin
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +49,8 @@ fun PlaceCard(
     onDirections: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Use this place as the start of directions instead of GPS. */
+    onStartHere: (() -> Unit)? = null,
     /** More rows under the actions, such as transit departures nearby. */
     extra: (@Composable () -> Unit)? = null,
 ) {
@@ -78,12 +83,18 @@ fun PlaceCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 12.dp, end = 12.dp),
+                modifier = Modifier.padding(top = 12.dp, end = 12.dp).horizontalScroll(rememberScrollState()),
             ) {
                 if (onDirections != null) {
                     Button(onClick = onDirections) {
                         Icon(Icons.Filled.Directions, contentDescription = null, Modifier.size(18.dp))
                         Text(stringResource(R.string.place_directions), Modifier.padding(start = 8.dp))
+                    }
+                }
+                onStartHere?.let {
+                    TextButton(onClick = it) {
+                        Icon(Icons.Filled.TripOrigin, contentDescription = null, Modifier.size(18.dp))
+                        Text(stringResource(R.string.place_start_here), Modifier.padding(start = 6.dp))
                     }
                 }
                 place.phone?.let { phone ->

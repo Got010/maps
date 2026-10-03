@@ -35,6 +35,9 @@ import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
+import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.PackStatus
+import app.southbound.core.packs.PackStore
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.updates.UpdateState
 import app.southbound.core.updates.UpdateStatus
@@ -49,17 +52,28 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
     val context = LocalContext.current
     val toggles by network.state.collectAsState()
     val state by UpdateStatus.state.collectAsState()
+    val queue by remember { UpdateScheduler.queue(context) }.collectAsState(UpdateScheduler.Queue.IDLE)
+    var networkPermitted by remember { mutableStateOf(UpdateScheduler.networkPermitted(context)) }
+    var packs by remember { mutableStateOf(installedPacks(context)) }
     var mobileData by remember { mutableStateOf(UpdateScheduler.allowMobileData(context)) }
     var canInstall by remember { mutableStateOf(context.packageManager.canRequestPackageInstalls()) }
     LifecycleResumeEffect(Unit) {
         canInstall = context.packageManager.canRequestPackageInstalls()
+        networkPermitted = UpdateScheduler.networkPermitted(context)
+        packs = installedPacks(context)
         onPauseOrDispose { }
     }
 
     Section(R.string.settings_updates)
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(versionLine(context), style = MaterialTheme.typography.bodyMedium)
+        if (!networkPermitted) {
+            Text(UpdateScheduler.NO_NETWORK_PERMISSION, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
         UpdateProgress(state)
+        if (queue == UpdateScheduler.Queue.WAITING && state !is UpdateState.Downloading && state != UpdateState.Checking) {
+            Text(stringResource(R.string.updates_waiting), style = MaterialTheme.typography.bodySmall)
+        }
         Button(
             onClick = { UpdateScheduler.checkNow(context, anyNetwork = true) },
             enabled = state !is UpdateState.Downloading && state != UpdateState.Checking,
@@ -84,6 +98,40 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
         UpdateScheduler.setAllowMobileData(context, it)
     }
     GitHubToken(secrets)
+    InstalledPacks(packs)
+}
+
+private data class PackLine(val name: String, val sizeMb: Long, val modified: Long)
+
+private fun installedPacks(context: Context): List<PackLine> {
+    val store = PackStore(context.filesDir, context.getExternalFilesDir(null))
+    return PackKind.entries.mapNotNull { kind ->
+        (store.status(kind, PackStore.DEFAULT_REGION) as? PackStatus.Installed)?.file?.let {
+            PackLine(it.name, it.length() shr 20, it.lastModified())
+        }
+    }
+}
+
+/** What's on the phone now, so a missing or stale pack is easy to spot. */
+@Composable
+private fun InstalledPacks(packs: List<PackLine>) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(stringResource(R.string.updates_packs_installed), style = MaterialTheme.typography.labelLarge)
+        if (packs.isEmpty()) {
+            Text(stringResource(R.string.updates_packs_none), style = MaterialTheme.typography.bodySmall)
+        }
+        for (pack in packs) {
+            Text(
+                stringResource(
+                    R.string.updates_pack_line,
+                    pack.name,
+                    pack.sizeMb,
+                    DateUtils.formatDateTime(LocalContext.current, pack.modified, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable

@@ -6,7 +6,6 @@ import androidx.sqlite.driver.bundled.SQLITE_OPEN_READONLY
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.Closeable
 import java.io.File
-import kotlin.math.cos
 
 /**
  * Searches a search pack (search-<region>.sqlite) on the device.
@@ -36,7 +35,21 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         }
     }
 
+    /**
+     * Rows matching every word: the most important ones overall, plus (with
+     * [near]) the most important ones close by, so a small local place isn't
+     * crowded out by famous ones far away. Distance ranking happens in Kotlin
+     * ([SearchRanking]); the SQL uses no math functions, which not every
+     * SQLite build has.
+     */
     private fun candidates(query: SearchQuery, near: LatLon?): List<Candidate> {
+        val overall = select(query, box = null)
+        if (near == null) return overall
+        val nearby = select(query, box = NearbyBox.around(near, NEARBY_KM))
+        return (nearby + overall).distinctBy { it.place.id }
+    }
+
+    private fun select(query: SearchQuery, box: NearbyBox?): List<Candidate> {
         val args = mutableListOf<Any>()
         val sql = StringBuilder("SELECT $COLUMNS FROM ")
         val match = query.ftsMatch
@@ -54,19 +67,11 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
             args += query.prefix
             args += query.prefix + '\u007f'
         }
-        if (near != null) {
-            // Importance minus POINTS_PER_KM per km, as in SearchRanking, with
-            // an equirectangular distance that is plenty for ordering.
-            sql.append(
-                " ORDER BY f.importance - ? * sqrt((f.lat - ?) * (f.lat - ?) * ? + (f.lon - ?) * (f.lon - ?) * ?) DESC",
-            )
-            val kmPerDegLat2 = KM_PER_DEGREE * KM_PER_DEGREE
-            val kmPerDegLon2 = kmPerDegLat2 * cos(Math.toRadians(near.lat)).let { it * it }
-            args.addAll(listOf(SearchRanking.POINTS_PER_KM, near.lat, near.lat, kmPerDegLat2, near.lon, near.lon, kmPerDegLon2))
-        } else {
-            sql.append(" ORDER BY f.importance DESC")
+        if (box != null) {
+            sql.append(" AND f.lat BETWEEN ? AND ? AND f.lon BETWEEN ? AND ?")
+            args.addAll(listOf(box.south, box.north, box.west, box.east))
         }
-        sql.append(" LIMIT $CANDIDATE_LIMIT")
+        sql.append(" ORDER BY f.importance DESC LIMIT $CANDIDATE_LIMIT")
 
         return connection.prepare(sql.toString()).use { stmt ->
             args.forEachIndexed { i, arg ->
@@ -84,7 +89,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
 
     companion object {
         private const val CANDIDATE_LIMIT = 300
-        private const val KM_PER_DEGREE = 111.195
+
+        /** How far "nearby" reaches when picking local candidates. */
+        private const val NEARBY_KM = 15.0
         private const val COLUMNS =
             "f.id, f.kind, f.name, f.category, f.address, f.lat, f.lon, f.importance, f.name_key, " +
                 "f.search_text, f.opening_hours, f.phone, f.website, f.cuisine, f.osm_ref"

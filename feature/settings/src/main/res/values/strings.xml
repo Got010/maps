@@ -74,4 +74,8 @@
     <string name="updates_token_saved">GitHub token saved (type to replace)</string>
     <string name="updates_token_save">Save token</string>
     <string name="updates_token_remove">Remove token</string>
+    <string name="updates_waiting">Queued: waiting for a network connection (Wi-Fi, unless mobile data is allowed).</string>
+    <string name="updates_packs_installed">Installed data</string>
+    <string name="updates_packs_none">No data packs installed yet.</string>
+    <string name="updates_pack_line">%1$s · %2$d MB · %3$s</string>
 </resources>
