@@ -251,6 +251,19 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 5: the feel of the map and of guidance** (map touch, traffic visuals and small details; written by the map agent, the guidance half is tracked separately)
+
+- [x] Two-finger rotate and tilt, with a compass button that snaps back to north (MapLibre's compass, fades when facing north)
+- [x] One-finger zoom: double-tap and hold, slide up or down
+- [x] A "Re-center" pill when the map leaves the puck; tap it, or wait 10 s while navigating
+- [x] Slowdown colors on the active route and in the route picker, with "X min of delay" (`RouteTraffic.slowdowns`, NYC DOT links only; TomTom flow isn't built)
+- [x] ETA in red with "+X min" when traffic adds more than 2 min, "Typical: N min"
+- [x] Incident pins along the route line with the tap-to-read card
+- [x] "Faster route found, saves N min" banner every ~3 min mid-trip (`FasterRoute`)
+- [x] Arrival: side of street (computed on the phone from the route end, since Ferrostar's route model doesn't carry Valhalla's `side_of_street`), parking nearby from the search pack (`SearchIndex.nearby`; only named parking is in the pack)
+- [x] Highway signposts from the banner's exit numbers
+- Not verified: none of this has been built or run (the Android build can't run in the dev container); the pure parts are unit-tested.
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
