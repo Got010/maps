@@ -223,4 +223,55 @@ class UserDataTest {
         store.setShortcut(Shortcut.HOME, cafe)
         assertEquals(cafe, UserDataStore(file, PlainSealer).data.value.home)
     }
+
+    @Test
+    fun `reload after a temporary failure ends loaded with the data`() {
+        val file = tmp.root.resolve("places.sealed")
+        UserDataStore(file, PlainSealer).save(cafe, UserData.FAVORITES_ID)
+        var failuresLeft = 1
+        val flaky = object : Sealer {
+            override fun seal(plain: ByteArray) = plain
+            override fun open(sealed: ByteArray): ByteArray =
+                if (failuresLeft-- > 0) throw java.security.GeneralSecurityException("keystore busy") else sealed
+        }
+        val store = UserDataStore(file, flaky)
+        assertTrue(store.loadState.value is LoadState.Unreadable)
+        store.reload()
+        assertEquals(LoadState.Loaded, store.loadState.value)
+        assertEquals(1, store.data.value.saved.size)
+        store.recordRecent(pin) // saves work again
+        assertEquals(1, UserDataStore(file, PlainSealer).data.value.recents.size)
+    }
+
+    @Test
+    fun `reload keeps a still-unreadable file as it is`() {
+        val file = tmp.root.resolve("places.sealed")
+        file.writeBytes("garbage".toByteArray())
+        val store = UserDataStore(file, PlainSealer)
+        store.reload()
+        assertTrue(store.loadState.value is LoadState.Unreadable)
+        assertEquals("garbage", file.readText())
+        assertEquals(listOf("places.sealed"), tmp.root.list()!!.toList())
+    }
+
+    @Test
+    fun `refused saves are counted`() {
+        val file = tmp.root.resolve("places.sealed")
+        file.writeBytes("garbage".toByteArray())
+        val store = UserDataStore(file, PlainSealer)
+        assertEquals(0, store.refusedSaves.value)
+        repeat(2) { try { store.save(cafe, UserData.FAVORITES_ID) } catch (expected: UserDataUnreadableException) { } }
+        assertEquals(2, store.refusedSaves.value)
+    }
+
+    @Test
+    fun `a stale temp file from a crash is replaced by the next write`() {
+        val file = tmp.root.resolve("places.sealed")
+        tmp.root.resolve("places.sealed.part").writeBytes("half a wri".toByteArray())
+        val store = UserDataStore(file, PlainSealer)
+        assertEquals(LoadState.Loaded, store.loadState.value) // the .part file is ignored on load
+        store.save(cafe, UserData.FAVORITES_ID)
+        assertEquals(listOf("places.sealed"), tmp.root.list()!!.toList())
+        assertEquals(1, UserDataStore(file, PlainSealer).data.value.saved.size)
+    }
 }
