@@ -13,6 +13,13 @@ enum class PlaceKind(val code: Int) {
     }
 }
 
+/**
+ * Which data a [Place] came from. Overture Places rows live in their own
+ * tables of the search pack and stay out of guidance landmarks and "nearby"
+ * (see [OverturePlaces]); their credit is on the About screen.
+ */
+enum class PlaceSource { OSM, OVERTURE }
+
 /** A point on the map with a name, from the search pack or a long press. */
 data class Place(
     val id: Long,
@@ -34,6 +41,8 @@ data class Place(
      * the nearest numbers on the same street ([AddressLookup.nearestHouse]).
      */
     val approximate: Boolean = false,
+    /** [PlaceSource.OVERTURE] for a row of the pack's overture_place table; OSM for everything else. */
+    val source: PlaceSource = PlaceSource.OSM,
 ) {
     /** "Coffee shop" from "coffee_shop", for the place card. */
     val categoryLabel: String?
