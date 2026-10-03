@@ -7,6 +7,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.southbound.core.network.ApiKey
+import app.southbound.core.routing.FuelPrefs
+import app.southbound.core.routing.GasRegion
+import app.southbound.core.routing.PriceSource
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
@@ -229,7 +232,7 @@ fun SettingsScreen(
 
             // Phase 6: driving options.
             HorizontalDivider(Modifier.padding(top = 24.dp))
-            DrivingSection()
+            DrivingSection(network, secrets)
 
             if (network != null && secrets != null) {
                 HorizontalDivider(Modifier.padding(top = 24.dp))
@@ -285,6 +288,26 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
+
+    // Gas price for the fuel estimate on route cards. The state is a choice made here, never worked out from GPS.
+    val fuelPrefs = FuelPrefs.get(LocalContext.current)
+    val fuel by fuelPrefs.settings.collectAsState()
+    Subheading(R.string.live_fuel)
+    Toggle(R.string.live_gas, toggles.getValue(NetworkFeature.GAS_PRICES), R.string.live_gas_note) { on ->
+        network.set(NetworkFeature.GAS_PRICES, on)
+        // Off means the typed-in price again, even though an old fetched one is kept.
+        if (!on) fuelPrefs.setPriceSource(PriceSource.MANUAL)
+    }
+    KeyField(secrets, ApiKey.EIA, R.string.live_gas_key, R.string.live_gas_key_saved)
+    if (toggles.getValue(NetworkFeature.GAS_PRICES)) {
+        Choice(
+            title = R.string.live_gas_state,
+            options = GasRegion.entries,
+            selected = fuel.region,
+            label = { it.name },
+            note = if (fuel.region == GasRegion.NJ) stringResource(R.string.live_gas_nj_note) else null,
+        ) { fuelPrefs.setRegion(it) }
+    }
 }
 
 /** A password-style field that saves an API key encrypted, with Remove once one is saved. */
@@ -347,7 +370,7 @@ internal fun Toggle(@StringRes title: Int, checked: Boolean, @StringRes note: In
 }
 
 @Composable
-private fun <T> Choice(
+internal fun <T> Choice(
     @StringRes title: Int,
     options: List<T>,
     selected: T,

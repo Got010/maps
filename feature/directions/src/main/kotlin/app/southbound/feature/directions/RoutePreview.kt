@@ -37,14 +37,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Eta
 import app.southbound.core.map.Units
+import app.southbound.core.routing.FuelModel
+import app.southbound.core.routing.FuelSettings
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
 
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
     data object Loading : RoutePreviewState
-    /** [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown. */
-    data class Ready(val summaries: List<RouteSummary>, val selected: Int, val delaySeconds: List<Double> = emptyList()) : RoutePreviewState
+    /**
+     * [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown.
+     * [fuelGallons] is the estimated gas each route burns, in the same order (traffic idling included);
+     * empty when unknown, which hides the fuel line.
+     */
+    data class Ready(
+        val summaries: List<RouteSummary>,
+        val selected: Int,
+        val delaySeconds: List<Double> = emptyList(),
+        val fuelGallons: List<Double> = emptyList(),
+    ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
     enum class Reason { NO_ROUTE, NO_LOCATION }
@@ -64,6 +75,8 @@ fun RoutePreviewSheet(
     onStart: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Fuel economy and gas price for the cost on each option. */
+    fuel: FuelSettings = FuelSettings.DEFAULT,
     /** Shows a Transit chip that switches to the transit planner. */
     onTransit: (() -> Unit)? = null,
     /** A chosen start point instead of GPS; routes can be previewed but not navigated from it. */
@@ -125,12 +138,20 @@ fun RoutePreviewSheet(
                         modifier = Modifier.padding(vertical = 16.dp),
                     )
                     is RoutePreviewState.Ready -> {
+                        // With only one route there is nothing to compare, so no efficiency badge.
+                        val thriftiest = if (state.fuelGallons.size == state.summaries.size && state.summaries.size > 1) {
+                            FuelModel.mostEfficient(state.fuelGallons)
+                        } else {
+                            null
+                        }
                         state.summaries.forEachIndexed { i, summary ->
                             RouteOption(
                                 summary,
                                 delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
                                 selected = i == state.selected,
                                 fastest = i == 0,
+                                fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
+                                leastGas = i == thriftiest,
                                 onClick = { onSelect(i) },
                             )
                         }
@@ -182,7 +203,15 @@ fun ModeChips(
 }
 
 @Composable
-private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+private fun RouteOption(
+    summary: RouteSummary,
+    delaySeconds: Double,
+    selected: Boolean,
+    fastest: Boolean,
+    fuelCost: Double?,
+    leastGas: Boolean,
+    onClick: () -> Unit,
+) {
     val late = Eta.isLate(delaySeconds)
     val total = summary.durationSeconds + delaySeconds
     val red = MaterialTheme.colorScheme.error
@@ -237,9 +266,40 @@ private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: B
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (leastGas) LeastGasBadge(fastest)
             }
-            Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
+                fuelCost?.let { GasCostLine(it) }
+            }
         }
+    }
+}
+
+/** "≈ $4.10 gas" under the distance. */
+@Composable
+private fun GasCostLine(dollars: Double) {
+    Text(
+        stringResource(R.string.directions_gas_cost, FuelModel.formatCost(dollars)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Marks the option that burns the least gas; [alsoFastest] when it is the fastest too. */
+@Composable
+private fun LeastGasBadge(alsoFastest: Boolean) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Text(
+            stringResource(if (alsoFastest) R.string.directions_fastest_least_gas else R.string.directions_least_gas),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 
