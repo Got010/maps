@@ -23,6 +23,13 @@
 #                       default: by location (states.py)
 #   SEARCH_MAX_MB       fail if the pack is bigger (default 1900: GitHub release
 #                       files must stay under 2 GiB)
+#   OVERTURE            1: add Overture Places (overture.py) in their own tables,
+#                       fetched from Overture's public S3 bucket with DuckDB.
+#                       Default off; release.yml and data.yml turn it on.
+#   OVERTURE_RELEASE    an Overture release id (e.g. 2026-09-23.1) or "latest";
+#                       default: overture.py's DEFAULT_RELEASE while published,
+#                       else the newest
+#   OVERTURE_MAX_MB     fail if the Overture tables alone are bigger (default 900)
 #
 # Usage: build.sh <region>      e.g. build.sh nys
 set -euo pipefail
@@ -34,6 +41,8 @@ PYTHON_IMAGE="${PYTHON_IMAGE:-python:3.12-slim}"
 GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.9.2}"
 PYOSMIUM_VERSION="4.3.1"
 SEARCH_MAX_MB="${SEARCH_MAX_MB:-1900}"
+DUCKDB_VERSION="1.5.6"
+OVERTURE_MAX_MB="${OVERTURE_MAX_MB:-900}"
 
 clip_extract "$REGION"
 region_bounds "$REGION"
@@ -141,17 +150,34 @@ else
   echo "==> ADDRESS_POINTS_URL is not set: addresses from OSM only"
 fi
 
+# Overture Places: overture.py fetch reads the region's rows from Overture's
+# bucket into a staging CSV (kept in tmp/ and reused while the release and
+# bounds stay the same), then build_search.py loads it into its own tables.
+OVERTURE_STEP=""
+if [[ "${OVERTURE:-0}" == 1 ]]; then
+  OVERTURE_CSV="/data/tmp/overture-$REGION.csv"
+  OVERTURE_STEP="pip install -q --root-user-action=ignore duckdb==$DUCKDB_VERSION
+    python /search/overture.py fetch --bounds=$BOUNDS --out=$OVERTURE_CSV
+    chown $(id -u):$(id -g) $OVERTURE_CSV $OVERTURE_CSV.json"
+  ARGS="$ARGS --overture=$OVERTURE_CSV --overture-max-mb=$OVERTURE_MAX_MB"
+  echo "==> Adding Overture Places (release: ${OVERTURE_RELEASE:-default})"
+else
+  echo "==> OVERTURE is not 1: OSM places only"
+fi
+
 OUTPUT="search-$REGION.sqlite"
 echo "==> Indexing places, streets and addresses -> $OUTPUT"
 docker run --rm \
   -v "$DATA_DIR:/data" \
   -v "$PIPELINE_DIR/search:/search:ro" \
   -v "$PIPELINE_DIR/regions.json:/regions.json:ro" \
+  -e OVERTURE_RELEASE="${OVERTURE_RELEASE:-}" \
   "$PYTHON_IMAGE" bash -c "
     set -e
     # pyosmium's wheel links against libexpat, which the slim image lacks.
     apt-get update -qq >/dev/null && apt-get install -y -qq libexpat1 >/dev/null
     pip install -q --root-user-action=ignore osmium==$PYOSMIUM_VERSION
+    $OVERTURE_STEP
     python /search/build_search.py $CLIPPED_IN_DOCKER /data/out/$OUTPUT $REGION $ARGS
     chown $(id -u):$(id -g) /data/out/$OUTPUT
   "

@@ -40,8 +40,15 @@ The app reads it with SQLite's FTS5 (see core/search). PRAGMA
 application_id marks the file as a search pack so an import can recognise
 it whatever its name.
 
+Overture Places (overture.py), with --overture, go into their own tables,
+overture_place and overture_fts, never into `feature`: Overture's licence
+asks that they stay separate from OSM's rows, so the app merges the two only
+when it ranks results. The schema version doesn't change for them: the app
+detects the tables, as it does the address and landmark tables.
+
 Usage: build_search.py <input.osm.pbf> <output.sqlite> <region>
          [--state NY] [--address-points points.csv] [--bounds w,s,e,n] [--max-mb N]
+         [--overture places.csv]
 """
 
 import argparse
@@ -665,11 +672,14 @@ def way_start(way):
     return None
 
 
-def build(pbf, output, region, state=None, address_points=None, bounds=None, max_mb=None):
+def build(pbf, output, region, state=None, address_points=None, bounds=None, max_mb=None, overture=None,
+          overture_max_mb=None):
     """Builds the pack; returns the row counts per kind (ADDRESS counts the
     address table). Addresses and streets without addr:state are in `state`
-    if given, else wherever states.state_at puts them. Fails if the file ends
-    up larger than max_mb."""
+    if given, else wherever states.state_at puts them. overture is a staging
+    CSV from overture.py fetch: its places go into their own tables (see
+    overture.py). Fails if the file ends up larger than max_mb, or the
+    Overture tables alone larger than overture_max_mb."""
     if os.path.exists(output):
         os.remove(output)
     tmp = output + ".part"
@@ -717,6 +727,12 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
         addresses.load(collector, address_points, SOURCE_STATE, bounds=bounds)
         attribution += "; NYS Address Points, NYS GIS Program Office, CC0"
     collector.flush()
+    overture_kept = overture_skipped = 0
+    if overture:
+        import overture as overture_places  # only needed with Overture rows
+
+        overture_kept, overture_skipped = overture_places.load(db, overture, overture_places.region_scopes(region))
+        attribution += "; " + overture_places.ATTRIBUTION
 
     finder = LocalityFinder(collector.localities)
     state_of = state_finder(state)
@@ -731,12 +747,15 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
             ("state", state or "by location"),
             ("source", os.path.basename(pbf)),
             ("address_points", os.path.basename(address_points) if address_points else ""),
+            ("overture_release", overture_places.release_of(overture) if overture else ""),
             ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
             ("attribution", attribution),
         ],
     )
     db.commit()
     db.executescript(INDEXES)
+    if overture:
+        overture_places.finish(db)
     db.commit()
     db.execute("VACUUM")
     sizes = table_sizes(db)
@@ -755,6 +774,13 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
         f"{collector.address_skipped} without a number or street skipped, {duplicates} duplicates merged; "
         f"{written} addresses on {address_streets} streets"
     )
+    if overture:
+        overture_mb = sum(size for name, size in sizes.items() if name.startswith("overture")) / 1e6
+        log(f"    Overture places: {overture_kept} kept, {overture_skipped} skipped"
+            f" (closed, outside the region, or no state); {overture_mb:.1f} MB")
+        if overture_max_mb is not None and overture_mb > overture_max_mb:
+            raise SystemExit(f"The Overture tables are {overture_mb:.0f} MB, over the {overture_max_mb} MB limit"
+                             " (--overture-max-mb, OVERTURE_MAX_MB)")
     size_mb = os.path.getsize(output) / 1e6
     log(f"    {os.path.basename(output)}: {size_mb:.1f} MB")
     for name, size in list(sizes.items())[:12]:
@@ -784,9 +810,12 @@ def main():
     parser.add_argument("--bounds", type=parse_bounds,
                         help="minlon,minlat,maxlon,maxlat: keep only address points inside")
     parser.add_argument("--max-mb", type=float, help="fail if the pack is larger than this")
+    parser.add_argument("--overture", help="Overture places staging CSV from overture.py fetch")
+    parser.add_argument("--overture-max-mb", type=float, help="fail if the Overture tables are larger than this")
     args = parser.parse_args()
     build(args.pbf, args.output, args.region, state=args.state.upper() if args.state else None,
-          address_points=args.address_points, bounds=args.bounds, max_mb=args.max_mb)
+          address_points=args.address_points, bounds=args.bounds, max_mb=args.max_mb,
+          overture=args.overture, overture_max_mb=args.overture_max_mb)
 
 
 if __name__ == "__main__":
