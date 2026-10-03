@@ -5,14 +5,35 @@ import java.util.Locale
 /** A point on the map, in WGS84 degrees. */
 data class MapPoint(val lat: Double, val lon: Double)
 
-/** A route drawn on the map; the [selected] one is drawn on top, in colour. */
-data class MapLine(val points: List<MapPoint>, val selected: Boolean)
+/**
+ * A route drawn on the map. [rank] is the route's place among the
+ * alternatives (0 = fastest) and picks its colour from [RouteColors].
+ */
+data class MapLine(val points: List<MapPoint>, val role: Role, val rank: Int = 0) {
+    enum class Role {
+        /** The chosen route: a thick line in its colour over a casing. */
+        LEADER,
+
+        /** Another alternative: a thin line in its colour, drawn over the leader. */
+        THREAD,
+
+        /** A transit walk leg: thin grey dashes. */
+        WALK,
+    }
+}
 
 /** A road segment coloured by its live speed. */
 data class SpeedLine(val points: List<MapPoint>, val speedMph: Double)
 
 /** An incident pin; [kind] is the IncidentKind name, [id] comes back from a tap. */
 data class IncidentPin(val id: String, val point: MapPoint, val kind: String, val closure: Boolean)
+
+/**
+ * A licence-plate reader (Flock and others) from the search pack, drawn at
+ * all times. [id] comes back from a tap; [name] is who makes or runs it,
+ * when mapped.
+ */
+data class CameraPin(val id: String, val point: MapPoint, val name: String? = null)
 
 /** The live traffic layer: speeds under the routes, incidents over them. */
 data class TrafficOverlay(
@@ -38,6 +59,8 @@ data class MapOverlays(
     val traffic: TrafficOverlay = TrafficOverlay.NONE,
     /** Stretches of the selected route coloured by live speed; drawn on top of the route line. */
     val slowdowns: List<SpeedLine> = emptyList(),
+    /** Plate readers, shown in every state (browsing, planning, driving) from zoom 11. */
+    val cameras: List<CameraPin> = emptyList(),
 )
 
 /**
@@ -62,13 +85,22 @@ sealed interface CameraRequest {
 /** GeoJSON for the overlay sources, built by hand to keep the dependency surface small. */
 internal object OverlayGeoJson {
 
-    fun routes(lines: List<MapLine>): String = featureCollection(
-        // Alternatives first so the selected route is drawn last, on top.
-        lines.sortedBy { it.selected }.filter { it.points.size >= 2 }.map { line ->
-            val coordinates = line.points.joinToString(",") { coordinate(it) }
-            """{"type":"Feature","properties":{"selected":${line.selected}},""" +
-                """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
-        },
+    /**
+     * Each line carries its rank, role and colours, so the layers only filter
+     * on role and read the colour: no theme logic in the style. Within a role,
+     * higher ranks come first so the faster routes draw on top.
+     */
+    fun routes(lines: List<MapLine>, darkTheme: Boolean): String = featureCollection(
+        lines.filter { it.points.size >= 2 }
+            .sortedWith(compareBy<MapLine>({ it.role.ordinal }, { -it.rank }))
+            .map { line ->
+                val coordinates = line.points.joinToString(",") { coordinate(it) }
+                val color = if (line.role == MapLine.Role.WALK) RouteColors.WALK else RouteColors.hex(line.rank, darkTheme)
+                val role = line.role.name.lowercase(Locale.ROOT)
+                """{"type":"Feature","properties":{"rank":${line.rank},"role":"$role","color":"$color",""" +
+                    """"casing":"${RouteColors.casingHex(darkTheme)}"},""" +
+                    """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
+            },
     )
 
     fun pins(pin: MapPoint?, destination: MapPoint?): String = featureCollection(
@@ -90,6 +122,14 @@ internal object OverlayGeoJson {
         // Closures last, so they draw on top of lesser incidents.
         pins.sortedBy { it.closure }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":${quote(pin.kind)},"closure":${pin.closure}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun cameras(pins: List<CameraPin>): String = featureCollection(
+        pins.map { pin ->
+            val name = pin.name?.let { ""","name":${quote(it)}""" } ?: ""
+            """{"type":"Feature","properties":{"id":${quote(pin.id)}$name},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )

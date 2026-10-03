@@ -1,15 +1,19 @@
 package app.southbound.feature.directions
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -30,21 +34,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Eta
+import app.southbound.core.map.RouteColors
 import app.southbound.core.map.Units
+import app.southbound.core.routing.FuelModel
+import app.southbound.core.routing.FuelSettings
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
 
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
     data object Loading : RoutePreviewState
-    /** [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown. */
-    data class Ready(val summaries: List<RouteSummary>, val selected: Int, val delaySeconds: List<Double> = emptyList()) : RoutePreviewState
+    /**
+     * [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown.
+     * [fuelGallons] is the estimated gas each route burns, in the same order (traffic idling included);
+     * empty when unknown, which hides the fuel line.
+     * [cameraCounts] is how many plate readers each route passes, same order; empty when unknown (no
+     * search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
+     * route still passes some.
+     */
+    data class Ready(
+        val summaries: List<RouteSummary>,
+        val selected: Int,
+        val delaySeconds: List<Double> = emptyList(),
+        val fuelGallons: List<Double> = emptyList(),
+        val cameraCounts: List<Int> = emptyList(),
+        val cameraAvoidIncomplete: Boolean = false,
+    ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
     enum class Reason { NO_ROUTE, NO_LOCATION }
@@ -52,7 +74,7 @@ sealed interface RoutePreviewState {
 
 /**
  * The sheet under the map while choosing a route: travel mode, the route
- * options (the selected one is blue on the map), and Start.
+ * options (each marked with its line colour on the map), and Start.
  */
 @Composable
 fun RoutePreviewSheet(
@@ -64,6 +86,8 @@ fun RoutePreviewSheet(
     onStart: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Fuel economy and gas price for the cost on each option. */
+    fuel: FuelSettings = FuelSettings.DEFAULT,
     /** Shows a Transit chip that switches to the transit planner. */
     onTransit: (() -> Unit)? = null,
     /** A chosen start point instead of GPS; routes can be previewed but not navigated from it. */
@@ -125,15 +149,26 @@ fun RoutePreviewSheet(
                         modifier = Modifier.padding(vertical = 16.dp),
                     )
                     is RoutePreviewState.Ready -> {
+                        // With only one route there is nothing to compare, so no efficiency badge.
+                        val thriftiest = if (state.fuelGallons.size == state.summaries.size && state.summaries.size > 1) {
+                            FuelModel.mostEfficient(state.fuelGallons)
+                        } else {
+                            null
+                        }
                         state.summaries.forEachIndexed { i, summary ->
                             RouteOption(
                                 summary,
                                 delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
                                 selected = i == state.selected,
                                 fastest = i == 0,
+                                rank = i,
+                                fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
+                                leastGas = i == thriftiest,
                                 onClick = { onSelect(i) },
+                                cameras = state.cameraCounts.getOrNull(i),
                             )
                         }
+                        if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
                         beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
@@ -182,7 +217,20 @@ fun ModeChips(
 }
 
 @Composable
-private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+private fun RouteOption(
+    summary: RouteSummary,
+    delaySeconds: Double,
+    selected: Boolean,
+    fastest: Boolean,
+    rank: Int,
+    fuelCost: Double?,
+    leastGas: Boolean,
+    onClick: () -> Unit,
+    /** Plate readers on this route; null hides the line. */
+    cameras: Int? = null,
+) {
+    // The route's line colour on the map. Outside a trip the map follows the system theme.
+    val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
     val late = Eta.isLate(delaySeconds)
     val total = summary.durationSeconds + delaySeconds
     val red = MaterialTheme.colorScheme.error
@@ -194,6 +242,7 @@ private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: B
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.padding(end = 12.dp).size(12.dp).background(lineColor, CircleShape))
             Column(Modifier.weight(1f)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     Text(
@@ -237,9 +286,41 @@ private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: B
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                cameras?.let { PlateReaderCount(it) }
+                if (leastGas) LeastGasBadge(fastest)
             }
-            Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
+                fuelCost?.let { GasCostLine(it) }
+            }
         }
+    }
+}
+
+/** "≈ $4.10 gas" under the distance. */
+@Composable
+private fun GasCostLine(dollars: Double) {
+    Text(
+        stringResource(R.string.directions_gas_cost, FuelModel.formatCost(dollars)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Marks the option that burns the least gas; [alsoFastest] when it is the fastest too. */
+@Composable
+private fun LeastGasBadge(alsoFastest: Boolean) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Text(
+            stringResource(if (alsoFastest) R.string.directions_fastest_least_gas else R.string.directions_least_gas),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 

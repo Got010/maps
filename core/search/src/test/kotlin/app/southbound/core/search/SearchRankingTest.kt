@@ -65,6 +65,39 @@ class SearchRankingTest {
     }
 
     @Test
+    fun softWordsRaiseButDontFilter() {
+        val brooklyn = candidate(1, "Joe's Pizza", 40.73, -73.99, extra = "brooklyn ny 11201")
+        val plain = candidate(2, "Joe's Pizza", 40.73, -73.99)
+        val results = SearchRanking.rank(SearchQuery.parse("joes pizza ny 11201"), listOf(plain, brooklyn), null, 10)
+        assertEquals(listOf(1L, 2L), results.map { it.place.id })
+    }
+
+    @Test
+    fun olderPacksAddressBeatsAPlaceOnItsStreet() {
+        // Schema 1 packs keep addresses in `feature`: "123 Court Street" with
+        // its town in the text, next to a famous place on the same street.
+        val address = Candidate(
+            place = Place(1, PlaceKind.ADDRESS, "123 Court Street", null, "Brooklyn 11201", 40.69, -73.99),
+            importance = 10,
+            nameKey = "123 ct st",
+            searchText = " 123 ct st brooklyn 11201 ",
+        )
+        val place = candidate(2, "123 Court Street Deli", 40.69, -73.99, importance = 60, extra = "brooklyn")
+        val results = SearchRanking.rank(SearchQuery.parse("123 Court St Brooklyn"), listOf(place, address), null, 10)
+        assertEquals(listOf(1L, 2L), results.map { it.place.id })
+    }
+
+    @Test
+    fun extraResultsMergeByScore() {
+        val deli = candidate(1, "Main Street Deli", 41.09, -73.92)
+        val address = Place(1L shl 40, PlaceKind.ADDRESS, "123 Main Street", null, "123 Main Street, Nyack, NY", 41.09, -73.92)
+        val extra = listOf(ScoredResult(SearchResult(address, null), AddressLookup.EXACT))
+        val results = SearchRanking.rank(SearchQuery.parse("123 main st"), listOf(deli), null, 10, extra)
+        // The deli doesn't contain "123"; the address comes through the extra list.
+        assertEquals(listOf(1L shl 40), results.map { it.place.id })
+    }
+
+    @Test
     fun distanceIsGreatCircle() {
         // Union Square to Times Square is about 2.4 km.
         val d = SearchRanking.distanceMeters(unionSquare, 40.7580, -73.9855)

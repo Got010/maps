@@ -136,6 +136,12 @@ fun RouteOptionsSheet(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit, onDismi
             OptionSwitch(R.string.options_avoid_tolls, prefs.avoidTolls) { onChange(prefs.copy(avoidTolls = it)) }
             OptionSwitch(R.string.options_avoid_highways, prefs.avoidHighways) { onChange(prefs.copy(avoidHighways = it)) }
             OptionSwitch(R.string.options_avoid_ferries, prefs.avoidFerries) { onChange(prefs.copy(avoidFerries = it)) }
+            OptionSwitch(R.string.options_avoid_alpr, prefs.avoidAlpr) { onChange(prefs.copy(avoidAlpr = it)) }
+            Text(
+                stringResource(R.string.options_avoid_alpr_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             Text(stringResource(R.string.options_vehicle), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

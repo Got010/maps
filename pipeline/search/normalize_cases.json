@@ -12,6 +12,8 @@
   ["  Fort   Greene  Park ", "ft greene park"],
   ["Brooklyn-Queens Expressway", "brooklyn queens expy"],
   ["123 Main St, Brooklyn, NY 11201", "123 main st brooklyn ny 11201"],
+  ["31-05 Steinway St", "31 05 steinway st"],
+  ["W 20TH ST", "w 20 st"],
   ["ÅÉÎÕÜ", "aeiou"],
   ["Empire State Building", "empire state bldg"],
   ["Lincoln Center", "lincoln ctr"],

@@ -39,6 +39,24 @@ class RouteRegionsTest {
     }
 
     @Test
+    fun `new jersey is missing for a phone with only the new york city map`() {
+        // Manhattan to Newark: NYC's box covers Newark, but the Newark map is northern New Jersey's.
+        val newark = 40.7357 to -74.1724
+        val route = line(manhattan, newark)
+        assertEquals(listOf("njn"), RouteRegions.missing(route, setOf("nyc")).map { it.id })
+        assertTrue(RouteRegions.missing(route, setOf("nyc", "njn")).isEmpty())
+        // The reverse: with only the New Jersey map the New York end is missing.
+        assertEquals(listOf("nyc"), RouteRegions.missing(route, setOf("njn")).map { it.id })
+    }
+
+    @Test
+    fun `staten island is not new jersey`() {
+        val statenIsland = listOf(40.5540 to -74.1510)
+        assertTrue(RouteRegions.missing(statenIsland, setOf("nyc")).isEmpty())
+        assertEquals(listOf("nyc"), RouteRegions.missing(statenIsland, setOf("njn")).map { it.id })
+    }
+
+    @Test
     fun `points outside every region and empty routes are ignored`() {
         assertTrue(RouteRegions.missing(emptyList(), emptySet()).isEmpty())
         assertTrue(RouteRegions.missing(listOf(34.0 to -118.0), emptySet()).isEmpty())

@@ -7,7 +7,7 @@
     <string name="explore_location_settings">Open settings</string>
     <string name="explore_pack_missing_title">Pick your map regions</string>
     <string name="explore_pack_body">Or load the packs by hand: download them from the latest Southbound release on GitHub, then import them here. Everything stays on this phone.</string>
-    <string name="explore_download_wifi">Southbound downloads the maps for the regions ticked above, plus statewide search and directions and NYC transit data, from its latest release next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
+    <string name="explore_download_wifi">Southbound downloads the maps for the regions ticked above, plus search and directions for New York and northern New Jersey, and NYC transit data, from its latest release next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
     <string name="explore_download_off">Map downloads are turned off in Settings &gt; Updates.</string>
     <string name="explore_download_checking">Checking the latest release…</string>
     <string name="explore_download_progress">Downloading map data: %1$d of %2$d MB</string>
@@ -33,6 +33,9 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_traffic_hide">Hide live traffic</string>
+    <string name="explore_traffic_needs_key">511NY needs an API key. Add it in Settings.</string>
+    <string name="explore_traffic_empty">No live readings here. NYC DOT speeds cover the five boroughs.</string>
+    <string name="explore_traffic_stale">NYC DOT data is stale (newest reading older than 2 hours).</string>
     <string name="explore_alert_speed_camera">Speed camera ahead.</string>
     <string name="explore_alert_school_zone">School zone ahead.</string>
     <string name="explore_alert_alpr_camera">License plate reader ahead.</string>

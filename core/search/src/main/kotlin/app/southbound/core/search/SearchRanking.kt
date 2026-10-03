@@ -16,6 +16,9 @@ data class Candidate(
 
 data class SearchResult(val place: Place, val distanceMeters: Double?)
 
+/** A result scored elsewhere (addresses, see [AddressLookup]) to merge into [SearchRanking.rank]. */
+data class ScoredResult(val result: SearchResult, val score: Double)
+
 /**
  * Orders candidates the way people expect: a name match beats an address or
  * category match, closer beats farther, and notable places (boroughs,
@@ -26,20 +29,42 @@ object SearchRanking {
     /** Score lost per kilometre from the user. */
     const val POINTS_PER_KM = 8.0
 
-    fun rank(query: SearchQuery, candidates: List<Candidate>, near: LatLon?, limit: Int): List<SearchResult> =
+    /** Per soft word (state, ZIP) the row has. */
+    const val SOFT_POINTS = 15.0
+
+    /**
+     * An address row of an older pack (schema 1 kept addresses in `feature`)
+     * whose whole name starts the query, as "123 ct st" does for "123 Court
+     * St Brooklyn": it beats places, as the address lookup's results do.
+     */
+    const val ADDRESS_NAME_BONUS = 100.0
+
+    /**
+     * The best [limit] of [candidates] that match [query], merged with
+     * [extra] results scored elsewhere, best first, each place once.
+     */
+    fun rank(
+        query: SearchQuery,
+        candidates: List<Candidate>,
+        near: LatLon?,
+        limit: Int,
+        extra: List<ScoredResult> = emptyList(),
+    ): List<SearchResult> =
         candidates
             .asSequence()
             .filter { query.matchesText(it.searchText) }
             .map { candidate ->
                 val distance = near?.let { distanceMeters(it, candidate.place.lat, candidate.place.lon) }
-                val score = textScore(query, candidate) + candidate.importance -
+                val score = textScore(query, candidate) + candidate.importance +
+                    SOFT_POINTS * query.softMatches(candidate.searchText) -
                     (distance ?: 0.0) / 1000.0 * POINTS_PER_KM
-                Triple(candidate, distance, score)
+                ScoredResult(SearchResult(candidate.place, distance), score)
             }
-            .sortedByDescending { it.third }
-            .distinctBy { (candidate, _, _) -> candidate.place.id }
+            .plus(extra)
+            .sortedByDescending { it.score }
+            .distinctBy { it.result.place.id }
             .take(limit)
-            .map { (candidate, distance, _) -> SearchResult(candidate.place, distance) }
+            .map { it.result }
             .toList()
 
     internal fun textScore(query: SearchQuery, candidate: Candidate): Double {
@@ -47,6 +72,8 @@ object SearchRanking {
         val q = query.normalized
         val nameWords = " $name"
         return when {
+            candidate.place.kind == PlaceKind.ADDRESS && (q == name || q.startsWith("$name ")) ->
+                60.0 + ADDRESS_NAME_BONUS
             name == q -> 60.0
             name.startsWith(q) -> 40.0
             query.tokens.all { nameWords.contains(" $it") } -> 25.0

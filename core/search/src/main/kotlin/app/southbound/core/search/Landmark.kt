@@ -3,8 +3,9 @@ package app.southbound.core.search
 /**
  * A point that guidance talks about, from the search pack's `landmark`
  * table: a traffic signal, a stop sign, a roadside place, or something to
- * warn about. [category] is one of the constants below; [name] is set only
- * for places (brand or name, e.g. "Shell", "Walgreens").
+ * warn about. [category] is one of the constants below; [name] is set for
+ * places (brand or name, e.g. "Shell", "Walgreens") and, in newer packs,
+ * for plate readers (who makes or runs them, e.g. "Flock Safety").
  */
 data class Landmark(
     val id: Long,

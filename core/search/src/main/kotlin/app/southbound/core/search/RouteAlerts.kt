@@ -41,6 +41,39 @@ object RouteAlerts {
     /** Alerts of one kind this close together along the route are spoken once (a pair of cameras, a zone's two signs). */
     const val SAME_ALERT_M = 200.0
 
+    /** Cameras this close to each other (one pole facing both ways, or mapped twice) count as one. */
+    const val SAME_SPOT_M = 25.0
+
+    /**
+     * The [kind] landmarks within [withinMeters] of [route], each once even
+     * when overlapping boxes returned it twice; in no particular order. E.g.
+     * the plate readers to steer around.
+     */
+    fun alongRoute(route: RouteLine, landmarks: List<Landmark>, kind: AlertKind, withinMeters: Double = MAX_OFFSET_M): List<Landmark> =
+        landmarks.distinctBy { it.id }.filter { mark ->
+            mark.category == kind.category && (route.locate(mark.point)?.offset ?: Double.POSITIVE_INFINITY) <= withinMeters
+        }
+
+    /**
+     * How many [kind] landmarks a drive along [route] passes, e.g. "3 plate
+     * readers" on a route option: those within [withinMeters] of the line,
+     * with cameras within [sameSpotMeters] of one already counted counting
+     * as the same one.
+     */
+    fun count(
+        route: RouteLine,
+        landmarks: List<Landmark>,
+        kind: AlertKind,
+        withinMeters: Double = MAX_OFFSET_M,
+        sameSpotMeters: Double = SAME_SPOT_M,
+    ): Int {
+        val spots = mutableListOf<LatLon>()
+        for (mark in alongRoute(route, landmarks, kind, withinMeters)) {
+            if (spots.none { RouteLine.distanceMeters(it, mark.point) <= sameSpotMeters }) spots += mark.point
+        }
+        return spots.size
+    }
+
     /** The alerts on [route], in driving order. */
     fun onRoute(route: RouteLine, landmarks: List<Landmark>): List<RouteAlert> =
         landmarks.mapNotNull { mark ->

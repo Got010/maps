@@ -10,12 +10,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.time.LocalDate
+import java.util.Collections
 
 class TransitRealtimeTest {
 
     private val tripUpdates = File("src/test/resources/gtfsrt/trip_updates.pb").readBytes()
     private val alerts = File("src/test/resources/gtfsrt/alerts.pb").readBytes()
-    private val requested = ArrayList<Pair<NetworkFeature, String>>()
+    // TransitRealtime fetches feeds in parallel on Dispatchers.IO, so the fake
+    // fetcher records from several threads at once; a plain ArrayList drops adds.
+    private val requested: MutableList<Pair<NetworkFeature, String>> = Collections.synchronizedList(ArrayList())
 
     private fun realtime(realtime: Boolean, bus: Boolean, key: String? = "SECRET", now: Long = 1_000_000L): TransitRealtime {
         val toggles = InMemoryNetworkToggles(mapOf(NetworkFeature.TRANSIT_REALTIME to realtime, NetworkFeature.TRANSIT_BUS_TIME to bus))

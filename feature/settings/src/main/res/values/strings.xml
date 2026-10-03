@@ -90,7 +90,7 @@
     <string name="updates_up_to_date">Everything is up to date.</string>
     <string name="updates_installed">Installed: %1$s</string>
     <string name="updates_packs">Download map data</string>
-    <string name="updates_packs_note">Maps for the regions below, statewide search and directions, and NYC transit data from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
+    <string name="updates_packs_note">Maps for the regions below, search and directions for New York and northern New Jersey, and NYC transit data from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
     <string name="updates_app">Install app updates</string>
     <string name="updates_app_note">New versions of Southbound from the same releases, checked to be signed with the same key. Android asks you to confirm the first one; after that Southbound updates itself.</string>
     <string name="updates_allow_install">Allow Southbound to install updates</string>
@@ -103,7 +103,7 @@
     <string name="updates_token_remove">Remove token</string>
     <string name="updates_waiting">Queued: Android starts it once there\'s a connection (Wi-Fi, unless mobile data is allowed). If this stays for more than a minute, close and reopen Southbound.</string>
     <string name="regions_title">Map regions</string>
-    <string name="regions_note">Tick the parts of New York you want maps for. Search and directions cover the whole state in one download each; transit schedules cover NYC. Unticking a region deletes its map from the phone.</string>
+    <string name="regions_note">Tick the parts of New York and northern New Jersey you want maps for. Search and directions cover all of it in one download each; transit schedules cover NYC. Unticking a region deletes its map from the phone.</string>
     <string name="regions_installed">Installed · %1$d MB</string>
     <string name="regions_pending">Not downloaded yet; comes with the next update check.</string>
     <string name="regions_not_installed">Not on this phone</string>
@@ -113,4 +113,20 @@
     <string name="settings_driving">Driving</string>
     <string name="driving_night">Night mode by sunset while navigating</string>
     <string name="driving_night_note">After sunset at your location the map and navigation screen turn dark, even if the phone is in light theme. Worked out on the phone from your GPS fix.</string>
+    <string name="driving_mpg">Fuel economy (mpg)</string>
+    <string name="driving_gas_price">Gas price ($ per gallon)</string>
+    <string name="driving_fuel_note">Used to estimate what each route costs in gas.</string>
+    <string name="driving_eia_price">From EIA: %1$s, updated %2$s</string>
+    <string name="driving_eia_no_key">Gas prices (EIA) is on, but no EIA key is saved. Add one under Live data. Your price is used.</string>
+    <string name="driving_eia_waiting">No EIA price yet. It is fetched when you next open directions. Your price is used until then.</string>
+    <string name="driving_price_source">Gas price to use</string>
+    <string name="driving_use_mine">Use my price</string>
+    <string name="driving_use_eia">Use EIA price</string>
+    <string name="live_fuel">Fuel</string>
+    <string name="live_gas">Gas prices (EIA)</string>
+    <string name="live_gas_note">Weekly average retail price for the state you pick, from the U.S. Energy Information Administration. Needs a free EIA API key (eia.gov/opendata/register.php). Nothing about you or your location is sent.</string>
+    <string name="live_gas_key">EIA key</string>
+    <string name="live_gas_key_saved">EIA key saved (type to replace)</string>
+    <string name="live_gas_state">State for gas prices</string>
+    <string name="live_gas_nj_note">EIA has no New Jersey figure; this uses the Central Atlantic region average.</string>
 </resources>

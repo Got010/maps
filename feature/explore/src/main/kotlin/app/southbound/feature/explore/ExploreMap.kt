@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +68,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.southbound.core.map.ArrivalSide
 import app.southbound.core.map.Arrival
+import app.southbound.core.map.CameraPin
 import app.southbound.core.map.CameraRequest
 import app.southbound.core.map.MapLine
 import app.southbound.core.map.IncidentPin
@@ -77,12 +80,15 @@ import app.southbound.core.map.NYC_CENTER
 import app.southbound.core.map.NightMode
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
+import app.southbound.core.map.HeadingFilter
+import app.southbound.core.map.withHeading
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.RouteRegions
 import app.southbound.core.packs.Regions
 import app.southbound.core.routing.DrivingPrefs
+import app.southbound.core.routing.FuelModel
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.RouteSummary
@@ -91,6 +97,7 @@ import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.userdata.Shortcut
+import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
@@ -130,8 +137,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
 import uniffi.ferrostar.TripState
@@ -195,12 +205,17 @@ internal fun ExploreMap(
     }
 
     var location by remember { mutableStateOf<Location?>(null) }
+    // Holds the last trustworthy travel direction so the fin never snaps north or spins when parked.
+    val headingFilter = remember { HeadingFilter() }
     var following by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(hasPermission) {
         if (!hasPermission) return@LaunchedEffect
         val locationManager = context.getSystemService(LocationManager::class.java)
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            locationManager.collectGps { location = it }
+            locationManager.collectGps {
+                headingFilter.update(it)
+                location = it
+            }
         }
     }
 
@@ -258,6 +273,8 @@ internal fun ExploreMap(
     var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
     val drivingPrefs = remember { DrivingPrefs.get(context) }
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
+    // Fuel economy and gas price for the cost on route cards; changing them never recomputes routes.
+    val fuel by services.fuelPrefs.settings.collectAsState()
     var clockMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -277,6 +294,19 @@ internal fun ExploreMap(
     val traffic by services.traffic.snapshot.collectAsState()
     var shownIncident by remember { mutableStateOf<Incident?>(null) }
     LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
+    // Gas price from EIA (opt-in, and rate-limited to one request a day): on resume, when directions open,
+    // and when the state is changed in Settings.
+    val directionsOpen = panel is Panel.Directions
+    LaunchedEffect(resumes, directionsOpen, fuel.region) {
+        if (services.gasPrices.isReady) attempt { services.gasPrices.refresh() }
+    }
+    // A new mpg in Settings reprices the routes already on screen.
+    LaunchedEffect(fuel.mpg) {
+        val ready = preview as? RoutePreviewState.Ready ?: return@LaunchedEffect
+        if (routes.size == ready.summaries.size) {
+            preview = ready.copy(fuelGallons = fuelGallonsFor(routes, ready.delaySeconds, fuel.mpg))
+        }
+    }
 
     // --- Phase 5 (map): touch, traffic on the route, faster route, arrival details ---
     // Re-center: while navigating, 10 s without a touch after leaving the puck snaps back to following.
@@ -309,6 +339,16 @@ internal fun ExploreMap(
         scope.launch(Dispatchers.IO) { attempt { services.userData.recordRecent(place.toRef()) } }
     }
 
+    // Plate readers (Flock and others) from the search pack: on the map in every state, counted on
+    // each driving route option, and steered around with "Avoid plate readers".
+    var cameraPins by remember { mutableStateOf<List<CameraPin>>(emptyList()) }
+    var shownCamera by remember { mutableStateOf<CameraPin?>(null) }
+    LaunchedEffect(shownIncident) { if (shownIncident != null) shownCamera = null }
+    LaunchedEffect(searchIndex) {
+        val index = searchIndex
+        cameraPins = if (index == null) emptyList() else withContext(Dispatchers.IO) { attempt { PlateReaders.pins(index) } }.orEmpty()
+    }
+
     // Route preview: recompute when the destination or mode changes, or when
     // the first GPS fix arrives after "no location".
     val directions = panel as? Panel.Directions
@@ -339,13 +379,30 @@ internal fun ExploreMap(
         } else {
             emptyList()
         }
-        val found = try {
+        val plainRoutes = try {
             withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), waypoints, target.mode, avoid) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             emptyList()
         }
+        // Plate readers: with "Avoid plate readers" on, route again around the ones on the best route.
+        // The pack may still be opening on a cold start, so wait for it briefly.
+        val driving = target.mode == TravelMode.DRIVE
+        val cameraIndex = when {
+            !driving -> null
+            searchIndex != null -> searchIndex
+            withContext(Dispatchers.IO) { services.hasPack(PackKind.SEARCH) } -> withTimeoutOrNull(SEARCH_WAIT_MS) { snapshotFlow { searchIndex }.filterNotNull().first() }
+            else -> null
+        }
+        val found = if (driving && routePrefs.avoidAlpr && cameraIndex != null && plainRoutes.isNotEmpty()) {
+            withContext(Dispatchers.Default) {
+                attempt { PlateReaders.avoid(nav, cameraIndex, from.toUserLocation(), waypoints, target.mode, avoid, plainRoutes).routes }
+            } ?: plainRoutes.also { nav.cameraAvoid = emptyList() }
+        } else {
+            plainRoutes
+        }
+        val cameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
         routes = found
         // Live speeds laid over each option: coloured stretches and the delay they add.
         val speeds = snapshot?.speeds.orEmpty()
@@ -356,7 +413,15 @@ internal fun ExploreMap(
         if (found.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
-            preview = RoutePreviewState.Ready(found.map(RouteSummary::of), selected = 0, delaySeconds = slow.map { it.delaySeconds })
+            val delays = slow.map { it.delaySeconds }
+            preview = RoutePreviewState.Ready(
+                summaries = found.map(RouteSummary::of),
+                selected = 0,
+                delaySeconds = delays,
+                fuelGallons = fuelGallonsFor(found, delays, services.fuelPrefs.settings.value.mpg),
+                cameraCounts = cameraCounts,
+                cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && (cameraCounts.firstOrNull() ?: 0) > 0,
+            )
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
                     MapPoint(from.latitude, from.longitude),
@@ -619,13 +684,19 @@ internal fun ExploreMap(
     // Incidents along the route are pinned even when the traffic layer itself is hidden.
     // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
     val routeAlerts by services.guidance.routeAlerts.collectAsState()
-    val alertPins = if (inTrip) routeAlerts.map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) } else emptyList()
+    // Plate readers are on the always-on camera layer, so only speed cameras and school zones are pinned here.
+    val alertPins = if (inTrip) {
+        routeAlerts.filter { it.kind != AlertKind.ALPR_CAMERA }
+            .map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) }
+    } else {
+        emptyList()
+    }
     val trafficOverlay = baseTrafficOverlay.copy(
         incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() } + alertPins).distinctBy { it.id },
     )
     val overlays = when {
         inTrip -> MapOverlays(
-            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, selected = true)),
+            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, MapLine.Role.LEADER)),
             destination = (trip as? TripState.Navigating)?.remainingWaypoints?.lastOrNull()
                 ?.let { MapPoint(it.coordinate.lat, it.coordinate.lng) },
             traffic = trafficOverlay,
@@ -646,7 +717,8 @@ internal fun ExploreMap(
                 val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
-                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, selected = i == selected)
+                        val role = if (i == selected) MapLine.Role.LEADER else MapLine.Role.THREAD
+                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, role, rank = i)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
                     traffic = trafficOverlay,
@@ -656,8 +728,10 @@ internal fun ExploreMap(
             else -> MapOverlays(traffic = trafficOverlay)
         }
     }
-    // While on route, the puck sits on the road rather than wandering with GPS noise.
-    val shownLocation = (trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location
+    // While on route, the puck sits on the road rather than wandering with GPS noise. Its bearing
+    // always comes from the gated raw fix, not from the snapped location's course.
+    val shownLocation = ((trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location)
+        ?.withHeading(headingFilter.heading)
     // Phase 6: night mode by sunset, from the last fix and the clock.
     val systemDark = isSystemInDarkTheme()
     val darkTheme = NightMode.useDark(systemDark, inTrip, nightBySunset, location?.latitude, location?.longitude, clockMs)
@@ -686,7 +760,7 @@ internal fun ExploreMap(
             onFollowingDismissed = { following = false },
             modifier = Modifier.fillMaxSize(),
             contentPadding = WindowInsets.systemBars.asPaddingValues(),
-            overlays = overlays,
+            overlays = overlays.copy(cameras = cameraPins),
             cameraRequest = cameraRequest,
             navigating = inTrip,
             onLongPress = if (inTrip) {
@@ -700,9 +774,21 @@ internal fun ExploreMap(
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
             onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            // A tap on another route's line picks it, as tapping its card does.
+            onRouteTap = { rank ->
+                val ready = preview as? RoutePreviewState.Ready
+                val driving = (panel as? Panel.Directions)?.transit == false
+                if (!inTrip && driving && ready != null && rank in ready.summaries.indices) {
+                    preview = ready.copy(selected = rank)
+                }
+            },
             onTouchChanged = { down ->
                 touching = down
                 touchSerial++
+            },
+            onCameraTap = { id ->
+                shownIncident = null
+                shownCamera = cameraPins.firstOrNull { it.id == id }
             },
         )
 
@@ -782,13 +868,38 @@ internal fun ExploreMap(
                             Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = if (shownIncident != null) 190.dp else 28.dp),
                         )
                     }
-                    if (trafficVisible && traffic.errors.isNotEmpty()) {
-                        Text(
-                            traffic.errors.joinToString("\n"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
-                        )
+                    // Why the traffic layer may look empty: say so instead of showing nothing.
+                    val trafficNeedsKey = remember(resumes, trafficVisible) { services.traffic.needsIncidentsKey }
+                    val trafficNote = when {
+                        !trafficVisible || !trafficOn -> null
+                        trafficNeedsKey -> R.string.explore_traffic_needs_key
+                        traffic.speedsStale -> R.string.explore_traffic_stale
+                        traffic.fetchedAt > 0 && traffic.isEmpty && traffic.errors.isEmpty() -> R.string.explore_traffic_empty
+                        else -> null
+                    }
+                    if (trafficVisible && (traffic.errors.isNotEmpty() || trafficNote != null)) {
+                        Column(
+                            Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            if (traffic.errors.isNotEmpty()) {
+                                Text(
+                                    traffic.errors.joinToString("\n"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                            if (trafficNote != null) {
+                                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+                                    Text(
+                                        stringResource(trafficNote),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Panel.Search -> SearchPanel(
@@ -867,6 +978,7 @@ internal fun ExploreMap(
                         destinationName = current.place.name,
                         mode = current.mode,
                         state = preview,
+                        fuel = fuel,
                         onModeChange = { mode -> panel = current.copy(mode = mode) },
                         onSelect = { index ->
                             (preview as? RoutePreviewState.Ready)?.let { preview = it.copy(selected = index) }
@@ -918,6 +1030,17 @@ internal fun ExploreMap(
             IncidentCard(
                 incident,
                 onClose = { shownIncident = null },
+                modifier = when {
+                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
+                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
+                },
+            )
+        }
+        // The tap-to-read card for a plate-reader dot.
+        shownCamera?.let { camera ->
+            CameraCard(
+                camera,
+                onClose = { shownCamera = null },
                 modifier = when {
                     inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
                     else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
@@ -1002,6 +1125,9 @@ private const val FASTER_ROUTE_TRY_DETOUR_SECONDS = 120.0
 private const val DETOUR_MIN_DISTANCE_M = 300.0
 private const val DETOUR_MAX_SPOTS = 3
 
+// How long a route preview waits for the search pack to open before going without plate readers.
+private const val SEARCH_WAIT_MS = 5_000L
+
 /** A faster route found mid-trip, with its points for telling it apart later. */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
 
@@ -1017,10 +1143,11 @@ private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
     FloatingActionButton(
         onClick = onClick,
         modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = if (shown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        // On reads clearly in dynamic dark mode too, where primary and onSurfaceVariant look alike.
+        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Icon(Icons.Filled.Traffic, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
+        Icon(if (shown) Icons.Filled.Traffic else Icons.Outlined.TrafficOutlined, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
     }
 }
 
@@ -1063,8 +1190,8 @@ private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Mo
     FloatingActionButton(
         onClick = onClick,
         modifier = modifier.safeDrawingPadding().padding(16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        containerColor = if (following) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (following) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_my_location),
@@ -1072,6 +1199,10 @@ private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Mo
         )
     }
 }
+
+/** Estimated gallons for each route at [mpg], with the live-traffic delay of each spent idling. */
+private fun fuelGallonsFor(routes: List<Route>, delaySeconds: List<Double>, mpg: Double): List<Double> =
+    routes.mapIndexed { i, route -> FuelModel.gallons(route, mpg, delaySeconds.getOrElse(i) { 0.0 }) }
 
 private fun TravelMode.guidanceMode(): GuidanceMode = when (this) {
     TravelMode.DRIVE -> GuidanceMode.DRIVING

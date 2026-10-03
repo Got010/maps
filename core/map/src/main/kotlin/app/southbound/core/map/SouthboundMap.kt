@@ -74,7 +74,7 @@ private val NAVIGATION_COMPASS_OFFSET = 120.dp
  * new request. While [navigating], the camera follows the puck heading-up and
  * tilted, as turn-by-turn apps do. A long press reports the spot to
  * [onLongPress], e.g. to drop a pin; a tap on an incident pin reports its id
- * to [onIncidentTap].
+ * to [onIncidentTap], and a tap on an alternative route its rank to [onRouteTap].
  *
  * Two-finger rotate and tilt, double-tap zoom and one-finger "double tap and
  * drag" zoom are on, with MapLibre's compass (it fades when facing north and
@@ -98,11 +98,15 @@ fun SouthboundMap(
     /** Screen edges covered by panels; camera moves keep their subject clear of them. */
     obscured: PaddingValues = PaddingValues(),
     onIncidentTap: ((String) -> Unit)? = null,
+    /** A tap on an alternative route's line reports its [MapLine.rank]. */
+    onRouteTap: ((Int) -> Unit)? = null,
     /** Where the map opens before the first fix, e.g. the middle of the installed regions. */
     initialCenter: MapPoint = NYC_CENTER,
     initialZoom: Double = START_ZOOM,
     /** True when a finger goes down on the map, false when the last one lifts; drives auto-recenter. */
     onTouchChanged: ((Boolean) -> Unit)? = null,
+    /** A tap on a plate-reader dot ([MapOverlays.cameras]) reports its id. */
+    onCameraTap: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -159,6 +163,8 @@ fun SouthboundMap(
             isQuickZoomGesturesEnabled = true
             isCompassEnabled = true
             setCompassFadeFacingNorth(true)
+            // Logo off; the attribution (i) button stays for the OpenStreetMap/OpenMapTiles credit.
+            isLogoEnabled = false
         }
         // A user gesture (not an animation or API move) that turns or tilts the map ends following:
         // heading-up and tilted navigation would otherwise fight the user's hands.
@@ -196,9 +202,28 @@ fun SouthboundMap(
         }
     }
 
-    LaunchedEffect(style, overlays) {
+    LaunchedEffect(style, overlays, darkTheme) {
         val loaded = style ?: return@LaunchedEffect
-        OverlayLayers.update(loaded, overlays)
+        OverlayLayers.update(loaded, overlays, darkTheme)
+    }
+
+    // Plate-reader taps get their own listener, added before the incident one so a camera
+    // sitting on a route line or next to an incident wins the tap.
+    val currentOnCameraTap by rememberUpdatedState(onCameraTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val handler = currentOnCameraTap ?: return@OnMapClickListener false
+            if (loadedMap.style?.getLayer(OverlayLayers.CAMERAS) == null) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.CAMERAS).firstOrNull() ?: return@OnMapClickListener false
+            val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
+            handler(id)
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
     }
 
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -214,18 +239,37 @@ fun SouthboundMap(
     }
 
     val currentOnIncidentTap by rememberUpdatedState(onIncidentTap)
+    val currentOnRouteTap by rememberUpdatedState(onRouteTap)
     DisposableEffect(map) {
         val loadedMap = map ?: return@DisposableEffect onDispose { }
+        // Returns true only when the tap was used, so other click listeners still see the rest.
         val listener = MapLibreMap.OnMapClickListener { latLng ->
-            val handler = currentOnIncidentTap ?: return@OnMapClickListener false
-            if (loadedMap.style?.getLayer(OverlayLayers.INCIDENTS) == null) return@OnMapClickListener false
+            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
             val screen = loadedMap.projection.toScreenLocation(latLng)
-            // A finger is wider than a pin: search a small box around the tap.
+            // A finger is wider than a pin or a thin line: search a small box around the tap.
             val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
-            val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.INCIDENTS).firstOrNull() ?: return@OnMapClickListener false
-            val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
-            handler(id)
-            true
+            // Incidents first: they sit on top of the routes.
+            val incidentHandler = currentOnIncidentTap
+            if (incidentHandler != null && loadedStyle.getLayer(OverlayLayers.INCIDENTS) != null) {
+                val id = loadedMap.queryRenderedFeatures(box, OverlayLayers.INCIDENTS).firstOrNull()?.getStringProperty("id")
+                if (id != null) {
+                    incidentHandler(id)
+                    return@OnMapClickListener true
+                }
+            }
+            // Then the other routes. Only threads can be picked (the leader is already chosen); on a
+            // stretch several share, the fastest of them wins.
+            val routeHandler = currentOnRouteTap
+            if (routeHandler != null && loadedStyle.getLayer(OverlayLayers.ROUTE_THREADS) != null) {
+                val rank = loadedMap.queryRenderedFeatures(box, OverlayLayers.ROUTE_THREADS)
+                    .mapNotNull { it.getNumberProperty("rank")?.toInt() }
+                    .minOrNull()
+                if (rank != null) {
+                    routeHandler(rank)
+                    return@OnMapClickListener true
+                }
+            }
+            false
         }
         loadedMap.addOnMapClickListener(listener)
         onDispose { loadedMap.removeOnMapClickListener(listener) }
@@ -307,8 +351,8 @@ fun SouthboundMap(
             val end = (contentPadding.calculateEndPadding(layoutDirection) + 8.dp).roundToPx()
             val top = (contentPadding.calculateTopPadding() + 8.dp).roundToPx()
             val bottom = (contentPadding.calculateBottomPadding() + 8.dp).roundToPx()
-            ui.setLogoMargins(start, 0, 0, bottom)
-            ui.setAttributionMargins(start + 88.dp.roundToPx(), 0, 0, bottom)
+            // The MapLibre logo is off; the (i) button keeps the OpenStreetMap credit and takes its place.
+            ui.setAttributionMargins(start, 0, 0, bottom)
             // The turn banner sits across the top while navigating; the compass goes below it.
             ui.setCompassMargins(0, top + if (navigating) NAVIGATION_COMPASS_OFFSET.roundToPx() else 0, end, 0)
         }
@@ -332,11 +376,11 @@ private fun activateLocationPuck(
             .locationComponentOptions(finPuckOptions(context))
             .build(),
     )
-    // The fin is drawn side-on, so it never turns with the travel direction: NORMAL keeps it
-    // upright on screen in every camera mode, navigation included.
-    puck.renderMode = RenderMode.NORMAL
+    // GPS mode rotates the fin by the fix bearing, so its nose points the way we travel. The
+    // bearing comes from HeadingFilter, which holds the last good heading while parked.
+    puck.renderMode = RenderMode.GPS
     // MapLibre lays the puck flat on the map; on the tilted navigation camera that would squash
-    // the fin onto the road. Stand it up facing the screen instead.
+    // the fin onto the road. Keep it facing the screen instead (it still turns with the bearing).
     style.getLayer(LocationComponentConstants.FOREGROUND_LAYER)
         ?.setProperties(iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT))
     if (firstActivation) {
@@ -350,9 +394,10 @@ private fun activateLocationPuck(
 /** The user's position as a tiger shark fin in the water instead of MapLibre's blue dot. */
 private fun finPuckOptions(context: Context): LocationComponentOptions =
     LocationComponentOptions.builder(context)
-        .foregroundDrawable(R.drawable.location_fin)
-        .gpsDrawable(R.drawable.location_fin)
-        .foregroundDrawableStale(R.drawable.location_fin_stale)
+        // Nose-up art in every mode, so the bearing rotation always points the fin forward.
+        .foregroundDrawable(R.drawable.location_fin_gps)
+        .gpsDrawable(R.drawable.location_fin_gps)
+        .foregroundDrawableStale(R.drawable.location_fin_gps_stale)
         // No white ring behind the fin, and no shadow cast from one.
         .backgroundDrawable(R.drawable.location_none)
         .backgroundDrawableStale(R.drawable.location_none)
