@@ -2,6 +2,7 @@ package app.southbound.feature.directions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -39,7 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.southbound.core.routing.BikeType
 import app.southbound.core.routing.RoutePrefs
+import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.VehicleKind
 import java.util.Locale
 
@@ -115,13 +118,20 @@ fun MissingRegionWarning(regionNames: List<String>, onDownload: () -> Unit, modi
 }
 
 /**
- * Route options: avoid tolls, highways and ferries, and the vehicle (car, or
- * truck/RV with its size and weight). Every change applies at once; the
- * caller saves it and recomputes the routes.
+ * Route options for the travel [mode], one sheet keyed by mode: driving has
+ * avoid tolls, highways and ferries and the vehicle (car, or truck/RV with its
+ * size and weight); walking has stairs and sidewalk preferences; cycling has
+ * the bicycle type, hills, busy roads and ferries. Every change applies at
+ * once; the caller saves it and recomputes the routes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteOptionsSheet(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit, onDismiss: () -> Unit) {
+fun RouteOptionsSheet(
+    prefs: RoutePrefs,
+    onChange: (RoutePrefs) -> Unit,
+    onDismiss: () -> Unit,
+    mode: TravelMode = TravelMode.DRIVE,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -129,42 +139,20 @@ fun RouteOptionsSheet(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit, onDismi
         ) {
             Text(stringResource(R.string.options_title), style = MaterialTheme.typography.titleMedium)
             Text(
-                stringResource(R.string.options_note),
+                stringResource(
+                    when (mode) {
+                        TravelMode.DRIVE -> R.string.options_note
+                        TravelMode.WALK -> R.string.options_note_walk
+                        TravelMode.BIKE -> R.string.options_note_bike
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OptionSwitch(R.string.options_avoid_tolls, prefs.avoidTolls) { onChange(prefs.copy(avoidTolls = it)) }
-            OptionSwitch(R.string.options_avoid_highways, prefs.avoidHighways) { onChange(prefs.copy(avoidHighways = it)) }
-            OptionSwitch(R.string.options_avoid_ferries, prefs.avoidFerries) { onChange(prefs.copy(avoidFerries = it)) }
-            OptionSwitch(R.string.options_avoid_alpr, prefs.avoidAlpr) { onChange(prefs.copy(avoidAlpr = it)) }
-            Text(
-                stringResource(R.string.options_avoid_alpr_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Text(stringResource(R.string.options_vehicle), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = prefs.vehicle == VehicleKind.CAR,
-                    onClick = { onChange(prefs.copy(vehicle = VehicleKind.CAR)) },
-                    label = { Text(stringResource(R.string.options_car)) },
-                )
-                FilterChip(
-                    selected = prefs.vehicle == VehicleKind.TRUCK,
-                    onClick = { onChange(prefs.copy(vehicle = VehicleKind.TRUCK)) },
-                    label = { Text(stringResource(R.string.options_truck)) },
-                )
-            }
-            if (prefs.vehicle == VehicleKind.TRUCK) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(R.string.options_height, prefs.heightFt, Modifier.weight(1f)) { onChange(prefs.copy(heightFt = it)) }
-                    NumberField(R.string.options_width, prefs.widthFt, Modifier.weight(1f)) { onChange(prefs.copy(widthFt = it)) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(R.string.options_length, prefs.lengthFt, Modifier.weight(1f)) { onChange(prefs.copy(lengthFt = it)) }
-                    NumberField(R.string.options_weight, prefs.weightTons, Modifier.weight(1f)) { onChange(prefs.copy(weightTons = it)) }
-                }
+            when (mode) {
+                TravelMode.DRIVE -> DriveOptions(prefs, onChange)
+                TravelMode.WALK -> WalkOptions(prefs, onChange)
+                TravelMode.BIKE -> BikeOptions(prefs, onChange)
             }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.options_done)) }
         }
@@ -172,10 +160,94 @@ fun RouteOptionsSheet(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit, onDismi
 }
 
 @Composable
-private fun OptionSwitch(label: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ColumnScope.DriveOptions(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit) {
+    OptionSwitch(R.string.options_avoid_tolls, prefs.avoidTolls) { onChange(prefs.copy(avoidTolls = it)) }
+    OptionSwitch(R.string.options_avoid_highways, prefs.avoidHighways) { onChange(prefs.copy(avoidHighways = it)) }
+    OptionSwitch(R.string.options_avoid_ferries, prefs.avoidFerries) { onChange(prefs.copy(avoidFerries = it)) }
+    OptionSwitch(R.string.options_avoid_alpr, prefs.avoidAlpr) { onChange(prefs.copy(avoidAlpr = it)) }
+    OptionNote(R.string.options_avoid_alpr_note)
+
+    Text(stringResource(R.string.options_vehicle), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = prefs.vehicle == VehicleKind.CAR,
+            onClick = { onChange(prefs.copy(vehicle = VehicleKind.CAR)) },
+            label = { Text(stringResource(R.string.options_car)) },
+        )
+        FilterChip(
+            selected = prefs.vehicle == VehicleKind.TRUCK,
+            onClick = { onChange(prefs.copy(vehicle = VehicleKind.TRUCK)) },
+            label = { Text(stringResource(R.string.options_truck)) },
+        )
+    }
+    if (prefs.vehicle == VehicleKind.TRUCK) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberField(R.string.options_height, prefs.heightFt, Modifier.weight(1f)) { onChange(prefs.copy(heightFt = it)) }
+            NumberField(R.string.options_width, prefs.widthFt, Modifier.weight(1f)) { onChange(prefs.copy(widthFt = it)) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberField(R.string.options_length, prefs.lengthFt, Modifier.weight(1f)) { onChange(prefs.copy(lengthFt = it)) }
+            NumberField(R.string.options_weight, prefs.weightTons, Modifier.weight(1f)) { onChange(prefs.copy(weightTons = it)) }
+        }
+    }
+}
+
+/** Walking: stairs, step-free and sidewalks. Step-free implies avoiding stairs, so that switch shows on and locks. */
+@Composable
+private fun ColumnScope.WalkOptions(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit) {
+    val walk = prefs.walk
+    OptionSwitch(R.string.options_walk_avoid_stairs, walk.avoidStairs || walk.stepFree, enabled = !walk.stepFree) {
+        onChange(prefs.copy(walk = walk.copy(avoidStairs = it)))
+    }
+    OptionSwitch(R.string.options_walk_step_free, walk.stepFree) { onChange(prefs.copy(walk = walk.copy(stepFree = it))) }
+    OptionNote(R.string.options_walk_step_free_note)
+    OptionSwitch(R.string.options_walk_prefer_paths, walk.preferPaths) { onChange(prefs.copy(walk = walk.copy(preferPaths = it))) }
+}
+
+/** Cycling: bicycle type, hills, busy roads and ferries. */
+@Composable
+private fun ColumnScope.BikeOptions(prefs: RoutePrefs, onChange: (RoutePrefs) -> Unit) {
+    val bike = prefs.bike
+    Text(stringResource(R.string.options_bike_type), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        BikeType.entries.forEach { type ->
+            FilterChip(
+                selected = bike.type == type,
+                onClick = { onChange(prefs.copy(bike = bike.copy(type = type))) },
+                label = {
+                    Text(
+                        stringResource(
+                            when (type) {
+                                BikeType.ROAD -> R.string.options_bike_road
+                                BikeType.HYBRID -> R.string.options_bike_hybrid
+                                BikeType.MOUNTAIN -> R.string.options_bike_mountain
+                            },
+                        ),
+                    )
+                },
+            )
+        }
+    }
+    OptionSwitch(R.string.options_bike_avoid_hills, bike.avoidHills) { onChange(prefs.copy(bike = bike.copy(avoidHills = it))) }
+    OptionNote(R.string.options_bike_hills_note)
+    OptionSwitch(R.string.options_bike_avoid_busy, bike.avoidBusyRoads) { onChange(prefs.copy(bike = bike.copy(avoidBusyRoads = it))) }
+    OptionSwitch(R.string.options_avoid_ferries, prefs.avoidFerries) { onChange(prefs.copy(avoidFerries = it)) }
+}
+
+@Composable
+private fun OptionNote(text: Int) {
+    Text(
+        stringResource(text),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun OptionSwitch(label: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(label), Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 

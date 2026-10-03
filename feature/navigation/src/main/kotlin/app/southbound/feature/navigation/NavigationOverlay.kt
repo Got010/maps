@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -25,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -46,7 +48,6 @@ import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.voice.VoiceMode
 import com.stadiamaps.ferrostar.composeui.runtime.KeepScreenOnDisposableEffect
 import com.stadiamaps.ferrostar.composeui.views.components.InstructionsView
-import com.stadiamaps.ferrostar.composeui.views.components.TripProgressView
 import com.stadiamaps.ferrostar.core.NavigationState
 import uniffi.ferrostar.TripState
 import uniffi.ferrostar.VisualInstructionContent
@@ -85,6 +86,14 @@ fun NavigationOverlay(
     // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
     val colors = if (darkOverlay) dynamicDarkColorScheme(LocalContext.current) else MaterialTheme.colorScheme
     MaterialTheme(colorScheme = colors, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
+    // Phase 8: on its side the phone gets the driving column (NavigationLandscape.kt); portrait is as it was.
+    if (rememberDrivingLandscape()) {
+        NavigationLandscape(
+            state, voiceMode, onVoiceModeChange, onEnd, modifier, speedMph, onSkipStop, delaySeconds,
+            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress,
+        )
+        return@MaterialTheme
+    }
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
         when (val trip = state.tripState) {
             is TripState.Navigating -> {
@@ -100,6 +109,7 @@ fun NavigationOverlay(
                             theme = DrivingInstructionRowTheme,
                         )
                         HighwaySign(instruction.primaryContent)
+                        CurrentLanes(trip, Modifier.align(Alignment.CenterHorizontally))
                     }
                     CurrentRoadName(trip.remainingSteps.firstOrNull()?.roadName)
                     fasterRoute?.let { FasterRouteBanner(it) }
@@ -123,14 +133,11 @@ fun NavigationOverlay(
                         Box(Modifier.weight(1f))
                         VoiceButton(voiceMode, onVoiceModeChange, mutedUntilNextTurn, onVoiceLongPress)
                     }
-                    // Arrival time with any traffic delay, and Skip stop while more stops remain.
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        EtaLine(trip.progress.durationRemaining, delaySeconds)
-                        if (onSkipStop != null && trip.remainingWaypoints.size > 1) {
-                            OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
-                        }
+                    // Skip stop while more stops remain, then minutes left, distance, arrival and End.
+                    if (onSkipStop != null && trip.remainingWaypoints.size > 1) {
+                        OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
                     }
-                    TripProgressView(progress = trip.progress, onTapExit = onEnd, modifier = Modifier.fillMaxWidth())
+                    EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd)
                 }
             }
             is TripState.Complete -> ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier.align(Alignment.BottomCenter).padding(16.dp))
@@ -142,7 +149,7 @@ fun NavigationOverlay(
 
 /** A US speed limit sign: white, black border, red when the user is over it. */
 @Composable
-private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
+internal fun SpeedLimitSign(limitMph: Int, over: Boolean) {
     OutlinedCard(
         colors = CardDefaults.outlinedCardColors(containerColor = Color.White, contentColor = Color.Black),
         border = BorderStroke(2.dp, if (over) Color(0xFFD93025) else Color.Black),
@@ -166,7 +173,7 @@ private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUntilNextTurn: Boolean, onLongPress: () -> Unit) {
+internal fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUntilNextTurn: Boolean, onLongPress: () -> Unit) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -196,7 +203,7 @@ private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUnt
 }
 
 @Composable
-private fun ArrivedCard(onDone: () -> Unit, side: ArrivalSide?, parkingNearby: Boolean, modifier: Modifier) {
+internal fun ArrivedCard(onDone: () -> Unit, side: ArrivalSide?, parkingNearby: Boolean, modifier: Modifier) {
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, tonalElevation = 3.dp, shadowElevation = 6.dp) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.navigation_arrived), style = MaterialTheme.typography.titleLarge)
@@ -224,7 +231,7 @@ fun ArrivalSide.sentence(): Int = when (this) {
 data class FasterRouteOffer(val savesMinutes: Int, val onAccept: () -> Unit, val onDismiss: () -> Unit)
 
 @Composable
-private fun FasterRouteBanner(offer: FasterRouteOffer) {
+internal fun FasterRouteBanner(offer: FasterRouteOffer) {
     Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             Text(stringResource(R.string.navigation_faster_route, offer.savesMinutes), style = MaterialTheme.typography.titleSmall)
@@ -237,27 +244,43 @@ private fun FasterRouteBanner(offer: FasterRouteOffer) {
 }
 
 /**
- * Arrival clock time and the trip's typical duration. When live traffic adds
- * more than two minutes the time turns red with "+X min".
+ * The bottom bar: time left in minutes as the headline ("12 min", "1 hr 5 min"),
+ * then distance left and the arrival clock in smaller type, and End. When live
+ * traffic adds more than two minutes the headline turns red with "+X min" and
+ * the trip's typical duration follows. This replaces Ferrostar's own progress
+ * bar, which led with the arrival clock, so there is one clock on screen.
+ * [distanceMeters] and [onEnd] are optional: without them the bar has no distance and no End button.
  */
 @Composable
-private fun EtaLine(remainingSeconds: Double, delaySeconds: Double) {
+internal fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMeters: Double? = null, onEnd: (() -> Unit)? = null) {
     val late = Eta.isLate(delaySeconds)
+    val leftSeconds = remainingSeconds + delaySeconds
     // Recomputed whenever Ferrostar updates the remaining time (about once a second).
-    val arrival = remember(remainingSeconds, delaySeconds) { Eta.clock(System.currentTimeMillis(), remainingSeconds + delaySeconds) }
+    val arrival = remember(remainingSeconds, delaySeconds) { Eta.clock(System.currentTimeMillis(), leftSeconds) }
     val color = if (late) Color(0xFFD93025) else MaterialTheme.colorScheme.onSurface
-    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.navigation_arrive, arrival), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
-            if (late) {
-                Text(stringResource(R.string.navigation_eta_plus, Eta.delayMinutes(delaySeconds)), style = MaterialTheme.typography.labelLarge, color = color)
+    val arriveText = stringResource(R.string.navigation_arrive_clock, arrival)
+    val typicalText = if (delaySeconds >= 60) stringResource(R.string.navigation_typical, Units.duration(remainingSeconds)) else null
+    val details = listOfNotNull(distanceMeters?.let { Units.distance(it) }, arriveText, typicalText).joinToString(" \u00B7 ")
+    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    Text(Units.duration(leftSeconds), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
+                    if (late) {
+                        Text(
+                            stringResource(R.string.navigation_eta_plus, Eta.delayMinutes(delaySeconds)),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = color,
+                            modifier = Modifier.padding(bottom = 3.dp),
+                        )
+                    }
+                }
+                Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (delaySeconds >= 60) {
-                Text(
-                    stringResource(R.string.navigation_typical, Units.duration(remainingSeconds)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (onEnd != null) {
+                IconButton(onClick = onEnd) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.navigation_end))
+                }
             }
         }
     }
@@ -268,7 +291,7 @@ private fun EtaLine(remainingSeconds: Double, delaySeconds: Double) {
  * when Valhalla's banner carries exit numbers (Ferrostar passes them on).
  */
 @Composable
-private fun HighwaySign(content: VisualInstructionContent) {
+internal fun HighwaySign(content: VisualInstructionContent) {
     if (content.exitNumbers.isEmpty()) return
     Surface(
         color = Color(0xFF0B6B3A),

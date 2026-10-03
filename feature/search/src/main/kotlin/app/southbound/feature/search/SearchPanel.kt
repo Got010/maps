@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -60,6 +61,7 @@ import app.southbound.core.search.PlaceKind
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.search.SearchResult
+import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -99,6 +101,8 @@ fun SearchPanel(
     // Shown instead of "No matches" when the lookup itself failed, so a broken pack is visible.
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
+    // One minute-tick for every row's Open/Closed label.
+    val now = rememberNow()
     val keyboard = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -182,9 +186,12 @@ fun SearchPanel(
                                 }
                             }
                         }
-                        items(group.places, key = { "${group.title}:${it.osmRef ?: "${it.lat},${it.lon}"}" }) { place ->
+                        // Keyed by position: several places can share a point (Overture puts a building's
+                        // businesses on one coordinate, and pins have no osmRef), and a repeated key crashes.
+                        itemsIndexed(group.places, key = { i, _ -> "${group.title}:$i" }) { _, place ->
                             ResultRow(
                                 SearchResult(place, near?.let { SearchRanking.distanceMeters(it, place.lat, place.lon) }),
+                                now = now,
                                 icon = if (group.recents) Icons.Filled.History else Icons.Filled.Bookmark,
                                 onClick = {
                                     keyboard?.hide()
@@ -199,7 +206,7 @@ fun SearchPanel(
                 query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
                 else -> LazyColumn(Modifier.fillMaxWidth()) {
                     items(results, key = { it.place.id }) { result ->
-                        ResultRow(result, onClick = {
+                        ResultRow(result, now = now, onClick = {
                             keyboard?.hide()
                             pick(result)
                         })
@@ -241,10 +248,16 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
 }
 
 @Composable
-private fun ResultRow(result: SearchResult, onClick: () -> Unit, icon: ImageVector = result.place.kind.icon()) {
+private fun ResultRow(
+    result: SearchResult,
+    now: LocalDateTime,
+    onClick: () -> Unit,
+    icon: ImageVector = result.place.kind.icon(),
+) {
     val place = result.place
     val approximate = if (place.approximate) stringResource(R.string.search_approximate) else null
-    val supporting = listOfNotNull(approximate, place.secondaryLine()).joinToString(" · ").ifEmpty { null }
+    val openLabel = rowOpenLabel(place.openingHours, now)
+    val supporting = listOfNotNull(approximate, place.secondaryLine(), openLabel).joinToString(" · ").ifEmpty { null }
     ListItem(
         headlineContent = { Text(place.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = supporting?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },

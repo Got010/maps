@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -48,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +61,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -74,6 +77,8 @@ import app.southbound.core.map.MapLine
 import app.southbound.core.map.IncidentPin
 import app.southbound.core.map.MapOverlays
 import app.southbound.core.map.MapPoint
+import app.southbound.core.map.MessageSignPin
+import app.southbound.core.map.TrafficCameraPin
 import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
 import app.southbound.core.map.NYC_CENTER
@@ -108,10 +113,14 @@ import app.southbound.core.traffic.FasterRoute
 import app.southbound.core.traffic.Geo
 import app.southbound.core.traffic.GeoPoint
 import app.southbound.core.traffic.Incident
+import app.southbound.core.traffic.IncidentKind
+import app.southbound.core.traffic.PoliceAlerts
 import app.southbound.core.traffic.RouteSlowdowns
 import app.southbound.core.traffic.RouteTraffic
 import app.southbound.core.traffic.SpeedBand
+import app.southbound.core.traffic.TrafficRanking
 import app.southbound.core.traffic.TrafficSnapshot
+import app.southbound.core.traffic.TripTraffic
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.SpeedAlertMode
@@ -124,6 +133,9 @@ import app.southbound.feature.directions.RoutePreviewState
 import app.southbound.feature.directions.StopsEditor
 import app.southbound.feature.navigation.FasterRouteOffer
 import app.southbound.feature.navigation.NavigationOverlay
+import app.southbound.feature.navigation.drivingMapBottomCenter
+import app.southbound.feature.navigation.rememberDrivingLandscape
+import app.southbound.feature.navigation.rememberDrivingPanelWidth
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.SearchPanel
 import app.southbound.feature.search.ShortcutSlot
@@ -158,6 +170,20 @@ private sealed interface Panel {
     data class PlaceShown(val place: Place) : Panel
     // Phase 6: [stops] are the places between here and [place], in order.
     data class Directions(val place: Place, val mode: TravelMode, val transit: Boolean = false, val stops: List<Place> = emptyList()) : Panel
+}
+
+/**
+ * The one tap-to-read card open over the map, if any: an incident pin, a
+ * plate reader, or (Phase 8) a 511NY traffic camera or message sign. One
+ * state, so opening one card closes the other.
+ */
+private sealed interface ShownThing {
+    data class IncidentShown(val incident: Incident) : ShownThing
+    data class PlateReader(val pin: CameraPin) : ShownThing
+
+    /** Looked up by id in the latest snapshot, so the card follows the feed. */
+    data class TrafficCam(val id: String) : ShownThing
+    data class Sign(val id: String) : ShownThing
 }
 
 private const val PLACE_ZOOM = 16.0
@@ -294,8 +320,12 @@ internal fun ExploreMap(
     var trafficVisible by rememberSaveable { mutableStateOf(false) }
     var trafficOn by remember { mutableStateOf(services.traffic.isEnabled) }
     val traffic by services.traffic.snapshot.collectAsState()
-    var shownIncident by remember { mutableStateOf<Incident?>(null) }
+    var shownThing by remember { mutableStateOf<ShownThing?>(null) }
     LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
+    // Cameras and signs belong to the traffic layer: hiding it closes their card.
+    LaunchedEffect(trafficVisible, trafficOn) {
+        if (!(trafficVisible && trafficOn) && (shownThing is ShownThing.TrafficCam || shownThing is ShownThing.Sign)) shownThing = null
+    }
     // Gas price from EIA (opt-in, and rate-limited to one request a day): on resume, when directions open,
     // and when the state is changed in Settings.
     val directionsOpen = panel is Panel.Directions
@@ -317,6 +347,9 @@ internal fun ExploreMap(
     // Slowdowns and incidents along the selected route (preview) or what's left of the trip.
     var previewTraffic by remember { mutableStateOf<List<RouteSlowdowns>>(emptyList()) }
     var tripTraffic by remember { mutableStateOf(RouteSlowdowns.NONE) }
+    // Live traffic laid on the whole trip route (redone on a reroute or a new snapshot), and how far along it the driver is.
+    var tripMatch by remember { mutableStateOf(TripTraffic.NONE) }
+    var tripAlong by remember { mutableDoubleStateOf(0.0) }
     var routeIncidents by remember { mutableStateOf<List<Incident>>(emptyList()) }
     var fasterOffer by remember { mutableStateOf<FasterOffer?>(null) }
     val dismissedRoutes = remember { FasterRoute.Dismissals() }
@@ -344,8 +377,6 @@ internal fun ExploreMap(
     // Plate readers (Flock and others) from the search pack: on the map in every state, counted on
     // each driving route option, and steered around with "Avoid plate readers".
     var cameraPins by remember { mutableStateOf<List<CameraPin>>(emptyList()) }
-    var shownCamera by remember { mutableStateOf<CameraPin?>(null) }
-    LaunchedEffect(shownIncident) { if (shownIncident != null) shownCamera = null }
     LaunchedEffect(searchIndex) {
         val index = searchIndex
         cameraPins = if (index == null) emptyList() else withContext(Dispatchers.IO) { attempt { PlateReaders.pins(index) } }.orEmpty()
@@ -404,23 +435,38 @@ internal fun ExploreMap(
         } else {
             plainRoutes
         }
-        val cameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
-        routes = found
-        // Live speeds laid over each option: coloured stretches and the delay they add.
-        val speeds = snapshot?.speeds.orEmpty()
-        val slow = withContext(Dispatchers.Default) {
+        val valhallaCameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
+        // Live speeds laid over each option: coloured stretches and the delay they add (car traffic: driving only).
+        val speeds = if (driving) snapshot?.speeds.orEmpty() else emptyList()
+        val valhallaSlow = withContext(Dispatchers.Default) {
             found.map { RouteTraffic.slowdowns(it.geometry.map { p -> GeoPoint(p.lat, p.lng) }, speeds) }
         }
+        // Valhalla on the phone ranks without live speeds, so put the fastest option with traffic first
+        // (when it gains 2+ min). The driver's avoid options win over a traffic estimate: with tolls, highways
+        // or ferries avoided Valhalla's order stands, and no route with more plate readers than its first may lead.
+        val order = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
+            found.indices.toList()
+        } else {
+            TrafficRanking.order(
+                durationsSeconds = found.map { RouteSummary.of(it).durationSeconds },
+                delaysSeconds = valhallaSlow.map { it.delaySeconds },
+                mayLead = { i -> !routePrefs.avoidAlpr || valhallaCameraCounts.getOrElse(i) { 0 } <= valhallaCameraCounts.getOrElse(0) { 0 } },
+            )
+        }
+        val ranked = TrafficRanking.reorder(found, order)
+        val slow = TrafficRanking.reorder(valhallaSlow, order)
+        val cameraCounts = TrafficRanking.reorder(valhallaCameraCounts, order)
+        routes = ranked
         previewTraffic = slow
-        if (found.isEmpty()) {
+        if (ranked.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
             val delays = slow.map { it.delaySeconds }
             preview = RoutePreviewState.Ready(
-                summaries = found.map(RouteSummary::of),
+                summaries = ranked.map(RouteSummary::of),
                 selected = 0,
                 delaySeconds = delays,
-                fuelGallons = fuelGallonsFor(found, delays, services.fuelPrefs.settings.value.mpg),
+                fuelGallons = fuelGallonsFor(ranked, delays, services.fuelPrefs.settings.value.mpg),
                 cameraCounts = cameraCounts,
                 cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && (cameraCounts.firstOrNull() ?: 0) > 0,
             )
@@ -489,7 +535,8 @@ internal fun ExploreMap(
     LaunchedEffect(trafficVisible, inTrip, trafficOn) {
         if (!trafficOn || !(trafficVisible || inTrip)) return@LaunchedEffect
         while (true) {
-            withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }
+            // With the layer shown, 511NY's cameras (daily) and message signs (every 5 min) come too.
+            withContext(Dispatchers.IO) { attempt { services.traffic.refresh(mapExtras = trafficVisible) } }
             delay(TRAFFIC_POLL_MS)
         }
     }
@@ -515,24 +562,45 @@ internal fun ExploreMap(
         following = true
     }
 
-    // Slow stretches and incidents ahead on the trip, redone as traffic or progress changes.
+    // Slow stretches and incidents ahead on the trip. Matching live speeds onto the route is the costly
+    // part (links x route points), so it is done on the whole route only when the route (a reroute) or the
+    // traffic snapshot (a poll, TRAFFIC_POLL_MS) changes. Every 250 m of progress the match is just trimmed
+    // to what is left: passed stretches drop off the map and the "+X min" shrinks through a slow one.
+    val routeGeometry = navState.routeGeometry
+    val routeKey = Triple(routeGeometry.size, routeGeometry.firstOrNull(), routeGeometry.lastOrNull())
+    val matchedRouteKey = remember { arrayOfNulls<Any>(1) }
+    LaunchedEffect(inTrip, routeKey, traffic) {
+        if (!inTrip) {
+            tripMatch = TripTraffic.NONE
+            matchedRouteKey[0] = null
+            return@LaunchedEffect
+        }
+        // Car traffic only changes a driving trip's ETA; incidents are shown on any trip.
+        val speeds = if (navigator?.mode == TravelMode.DRIVE) traffic.speeds else emptyList()
+        val incidents = traffic.incidents
+        val geometry = routeGeometry.map { GeoPoint(it.lat, it.lng) }
+        val matched = withContext(Dispatchers.Default) { TripTraffic.match(geometry, speeds, incidents) }
+        // A new route starts where the driver is; a new snapshot on the same route keeps their place on it.
+        if (matchedRouteKey[0] != routeKey) tripAlong = 0.0
+        matchedRouteKey[0] = routeKey
+        tripMatch = matched
+    }
     val tripProgressBucket = ((trip as? TripState.Navigating)?.progress?.distanceRemaining ?: 0.0).toInt() / 250
-    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+    LaunchedEffect(inTrip, tripMatch, tripProgressBucket) {
         val navigating = trip as? TripState.Navigating
         if (navigating == null) {
             tripTraffic = RouteSlowdowns.NONE
             routeIncidents = emptyList()
             return@LaunchedEffect
         }
-        val here = navigating.snappedUserLocation.coordinates
-        val speeds = traffic.speeds
-        val incidents = traffic.incidents
-        val geometry = navState.routeGeometry
-        withContext(Dispatchers.Default) {
-            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
-            tripTraffic = RouteTraffic.slowdowns(ahead, speeds)
-            routeIncidents = RouteTraffic.incidentsOnRoute(ahead, incidents)
-        }
+        val here = navigating.snappedUserLocation.coordinates.let { GeoPoint(it.lat, it.lng) }
+        val match = tripMatch
+        val along = withContext(Dispatchers.Default) { match.along(here, notBefore = tripAlong) }
+        // A reroute's match landed meanwhile: this position is on the old route, so leave it to the next run.
+        if (match !== tripMatch) return@LaunchedEffect
+        tripAlong = along
+        tripTraffic = match.ahead(along)
+        routeIncidents = match.incidentsAhead(along)
     }
     // Preview: incidents along the selected option.
     val previewSelected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
@@ -549,9 +617,33 @@ internal fun ExploreMap(
     }
     LaunchedEffect(directions, inTrip) { if (directions == null && !inTrip) routeIncidents = emptyList() }
 
+    // Police activity ahead (511NY events), said once each when it is within about a mile on what is left of
+    // the route and on our side of the road. Needs the 511NY feed on; the poll above runs during any trip,
+    // so this works with the traffic layer hidden. The voice policy applies the traffic-alert toggle and chime.
+    val policeSpoken = stringResource(R.string.explore_police_spoken)
+    val policeSpokenNoRoad = stringResource(R.string.explore_police_spoken_no_road)
+    val announcedPolice = remember { mutableSetOf<String>() }
+    LaunchedEffect(inTrip) { if (!inTrip) announcedPolice.clear() }
+    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+        val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
+        if (!services.traffic.hasIncidents) return@LaunchedEffect
+        val police = traffic.incidents.filter { it.kind == IncidentKind.POLICE && it.id !in announcedPolice }
+        if (police.isEmpty()) return@LaunchedEffect
+        val here = navigating.snappedUserLocation.coordinates
+        val geometry = navState.routeGeometry
+        val next = withContext(Dispatchers.Default) {
+            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
+            PoliceAlerts.ahead(ahead, police).firstOrNull()
+        } ?: return@LaunchedEffect
+        announcedPolice += next.incident.id
+        val road = next.incident.roadway
+        services.voice.announce(UtteranceKind.TRAFFIC_ALERT, if (road != null) policeSpoken.format(road) else policeSpokenNoRoad)
+    }
+
     // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?
     val latestNav by rememberUpdatedState(navState)
     val latestTraffic by rememberUpdatedState(traffic)
+    val latestTripMatch by rememberUpdatedState(tripMatch)
     LaunchedEffect(inTrip, trafficOn, navigator) {
         if (!inTrip) {
             fasterOffer = null
@@ -564,10 +656,10 @@ internal fun ExploreMap(
             val snapshot = latestNav
             val tripNow = snapshot.tripState as? TripState.Navigating ?: continue
             if (snapshot.isCalculatingNewRoute || fasterOffer != null) continue
-            val speeds = latestTraffic.speeds
+            val speeds = if (nav.mode == TravelMode.DRIVE) latestTraffic.speeds else emptyList()
             val here = tripNow.snappedUserLocation.coordinates.let { GeoPoint(it.lat, it.lng) }
-            val current = RouteTraffic.remaining(snapshot.routeGeometry.map { GeoPoint(it.lat, it.lng) }, here)
-            val currentSlow = withContext(Dispatchers.Default) { RouteTraffic.slowdowns(current, speeds) }
+            // The same remaining-route delay the trip screen shows, from the driver's position now.
+            val currentSlow = latestTripMatch.ahead(here, notBefore = tripAlong)
             // Valhalla on the phone doesn't know live speeds, so a plain fresh route is usually the same road.
             // When the route ahead crawls, also try one that steers around the worst stretches.
             val detours = if (currentSlow.delaySeconds >= FASTER_ROUTE_TRY_DETOUR_SECONDS) {
@@ -691,6 +783,14 @@ internal fun ExploreMap(
     }
 
     val baseTrafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
+    // Phase 8: 511NY cameras and signs with the traffic layer. Remembered per list, so the map only
+    // re-sends them when the feed brings a new one. Blank signs say nothing, so they aren't drawn.
+    val trafficCameraPins = remember(traffic.cameras) {
+        traffic.cameras.map { TrafficCameraPin(it.id, MapPoint(it.lat, it.lon), offline = !it.hasImage) }
+    }
+    val messageSignPins = remember(traffic.signs) {
+        traffic.signs.filterNot { it.isBlank }.map { MessageSignPin(it.id, MapPoint(it.lat, it.lon)) }
+    }
     // Incidents along the route are pinned even when the traffic layer itself is hidden.
     // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
     val routeAlerts by services.guidance.routeAlerts.collectAsState()
@@ -746,6 +846,23 @@ internal fun ExploreMap(
     val systemDark = isSystemInDarkTheme()
     val darkTheme = NightMode.useDark(systemDark, inTrip, nightBySunset, location?.latitude, location?.longitude, clockMs)
     val sheetOpen = !inTrip && (panel is Panel.PlaceShown || panel is Panel.Directions)
+    // Phase 8: a phone on its side during a trip gets the driving column on the left (NavigationOverlay),
+    // and the map shrinks to the rest of the screen so the column covers nothing.
+    val landscape = rememberDrivingLandscape()
+    val drivingPanelWidth = rememberDrivingPanelWidth()
+    val drivingLandscape = inTrip && landscape
+    val systemBars = WindowInsets.systemBars.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    // The column covers the left system inset, so only the other edges still pad the map's controls.
+    val mapPadding = if (drivingLandscape) {
+        PaddingValues(
+            top = systemBars.calculateTopPadding(),
+            end = systemBars.calculateEndPadding(layoutDirection),
+            bottom = systemBars.calculateBottomPadding(),
+        )
+    } else {
+        systemBars
+    }
     val droppedPin = stringResource(R.string.explore_dropped_pin)
 
     // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
@@ -758,7 +875,12 @@ internal fun ExploreMap(
     }
     Box(Modifier.fillMaxSize()) {
         if (showRouteOptions) {
-            RouteOptionsSheet(prefs = routePrefs, onChange = routeOptions::set, onDismiss = { showRouteOptions = false })
+            RouteOptionsSheet(
+                prefs = routePrefs,
+                onChange = routeOptions::set,
+                onDismiss = { showRouteOptions = false },
+                mode = (panel as? Panel.Directions)?.mode ?: TravelMode.DRIVE,
+            )
         }
         SouthboundMap(
             basemaps = basemaps.map { it.region to it.file },
@@ -768,9 +890,13 @@ internal fun ExploreMap(
             location = shownLocation,
             following = following,
             onFollowingDismissed = { following = false },
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = WindowInsets.systemBars.asPaddingValues(),
-            overlays = overlays.copy(cameras = cameraPins),
+            modifier = if (drivingLandscape) Modifier.fillMaxSize().padding(start = drivingPanelWidth) else Modifier.fillMaxSize(),
+            contentPadding = mapPadding,
+            overlays = overlays.copy(
+                cameras = cameraPins,
+                trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
+                messageSigns = if (trafficVisible && trafficOn) messageSignPins else emptyList(),
+            ),
             cameraRequest = cameraRequest,
             navigating = inTrip,
             onLongPress = if (inTrip) {
@@ -783,7 +909,7 @@ internal fun ExploreMap(
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
-            onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            onIncidentTap = { id -> shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown) },
             // A tap on another route's line picks it, as tapping its card does.
             onRouteTap = { rank ->
                 val ready = preview as? RoutePreviewState.Ready
@@ -797,9 +923,10 @@ internal fun ExploreMap(
                 touchSerial++
             },
             onCameraTap = { id ->
-                shownIncident = null
-                shownCamera = cameraPins.firstOrNull { it.id == id }
+                shownThing = cameraPins.firstOrNull { it.id == id }?.let(ShownThing::PlateReader)
             },
+            onTrafficCameraTap = { id -> shownThing = ShownThing.TrafficCam(id) },
+            onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
         )
 
         saveDialogFor?.let { place ->
@@ -852,7 +979,14 @@ internal fun ExploreMap(
             )
             if (!following && location != null) {
                 // Above the ETA and trip progress at the bottom.
-                RecenterPill({ following = true }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp))
+                RecenterPill(
+                    { following = true },
+                    if (drivingLandscape) {
+                        drivingMapBottomCenter(drivingPanelWidth)
+                    } else {
+                        Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp)
+                    },
+                )
             }
         } else {
             when (val current = panel) {
@@ -875,7 +1009,13 @@ internal fun ExploreMap(
                     if (!following && location != null) {
                         RecenterPill(
                             { following = true },
-                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = if (shownIncident != null) 190.dp else 28.dp),
+                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(
+                                bottom = when (shownThing) {
+                                    null, is ShownThing.PlateReader -> 28.dp
+                                    is ShownThing.TrafficCam -> 400.dp
+                                    is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
+                                },
+                            ),
                         )
                     }
                     // Why the traffic layer may look empty: say so instead of showing nothing.
@@ -1007,9 +1147,7 @@ internal fun ExploreMap(
                         },
                         // Phase 6: options chip and stops under the mode chips; region warning above Start.
                         afterModes = {
-                            if (current.mode == TravelMode.DRIVE) {
-                                RouteOptionsChip(active = !routePrefs.isDefault, onClick = { showRouteOptions = true })
-                            }
+                            RouteOptionsChip(active = !routePrefs.isDefaultFor(current.mode), onClick = { showRouteOptions = true })
                             StopsEditor(
                                 stops = current.stops.map { it.name },
                                 onMove = { i, delta -> panel = current.copy(stops = TripStops.move(current.stops, i, delta)) },
@@ -1036,26 +1174,22 @@ internal fun ExploreMap(
         }
 
         // --- Phase 5 (map): the tap-to-read card for incident pins, wherever the pin was tapped ---
-        shownIncident?.let { incident ->
-            IncidentCard(
-                incident,
-                onClose = { shownIncident = null },
-                modifier = when {
-                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
-                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
-                },
-            )
+        val cardModifier = when {
+            inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
+            else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
         }
-        // The tap-to-read card for a plate-reader dot.
-        shownCamera?.let { camera ->
-            CameraCard(
-                camera,
-                onClose = { shownCamera = null },
-                modifier = when {
-                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
-                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
-                },
-            )
+        when (val shown = shownThing) {
+            null -> Unit
+            is ShownThing.IncidentShown -> IncidentCard(shown.incident, onClose = { shownThing = null }, modifier = cardModifier)
+            // The tap-to-read card for a plate-reader dot.
+            is ShownThing.PlateReader -> CameraCard(shown.pin, onClose = { shownThing = null }, modifier = cardModifier)
+            // Phase 8: a 511NY camera's still, or what a message sign says. Gone from the feed: no card.
+            is ShownThing.TrafficCam -> traffic.cameras.firstOrNull { it.id == shown.id }?.let { camera ->
+                TrafficCameraCard(camera, services.networkGate, onClose = { shownThing = null }, modifier = cardModifier)
+            }
+            is ShownThing.Sign -> traffic.signs.firstOrNull { it.id == shown.id }?.let { sign ->
+                MessageSignCard(sign, onClose = { shownThing = null }, modifier = cardModifier)
+            }
         }
     }
 }
@@ -1165,7 +1299,14 @@ private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modi
     Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(incident.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                val heading = if (incident.kind == IncidentKind.POLICE) {
+                    // "Police activity", then the road when the feed names one (title falls back to the description).
+                    if (incident.roadway.isNullOrBlank()) stringResource(R.string.explore_incident_police)
+                    else stringResource(R.string.explore_incident_police_on, incident.title)
+                } else {
+                    incident.title
+                }
+                Text(heading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_import_ok))
                 }

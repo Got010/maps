@@ -77,7 +77,7 @@ A build pipeline on your computer turns public datasets into six data packs, whi
 | `basemap-<region>.pmtiles` | OSM New York extract (Geofabrik); `basemap-njn` from the New Jersey extract | Planetiler, OpenMapTiles or Protomaps schema | Monthly | 300-800 MB |
 | `routing.tar` | Same OSM extracts, New York merged with northern New Jersey | Valhalla tile builder | Monthly | 300-600 MB |
 | `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | Built into `search-nys.sqlite` (address tables, see Phase 7) by `pipeline/search/addresses.py` | Monthly | ~40 MB per million addresses |
-| `places.sqlite` | OSM POIs plus [Overture Places](https://docs.overturemaps.org/guides/places/) | DuckDB script into FTS5 | Monthly | 100-250 MB |
+| Places (in `search-nys.sqlite`) | OSM POIs, plus [Overture Places](https://docs.overturemaps.org/guides/places/) in their own `overture_place`/`overture_fts` tables (Phase 7) | `pipeline/search/overture.py`: DuckDB reads the bucket's GeoParquet by bbox, into FTS5 | Monthly | Overture adds about 165 MB (NYC) / 480 MB (state), measured on release 2026-09-23.1 |
 | `transit-nyc.sqlite` | MTA GTFS: subway, 6 bus files, LIRR, Metro-North | Python compiler | Weekly | 50-150 MB |
 | Voice model | Piper voice for sherpa-onnx (Amy) | Bundled in the APK | Rarely | about 55 MB with libs |
 | `voice-<voice>.zip` | Extra Piper voices (Norman), from the pinned sherpa-onnx tts-models | `pipeline/voices/build.sh` | Rarely | about 58 MB each, downloaded only when picked |
@@ -87,7 +87,7 @@ The sizes are guesses to replace after the first real build. Expect 1 to 2.5 GB 
 - **Regions.** Split the basemap into NYC, Long Island, Hudson Valley, Capital and North Country, Central and Western NY, and Northern New Jersey (`njn`), so you install only what you need. Keep routing as one graph (New York plus northern New Jersey) so cross-region trips work.
 - **Addresses.** NYS Address Points is the state's 911-grade address file. It is CC0-licensed, refreshed twice a month, and fills OSM's upstate address gaps.
 - **Places.** Overture is CDLA Permissive 2.0, with Foursquare rows under Apache 2.0 and AllThePlaces rows under CC0. Keep it in its own table and dedupe against OSM at query time, because Overture notes that a database joined with OSM may inherit ODbL.
-- **Hours.** Opening hours come from OSM's `opening_hours` tag.
+- **Hours.** Opening hours come from OSM's `opening_hours` tag; the phone parses the common grammar into Open/Closed (`core/search OpeningHours`, Phase 7). Overture rows carry no hours.
 - **Search.** Use FTS5 with a trigram tokenizer for typo tolerance, ranked by distance and category. Skip libpostal, whose model is gigabytes.
 - **Integrity.** Each release ships a manifest with a SHA-256 per pack. The app verifies a pack before swapping it in.
 - **Attribution.** An About screen credits OSM (ODbL), Overture, the Foursquare notice, NYS GIS and MTA.
@@ -200,7 +200,7 @@ Build NYC end to end first, then scale the same pipeline to the state. Each phas
   - Saved places, lists and recents live in `core/userdata`: one JSON document, AES-GCM under an Android Keystore key, in the no-backup directory. The place card has Save (checkbox per list, new lists), and the search panel shows the lists and recents while the box is empty.
   - Speed limits come from the route itself: Ferrostar already asks Valhalla for `shape_attributes.speed_limit`, so `SpeedLimits` reads the current one from the navigation state. The navigation screen shows a US-style sign, red when over, and Speed limit alerts (Off, Voice or Beep) warn once per stretch: after 8 s over the limit plus 5 mph, then again only if the limit changes and you are still over, you were under it for a minute and go over again, or you are far more over (15 mph or 20%) than at the last warning (`SpeedWarningPolicy`). Only where OSM has `maxspeed`.
   - Buildings stand up from zoom 15 (`building-3d` fill-extrusion layer in build_styles.py).
-  - Left: lane guidance, traffic-aware routing, upstate transit (see the Phase 4 list).
+  - Left: traffic-aware routing (spike done), upstate transit (see the Phase 4 list). Lane guidance is in (Phase 7).
 - **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with the signed APK, the packs and `southbound.json`. Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
 - **The app updates itself** from the latest release (`core/updates`). Map data downloads are on by default; app updates are off until turned on. While the repo is private, a read-only GitHub token goes in Settings > Updates.
 - **Not verified yet:**
@@ -252,9 +252,9 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 
 **Phase 4: polish toward Google-grade**
 
-- [ ] Lane guidance (Ferrostar's banner `laneInfo` is empty for Valhalla routes; see the risk below), [x] speed limits, [x] 3D buildings
+- [x] Lane guidance (built October 2026, see Phase 7), [x] speed limits, [x] 3D buildings
 - [x] Saved places, lists and recents, encrypted
-- [ ] Traffic-aware routing (needs the live-traffic-in-Valhalla spike first)
+- [ ] Traffic-aware routing (spike written: `docs/traffic-routing-spike.md`; ETAs and the route order already use live speeds, see Phase 7)
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
@@ -296,16 +296,21 @@ Exit test: set Home, plan Home, a stop in Albany, then Buffalo avoiding tolls, s
   - Built (search pack schema 2, not yet run on a phone or with the real state file): addresses left the trigram index for `address_street` (one row per street per town, own small trigram index) and `address` (house numbers keyed by street and number, B-tree only). Synthetic measure, 1M addresses: 214 MB as schema 1 `feature` rows, 42 MB in the new tables; a lookup takes under 1 ms. Streets and addresses carry their town (tags, else the nearest locality) and state (`states.py`).
   - The app parses "123 Main St, Nyack NY 10960" (`AddressQuery`): exact number, else "Approximate: nearest number on this street" interpolated from the neighbours, then the street; a typed town or ZIP ranks first but never filters. Older packs still work.
   - To turn the state file on: set the repository variable `ADDRESS_POINTS_URL` (Settings > Secrets and variables > Actions > Variables) to the statewide NYS Address Points zip from https://gis.ny.gov/streets-addresses, then run the Release workflow with "Rebuild data". Check the search job's log for the column mapping and per-table sizes; `pipeline/search/addresses.py --check <file>` shows how a file will be read.
-- [ ] Traffic-aware ETAs, then routing: adjust the ETA from NYC DOT speeds on the route's links; then the spike on live speeds in on-device Valhalla before committing to traffic-aware routing
-- [ ] Lane guidance: carry Valhalla's lane data through Ferrostar's banner parsing (patch or upstream, see Risks) and draw lanes under the instruction
-- [ ] Walking and cycling detail: step-free and stairs preferences for walking (pedestrian costing options), elevation profile for cycling (needs an elevation source in the pack)
+- [x] Overture Places in the search pack (built October 2026; first real S3 fetch runs in the next data build). `pipeline/search/overture.py` (behind `OVERTURE=1`, on by default in release.yml; repository variables `OVERTURE`=0 to leave them out, `OVERTURE_RELEASE` to pin a release or `latest`, `OVERTURE_MIN_CONFIDENCE` above 0.5 for a smaller pack, `OVERTURE_MAX_MB` guard at 700) reads the release's GeoParquet by bbox with DuckDB httpfs and writes `overture_place` + `overture_fts` (schema stays 2; `SearchIndex.hasOverture` detects the tables). Rows below confidence 0.5, unnamed, permanently closed or outside NY / the njn box are dropped; categories map onto the OSM values the app uses. Measured: NYC 377k rows / 163 MB, state 1.12 M rows / 483 MB, so `search-nys.sqlite` grows from 366 MB to roughly 850 MB. On the phone `OverturePlaces.merge` drops an Overture row with an OSM twin (same name key within 60 m, or one name starting the other within 30 m) and lends a missing phone/website to the OSM place; Overture ids are `1 shl 42 + rowid`, landmarks and "nearby" stay OSM-only; About credits Overture (CDLA Permissive 2.0), Foursquare (Apache 2.0) and AllThePlaces (CC0). Note: release 2026-09-23.1 has `taxonomy.primary`/`basic_category`, not the older `categories` column. See `docs/overture-places.md`.
+- [x] Open now: `core/search OpeningHours` parses OSM `opening_hours` (24/7, weekday ranges and lists, several spans a day, `;` overrides, `,` additions, `off`/`closed`, spans past midnight, `PH`/`SH` ignored) into Open / closes soon (30 min) / Closed with the next opening; months, week numbers, `sunrise`, `09:00+` and comments fall back to the raw tag. The place card shows "Open · closes 5 PM" (tap for the full tag) in theme colours and search rows append Open/Closed (`feature/search HoursStatus`). Phone time zone and no holiday calendar: `PH off` places read Open on a holiday.
+- [x] Traffic-aware ETAs: during a trip the delay is recomputed from NYC DOT speeds on the remaining route (`core/traffic TripTraffic`: links matched once per route or snapshot, trimmed every 250 m, the link being driven counts only its share still ahead), and the "+X min" and faster-route check use it; at preview, `TrafficRanking` moves an alternative to the front when it is at least 2 min faster with traffic (not when tolls/highways/ferries are avoided; never a route with more plate readers when avoiding them). Car-traffic delay applies to driving only.
+- [ ] Traffic-aware routing: `docs/traffic-routing-spike.md` concludes it is feasible on the phone without native code (Valhalla's memory-mapped `traffic.tar`, written from Kotlin; a pipeline-built NYC DOT link → edge-id table shipped with the routing pack). Next step is a one-day probe behind an experimental switch, then about a week to build; the app must then stop adding "+X min" on top.
+- [x] Lane guidance: no Ferrostar patch was needed. Valhalla writes each manoeuvre's lanes as a banner `sub` of `lane` components, and Ferrostar 0.57 parses them into `VisualInstruction.subContent.laneInfo` (only `primaryContent.laneInfo` is empty). `core/routing StepLanes`/`Lanes`/`LaneWording` read a step's lanes and phrase them ("use the left two lanes", "use the far right lane", "use the middle lane", "use any of the left three lanes"); the phrase is spoken once on the closest prompt before the "now" prompt (`core/voice LanePrompt`, `InstructionText.withLanes`) and the arrows are drawn under the banner within 1 km (`feature/navigation LaneRow`). Only where OSM has `turn:lanes`, driving only.
+- [x] Walking and cycling options in the route Options sheet: walking has Avoid stairs (`step_penalty` 600), Step-free (Valhalla's `pedestrian.type: wheelchair`, plus the step penalty, `use_hills` 0.1, `use_tracks` 0) and Prefer sidewalks and paths (`walkway_factor` 0.5, `sidewalk_factor` 0.7); cycling has Road/Hybrid/Mountain (`bicycle_type`), Avoid hills (`use_hills` 0.1) and Avoid busy roads (`use_roads` 0.1) (`RoutePrefs.walk`/`bike`, `RouteOptions.withPrefs` per mode).
+- [ ] Elevation: the routing pack is built without it, so every road is flat and Avoid hills does nothing yet (the sheet says so). `docs/elevation-spike.md`: bake grades into the routing tiles at build time (29 one-degree HGT tiles for NY + northern NJ, about 175 MB gzipped to download in CI, no extra size on the phone) and, for a profile chart, ship an 8 MB 6-arc-second raster in the search pack.
 
 Exit test: an upstate house number searches to the right spot; a highway exit in NYC shows which lanes to take; an ETA across Manhattan changes with the live speeds.
 
 **Phase 8: live data and the car**
 
-- [ ] 511NY cameras and message signs on the map: tap a camera for its still, show sign text
-- [ ] Android Auto (car app library, no Play Services) or, failing that, a landscape driving layout
+- [x] 511NY cameras and message signs on the map (same toggle and key as incidents; cameras cached 24 h, signs 5 min, fetched only while the layer is shown): teal camera badges from zoom 12, amber sign boards from zoom 11; tap a camera for its still (fetched through NetworkGate, Refresh, "Camera offline"), tap a sign for its lines. Field names assumed from 511NY's published API; the real feed has not been fetched from the dev container.
+- [x] Police activity: 511NY events whose type, subtype or wording says police become `IncidentKind.POLICE` (navy pin, "Police activity" card) and are spoken once about a mile ahead on the route, your direction only (`core/traffic PoliceAlerts`).
+- [x] Landscape driving layout (`feature/navigation NavigationLandscape`: a 40% driving column with the turn, road, faster-route offer, time left and End; the map on the right with the fin in its lower third) and [x] an Android Auto navigation service (`:feature:car`, androidx.car.app 1.4.0, no GMS in our code) that mirrors a trip started on the phone: turn, next turn, time and distance left, Stop. Not built: the map on the car screen (needs the surface-rendering path). Android Auto itself is Google's app and needs Play Services on the phone; see `docs/android-auto.md`.
 
 Exit test: a camera still opens from the traffic layer; the app runs on a car screen or in landscape with a driving layout.
 
@@ -393,8 +398,8 @@ The biggest gap to Google isn't code, it's data: no reviews, photos or popular t
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Ferrostar drops Valhalla lane data, reading lanes only from banner sub-components ([discussion](https://github.com/stadiamaps/ferrostar/discussions/932)) | No lane guidance | Patch the parser or upstream a fix in Phase 4 |
-| Live traffic in on-device Valhalla is unverified | Traffic-aware routing may need another approach | Prove it in a spike before Phase 4 |
+| Lane data: Ferrostar reads lanes only from banner sub-components ([discussion](https://github.com/stadiamaps/ferrostar/discussions/932)), and Valhalla writes them there, so `subContent.laneInfo` carries them (resolved October 2026) | Lanes missing where OSM lacks `turn:lanes` | None needed; improve OSM tagging |
+| Live traffic in on-device Valhalla is unverified | Traffic-aware routing may need another approach | Spike written (`docs/traffic-routing-spike.md`); run the one-day probe before building |
 | NYC DOT open-data copy may lag | Stale speeds | Measure refresh, and look for the direct DOT feed |
 | TomTom terms on caching tiles and using data with another routing engine | Terms violation | Read the terms before shipping that layer |
 | Pack sizes of 1 to 2.5 GB | Storage, first-run download | Regional packs, file import |

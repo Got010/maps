@@ -67,8 +67,23 @@ object RouteTraffic {
     ): RouteSlowdowns {
         if (route.size < 2 || links.isEmpty()) return RouteSlowdowns.NONE
         val line = Line(route)
-        val found = ArrayList<Pair<Double, SlowSegment>>()
-        var delay = 0.0
+        val found = match(line, links, matchMeters, freeFlowMph)
+        return RouteSlowdowns(found.map { it.segment(line, it.start) }, found.sumOf { it.delaySeconds })
+    }
+
+    /**
+     * The [links] that run along [line] in its direction of travel, in route
+     * order: where each starts and ends along the line, and the delay it adds
+     * (its travel time minus the time at [freeFlowMph]; 0 when flowing).
+     * [TripTraffic] keeps these so it can trim them as a trip goes on.
+     */
+    internal fun match(
+        line: Line,
+        links: List<SpeedLink>,
+        matchMeters: Double = MATCH_METERS,
+        freeFlowMph: Double = FREE_FLOW_MPH,
+    ): List<MatchedLink> {
+        val found = ArrayList<MatchedLink>()
         for (link in links) {
             if (link.points.size < 2 || link.speedMph <= 0.0) continue
             if (!line.nearBox(link.points, matchMeters)) continue
@@ -80,14 +95,23 @@ object RouteTraffic {
             val linkLength = pathLength(link.points)
             val span = end.along - start.along
             if (linkLength > 0 && span > linkLength * 3 + 50) continue
-            found += start.along to SlowSegment(line.slice(start.along, end.along), link.speedMph, SpeedBand.of(link.speedMph))
-            if (link.speedMph < FLOWING_MPH) {
+            val delay = if (link.speedMph < FLOWING_MPH) {
                 val actual = link.travelTimeSeconds?.toDouble() ?: (linkLength / (link.speedMph * MPH_TO_MPS))
                 val free = linkLength / (freeFlowMph * MPH_TO_MPS)
-                delay += max(0.0, actual - free)
+                max(0.0, actual - free)
+            } else {
+                0.0
             }
+            found += MatchedLink(start.along, end.along, link.speedMph, delay)
         }
-        return RouteSlowdowns(found.sortedBy { it.first }.map { it.second }, delay)
+        found.sortBy { it.start }
+        return found
+    }
+
+    /** One link laid on a route: metres along the route where it starts and ends, its speed, and the delay it adds. */
+    internal class MatchedLink(val start: Double, val end: Double, val speedMph: Double, val delaySeconds: Double) {
+        /** The coloured stretch from [from] (at or after [start]) to the link's end. */
+        fun segment(line: Line, from: Double): SlowSegment = SlowSegment(line.slice(from, end), speedMph, SpeedBand.of(speedMph))
     }
 
     /** The incidents within [withinMeters] of [route], in the order they come along it. */
@@ -115,7 +139,7 @@ object RouteTraffic {
     }
 
     /** A route polyline with cumulative distances, for projecting points onto it. */
-    private class Line(val points: List<GeoPoint>) {
+    internal class Line(val points: List<GeoPoint>) {
         private val cumulative = DoubleArray(points.size)
         private val minLat: Double
         private val maxLat: Double
@@ -139,10 +163,15 @@ object RouteTraffic {
             return other.any { it.lat in (minLat - padLat)..(maxLat + padLat) && it.lon in (minLon - padLon)..(maxLon + padLon) }
         }
 
-        /** The closest spot on the line to [p]: how far away, and how far along the line it is. */
-        fun project(p: GeoPoint): Projection {
+        /**
+         * The closest spot on the line to [p]: how far away, and how far along the line it is.
+         * Only the line from [notBefore] metres on is searched, so on a route that comes back
+         * along the same road a trip's position doesn't jump back to the way out.
+         */
+        fun project(p: GeoPoint, notBefore: Double = 0.0): Projection {
             var best = Projection(Double.POSITIVE_INFINITY, 0.0)
             for (i in 0 until points.size - 1) {
+                if (cumulative[i + 1] < notBefore) continue
                 val a = points[i]
                 val b = points[i + 1]
                 // Skip segments clearly out of reach before doing the maths.
@@ -185,7 +214,7 @@ object RouteTraffic {
         }
     }
 
-    private class Projection(val distance: Double, val along: Double)
+    internal class Projection(val distance: Double, val along: Double)
 }
 
 /**

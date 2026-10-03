@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<automotiveApp>
+    <!-- A Car App Library app: the host draws templates, the app draws nothing itself. -->
+    <uses name="template" />
+</automotiveApp>
