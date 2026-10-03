@@ -62,8 +62,7 @@ fun ArrivalTime(nowMs: Long, durationRemainingSeconds: Double, modifier: Modifie
     val text = DateFormat.getTimeFormat(context).format(Date(TripClock.arrivalMillis(nowMs, durationRemainingSeconds)))
     Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.navigation_arrive), style = MaterialTheme.typography.titleMedium)
-            Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.navigation_arrive, text), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
     }
 }

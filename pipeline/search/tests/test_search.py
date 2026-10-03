@@ -53,6 +53,7 @@ class BuildTest(unittest.TestCase):
             [
                 ("Café Grumpy", "cafe", "224 West 20th Street, New York 10011"),
                 ("Empire State Building", "attraction", None),
+                ("Shell Gas", "fuel", None),
             ],
             self.rows(build_search.PLACE),
         )
@@ -80,7 +81,7 @@ class BuildTest(unittest.TestCase):
 
     def test_streets_are_grouped_per_cell(self):
         # Two nearby Broadway segments make one row; the far one makes another.
-        self.assertEqual(2, len(self.rows(build_search.STREET)))
+        self.assertEqual(2, len([r for r in self.rows(build_search.STREET) if r[0] == "Broadway"]))
         self.assertNotIn("Some Path", [r[0] for r in self.rows(build_search.STREET)])
 
     def test_trigram_index_finds_normalised_text(self):
@@ -107,6 +108,44 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(["Empire State Building"], search("empire"))
         # A word must start at a word boundary, so "rumpy" finds nothing.
         self.assertEqual([], search("rumpy"))
+
+    def test_landmarks(self):
+        rows = self.db.execute("SELECT category, name, lat, lon FROM landmark ORDER BY lat").fetchall()
+        self.assertEqual(
+            [
+                ("traffic_signals", None, 40.74, -73.99),
+                ("stop", None, 40.741, -73.99),
+                # Brand beats the name: "past the Shell".
+                ("fuel", "Shell", 40.742, -73.991),
+                ("speed_camera", None, 40.743, -73.99),
+                ("alpr_camera", None, 40.744, -73.99),
+                # Node 35 is a plain camera: not an alert.
+                ("school_zone", None, 40.746, -73.99),
+                # The start of a road with a school speed limit.
+                ("school_zone", None, 40.747, -73.99),
+            ],
+            rows,
+        )
+
+    def test_landmark_box_query_uses_the_index(self):
+        plan = " ".join(
+            str(r[-1])
+            for r in self.db.execute(
+                "EXPLAIN QUERY PLAN SELECT category FROM landmark"
+                " WHERE lat BETWEEN 40.73 AND 40.75 AND lon BETWEEN -74.0 AND -73.98"
+            )
+        )
+        self.assertIn("landmark_lat_lon", plan)
+
+    def test_landmark_category(self):
+        cat = build_search.landmark_category
+        self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "camera:type": "ALPR"}))
+        self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "manufacturer": "Flock Safety"}))
+        self.assertEqual("church", cat({"amenity": "place_of_worship", "religion": "christian", "name": "St Paul"}))
+        self.assertIsNone(cat({"amenity": "place_of_worship", "religion": "jewish"}))
+        self.assertEqual("pharmacy", cat({"shop": "chemist", "name": "CVS"}))
+        self.assertEqual("school_zone", cat({"traffic_sign": "US:S5-1"}))
+        self.assertIsNone(cat({"amenity": "cafe"}))
 
     def test_meta(self):
         meta = dict(self.db.execute("SELECT key, value FROM meta"))

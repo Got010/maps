@@ -79,7 +79,8 @@ A build pipeline on your computer turns public datasets into six data packs, whi
 | `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | DuckDB script into FTS5 | Monthly | 200-400 MB |
 | `places.sqlite` | OSM POIs plus [Overture Places](https://docs.overturemaps.org/guides/places/) | DuckDB script into FTS5 | Monthly | 100-250 MB |
 | `transit-nyc.sqlite` | MTA GTFS: subway, 6 bus files, LIRR, Metro-North | Python compiler | Weekly | 50-150 MB |
-| Voice model | Piper voice for sherpa-onnx | Bundled in the APK | Rarely | about 55 MB with libs |
+| Voice model | Piper voice for sherpa-onnx (Amy) | Bundled in the APK | Rarely | about 55 MB with libs |
+| `voice-<voice>.zip` | Extra Piper voices (Norman), from the pinned sherpa-onnx tts-models | `pipeline/voices/build.sh` | Rarely | about 58 MB each, downloaded only when picked |
 
 The sizes are guesses to replace after the first real build. Expect 1 to 2.5 GB for the whole state.
 
@@ -251,6 +252,28 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 5: the feel of the map and of guidance** (guidance half)
+
+- [x] Landmark directions: a `landmark` table in the search pack (signals, stop signs, fuel, fast food, banks, pharmacies, supermarkets, churches, schools), matched to each turn on the phone (`core/search Landmarks`) and worked into the spoken prompt (`core/voice InstructionText`, `GuidancePolicy`). Needs the next search pack build; older packs work without landmarks.
+- [x] Smoother voice: next prompt synthesized ahead (`GuidanceVoice.prepare`), quick second turns chained with "then", no cut-offs except reroutes and closure alerts (`SpeechQueue`), chimes generated in code (`Chime`)
+- [x] Voice options: a second Piper voice (Norman, public domain) as a downloadable `voice-norman.zip` pack, fetched only once picked (`VoiceSelection`, `UpdatePlan` voices), so the APK keeps only Amy; distance style, chimes; mute until the next turn (long-press the voice button)
+- [x] Haptic turns even with voice on (Settings > Voice > Vibrate at turns)
+- [x] Speed camera, school zone and ALPR camera alerts from OSM tags in the same table, spoken ~300 m ahead; `ExploreServices.guidance.routeAlerts` lists them for the map
+- Not verified on a phone yet: the Android code was written without a local build (CI compiles it). School zones come only from `hazard=school_zone`, school traffic signs and `maxspeed:conditional` with "school"; plain `amenity=school` near the route is a landmark, not an alert, so NYC's many schools don't each set off a warning.
+
+Map half:
+
+- [x] Two-finger rotate and tilt, with a compass button that snaps back to north (MapLibre's compass, fades when facing north)
+- [x] One-finger zoom: double-tap and hold, slide up or down
+- [x] A "Re-center" pill when the map leaves the puck; tap it, or wait 10 s while navigating
+- [x] Slowdown colors on the active route and in the route picker, with "X min of delay" (`RouteTraffic.slowdowns`, NYC DOT links only; TomTom flow isn't built)
+- [x] ETA in red with "+X min" when traffic adds more than 2 min, "Typical: N min"
+- [x] Incident pins along the route line with the tap-to-read card
+- [x] "Faster route found, saves N min" banner every ~3 min mid-trip (`FasterRoute`)
+- [x] Arrival: side of street (computed on the phone from the route end, since Ferrostar's route model doesn't carry Valhalla's `side_of_street`), parking nearby from the search pack (`SearchIndex.nearby`; only named parking is in the pack)
+- [x] Highway signposts from the banner's exit numbers
+- Not verified: none of this has been built or run (the Android build can't run in the dev container); the pure parts are unit-tested.
+
 **Phase 6: driving essentials** (picked by the owner, October 2026; built, not yet run on a phone)
 
 - [x] Home and Work shortcuts: set from the place card's Save dialog (Set as Home / Set as Work), two chips at the top of the search panel while the box is empty. An unset chip asks you to search and pick; the pick sets it.
@@ -260,6 +283,22 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [x] Missing-region warning in the route preview with a Download button that ticks the region and starts an update check.
 
 Exit test: set Home, plan Home, a stop in Albany, then Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
+
+**Phase 7: data and routing quality**
+
+- [ ] NYS Address Points in the search pack (CC0, twice-monthly) and a smaller `search-nys.sqlite`: index addresses from the state file instead of OSM, cap trigram text, measure before and after
+- [ ] Traffic-aware ETAs, then routing: adjust the ETA from NYC DOT speeds on the route's links; then the spike on live speeds in on-device Valhalla before committing to traffic-aware routing
+- [ ] Lane guidance: carry Valhalla's lane data through Ferrostar's banner parsing (patch or upstream, see Risks) and draw lanes under the instruction
+- [ ] Walking and cycling detail: step-free and stairs preferences for walking (pedestrian costing options), elevation profile for cycling (needs an elevation source in the pack)
+
+Exit test: an upstate house number searches to the right spot; a highway exit in NYC shows which lanes to take; an ETA across Manhattan changes with the live speeds.
+
+**Phase 8: live data and the car**
+
+- [ ] 511NY cameras and message signs on the map: tap a camera for its still, show sign text
+- [ ] Android Auto (car app library, no Play Services) or, failing that, a landscape driving layout
+
+Exit test: a camera still opens from the traffic layer; the app runs on a car screen or in landscape with a driving layout.
 
 ## Repo layout and distribution
 

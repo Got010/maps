@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.southbound.core.map.Eta
 import app.southbound.core.map.Units
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
@@ -41,7 +43,8 @@ import app.southbound.core.routing.TravelMode
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
     data object Loading : RoutePreviewState
-    data class Ready(val summaries: List<RouteSummary>, val selected: Int) : RoutePreviewState
+    /** [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown. */
+    data class Ready(val summaries: List<RouteSummary>, val selected: Int, val delaySeconds: List<Double> = emptyList()) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
     enum class Reason { NO_ROUTE, NO_LOCATION }
@@ -123,7 +126,13 @@ fun RoutePreviewSheet(
                     )
                     is RoutePreviewState.Ready -> {
                         state.summaries.forEachIndexed { i, summary ->
-                            RouteOption(summary, selected = i == state.selected, fastest = i == 0, onClick = { onSelect(i) })
+                            RouteOption(
+                                summary,
+                                delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
+                                selected = i == state.selected,
+                                fastest = i == 0,
+                                onClick = { onSelect(i) },
+                            )
                         }
                         beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
@@ -173,7 +182,10 @@ fun ModeChips(
 }
 
 @Composable
-private fun RouteOption(summary: RouteSummary, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+    val late = Eta.isLate(delaySeconds)
+    val total = summary.durationSeconds + delaySeconds
+    val red = MaterialTheme.colorScheme.error
     OutlinedCard(
         border = BorderStroke(
             if (selected) 2.dp else 1.dp,
@@ -183,12 +195,40 @@ private fun RouteOption(summary: RouteSummary, selected: Boolean, fastest: Boole
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        Units.duration(total),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = when {
+                            late -> red
+                            fastest -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    if (late) {
+                        Text(
+                            stringResource(R.string.directions_eta_plus, Eta.delayMinutes(delaySeconds)),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = red,
+                        )
+                    }
+                }
+                // The clock time is read when the sheet is composed; it follows the route list as it refreshes.
+                val arrival = remember(total) { Eta.clock(System.currentTimeMillis(), total) }
                 Text(
-                    Units.duration(summary.durationSeconds),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (fastest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    stringResource(R.string.directions_arrive, arrival),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (late) red else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (delaySeconds >= 60) {
+                    Text(
+                        stringResource(R.string.directions_delay, Eta.delayMinutes(delaySeconds)) + " · " +
+                            stringResource(R.string.directions_typical, Units.duration(summary.durationSeconds)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (late) red else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 summary.via?.let {
                     Text(
                         stringResource(R.string.directions_via, it),

@@ -48,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.southbound.core.voice.AudioOutput
+import app.southbound.core.voice.BuiltInVoice
 import app.southbound.core.voice.DetailLevel
+import app.southbound.core.voice.DistanceStyle
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.GuidanceVolume
 import app.southbound.core.voice.OtherAudio
@@ -56,7 +58,14 @@ import app.southbound.core.voice.VoiceEngine
 import app.southbound.core.voice.VoiceMode
 import app.southbound.core.voice.VoiceSettings
 import app.southbound.core.voice.VoiceSettingsStore
+import app.southbound.core.packs.PackEvents
+import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.updates.UpdateScheduler
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
@@ -79,6 +88,34 @@ fun SettingsScreen(
     }
     var systemEngine by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(voice) { systemEngine = voice.systemEngineAvailable() }
+
+    // Downloadable voices: which are on the phone, and which one the updater should fetch.
+    val context = LocalContext.current
+    val voiceSelection = remember { VoiceSelection.get(context) }
+    var installedVoices by remember { mutableStateOf<Set<BuiltInVoice>>(emptySet()) }
+    suspend fun refreshVoices() {
+        installedVoices = withContext(Dispatchers.IO) { BuiltInVoice.entries.filter { voice.isVoiceInstalled(it) }.toSet() }
+    }
+    LaunchedEffect(voice) {
+        refreshVoices()
+        PackEvents.installed.collect { if (it.kind == PackKind.VOICE) refreshVoices() }
+    }
+    // Keeps the updater's list in step with the setting, e.g. after a backup restore.
+    LaunchedEffect(settings.builtInVoice) { voiceSelection.choose(settings.builtInVoice.takeUnless { it.bundled }?.id) }
+    fun pickVoice(picked: BuiltInVoice) {
+        val previous = settings.builtInVoice
+        update { it.copy(builtInVoice = picked) }
+        voiceSelection.choose(picked.takeUnless { it.bundled }?.id)
+        if (!picked.bundled && picked !in installedVoices) UpdateScheduler.checkNow(context, anyNetwork = false)
+        if (previous != picked && !previous.bundled) {
+            // Unpicked: give its space back. Picking it again downloads it again.
+            scope.launch(Dispatchers.IO) {
+                voice.deleteVoice(previous)
+                PackEvents.emitRemoved(PackKind.VOICE, previous.id)
+                refreshVoices()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -122,13 +159,43 @@ fun SettingsScreen(
                     },
                 ),
             ) { e -> update { it.copy(engine = e) } }
+            Choice(
+                R.string.voice_built_in_voice,
+                BuiltInVoice.entries,
+                settings.builtInVoice,
+                { stringResource(it.label()) },
+                note = when {
+                    settings.builtInVoice.bundled -> stringResource(R.string.voice_built_in_voice_note)
+                    settings.builtInVoice in installedVoices -> stringResource(R.string.voice_pack_installed)
+                    else -> stringResource(R.string.voice_pack_not_downloaded)
+                },
+                onSelect = ::pickVoice,
+            )
 
             Toggle(R.string.voice_street_names, settings.streetNames) { v -> update { it.copy(streetNames = v) } }
             Choice(R.string.voice_detail, DetailLevel.entries, settings.detail, { stringResource(it.label()) }) { d ->
                 update { it.copy(detail = d) }
             }
+            Choice(
+                R.string.voice_distance_style,
+                DistanceStyle.entries,
+                settings.distanceStyle,
+                { stringResource(it.label()) },
+                note = stringResource(R.string.voice_distance_style_note),
+            ) { d -> update { it.copy(distanceStyle = d) } }
+            Toggle(R.string.voice_instruction_chime, settings.instructionChime) { v -> update { it.copy(instructionChime = v) } }
+            Toggle(R.string.voice_alert_chime, settings.alertChime) { v -> update { it.copy(alertChime = v) } }
+            Toggle(R.string.voice_haptic_turns, settings.hapticTurns, R.string.voice_haptic_turns_note) { v ->
+                update { it.copy(hapticTurns = v) }
+            }
             Toggle(R.string.voice_traffic, settings.trafficAlerts) { v -> update { it.copy(trafficAlerts = v) } }
             Toggle(R.string.voice_speed_limits, settings.speedLimitWarnings) { v -> update { it.copy(speedLimitWarnings = v) } }
+            Subheading(R.string.voice_road_alerts)
+            Toggle(R.string.voice_speed_cameras, settings.speedCameraAlerts) { v -> update { it.copy(speedCameraAlerts = v) } }
+            Toggle(R.string.voice_alpr_cameras, settings.alprCameraAlerts, R.string.voice_alpr_cameras_note) { v ->
+                update { it.copy(alprCameraAlerts = v) }
+            }
+            Toggle(R.string.voice_school_zones, settings.schoolZoneAlerts) { v -> update { it.copy(schoolZoneAlerts = v) } }
             Toggle(R.string.voice_reroute, settings.rerouteAnnouncement) { v -> update { it.copy(rerouteAnnouncement = v) } }
             Toggle(R.string.voice_transit_stops, settings.transitStopAlerts) { v -> update { it.copy(transitStopAlerts = v) } }
             Choice(R.string.voice_volume, GuidanceVolume.entries, settings.volume, { stringResource(it.label()) }) { v ->
@@ -320,6 +387,16 @@ private fun engineLabel(engine: VoiceEngine?) = when (engine) {
 private fun DetailLevel.label() = when (this) {
     DetailLevel.FULL -> R.string.voice_detail_full
     DetailLevel.BRIEF -> R.string.voice_detail_brief
+}
+
+private fun BuiltInVoice.label() = when (this) {
+    BuiltInVoice.AMY -> R.string.voice_built_in_amy
+    BuiltInVoice.NORMAN -> R.string.voice_built_in_norman
+}
+
+private fun DistanceStyle.label() = when (this) {
+    DistanceStyle.FULL -> R.string.voice_distance_full
+    DistanceStyle.SHORT -> R.string.voice_distance_short
 }
 
 private fun GuidanceVolume.label() = when (this) {
