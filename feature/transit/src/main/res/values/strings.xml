@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transit_to">Transit to %1$s</string>
+    <string name="transit_close">Close transit directions</string>
+    <string name="transit_planning">Planning trips…</string>
+    <string name="transit_no_location">Waiting for your location. Step outside or near a window.</string>
+    <string name="transit_no_trips">No transit trips found in the next few hours. Try another time, or walk.</string>
+    <string name="transit_out_of_date">The transit schedules on this phone have expired. Share a newer transit-nyc.sqlite to Southbound.</string>
+    <string name="transit_now">Now</string>
+    <string name="transit_depart_at">Depart at…</string>
+    <string name="transit_arrive_by">Arrive by…</string>
+    <string name="transit_depart_at_time">Depart %1$s</string>
+    <string name="transit_arrive_by_time">Arrive by %1$s</string>
+    <string name="transit_time_ok">OK</string>
+    <string name="transit_time_cancel">Cancel</string>
+    <string name="transit_minutes">%1$d min</string>
+    <string name="transit_walk_only">Walk</string>
+    <string name="transit_alert">Service alert</string>
+    <string name="transit_canceled">Canceled</string>
+    <string name="transit_skips_stop">Skipping your stop</string>
+    <string name="transit_leaves_from">%1$s from %2$s</string>
+    <string name="transit_late">%1$d min late</string>
+    <string name="transit_walk_total">walk %1$d min</string>
+    <string name="transit_in_minutes">in %1$d min</string>
+    <string name="transit_step_walk">Walk %1$d min to %2$s</string>
+    <string name="transit_destination">your destination</string>
+    <string name="transit_toward">toward %1$s</string>
+    <string name="transit_step_ride">%1$s %2$s → %3$s %4$s (%5$d stops)</string>
+    <string name="transit_departures">Departures</string>
+    <string name="transit_no_departures">No departures in the next two hours.</string>
+    <string name="transit_board_minutes">%1$d min</string>
+</resources>

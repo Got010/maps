@@ -74,6 +74,7 @@ import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
+import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.feature.directions.RoutePreviewSheet
@@ -81,11 +82,17 @@ import app.southbound.feature.directions.RoutePreviewState
 import app.southbound.feature.navigation.NavigationOverlay
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.SearchPanel
+import app.southbound.feature.transit.StationBoard
+import app.southbound.feature.transit.TransitDepartures
+import app.southbound.feature.transit.TransitPlanSheet
+import app.southbound.feature.transit.TransitPlanState
+import app.southbound.feature.transit.TransitTime
 import com.stadiamaps.ferrostar.core.NavigationState
 import com.stadiamaps.ferrostar.core.location.toAndroidLocation
 import com.stadiamaps.ferrostar.core.location.toUserLocation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,7 +108,7 @@ private sealed interface Panel {
     data object Browse : Panel
     data object Search : Panel
     data class PlaceShown(val place: Place) : Panel
-    data class Directions(val place: Place, val mode: TravelMode) : Panel
+    data class Directions(val place: Place, val mode: TravelMode, val transit: Boolean = false) : Panel
 }
 
 private const val PLACE_ZOOM = 16.0
@@ -157,16 +164,27 @@ internal fun ExploreMap(
         }
     }
 
-    // Packs: search and routing open off the main thread.
+    // Packs: search, routing and transit open off the main thread.
     var searchIndex by remember { mutableStateOf<SearchIndex?>(null) }
     var navigator by remember { mutableStateOf<Navigator?>(null) }
     var hasRouting by remember { mutableStateOf(false) }
+    var transitPack by remember { mutableStateOf<TransitPack?>(null) }
     LaunchedEffect(packGeneration, resumes) {
         val inTrip = navigator?.state?.value?.tripState.let { it != null && it !is TripState.Idle }
         withContext(Dispatchers.IO) {
             searchIndex = services.openSearch()
             navigator = services.openNavigator(navigating = inTrip)
             hasRouting = services.hasPack(PackKind.ROUTING)
+            transitPack = services.openTransit()
+        }
+    }
+
+    // Departure countdowns tick on New York time.
+    var nowSeconds by remember { mutableIntStateOf(secondsOfDay()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15_000)
+            nowSeconds = secondsOfDay()
         }
     }
 
@@ -181,6 +199,10 @@ internal fun ExploreMap(
     var preview by remember { mutableStateOf<RoutePreviewState>(RoutePreviewState.Loading) }
     var cameraRequest by remember { mutableStateOf<CameraRequest?>(null) }
     val near = location?.let { LatLon(it.latitude, it.longitude) }
+    var transitTime by remember { mutableStateOf(TransitTime()) }
+    var transitPlan by remember { mutableStateOf<TransitPlanState>(TransitPlanState.Loading) }
+    var transitSelected by remember { mutableIntStateOf(0) }
+    var boards by remember { mutableStateOf<List<StationBoard>>(emptyList()) }
 
     fun showPlace(place: Place) {
         panel = Panel.PlaceShown(place)
@@ -193,9 +215,12 @@ internal fun ExploreMap(
     val directions = panel as? Panel.Directions
     val hasFix = location != null
     LaunchedEffect(directions, hasFix, navigator) {
-        val target = directions ?: return@LaunchedEffect
-        val nav = navigator ?: return@LaunchedEffect
+        val target = directions?.takeIf { !it.transit } ?: return@LaunchedEffect
         routes = emptyList()
+        val nav = navigator ?: run {
+            preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
+            return@LaunchedEffect
+        }
         val from = location ?: run {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_LOCATION)
             return@LaunchedEffect
@@ -219,6 +244,48 @@ internal fun ExploreMap(
                     MapPoint(from.latitude, from.longitude),
             )
         }
+    }
+
+    // Transit: plan from the pack, then layer realtime on top if it's on.
+    LaunchedEffect(directions, transitTime, hasFix, transitPack) {
+        val target = directions?.takeIf { it.transit } ?: return@LaunchedEffect
+        val pack = transitPack ?: return@LaunchedEffect
+        val from = location ?: run {
+            transitPlan = TransitPlanState.Failed(TransitPlanState.Reason.NO_LOCATION)
+            return@LaunchedEffect
+        }
+        transitPlan = TransitPlanState.Loading
+        transitSelected = 0
+        val plan = withContext(Dispatchers.Default) {
+            attempt { planTransit(pack, from.latitude, from.longitude, target.place.lat, target.place.lon, transitTime) }
+        } ?: TransitPlanState.Failed(TransitPlanState.Reason.NO_TRIPS)
+        transitPlan = plan
+        val ready = plan as? TransitPlanState.Ready ?: return@LaunchedEffect
+        cameraRequest = CameraRequest.Fit(
+            ready.journeys.first().mapLines(MapPoint(from.latitude, from.longitude), MapPoint(target.place.lat, target.place.lon))
+                .flatMap { it.points },
+        )
+        val snapshot = withContext(Dispatchers.IO) {
+            attempt { services.realtime.snapshot(includeBus = ready.journeys.any { it.usesBus() }) }
+        } ?: return@LaunchedEffect
+        transitPlan = ready.copy(live = liveFor(snapshot, ready.journeys))
+    }
+
+    // Departure boards for the place on the card, refreshed with the clock.
+    val shownPlace = (panel as? Panel.PlaceShown)?.place
+    LaunchedEffect(shownPlace, transitPack, nowSeconds / 60) {
+        val place = shownPlace ?: run {
+            boards = emptyList()
+            return@LaunchedEffect
+        }
+        val pack = transitPack ?: return@LaunchedEffect
+        val scheduled = withContext(Dispatchers.Default) { attempt { boardsNear(pack, place.lat, place.lon, null) } }.orEmpty()
+        boards = scheduled
+        if (scheduled.isEmpty()) return@LaunchedEffect
+        val snapshot = withContext(Dispatchers.IO) {
+            attempt { services.realtime.snapshot(includeBus = pack.hasBusNear(place.lat, place.lon)) }
+        } ?: return@LaunchedEffect
+        boards = withContext(Dispatchers.Default) { attempt { boardsNear(pack, place.lat, place.lon, snapshot) } } ?: scheduled
     }
 
     // A trip takes over the map and follows the user; ending it returns to browsing.
@@ -266,7 +333,15 @@ internal fun ExploreMap(
         )
         else -> when (val current = panel) {
             is Panel.PlaceShown -> MapOverlays(pin = MapPoint(current.place.lat, current.place.lon))
-            is Panel.Directions -> {
+            is Panel.Directions -> if (current.transit) {
+                val journey = (transitPlan as? TransitPlanState.Ready)?.journeys?.getOrNull(transitSelected)
+                val origin = location?.let { MapPoint(it.latitude, it.longitude) }
+                val end = MapPoint(current.place.lat, current.place.lon)
+                MapOverlays(
+                    routes = if (journey != null && origin != null) journey.mapLines(origin, end) else emptyList(),
+                    pin = end,
+                )
+            } else {
                 val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
@@ -341,8 +416,8 @@ internal fun ExploreMap(
                 is Panel.PlaceShown -> PlaceCard(
                     place = current.place,
                     distanceMeters = near?.let { SearchRanking.distanceMeters(it, current.place.lat, current.place.lon) },
-                    onDirections = if (hasRouting) {
-                        { panel = Panel.Directions(current.place, TravelMode.DRIVE) }
+                    onDirections = if (hasRouting || transitPack != null) {
+                        { panel = Panel.Directions(current.place, TravelMode.DRIVE, transit = !hasRouting) }
                     } else {
                         null
                     },
@@ -351,22 +426,50 @@ internal fun ExploreMap(
                         .align(Alignment.BottomCenter)
                         .safeDrawingPadding()
                         .padding(8.dp),
-                )
-                is Panel.Directions -> RoutePreviewSheet(
-                    destinationName = current.place.name,
-                    mode = current.mode,
-                    state = preview,
-                    onModeChange = { mode -> panel = current.copy(mode = mode) },
-                    onSelect = { index ->
-                        (preview as? RoutePreviewState.Ready)?.let { preview = it.copy(selected = index) }
+                    extra = if (boards.isNotEmpty()) {
+                        { TransitDepartures(boards, nowSeconds) }
+                    } else {
+                        null
                     },
-                    onStart = ::startTrip,
-                    onClose = { panel = Panel.PlaceShown(current.place) },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .safeDrawingPadding()
-                        .padding(8.dp),
                 )
+                is Panel.Directions -> if (current.transit) {
+                    TransitPlanSheet(
+                        destinationName = current.place.name,
+                        onModeChange = { mode -> panel = current.copy(mode = mode, transit = false) },
+                        time = transitTime,
+                        onTimeChange = { transitTime = it },
+                        state = transitPlan,
+                        selected = transitSelected,
+                        onSelect = { transitSelected = it },
+                        onClose = { panel = Panel.PlaceShown(current.place) },
+                        nowSeconds = nowSeconds,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .safeDrawingPadding()
+                            .padding(8.dp),
+                    )
+                } else {
+                    RoutePreviewSheet(
+                        destinationName = current.place.name,
+                        mode = current.mode,
+                        state = preview,
+                        onModeChange = { mode -> panel = current.copy(mode = mode) },
+                        onSelect = { index ->
+                            (preview as? RoutePreviewState.Ready)?.let { preview = it.copy(selected = index) }
+                        },
+                        onStart = ::startTrip,
+                        onClose = { panel = Panel.PlaceShown(current.place) },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .safeDrawingPadding()
+                            .padding(8.dp),
+                        onTransit = if (transitPack != null) {
+                            { panel = current.copy(transit = true) }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
     }

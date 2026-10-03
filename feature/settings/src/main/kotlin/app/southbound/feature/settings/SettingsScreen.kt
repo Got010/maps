@@ -1,5 +1,15 @@
 package app.southbound.feature.settings
 
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import app.southbound.core.network.ApiKey
+import app.southbound.core.network.NetworkFeature
+import app.southbound.core.network.PreferenceNetworkToggles
+import app.southbound.core.network.SecretStore
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -55,7 +65,14 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(store: VoiceSettingsStore, settings: VoiceSettings, voice: GuidanceVoice, onBack: () -> Unit) {
+fun SettingsScreen(
+    store: VoiceSettingsStore,
+    settings: VoiceSettings,
+    voice: GuidanceVoice,
+    onBack: () -> Unit,
+    network: PreferenceNetworkToggles? = null,
+    secrets: SecretStore? = null,
+) {
     val scope = rememberCoroutineScope()
     fun update(transform: (VoiceSettings) -> VoiceSettings) {
         scope.launch { store.update(transform) }
@@ -143,6 +160,11 @@ fun SettingsScreen(store: VoiceSettingsStore, settings: VoiceSettings, voice: Gu
                 Text(stringResource(R.string.voice_test), Modifier.padding(start = 8.dp))
             }
 
+            if (network != null && secrets != null) {
+                HorizontalDivider(Modifier.padding(top = 24.dp))
+                LiveDataSection(network, secrets)
+            }
+
             HorizontalDivider(Modifier.padding(top = 24.dp))
             Section(R.string.settings_about)
             Text(
@@ -150,6 +172,54 @@ fun SettingsScreen(store: VoiceSettingsStore, settings: VoiceSettings, voice: Gu
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+        }
+    }
+}
+
+/**
+ * Online extras, each off until turned on. Requests fetch whole feeds, so
+ * they never carry your location, searches or routes.
+ */
+@Composable
+private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretStore) {
+    val toggles by network.state.collectAsState()
+    Section(R.string.settings_live)
+    Text(
+        stringResource(R.string.settings_live_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Toggle(R.string.live_transit, toggles.getValue(NetworkFeature.TRANSIT_REALTIME), R.string.live_transit_note) {
+        network.set(NetworkFeature.TRANSIT_REALTIME, it)
+    }
+    Toggle(R.string.live_bus, toggles.getValue(NetworkFeature.TRANSIT_BUS_TIME), R.string.live_bus_note) {
+        network.set(NetworkFeature.TRANSIT_BUS_TIME, it)
+    }
+    var hasKey by remember { mutableStateOf(secrets.has(ApiKey.MTA_BUS_TIME)) }
+    var draft by remember { mutableStateOf("") }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = { Text(stringResource(if (hasKey) R.string.live_bus_key_saved else R.string.live_bus_key)) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                secrets.set(ApiKey.MTA_BUS_TIME, draft)
+                hasKey = secrets.has(ApiKey.MTA_BUS_TIME)
+                draft = ""
+            }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.live_bus_key_save)) }
+            if (hasKey) {
+                TextButton(onClick = {
+                    secrets.set(ApiKey.MTA_BUS_TIME, null)
+                    hasKey = false
+                }) { Text(stringResource(R.string.live_bus_key_remove)) }
+            }
         }
     }
 }
