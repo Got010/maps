@@ -13,21 +13,42 @@ opt-in extra.
 
 Everything below works from a phone. No computer needed.
 
-Every merge to `main` publishes a new release automatically, with the APK and
-the NYC data packs together. Download `southbound-<version>.apk` from the
-latest release and open it to install. Each file has a `.sha256` next to it. A
-newer APK installs over the old one and keeps your data.
+Every merge to `main` publishes a new release automatically, with the APK, the
+NYC data packs and `southbound.json` (a manifest of every file's size and
+SHA-256). Download `southbound-<version>.apk` from the latest release and open
+it to install. That's the only install you do.
 
-Android always asks before an app is installed or updated, so a release can't
-install itself. [Obtainium](https://github.com/ImranR98/Obtainium) is the
-closest thing: it watches this repo's releases and, on Android 12 and later,
-updates Southbound in the background once it has installed it. Add the repo
-URL and set its APK filter to `southbound-.*\.apk`, since each release also
-carries the data packs.
+### Updates, from inside the app
+
+Southbound keeps itself current from its own releases (Settings > Updates):
+
+- **Map data** (on by default): on first start, and then daily, Southbound
+  reads the latest release's manifest and downloads only the packs that
+  changed, on Wi-Fi unless you allow mobile data. Each download is checked
+  against its published SHA-256 before it replaces the old pack, and the map
+  switches to it straight away. **Download now** on the first screen fetches
+  everything at once on any network.
+- **App updates** (off until you turn them on): a newer APK is downloaded,
+  checked to be Southbound, newer, signed with the same key and matching its
+  checksum, then handed to Android's installer. Android asks you to allow
+  "Install unknown apps" for Southbound and to confirm the first update. After
+  that Southbound is its own installer, so later updates install without a
+  prompt (Android 12+).
+- **GitHub token**: while this repository is private, GitHub only shows its
+  releases to a token. Create a fine-grained personal access token (GitHub >
+  Settings > Developer settings > Fine-grained tokens) with access to
+  `StrongHorse44/maps` and the read-only **Contents** permission, and paste it
+  into Settings > Updates. It's stored encrypted and sent only to
+  `api.github.com`. Making the repository public removes this step.
+
+Requests go to GitHub only and carry nothing about you: no location, search or
+route. With the Network permission revoked the app keeps working from the
+packs it has.
 
 ## Load the NYC map
 
-The app ships without map data. There are four NYC packs, in every release
+The app downloads its data by itself (see above). You can also load packs by
+hand, for example without a token. There are four NYC packs, in every release
 next to the APK:
 
 | File | What it adds |
@@ -172,7 +193,8 @@ pull request, and checks the styles and pipeline scripts.
 | `app/` | Application module: `MainActivity`, theme, MapLibre init, release signing |
 | `core/map/` | `SouthboundMap` composable, style loading, GPS-only location flow |
 | `core/packs/` | `PackStore`: where packs live and whether one is valid |
-| `core/network/` | `NetworkGate`, the saved per-feature toggles and the encrypted API key store |
+| `core/network/` | `NetworkGate`, the saved per-feature toggles, the encrypted API key store and the GitHub releases client |
+| `core/updates/` | The updater: release manifest check, pack downloads, self-update through Android's installer |
 | `core/search/` | Search over the search pack: query parsing, FTS5 lookup, ranking |
 | `core/routing/` | Valhalla on the phone (valhalla-mobile) and Ferrostar navigation, GPS only |
 | `core/transit/` | Transit pack reader, RAPTOR planner, departure boards, GTFS-realtime parser and MTA feeds |

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="updates_channel">Updates</string>
+    <string name="updates_downloading">Downloading Southbound updates</string>
+    <string name="updates_progress">%1$d of %2$d MB</string>
+    <string name="updates_ready">Southbound update ready</string>
+    <string name="updates_ready_body">Tap to install the new version.</string>
+</resources>
