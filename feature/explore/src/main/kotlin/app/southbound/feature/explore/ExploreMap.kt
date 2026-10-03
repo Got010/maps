@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,11 +65,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.southbound.core.map.CameraRequest
 import app.southbound.core.map.MapLine
+import app.southbound.core.map.IncidentPin
 import app.southbound.core.map.MapOverlays
 import app.southbound.core.map.MapPoint
+import app.southbound.core.map.SpeedLine
+import app.southbound.core.map.TrafficOverlay
+import app.southbound.core.map.NYC_CENTER
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
+import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.Regions
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
@@ -76,6 +83,10 @@ import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
+import app.southbound.core.traffic.ClosureAvoidance
+import app.southbound.core.traffic.GeoPoint
+import app.southbound.core.traffic.Incident
+import app.southbound.core.traffic.TrafficSnapshot
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.UtteranceKind
@@ -103,7 +114,7 @@ import uniffi.ferrostar.Route
 import uniffi.ferrostar.TripState
 import uniffi.ferrostar.Waypoint
 import uniffi.ferrostar.WaypointKind
-import java.io.File
+import kotlin.math.log2
 
 /** What is open over the map, outside of a trip. */
 private sealed interface Panel {
@@ -124,7 +135,7 @@ private val SHEET_HEIGHT = 300.dp
  */
 @Composable
 internal fun ExploreMap(
-    basemap: File,
+    basemaps: List<ImportedPack>,
     services: ExploreServices,
     packGeneration: Int,
     onOpenSettings: () -> Unit,
@@ -207,6 +218,13 @@ internal fun ExploreMap(
     var boards by remember { mutableStateOf<List<StationBoard>>(emptyList()) }
     // A start point picked on the map ("Start here"), e.g. to plan from outside NYC. Null: from GPS.
     var startPlace by remember { mutableStateOf<Place?>(null) }
+
+    // Live traffic: shown on request, and watched for closures during a trip.
+    var trafficVisible by rememberSaveable { mutableStateOf(false) }
+    var trafficOn by remember { mutableStateOf(services.traffic.isEnabled) }
+    val traffic by services.traffic.snapshot.collectAsState()
+    var shownIncident by remember { mutableStateOf<Incident?>(null) }
+    LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
     fun origin(): Location? = startPlace?.let { place ->
         Location("start").apply {
             latitude = place.lat
@@ -240,8 +258,15 @@ internal fun ExploreMap(
         }
         preview = RoutePreviewState.Loading
         val destination = Waypoint(GeographicCoordinate(target.place.lat, target.place.lon), WaypointKind.BREAK)
+        // Steer around 511NY closures near the trip, when that feed is on.
+        val avoid = if (services.traffic.hasIncidents) {
+            val closures = withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }?.closures.orEmpty()
+            ClosureAvoidance.polygons(closures, GeoPoint(from.latitude, from.longitude), GeoPoint(target.place.lat, target.place.lon))
+        } else {
+            emptyList()
+        }
         val found = try {
-            withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), listOf(destination), target.mode) }
+            withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), listOf(destination), target.mode, avoid) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -310,6 +335,29 @@ internal fun ExploreMap(
             following = true
         }
     }
+    // Poll the feeds while the layer is shown or a trip is on; each feed keeps its own interval.
+    LaunchedEffect(trafficVisible, inTrip, trafficOn) {
+        if (!trafficOn || !(trafficVisible || inTrip)) return@LaunchedEffect
+        while (true) {
+            withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }
+            delay(TRAFFIC_POLL_MS)
+        }
+    }
+    // A closure that appears on the route ahead: say so and route around it.
+    val closureSpoken = stringResource(R.string.explore_closure_spoken)
+    val announcedClosures = remember { mutableSetOf<String>() }
+    LaunchedEffect(inTrip) { if (!inTrip) announcedClosures.clear() }
+    LaunchedEffect(traffic, inTrip) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!inTrip || traffic.closures.isEmpty()) return@LaunchedEffect
+        val ahead = ClosureAvoidance.onRoute(traffic.closures, navState.routeGeometry.map { GeoPoint(it.lat, it.lng) })
+            .filter { it.id !in announcedClosures }
+        if (ahead.isEmpty()) return@LaunchedEffect
+        announcedClosures += ahead.map { it.id }
+        services.voice.announce(UtteranceKind.TRAFFIC_ALERT, closureSpoken.format(ahead.first().title))
+        nav.rerouteAround(ClosureAvoidance.polygons(traffic.closures))
+    }
+
     val reroutingSpoken = stringResource(R.string.explore_rerouting_spoken)
     LaunchedEffect(navState.isCalculatingNewRoute) {
         if (navState.isCalculatingNewRoute && inTrip) {
@@ -338,11 +386,13 @@ internal fun ExploreMap(
         }
     }
 
+    val trafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
     val overlays = when {
         inTrip -> MapOverlays(
             routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, selected = true)),
             destination = (trip as? TripState.Navigating)?.remainingWaypoints?.lastOrNull()
                 ?.let { MapPoint(it.coordinate.lat, it.coordinate.lng) },
+            traffic = trafficOverlay,
         )
         else -> when (val current = panel) {
             is Panel.PlaceShown -> MapOverlays(pin = MapPoint(current.place.lat, current.place.lon))
@@ -353,6 +403,7 @@ internal fun ExploreMap(
                 MapOverlays(
                     routes = if (journey != null && origin != null) journey.mapLines(origin, end) else emptyList(),
                     pin = end,
+                    traffic = trafficOverlay,
                 )
             } else {
                 val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
@@ -361,9 +412,10 @@ internal fun ExploreMap(
                         MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, selected = i == selected)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
+                    traffic = trafficOverlay,
                 )
             }
-            else -> MapOverlays()
+            else -> MapOverlays(traffic = trafficOverlay)
         }
     }
     // While on route, the puck sits on the road rather than wandering with GPS noise.
@@ -371,9 +423,13 @@ internal fun ExploreMap(
     val sheetOpen = !inTrip && (panel is Panel.PlaceShown || panel is Panel.Directions)
     val droppedPin = stringResource(R.string.explore_dropped_pin)
 
+    // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
+    val home = remember(basemaps) { Regions.boundsOf(basemaps.map { it.region }) }
     Box(Modifier.fillMaxSize()) {
         SouthboundMap(
-            basemap = basemap,
+            basemaps = basemaps.map { it.region to it.file },
+            initialCenter = home?.let { MapPoint(it.centerLat, it.centerLon) } ?: NYC_CENTER,
+            initialZoom = home?.let { (log2(360.0 / maxOf(it.maxLon - it.minLon, (it.maxLat - it.minLat) * 1.4)) + 1.5).coerceIn(6.5, 11.0) } ?: 11.0,
             darkTheme = isSystemInDarkTheme(),
             location = shownLocation,
             following = following,
@@ -391,6 +447,7 @@ internal fun ExploreMap(
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
+            onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
         )
 
         if (inTrip) {
@@ -417,8 +474,24 @@ internal fun ExploreMap(
                         startPlace?.let { StartChip(it.name, onClear = { startPlace = null }) }
                         LocationStatus(hasPermission, location, asked, ::requestPermission)
                     }
-                    if (location != null) {
-                        RecenterButton(following, { following = true }, Modifier.align(Alignment.BottomEnd))
+                    Column(Modifier.align(Alignment.BottomEnd), horizontalAlignment = Alignment.End) {
+                        if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
+                        if (location != null) RecenterButton(following, { following = true }, Modifier)
+                    }
+                    shownIncident?.let { incident ->
+                        IncidentCard(
+                            incident,
+                            onClose = { shownIncident = null },
+                            modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = 8.dp),
+                        )
+                    }
+                    if (trafficVisible && traffic.errors.isNotEmpty()) {
+                        Text(
+                            traffic.errors.joinToString("\n"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
+                        )
                     }
                 }
                 Panel.Search -> SearchPanel(
@@ -565,6 +638,54 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
         }
     }
 }
+
+private const val TRAFFIC_POLL_MS = 60_000L
+
+@Composable
+private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = if (shown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Icon(Icons.Filled.Traffic, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
+    }
+}
+
+/** What a tapped incident pin says: road, direction, what happened, when 511NY last updated it. */
+@Composable
+private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(incident.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_import_ok))
+                }
+            }
+            Text(incident.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
+            val details = listOfNotNull(
+                incident.lanesStatus,
+                incident.severity?.let { stringResource(R.string.explore_incident_severity, it) },
+                incident.updatedAt?.let {
+                    stringResource(
+                        R.string.explore_incident_updated,
+                        android.text.format.DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS),
+                    )
+                },
+            )
+            if (details.isNotEmpty()) {
+                Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+private fun TrafficSnapshot.toOverlay() = TrafficOverlay(
+    speeds = speeds.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) },
+    incidents = incidents.map { IncidentPin(it.id, MapPoint(it.location.lat, it.location.lon), it.kind.name, it.isClosure) },
+)
 
 @Composable
 private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Modifier) {

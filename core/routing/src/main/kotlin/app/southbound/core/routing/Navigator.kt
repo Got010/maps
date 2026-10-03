@@ -17,6 +17,7 @@ import uniffi.ferrostar.NavigationControllerConfig
 import uniffi.ferrostar.Route
 import uniffi.ferrostar.RouteDeviationTracking
 import uniffi.ferrostar.RouteRequest
+import uniffi.ferrostar.TripState
 import uniffi.ferrostar.UserLocation
 import uniffi.ferrostar.Waypoint
 import uniffi.ferrostar.WaypointAdvanceMode
@@ -37,10 +38,17 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     @Volatile
     var mode: TravelMode = TravelMode.DRIVE
 
+    /**
+     * Polygons (rings of lon, lat) every route and reroute steers around:
+     * the closures the traffic layer knows about. Set by the app.
+     */
+    @Volatile
+    var avoid: List<List<Pair<Double, Double>>> = emptyList()
+
     private val core = FerrostarCore(
         customRouteProvider = object : CustomRouteProvider {
             override suspend fun getRoutes(userLocation: UserLocation, waypoints: List<Waypoint>): List<Route> =
-                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode) }
+                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid) }
         },
         httpClient = NoNetworkHttpClient,
         locationProvider = GpsLocationProvider(context.applicationContext),
@@ -60,15 +68,38 @@ class Navigator(context: Context, private val router: OfflineRouter) {
             core.spokenInstructionObserver = value
         }
 
-    /** Routes for preview, best first. */
-    suspend fun routes(from: UserLocation, waypoints: List<Waypoint>, mode: TravelMode): List<Route> {
+    /** Routes for preview, best first, around [avoid] (kept for the trip's reroutes). */
+    suspend fun routes(
+        from: UserLocation,
+        waypoints: List<Waypoint>,
+        mode: TravelMode,
+        avoid: List<List<Pair<Double, Double>>> = this.avoid,
+    ): List<Route> {
         this.mode = mode
+        this.avoid = avoid
         return core.getRoutes(from, waypoints)
     }
 
     fun start(route: Route, mode: TravelMode) {
         this.mode = mode
         core.startNavigation(route, controllerConfig(mode))
+    }
+
+    /**
+     * Mid-trip, routes again from where the user is to the remaining waypoints
+     * around [avoid] (a closure that just appeared on the route) and switches
+     * to the new route. False when not navigating or no route was found.
+     */
+    suspend fun rerouteAround(avoid: List<List<Pair<Double, Double>>>): Boolean {
+        val trip = state.value.tripState as? TripState.Navigating ?: return false
+        this.avoid = avoid
+        val routes = try {
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid) }
+        } catch (e: RoutingException) {
+            return false
+        }
+        core.replaceRoute(routes.first(), controllerConfig(mode))
+        return true
     }
 
     fun stop() = core.stopNavigation()
