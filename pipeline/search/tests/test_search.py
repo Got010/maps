@@ -42,7 +42,7 @@ class BuildTest(unittest.TestCase):
 
     def test_header_marks_a_search_pack(self):
         self.assertEqual(0x53425331, self.db.execute("PRAGMA application_id").fetchone()[0])
-        self.assertEqual(1, self.db.execute("PRAGMA user_version").fetchone()[0])
+        self.assertEqual(2, self.db.execute("PRAGMA user_version").fetchone()[0])
         with open(self.out, "rb") as f:
             header = f.read(72)
         self.assertEqual(b"SQLite format 3\x00", header[:16])
@@ -77,7 +77,19 @@ class BuildTest(unittest.TestCase):
         self.assertEqual([("Flatiron District", "neighbourhood", None)], self.rows(build_search.LOCALITY))
 
     def test_addresses(self):
-        self.assertEqual([("123 Court Street", None, "Brooklyn 11201")], self.rows(build_search.ADDRESS))
+        # Since schema 2 addresses have their own tables (see test_addresses.py).
+        self.assertEqual([], self.rows(build_search.ADDRESS))
+        rows = self.db.execute(
+            "SELECT a.number, s.street, s.city, s.state, a.postcode FROM address a"
+            " JOIN address_street s ON s.id = a.street_id ORDER BY a.number_key"
+        ).fetchall()
+        self.assertEqual(
+            [
+                ("123", "Court Street", "Brooklyn", "NY", "11201"),
+                ("224", "West 20th Street", "New York", "NY", "10011"),  # Café Grumpy's
+            ],
+            rows,
+        )
 
     def test_streets_are_grouped_per_cell(self):
         # Two nearby Broadway segments make one row; the far one makes another.
@@ -104,7 +116,7 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(["Café Grumpy"], search("grump"))
         self.assertEqual(["Café Grumpy"], search("Cafe W 20th"))
         self.assertEqual(["Café Grumpy"], search("coffee"))
-        self.assertEqual(["123 Court Street"], search("123 Court"))
+        self.assertEqual(["Café Grumpy"], search("224 W 20"))
         self.assertEqual(["Empire State Building"], search("empire"))
         # A word must start at a word boundary, so "rumpy" finds nothing.
         self.assertEqual([], search("rumpy"))
