@@ -85,4 +85,25 @@ class InstructionTextTest {
         assertEquals("Turn left.", InstructionText.withoutLeadingDistance("Turn left."))
         assertEquals("Continue for 2 miles.", InstructionText.withoutLeadingDistance("Continue for 2 miles."))
     }
+
+    @Test
+    fun theRoutesOwnArrivalIsRecognised() {
+        assertEquals(true, InstructionText.isArrived("You have arrived at your destination."))
+        assertEquals(true, InstructionText.isArrived("You have arrived at 350 5th Avenue."))
+        assertEquals(false, InstructionText.isArrived("You will arrive at your destination."))
+        assertEquals(false, InstructionText.isArrived("Your destination is on the right."))
+        assertEquals(false, InstructionText.isArrived("Turn left onto Arrive Street."))
+    }
+
+    @Test
+    fun exitThenTurnAtTheLight() {
+        assertEquals(
+            "Take exit 14S on the right, then turn left onto Route 9W.",
+            InstructionText.withFollowUp("Take exit 14S on the right.", "Turn left onto Route 9W."),
+        )
+        assertEquals(
+            "In a quarter mile, Take exit 14S on the right, then turn left onto Route 9W.",
+            InstructionText.withFollowUp("In a quarter mile, Take exit 14S on the right.", "In 300 feet, Turn left onto Route 9W."),
+        )
+    }
 }

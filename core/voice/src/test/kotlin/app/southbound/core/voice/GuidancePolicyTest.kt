@@ -158,6 +158,24 @@ class GuidancePolicyTest {
     }
 
     @Test
+    fun tripStartSpeaksWithTheVoiceOnOnly() {
+        val start = "Starting. You'll arrive at about 1:11 PM, 12 miles."
+        assertEquals(Speak(start), decide(kind = UtteranceKind.TRIP_START, text = start))
+        // Street names off doesn't touch it ("at about 1:11 PM" is no street).
+        assertEquals(Speak(start), decide(defaults.copy(streetNames = false), kind = UtteranceKind.TRIP_START, text = start))
+        assertEquals(Silent, decide(defaults.copy(mode = VoiceMode.ALERTS_ONLY), kind = UtteranceKind.TRIP_START, text = start))
+        assertEquals(Silent, decide(defaults.copy(mode = VoiceMode.MUTED), kind = UtteranceKind.TRIP_START, text = start))
+        assertEquals(Speak(start), decide(VoiceSettings(), kind = UtteranceKind.TRIP_START, text = start))
+    }
+
+    @Test
+    fun arrivalKeepsThePlaceName() {
+        val arrived = "You have arrived at Joe's Pizza."
+        assertEquals(Speak(arrived), decide(defaults.copy(streetNames = false), kind = ARRIVAL, text = arrived))
+        assertEquals(Speak(arrived), decide(defaults.copy(mode = VoiceMode.ALERTS_ONLY), kind = ARRIVAL, text = arrived))
+    }
+
+    @Test
     fun hapticTurnsBuzzWithTheVoice() {
         val haptic = defaults.copy(hapticTurns = true)
         assertEquals(Speak(turn, vibrate = true), decide(haptic, trigger = 30.0))

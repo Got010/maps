@@ -15,6 +15,9 @@ enum class UtteranceKind {
     SPEED_LIMIT,
     TRANSIT_STOP,
 
+    /** "Starting. You'll arrive at about 1:11 PM, 12 miles.", once as a trip starts. */
+    TRIP_START,
+
     /** The Test voice button: always speaks. */
     TEST,
 }
@@ -70,6 +73,7 @@ object GuidancePolicy {
             UtteranceKind.HAZARD_ALERT -> true
             UtteranceKind.SPEED_LIMIT -> false // decided above, by its own mode
             UtteranceKind.TRANSIT_STOP -> settings.transitStopAlerts && settings.mode == VoiceMode.ON
+            UtteranceKind.TRIP_START -> settings.mode == VoiceMode.ON
             UtteranceKind.TEST -> true
         }
         // The prompt at the turn itself buzzes with Haptic turns on, voice or not.
@@ -118,6 +122,8 @@ object GuidancePolicy {
             if (settings.distanceStyle == DistanceStyle.SHORT && atTurn) out = InstructionText.withoutLeadingDistance(out)
             return out
         }
+        // The trip's start and arrival name a time and a place, not a street to turn onto.
+        if (kind == UtteranceKind.TRIP_START || kind == UtteranceKind.ARRIVAL) return text
         if (kind != UtteranceKind.INSTRUCTION) return if (settings.streetNames) text else withoutStreetNames(text)
         var out = plain(text)
         if (landmark != null) out = InstructionText.withLandmark(out, landmark)
@@ -131,7 +137,7 @@ object GuidancePolicy {
             ChimeKind.INSTRUCTION.takeIf { settings.instructionChime }
         UtteranceKind.TRAFFIC_ALERT, UtteranceKind.HAZARD_ALERT, UtteranceKind.SPEED_LIMIT ->
             ChimeKind.ALERT.takeIf { settings.alertChime }
-        UtteranceKind.REROUTE, UtteranceKind.TRANSIT_STOP -> null
+        UtteranceKind.REROUTE, UtteranceKind.TRANSIT_STOP, UtteranceKind.TRIP_START -> null
     }
 
     /** Valhalla sentences carry street names after "onto", "on", "toward" or "at". */
