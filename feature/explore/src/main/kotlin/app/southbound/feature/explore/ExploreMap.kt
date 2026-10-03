@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,7 +114,9 @@ import app.southbound.core.traffic.PoliceAlerts
 import app.southbound.core.traffic.RouteSlowdowns
 import app.southbound.core.traffic.RouteTraffic
 import app.southbound.core.traffic.SpeedBand
+import app.southbound.core.traffic.TrafficRanking
 import app.southbound.core.traffic.TrafficSnapshot
+import app.southbound.core.traffic.TripTraffic
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.SpeedAlertMode
@@ -319,6 +322,9 @@ internal fun ExploreMap(
     // Slowdowns and incidents along the selected route (preview) or what's left of the trip.
     var previewTraffic by remember { mutableStateOf<List<RouteSlowdowns>>(emptyList()) }
     var tripTraffic by remember { mutableStateOf(RouteSlowdowns.NONE) }
+    // Live traffic laid on the whole trip route (redone on a reroute or a new snapshot), and how far along it the driver is.
+    var tripMatch by remember { mutableStateOf(TripTraffic.NONE) }
+    var tripAlong by remember { mutableDoubleStateOf(0.0) }
     var routeIncidents by remember { mutableStateOf<List<Incident>>(emptyList()) }
     var fasterOffer by remember { mutableStateOf<FasterOffer?>(null) }
     val dismissedRoutes = remember { FasterRoute.Dismissals() }
@@ -406,23 +412,38 @@ internal fun ExploreMap(
         } else {
             plainRoutes
         }
-        val cameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
-        routes = found
-        // Live speeds laid over each option: coloured stretches and the delay they add.
-        val speeds = snapshot?.speeds.orEmpty()
-        val slow = withContext(Dispatchers.Default) {
+        val valhallaCameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
+        // Live speeds laid over each option: coloured stretches and the delay they add (car traffic: driving only).
+        val speeds = if (driving) snapshot?.speeds.orEmpty() else emptyList()
+        val valhallaSlow = withContext(Dispatchers.Default) {
             found.map { RouteTraffic.slowdowns(it.geometry.map { p -> GeoPoint(p.lat, p.lng) }, speeds) }
         }
+        // Valhalla on the phone ranks without live speeds, so put the fastest option with traffic first
+        // (when it gains 2+ min). The driver's avoid options win over a traffic estimate: with tolls, highways
+        // or ferries avoided Valhalla's order stands, and no route with more plate readers than its first may lead.
+        val order = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
+            found.indices.toList()
+        } else {
+            TrafficRanking.order(
+                durationsSeconds = found.map { RouteSummary.of(it).durationSeconds },
+                delaysSeconds = valhallaSlow.map { it.delaySeconds },
+                mayLead = { i -> !routePrefs.avoidAlpr || valhallaCameraCounts.getOrElse(i) { 0 } <= valhallaCameraCounts.getOrElse(0) { 0 } },
+            )
+        }
+        val ranked = TrafficRanking.reorder(found, order)
+        val slow = TrafficRanking.reorder(valhallaSlow, order)
+        val cameraCounts = TrafficRanking.reorder(valhallaCameraCounts, order)
+        routes = ranked
         previewTraffic = slow
-        if (found.isEmpty()) {
+        if (ranked.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
             val delays = slow.map { it.delaySeconds }
             preview = RoutePreviewState.Ready(
-                summaries = found.map(RouteSummary::of),
+                summaries = ranked.map(RouteSummary::of),
                 selected = 0,
                 delaySeconds = delays,
-                fuelGallons = fuelGallonsFor(found, delays, services.fuelPrefs.settings.value.mpg),
+                fuelGallons = fuelGallonsFor(ranked, delays, services.fuelPrefs.settings.value.mpg),
                 cameraCounts = cameraCounts,
                 cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && (cameraCounts.firstOrNull() ?: 0) > 0,
             )
@@ -517,24 +538,45 @@ internal fun ExploreMap(
         following = true
     }
 
-    // Slow stretches and incidents ahead on the trip, redone as traffic or progress changes.
+    // Slow stretches and incidents ahead on the trip. Matching live speeds onto the route is the costly
+    // part (links x route points), so it is done on the whole route only when the route (a reroute) or the
+    // traffic snapshot (a poll, TRAFFIC_POLL_MS) changes. Every 250 m of progress the match is just trimmed
+    // to what is left: passed stretches drop off the map and the "+X min" shrinks through a slow one.
+    val routeGeometry = navState.routeGeometry
+    val routeKey = Triple(routeGeometry.size, routeGeometry.firstOrNull(), routeGeometry.lastOrNull())
+    val matchedRouteKey = remember { arrayOfNulls<Any>(1) }
+    LaunchedEffect(inTrip, routeKey, traffic) {
+        if (!inTrip) {
+            tripMatch = TripTraffic.NONE
+            matchedRouteKey[0] = null
+            return@LaunchedEffect
+        }
+        // Car traffic only changes a driving trip's ETA; incidents are shown on any trip.
+        val speeds = if (navigator?.mode == TravelMode.DRIVE) traffic.speeds else emptyList()
+        val incidents = traffic.incidents
+        val geometry = routeGeometry.map { GeoPoint(it.lat, it.lng) }
+        val matched = withContext(Dispatchers.Default) { TripTraffic.match(geometry, speeds, incidents) }
+        // A new route starts where the driver is; a new snapshot on the same route keeps their place on it.
+        if (matchedRouteKey[0] != routeKey) tripAlong = 0.0
+        matchedRouteKey[0] = routeKey
+        tripMatch = matched
+    }
     val tripProgressBucket = ((trip as? TripState.Navigating)?.progress?.distanceRemaining ?: 0.0).toInt() / 250
-    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+    LaunchedEffect(inTrip, tripMatch, tripProgressBucket) {
         val navigating = trip as? TripState.Navigating
         if (navigating == null) {
             tripTraffic = RouteSlowdowns.NONE
             routeIncidents = emptyList()
             return@LaunchedEffect
         }
-        val here = navigating.snappedUserLocation.coordinates
-        val speeds = traffic.speeds
-        val incidents = traffic.incidents
-        val geometry = navState.routeGeometry
-        withContext(Dispatchers.Default) {
-            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
-            tripTraffic = RouteTraffic.slowdowns(ahead, speeds)
-            routeIncidents = RouteTraffic.incidentsOnRoute(ahead, incidents)
-        }
+        val here = navigating.snappedUserLocation.coordinates.let { GeoPoint(it.lat, it.lng) }
+        val match = tripMatch
+        val along = withContext(Dispatchers.Default) { match.along(here, notBefore = tripAlong) }
+        // A reroute's match landed meanwhile: this position is on the old route, so leave it to the next run.
+        if (match !== tripMatch) return@LaunchedEffect
+        tripAlong = along
+        tripTraffic = match.ahead(along)
+        routeIncidents = match.incidentsAhead(along)
     }
     // Preview: incidents along the selected option.
     val previewSelected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
@@ -577,6 +619,7 @@ internal fun ExploreMap(
     // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?
     val latestNav by rememberUpdatedState(navState)
     val latestTraffic by rememberUpdatedState(traffic)
+    val latestTripMatch by rememberUpdatedState(tripMatch)
     LaunchedEffect(inTrip, trafficOn, navigator) {
         if (!inTrip) {
             fasterOffer = null
@@ -589,10 +632,10 @@ internal fun ExploreMap(
             val snapshot = latestNav
             val tripNow = snapshot.tripState as? TripState.Navigating ?: continue
             if (snapshot.isCalculatingNewRoute || fasterOffer != null) continue
-            val speeds = latestTraffic.speeds
+            val speeds = if (nav.mode == TravelMode.DRIVE) latestTraffic.speeds else emptyList()
             val here = tripNow.snappedUserLocation.coordinates.let { GeoPoint(it.lat, it.lng) }
-            val current = RouteTraffic.remaining(snapshot.routeGeometry.map { GeoPoint(it.lat, it.lng) }, here)
-            val currentSlow = withContext(Dispatchers.Default) { RouteTraffic.slowdowns(current, speeds) }
+            // The same remaining-route delay the trip screen shows, from the driver's position now.
+            val currentSlow = latestTripMatch.ahead(here, notBefore = tripAlong)
             // Valhalla on the phone doesn't know live speeds, so a plain fresh route is usually the same road.
             // When the route ahead crawls, also try one that steers around the worst stretches.
             val detours = if (currentSlow.delaySeconds >= FASTER_ROUTE_TRY_DETOUR_SECONDS) {
