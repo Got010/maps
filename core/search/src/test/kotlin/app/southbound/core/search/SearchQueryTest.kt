@@ -40,6 +40,24 @@ class SearchQueryTest {
     }
 
     @Test
+    fun trailingStateAndZipAreSoft() {
+        val query = SearchQuery.parse("123 Court St, Brooklyn, NY 11201-1234")
+        assertEquals(listOf("123", "ct", "st", "brooklyn"), query.tokens)
+        assertEquals(listOf("ny", "11201"), query.soft)
+        // A row without them still matches; one with them scores the matches.
+        assertTrue(query.matchesText(" 123 ct st brooklyn "))
+        assertEquals(2, query.softMatches(" 123 ct st brooklyn ny 11201 "))
+        assertEquals(0, query.softMatches(" 123 ct st brooklyn "))
+    }
+
+    @Test
+    fun aLoneStateWordIsStillSearched() {
+        val query = SearchQuery.parse("NY")
+        assertEquals(listOf("ny"), query.tokens)
+        assertTrue(query.soft.isEmpty())
+    }
+
+    @Test
     fun wordsMustStartAWord() {
         val query = SearchQuery.parse("grump")
         assertTrue(query.matchesText(" cafe grumpy 224 w 20 st "))
