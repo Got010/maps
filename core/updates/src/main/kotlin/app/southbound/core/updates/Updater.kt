@@ -20,6 +20,7 @@ import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.ReleaseManifest
 import app.southbound.core.packs.UnrecognizedPackException
 import app.southbound.core.packs.UpdatePlan
+import app.southbound.core.packs.VoiceSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -42,6 +43,7 @@ class Updater(context: Context) {
     private val app = context.applicationContext
     private val packStore = PackStore(app.filesDir, app.getExternalFilesDir(null))
     private val regions = RegionSelection.get(app)
+    private val voices = VoiceSelection.get(app)
     private val gate = NetworkGate(PreferenceNetworkToggles.get(app))
     private val secrets = SecretStore(app)
     private val client = GitHubReleases(gate, { secrets.get(ApiKey.GITHUB_RELEASES) })
@@ -71,6 +73,8 @@ class Updater(context: Context) {
                 wanted = if (packsOn) PackKind.entries.toSet() else emptySet(),
                 installedVersionCode = installedVersionCode(),
                 includeApp = appOn,
+                // A voice pack only for the voice picked in Settings > Voice.
+                voices = voices.voices.value,
             )
             if (plan.isEmpty) return@withContext publish(UpdateState.UpToDate(manifest.version))
             requireSpace(plan.bytes)

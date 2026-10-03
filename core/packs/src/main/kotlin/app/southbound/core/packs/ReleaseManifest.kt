@@ -91,12 +91,24 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
     companion object {
         /**
          * The packs the phone should have: a basemap for each region in
-         * [basemapRegions], and every other kind of pack the release offers
-         * (routing and search are statewide, transit is NYC), restricted to
-         * [wanted] kinds.
+         * [basemapRegions], a voice pack for each voice in [voices] (none
+         * unless the user picked one: they're big), and every other kind of
+         * pack the release offers (routing and search are statewide, transit
+         * is NYC), restricted to [wanted] kinds.
          */
-        fun wanted(manifest: ReleaseManifest, basemapRegions: Set<String>, wanted: Set<PackKind> = PackKind.entries.toSet()): List<ReleasePack> =
-            manifest.packs.filter { it.kind in wanted && (it.kind != PackKind.BASEMAP || it.region in basemapRegions) }
+        fun wanted(
+            manifest: ReleaseManifest,
+            basemapRegions: Set<String>,
+            wanted: Set<PackKind> = PackKind.entries.toSet(),
+            voices: Set<String> = emptySet(),
+        ): List<ReleasePack> =
+            manifest.packs.filter { pack ->
+                pack.kind in wanted && when (pack.kind) {
+                    PackKind.BASEMAP -> pack.region in basemapRegions
+                    PackKind.VOICE -> pack.region in voices
+                    else -> true
+                }
+            }
 
         /**
          * Packs among [wanted] whose installed copy (keyed by kind and region)
@@ -110,8 +122,9 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
             wanted: Set<PackKind> = PackKind.entries.toSet(),
             installedVersionCode: Long,
             includeApp: Boolean,
+            voices: Set<String> = emptySet(),
         ): UpdatePlan = UpdatePlan(
-            packs = wanted(manifest, basemapRegions, wanted).filter { installed[it.kind to it.region] != it.file.sha256 },
+            packs = wanted(manifest, basemapRegions, wanted, voices).filter { installed[it.kind to it.region] != it.file.sha256 },
             app = manifest.app?.takeIf { includeApp && manifest.versionCode > installedVersionCode },
         )
     }
