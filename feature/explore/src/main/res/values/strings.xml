@@ -36,4 +36,10 @@
     <string name="explore_incident_severity">Severity: %1$s</string>
     <string name="explore_incident_updated">Updated %1$s</string>
     <string name="explore_start_clear">Start from my location instead</string>
+    <string name="explore_recents">Recent</string>
+    <string name="explore_save_title">Save %1$s</string>
+    <string name="explore_save_new_list">New list</string>
+    <string name="explore_save_add">Add</string>
+    <string name="explore_save_done">Done</string>
+    <string name="explore_speeding_spoken">The speed limit is %1$d miles per hour.</string>
 </resources>

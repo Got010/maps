@@ -78,6 +78,7 @@ import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.Regions
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteSummary
+import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
@@ -219,6 +220,10 @@ internal fun ExploreMap(
     // A start point picked on the map ("Start here"), e.g. to plan from outside NYC. Null: from GPS.
     var startPlace by remember { mutableStateOf<Place?>(null) }
 
+    // Saved places and recents, kept encrypted on the phone.
+    val userData by services.userData.data.collectAsState()
+    var saveDialogFor by remember { mutableStateOf<Place?>(null) }
+
     // Live traffic: shown on request, and watched for closures during a trip.
     var trafficVisible by rememberSaveable { mutableStateOf(false) }
     var trafficOn by remember { mutableStateOf(services.traffic.isEnabled) }
@@ -239,6 +244,7 @@ internal fun ExploreMap(
         panel = Panel.PlaceShown(place)
         following = false
         cameraRequest = CameraRequest.Show(MapPoint(place.lat, place.lon), PLACE_ZOOM)
+        scope.launch(Dispatchers.IO) { attempt { services.userData.recordRecent(place.toRef()) } }
     }
 
     // Route preview: recompute when the destination or mode changes, or when
@@ -358,6 +364,25 @@ internal fun ExploreMap(
         nav.rerouteAround(ClosureAvoidance.polygons(traffic.closures))
     }
 
+    // Over the limit for a while: one warning, then quiet for a minute (Settings > Speed limit warnings).
+    val speedMph = location?.takeIf { inTrip && it.hasSpeed() }?.let { SpeedLimits.mph(it.speed) }
+    val speedLimit = remember(navState) { if (inTrip) SpeedLimits.currentMph(navState) else null }
+    val speedingSpoken = stringResource(R.string.explore_speeding_spoken)
+    var speedingSince by remember { mutableStateOf(0L) }
+    var lastSpeedWarning by remember { mutableStateOf(0L) }
+    LaunchedEffect(speedMph, speedLimit) {
+        val now = SystemClock.elapsedRealtime()
+        if (speedMph == null || speedLimit == null || speedMph <= speedLimit + SpeedLimits.TOLERANCE_MPH) {
+            speedingSince = 0L
+            return@LaunchedEffect
+        }
+        if (speedingSince == 0L) speedingSince = now
+        if (now - speedingSince >= SPEEDING_GRACE_MS && now - lastSpeedWarning >= SPEEDING_REPEAT_MS) {
+            lastSpeedWarning = now
+            services.voice.announce(UtteranceKind.SPEED_LIMIT, speedingSpoken.format(speedLimit))
+        }
+    }
+
     val reroutingSpoken = stringResource(R.string.explore_rerouting_spoken)
     LaunchedEffect(navState.isCalculatingNewRoute) {
         if (navState.isCalculatingNewRoute && inTrip) {
@@ -450,12 +475,27 @@ internal fun ExploreMap(
             onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
         )
 
+        saveDialogFor?.let { place ->
+            SaveDialog(
+                place = place,
+                data = userData,
+                onToggle = { listId, on ->
+                    scope.launch(Dispatchers.IO) {
+                        attempt { if (on) services.userData.save(place.toRef(), listId) else services.userData.unsave(place.toRef(), listId) }
+                    }
+                },
+                onCreateList = { name -> scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.createList(name) } } } },
+                onDismiss = { saveDialogFor = null },
+            )
+        }
+
         if (inTrip) {
             NavigationOverlay(
                 state = navState,
                 voiceMode = voiceSettings.mode,
                 onVoiceModeChange = { mode -> scope.launch { services.voiceStore.update { it.copy(mode = mode) } } },
                 onEnd = { navigator?.stop() },
+                speedMph = speedMph,
             )
             if (!following && location != null) {
                 RecenterButton(following, { following = true }, Modifier.align(Alignment.CenterEnd))
@@ -499,6 +539,8 @@ internal fun ExploreMap(
                     near = near,
                     onPick = { showPlace(it.place) },
                     onClose = { panel = Panel.Browse },
+                    groups = userData.placeGroups(),
+                    onClearRecents = { scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.clearRecents() } } } },
                 )
                 is Panel.PlaceShown -> PlaceCard(
                     place = current.place,
@@ -526,6 +568,8 @@ internal fun ExploreMap(
                     } else {
                         null
                     },
+                    onSave = { saveDialogFor = current.place },
+                    saved = userData.isSaved(current.place.toRef()),
                 )
                 is Panel.Directions -> if (current.transit) {
                     TransitPlanSheet(
@@ -640,6 +684,8 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
 }
 
 private const val TRAFFIC_POLL_MS = 60_000L
+private const val SPEEDING_GRACE_MS = 8_000L
+private const val SPEEDING_REPEAT_MS = 60_000L
 
 @Composable
 private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
