@@ -1,0 +1,71 @@
+[
+  {
+    "ID": "NYSDOT_4616",
+    "Name": "I-87 at Exit 17 (Newburgh)",
+    "DirectionOfTravel": "Northbound",
+    "RoadwayName": "I-87",
+    "Url": "http://511ny.org/map/Cctv/NYSDOT_4616",
+    "VideoUrl": "https://s51.nysdot.skyvdn.com/rtplive/R8_017/playlist.m3u8",
+    "Disabled": false,
+    "Blocked": false,
+    "Latitude": 41.4518,
+    "Longitude": -74.0547
+  },
+  {
+    "ID": 1204,
+    "Name": "FDR Dr at 96th St",
+    "DirectionOfTravel": "Unknown",
+    "RoadwayName": "FDR Drive",
+    "Url": "/map/Cctv/1204",
+    "Disabled": true,
+    "Blocked": false,
+    "Latitude": "40.7835",
+    "Longitude": "-73.9431"
+  },
+  {
+    "ID": "NYCDOT_311",
+    "Name": "Broadway at W 110 St",
+    "RoadwayName": "Broadway",
+    "Url": "https://webcams.nyctmc.org/api/cameras/311/image",
+    "Blocked": "true",
+    "Latitude": 40.8031,
+    "Longitude": -73.9653
+  },
+  {
+    "Id": "TT-77",
+    "Location": "NY-17 at Exit 120",
+    "Roadway": "NY-17",
+    "Direction": "Westbound",
+    "Latitude": 41.3,
+    "Longitude": -74.3,
+    "Views": [
+      { "Id": 1, "Url": "https://511ny.org/map/Cctv/TT-77--1", "Status": "Enabled", "Description": "West" },
+      { "Id": 2, "Url": "https://511ny.org/map/Cctv/TT-77--2", "Status": "Enabled" }
+    ]
+  },
+  {
+    "ID": "NO-POSITION",
+    "Name": "Somewhere",
+    "Url": "https://511ny.org/map/Cctv/NO-POSITION"
+  },
+  {
+    "ID": "ZERO",
+    "Name": "Null island",
+    "Latitude": 0,
+    "Longitude": 0
+  },
+  {
+    "Name": "No id",
+    "Latitude": 42.65,
+    "Longitude": -73.75
+  },
+  null,
+  {
+    "ID": "NO-IMAGE",
+    "Latitude": 42.65,
+    "Longitude": -73.75,
+    "RoadwayName": "I-90",
+    "DirectionOfTravel": "Eastbound",
+    "Views": [ { "Id": 1, "Status": "Disabled" } ]
+  }
+]

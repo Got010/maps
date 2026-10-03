@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "VMS-87-17N",
+    "Name": "I-87 NB before Exit 17",
+    "Roadway": "I-87",
+    "DirectionOfTravel": "Northbound",
+    "Messages": ["CRASH AT EXIT 17", "  RIGHT  LANE CLOSED ", "EXPECT DELAYS"],
+    "LastUpdated": "10/02/2026 10:15:00 PM",
+    "Latitude": 41.40,
+    "Longitude": -74.07
+  },
+  {
+    "ID": "NYC-TT-12",
+    "Name": "Henry Hudson Pkwy at W 79 St",
+    "RoadwayName": "Henry Hudson Parkway",
+    "Direction": "Northbound",
+    "Messages": "[jl3]TRAVEL TIME TO[nl]GWB  12 MIN[np][fo2]DRIVE SAFELY",
+    "Latitude": "40.7850",
+    "Longitude": "-73.9850"
+  },
+  {
+    "ID": "VMS-BLANK",
+    "Name": "I-90 WB at Exit 24",
+    "Roadway": "I-90",
+    "DirectionOfTravel": "Westbound",
+    "Messages": ["NO_MESSAGE"],
+    "Latitude": 42.70,
+    "Longitude": -73.85
+  },
+  {
+    "Id": 5501,
+    "Roadway": "NY-17",
+    "Direction": "Unknown",
+    "Message": "AMBER ALERT<br/>CALL 911",
+    "Message2": "TUNE TO 1610 AM",
+    "Latitude": 41.3,
+    "Longitude": -74.3
+  },
+  {
+    "ID": "NO-POSITION",
+    "Name": "Somewhere",
+    "Messages": ["HELLO"]
+  },
+  {
+    "ID": "NO-MESSAGES",
+    "Name": "Cross Bronx Expy EB",
+    "Latitude": 40.84,
+    "Longitude": -73.90
+  }
+]
