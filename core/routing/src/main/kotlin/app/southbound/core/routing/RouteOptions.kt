@@ -11,31 +11,40 @@ import java.util.Locale
 internal object RouteOptions {
     const val ALTERNATES = 2
 
-    fun json(mode: TravelMode): String {
-        val costing = when (mode) {
-            // Bikes stick to bike lanes and quieter streets where they can.
-            TravelMode.BIKE -> ""","costing_options":{"bicycle":{"bicycle_type":"hybrid","use_roads":0.3}}"""
-            TravelMode.WALK, TravelMode.DRIVE -> ""
-        }
-        return """{"alternates":$ALTERNATES,"units":"miles","language":"en-US"$costing}"""
-    }
-
-    // Phase 6: route preferences (tolls, highways, ferries, truck/RV profile).
     /**
-     * Applies the driver's [prefs] to a request [body] Ferrostar built: adds
-     * `costing_options` and, for a truck or RV, swaps the costing to "truck".
-     * Only driving has options; walking and cycling bodies come back as they
-     * were. Like closures, this goes in per request, not into the adapter, so a
+     * Costing options are not here: they depend on the user's preferences and
+     * go in per request by [withPrefs]. (Ferrostar merges these options as
+     * top-level keys, so a `costing_options` here would collide with that one.)
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun json(mode: TravelMode): String =
+        """{"alternates":$ALTERNATES,"units":"miles","language":"en-US"}"""
+
+    // Phase 6: route preferences (tolls, highways, ferries, truck/RV profile); Phase 7: walking and cycling.
+    /**
+     * Applies the user's [prefs] to a request [body] Ferrostar built: adds
+     * `costing_options` for the [mode] and, for a truck or RV, swaps the
+     * costing to "truck". Driving and walking add nothing while their options
+     * are at the defaults; cycling always adds its options (bike lanes and quiet
+     * streets first, see [BikePrefs]). Only the options for [mode] are sent.
+     * Like closures, this goes in per request, not into the adapter, so a
      * change in the options sheet takes effect on the next route and reroute.
      */
     fun withPrefs(body: String, mode: TravelMode, prefs: RoutePrefs): String {
-        if (mode != TravelMode.DRIVE) return body
-        val costing = prefs.costing
-        val options = prefs.costingOptionsJson() ?: return body
+        val costing = when (mode) {
+            TravelMode.DRIVE -> prefs.costing
+            TravelMode.WALK -> TravelMode.WALK.valhallaCosting
+            TravelMode.BIKE -> TravelMode.BIKE.valhallaCosting
+        }
+        val options = when (mode) {
+            TravelMode.DRIVE -> prefs.costingOptionsJson()
+            TravelMode.WALK -> prefs.walk.costingOptionsJson()
+            TravelMode.BIKE -> prefs.bikeCostingOptionsJson()
+        } ?: return body
         val start = body.indexOf('{')
         require(start >= 0) { "Route request isn't a JSON object" }
         var out = body
-        if (costing != TravelMode.DRIVE.valhallaCosting) {
+        if (costing != mode.valhallaCosting) {
             val swapped = COSTING_AUTO.replace(out, "\"costing\":\"$costing\"")
             require(swapped != out) { "Route request has no auto costing to switch" }
             out = swapped

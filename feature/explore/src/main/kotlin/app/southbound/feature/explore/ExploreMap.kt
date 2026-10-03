@@ -783,7 +783,12 @@ internal fun ExploreMap(
     }
     Box(Modifier.fillMaxSize()) {
         if (showRouteOptions) {
-            RouteOptionsSheet(prefs = routePrefs, onChange = routeOptions::set, onDismiss = { showRouteOptions = false })
+            RouteOptionsSheet(
+                prefs = routePrefs,
+                onChange = routeOptions::set,
+                onDismiss = { showRouteOptions = false },
+                mode = (panel as? Panel.Directions)?.mode ?: TravelMode.DRIVE,
+            )
         }
         SouthboundMap(
             basemaps = basemaps.map { it.region to it.file },
@@ -1032,9 +1037,7 @@ internal fun ExploreMap(
                         },
                         // Phase 6: options chip and stops under the mode chips; region warning above Start.
                         afterModes = {
-                            if (current.mode == TravelMode.DRIVE) {
-                                RouteOptionsChip(active = !routePrefs.isDefault, onClick = { showRouteOptions = true })
-                            }
+                            RouteOptionsChip(active = !routePrefs.isDefaultFor(current.mode), onClick = { showRouteOptions = true })
                             StopsEditor(
                                 stops = current.stops.map { it.name },
                                 onMove = { i, delta -> panel = current.copy(stops = TripStops.move(current.stops, i, delta)) },

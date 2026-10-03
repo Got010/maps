@@ -26,6 +26,9 @@ class RouteOptionsTest {
     @Test
     fun `options ask for alternatives in miles`() {
         assertEquals("""{"alternates":2,"units":"miles","language":"en-US"}""", RouteOptions.json(TravelMode.DRIVE))
+        // Costing options are per request (withPrefs), so no mode carries its own.
+        assertEquals(RouteOptions.json(TravelMode.DRIVE), RouteOptions.json(TravelMode.BIKE))
+        assertEquals(RouteOptions.json(TravelMode.DRIVE), RouteOptions.json(TravelMode.WALK))
     }
 
     // Phase 6
@@ -34,9 +37,9 @@ class RouteOptionsTest {
     @Test
     fun `default prefs and other modes leave the body alone`() {
         assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs.DEFAULT))
-        val avoid = RoutePrefs(avoidTolls = true)
+        // Driving options never leak into walking requests (cycling always sends its own, see WalkBikePrefsTest).
+        val avoid = RoutePrefs(avoidTolls = true, avoidHighways = true)
         assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.WALK, avoid))
-        assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.BIKE, avoid))
         // Truck dimensions alone don't matter while the profile is Car.
         assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(heightFt = 12.0)))
     }
