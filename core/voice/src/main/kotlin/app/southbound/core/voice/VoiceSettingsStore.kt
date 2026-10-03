@@ -34,7 +34,9 @@ class VoiceSettingsStore(context: Context) {
         val streetNames = booleanPreferencesKey("street_names")
         val detail = stringPreferencesKey("detail")
         val trafficAlerts = booleanPreferencesKey("traffic_alerts")
-        val speedLimitWarnings = booleanPreferencesKey("speed_limit_warnings")
+        /** Before speed alerts had a mode this was an on/off; still read once to carry the choice over. */
+        val speedLimitWarningsLegacy = booleanPreferencesKey("speed_limit_warnings")
+        val speedAlertMode = stringPreferencesKey("speed_alert_mode")
         val rerouteAnnouncement = booleanPreferencesKey("reroute_announcement")
         val transitStopAlerts = booleanPreferencesKey("transit_stop_alerts")
         val volume = stringPreferencesKey("volume")
@@ -63,7 +65,7 @@ class VoiceSettingsStore(context: Context) {
             streetNames = this[Keys.streetNames] ?: d.streetNames,
             detail = enumOr(Keys.detail, d.detail),
             trafficAlerts = this[Keys.trafficAlerts] ?: d.trafficAlerts,
-            speedLimitWarnings = this[Keys.speedLimitWarnings] ?: d.speedLimitWarnings,
+            speedAlerts = SpeedAlertMode.fromStored(this[Keys.speedAlertMode], this[Keys.speedLimitWarningsLegacy]),
             rerouteAnnouncement = this[Keys.rerouteAnnouncement] ?: d.rerouteAnnouncement,
             transitStopAlerts = this[Keys.transitStopAlerts] ?: d.transitStopAlerts,
             volume = enumOr(Keys.volume, d.volume),
@@ -91,7 +93,8 @@ class VoiceSettingsStore(context: Context) {
         prefs[Keys.streetNames] = streetNames
         prefs[Keys.detail] = detail.name
         prefs[Keys.trafficAlerts] = trafficAlerts
-        prefs[Keys.speedLimitWarnings] = speedLimitWarnings
+        prefs[Keys.speedAlertMode] = speedAlerts.name
+        prefs.remove(Keys.speedLimitWarningsLegacy)
         prefs[Keys.rerouteAnnouncement] = rerouteAnnouncement
         prefs[Keys.transitStopAlerts] = transitStopAlerts
         prefs[Keys.volume] = volume.name

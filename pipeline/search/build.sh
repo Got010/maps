@@ -13,8 +13,11 @@
 # variables of the same names, see release.yml):
 #   ADDRESS_POINTS_URL  NYS Address Points to add to OSM's addresses: a .zip
 #                       holding a file geodatabase or shapefile (as published at
-#                       https://gis.ny.gov/streets-addresses), or a .csv/.geojson.
-#                       Unset: OSM addresses only (the NYC PR check runs so).
+#                       https://gis.ny.gov/streets-addresses), a .csv/.geojson,
+#                       or the NYS GIS Resource Hub's download link for the
+#                       dataset (data.gis.ny.gov/api/download/v1/items/<id>/csv,
+#                       shapefile, filegdb or geojson). Unset: OSM addresses
+#                       only (the NYC PR check runs so).
 #   ADDRESS_POINTS_LAYER  the layer to read when the download holds several
 #   SEARCH_STATE        force one state (e.g. NJ) on addresses that don't say;
 #                       default: by location (states.py)
@@ -39,12 +42,63 @@ region_bounds "$REGION"
 # the region, at $DATA_DIR/tmp/address-points-<region>.csv. Converting with
 # ogr2ogr (GDAL in Docker) reads whichever layer the geodatabase or shapefile
 # holds; addresses.py then picks columns by name.
+# The file name for an address points URL: the URL's own file name, or for an
+# ArcGIS Hub download link (…/api/download/v1/items/<id>/<format>?…) a name
+# built from the format, since that path has no extension.
+address_points_filename() {
+  local url="$1" path format
+  path="${url%%\?*}"
+  if [[ "$path" == */api/download/v1/items/*/* ]]; then
+    format="${path##*/}"
+    case "$format" in
+      csv) echo "address-points.csv" ;;
+      geojson) echo "address-points.geojson" ;;
+      shapefile|filegdb|fgdb|kml|kmz|gpkg|geopackage) echo "address-points-$format.zip" ;;
+      *) echo "Unknown Hub download format '$format' in $url" >&2; return 1 ;;
+    esac
+  else
+    basename "$path"
+  fi
+}
+
+# Downloads $url to $file. An ArcGIS Hub download link answers with JSON
+# ({"status":"Pending"…}) while it prepares the file, then with the file or a
+# redirect to it; keep asking until it is ready (about an hour at most).
+download_address_points() {
+  local url="$1" file="$2" tries=0 type
+  while true; do
+    curl -sSfL --retry 3 -o "$file" -w '%{content_type}\n' "$url" > "$file.type"
+    type="$(tr '[:upper:]' '[:lower:]' < "$file.type")"
+    rm -f "$file.type"
+    if [[ "$type" != application/json* ]] || [[ "$file" == *.geojson ]]; then
+      return 0
+    fi
+    # A JSON answer to a non-GeoJSON download is the Hub saying "not yet".
+    if grep -q '"resultUrl"' "$file"; then
+      url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["resultUrl"])' "$file")"
+      echo "==> Address points ready at $url"
+      continue
+    fi
+    tries=$((tries + 1))
+    if (( tries > 120 )); then
+      echo "Address points download never became ready: $(head -c 300 "$file")" >&2
+      return 1
+    fi
+    echo "==> Address points not ready yet ($(head -c 120 "$file" | tr -d '\n')); waiting"
+    sleep 30
+  done
+}
+
 fetch_address_points() {
   local url="$1" file csv input
-  file="$DATA_DIR/sources/$(basename "${url%%\?*}")"
+  file="$DATA_DIR/sources/$(address_points_filename "$url")"
   csv="$DATA_DIR/tmp/address-points-$REGION.csv"
   echo "==> Fetching address points $url"
-  curl -fL --retry 3 -z "$file" -o "$file" "$url"
+  if [[ -f "$file" ]]; then
+    echo "==> Reusing $(basename "$file")"
+  else
+    download_address_points "$url" "$file"
+  fi
   case "$file" in
     *.csv|*.geojson|*.geojsonl|*.json)
       ADDRESS_POINTS_IN_DOCKER="/data/sources/$(basename "$file")"

@@ -57,6 +57,7 @@ import app.southbound.core.voice.DistanceStyle
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.GuidanceVolume
 import app.southbound.core.voice.OtherAudio
+import app.southbound.core.voice.SpeedAlertMode
 import app.southbound.core.voice.VoiceEngine
 import app.southbound.core.voice.VoiceMode
 import app.southbound.core.voice.VoiceSettings
@@ -192,7 +193,13 @@ fun SettingsScreen(
                 update { it.copy(hapticTurns = v) }
             }
             Toggle(R.string.voice_traffic, settings.trafficAlerts) { v -> update { it.copy(trafficAlerts = v) } }
-            Toggle(R.string.voice_speed_limits, settings.speedLimitWarnings) { v -> update { it.copy(speedLimitWarnings = v) } }
+            Choice(
+                R.string.voice_speed_limits,
+                SpeedAlertMode.entries,
+                settings.speedAlerts,
+                { stringResource(it.label()) },
+                note = stringResource(R.string.voice_speed_limits_note),
+            ) { m -> update { it.copy(speedAlerts = m) } }
             Subheading(R.string.voice_road_alerts)
             Toggle(R.string.voice_speed_cameras, settings.speedCameraAlerts) { v -> update { it.copy(speedCameraAlerts = v) } }
             Toggle(R.string.voice_alpr_cameras, settings.alprCameraAlerts, R.string.voice_alpr_cameras_note) { v ->
@@ -415,6 +422,12 @@ private fun DetailLevel.label() = when (this) {
 private fun BuiltInVoice.label() = when (this) {
     BuiltInVoice.AMY -> R.string.voice_built_in_amy
     BuiltInVoice.NORMAN -> R.string.voice_built_in_norman
+}
+
+private fun SpeedAlertMode.label() = when (this) {
+    SpeedAlertMode.OFF -> R.string.voice_speed_off
+    SpeedAlertMode.VOICE -> R.string.voice_speed_voice
+    SpeedAlertMode.BEEP -> R.string.voice_speed_beep
 }
 
 private fun DistanceStyle.label() = when (this) {

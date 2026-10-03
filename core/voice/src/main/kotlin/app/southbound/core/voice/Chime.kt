@@ -11,6 +11,9 @@ enum class ChimeKind {
 
     /** Three quick high notes before an alert. */
     ALERT,
+
+    /** Two short beeps on their own, the no-speech speed limit alert. */
+    SPEED_BEEP,
 }
 
 /**
@@ -32,7 +35,12 @@ object Chime {
         ChimeKind.INSTRUCTION -> listOf(Note(659.3, 110), Note(987.8, 160))
         // A5 three times, short and spaced.
         ChimeKind.ALERT -> listOf(Note(1760.0, 70, 50), Note(1760.0, 70, 50), Note(1760.0, 90))
+        // D6 twice, lower and longer than the alert so the two can't be mistaken.
+        ChimeKind.SPEED_BEEP -> listOf(Note(1175.0, 120, 90), Note(1175.0, 120))
     }
+
+    /** Beeps play alone over road noise, with no voice after them, so they're louder than a lead-in chime. */
+    private fun level(kind: ChimeKind): Double = if (kind == ChimeKind.SPEED_BEEP) 0.6 else LEVEL
 
     fun render(kind: ChimeKind, sampleRate: Int): ShortArray {
         val out = ArrayList<Short>()
@@ -45,12 +53,15 @@ object Chime {
                 // A touch of the octave makes it a chime rather than a beep.
                 val t = i.toDouble() / sampleRate
                 val wave = 0.8 * sin(2 * PI * note.hz * t) + 0.2 * sin(4 * PI * note.hz * t)
-                out += (wave * envelope * LEVEL * Short.MAX_VALUE).toInt().toShort()
+                out += (wave * envelope * level(kind) * Short.MAX_VALUE).toInt().toShort()
             }
             repeat(note.pauseMs * sampleRate / 1000) { out += 0 }
         }
         return out.toShortArray()
     }
+
+    /** The chime by itself, for alerts that don't speak. */
+    fun only(kind: ChimeKind, sampleRate: Int): Pcm = Pcm(render(kind, sampleRate), sampleRate)
 
     /** [speech] with the chime in front, at the speech's own sample rate. */
     fun before(kind: ChimeKind, speech: Pcm): Pcm {

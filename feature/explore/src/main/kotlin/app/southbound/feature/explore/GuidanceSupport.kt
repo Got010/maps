@@ -1,7 +1,11 @@
 package app.southbound.feature.explore
 
 import android.content.Context
+import android.os.SystemClock
+import app.southbound.core.map.Eta
 import app.southbound.core.routing.Navigator
+import app.southbound.core.routing.TravelMode
+import app.southbound.core.routing.TripStops
 import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Landmark
@@ -12,8 +16,12 @@ import app.southbound.core.search.RouteLine
 import app.southbound.core.search.RouteProgress
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.voice.GuidanceContext
+import app.southbound.core.voice.GuidancePolicy
 import app.southbound.core.voice.GuidanceVoice
+import app.southbound.core.voice.InstructionText
 import app.southbound.core.voice.NextInstruction
+import app.southbound.core.voice.SpokenUnits
+import app.southbound.core.voice.TurnTiming
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.core.voice.VoiceSettings
 import com.stadiamaps.ferrostar.core.NavigationState
@@ -21,13 +29,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import uniffi.ferrostar.Route
 import uniffi.ferrostar.RouteStep
 import uniffi.ferrostar.SpokenInstruction
 import uniffi.ferrostar.TripState
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Guidance that needs the route and the search pack together, wired between
@@ -35,7 +48,13 @@ import uniffi.ferrostar.TripState
  *
  * - landmarks for turns ("Turn right after the next light"), from the
  *   pack's landmark table, fetched once per route and reroute;
- * - a quick second turn chained onto the first ("..., then turn left");
+ * - a quick second turn chained onto the first ("Take exit 14S, then turn
+ *   left"), the second then not announced again in full ([TurnTiming]);
+ * - the "now" prompt said a few seconds ahead at speed, and prompts for a
+ *   turn already under way dropped;
+ * - the arrival time as the trip starts ([startTrip]), each stop and the
+ *   destination by name on arrival, and the trip ended a few seconds after
+ *   "You have arrived";
  * - the next prompt's audio made ahead of time;
  * - speed camera, licence-plate reader and school zone alerts about 300 m
  *   before each, and [routeAlerts] for the map to draw.
@@ -66,6 +85,39 @@ class GuidanceSupport(
     @Volatile
     private var nearRoute: List<Landmark> = emptyList()
 
+    /** Metres to the current step's maneuver and the GPS speed (m/s), as of the latest state. */
+    @Volatile
+    private var distanceToManeuver = Double.MAX_VALUE
+
+    @Volatile
+    private var speedMps: Double? = null
+
+    /** Waypoints left (stops, then the destination); 1 on the way to the destination. */
+    @Volatile
+    private var waypointsLeft = -1
+
+    /** Prompts not to say: their turn was already said as a follow-up. Touched by the voice too. */
+    private val chainedAway: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** The navigator being followed, to end a trip after arriving. */
+    @Volatile
+    private var navigator: Navigator? = null
+
+    /** Names of the trip's stops then its destination, from [startTrip]. */
+    @Volatile
+    private var tripNames: List<String> = emptyList()
+
+    /** Counts [startTrip]s, so a late arrival can't end the next trip. */
+    @Volatile
+    private var tripSerial = 0
+
+    /** "You have arrived" said (or being said) for this trip, and the trip's end under way. */
+    private val arrivalSaid = AtomicBoolean(false)
+    private val ending = AtomicBoolean(false)
+
+    @Volatile
+    private var arrivalSpeech: Job? = null
+
     // Touched only from the state collector.
     private var routeKey: RouteKey? = null
     private var loading: Job? = null
@@ -74,20 +126,56 @@ class GuidanceSupport(
     private var stepCount = -1
     private var prepared: String? = null
     private val announced = mutableSetOf<Long>()
+    private val spokenEarly = mutableSetOf<String>()
 
     /** Follows [navigator]'s trips. Called once per navigator. */
     fun attach(navigator: Navigator) {
         watching?.cancel()
+        this.navigator = navigator
         watching = scope.launch { navigator.state.collect { runCatching { onState(it) } } }
+    }
+
+    /**
+     * Starts [route] on [navigator] and says "Starting. You'll arrive at about
+     * 1:11 PM, 12 miles." ahead of the first turn. [places] names the trip's
+     * stops then its destination, for the arrival sentences. [durationSeconds]
+     * (with any traffic delay) and [distanceMeters] are the route preview's.
+     */
+    fun startTrip(
+        navigator: Navigator,
+        route: Route,
+        mode: TravelMode,
+        places: List<String>,
+        durationSeconds: Double,
+        distanceMeters: Double,
+    ) {
+        tripSerial++
+        tripNames = places
+        val announcement = appContext.getString(
+            R.string.explore_trip_start_spoken,
+            // The same clock time the trip screen shows.
+            Eta.clock(System.currentTimeMillis(), durationSeconds),
+            SpokenUnits.distance(distanceMeters),
+        )
+        voice.startTrip(announcement) { navigator.start(route, mode) }
     }
 
     private fun onState(state: NavigationState) {
         val trip = state.tripState as? TripState.Navigating
         if (trip == null) {
+            // Ferrostar's own arrival: within 30 m of the end with a good fix.
+            if (state.tripState is TripState.Complete) arrive(end = true)
             if (routeKey != null || stepCount >= 0) endTrip()
             return
         }
+        if (stepCount < 0) {
+            arrivalSaid.set(false)
+            ending.set(false)
+            arrivalSpeech = null
+        }
         voice.guidanceContext = this
+        distanceToManeuver = trip.progress.distanceToNextManeuver
+        speedMps = trip.userLocation.speed?.value
         steps = trip.remainingSteps
 
         // Passing a maneuver ends "mute until the next turn".
@@ -95,17 +183,28 @@ class GuidanceSupport(
         stepCount = trip.remainingSteps.size
 
         val key = RouteKey.of(state)
+        // A stop reached on the same route; a skipped stop comes with a new route and says nothing.
+        val left = trip.remainingWaypoints.size
+        if (key != null && key == routeKey && waypointsLeft > left) stopReached(waypointsLeft, left)
+        waypointsLeft = left
+
         if (key != null && key != routeKey) {
             routeKey = key
             progress = null
             nearRoute = emptyList()
             _routeAlerts.value = emptyList()
+            chainedAway.clear()
+            spokenEarly.clear()
             loading?.cancel()
             val line = RouteLine(state.routeGeometry.map { LatLon(it.lat, it.lng) })
             loading = scope.launch(Dispatchers.IO) { load(line) }
         }
 
+        // Arrived without Ferrostar noticing, e.g. a poor fix between buildings.
+        if (left <= 1 && !state.isCalculatingNewRoute && trip.progress.distanceRemaining <= ARRIVAL_NEAR_M) arrive(end = true)
+
         alerts(trip)
+        speakNowEarly(trip)
         prepareNext(trip)
     }
 
@@ -116,12 +215,70 @@ class GuidanceSupport(
         stepCount = -1
         prepared = null
         announced.clear()
+        spokenEarly.clear()
+        chainedAway.clear()
         steps = emptyList()
         nearRoute = emptyList()
+        distanceToManeuver = Double.MAX_VALUE
+        speedMps = null
+        waypointsLeft = -1
         _routeAlerts.value = emptyList()
         voice.guidanceContext = null
         voice.maneuverPassed()
     }
+
+    /** "Arrived at Joe's Pizza, continuing to Grandma's." for a stop on the way. */
+    private fun stopReached(before: Int, after: Int) {
+        val (stop, next) = TripStops.reached(tripNames, before, after) ?: return
+        voice.announce(UtteranceKind.ARRIVAL, appContext.getString(R.string.explore_arrived_stop_spoken, stop, next))
+    }
+
+    /**
+     * Says "You have arrived at Joe's Pizza." once per trip. With [end] (the
+     * trip is over: Ferrostar completed it, or the route's end is a few metres
+     * away) the trip then ends: once the sentence has played and the arrival
+     * card has shown for [ARRIVAL_MIN_SHOW_MS], back to browsing. Without it
+     * (the route's own "You have arrived" prompt came due), only the words.
+     * Any thread.
+     */
+    @Synchronized
+    private fun arrive(end: Boolean) {
+        val nav = navigator ?: return
+        if (arrivalSaid.compareAndSet(false, true)) {
+            val name = tripNames.lastOrNull()?.takeIf { it.isNotBlank() }
+            val text = if (name != null) {
+                appContext.getString(R.string.explore_arrived_spoken, name)
+            } else {
+                appContext.getString(R.string.explore_arrived_plain_spoken)
+            }
+            arrivalSpeech = scope.launch { voice.announceAndWait(UtteranceKind.ARRIVAL, text, ARRIVAL_SPEECH_TIMEOUT_MS) }
+        }
+        if (!end || !ending.compareAndSet(false, true)) return
+        val serial = tripSerial
+        val speech = arrivalSpeech
+        scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            // Ending the trip clears the voice queue: let the sentence finish first.
+            speech?.join()
+            val shown = SystemClock.elapsedRealtime() - started
+            if (shown < ARRIVAL_MIN_SHOW_MS) delay(ARRIVAL_MIN_SHOW_MS - shown)
+            withContext(Dispatchers.Main) {
+                // Not when the user ended it already, or started another trip meanwhile.
+                if (tripSerial == serial && navigator === nav && nav.state.value.tripState !is TripState.Idle) nav.stop()
+            }
+        }
+    }
+
+    /** At speed, says the current step's "now" prompt a few seconds out instead of at Ferrostar's trigger. */
+    private fun speakNowEarly(trip: TripState.Navigating) {
+        val step = trip.remainingSteps.firstOrNull() ?: return
+        val index = TurnTiming.speakNowEarly(prompts(step), trip.progress.distanceToNextManeuver, speedMps) ?: return
+        val instruction = step.spokenInstructions.getOrNull(index) ?: return
+        if (spokenEarly.add(instruction.utteranceId.toString())) voice.speakEarly(instruction)
+    }
+
+    private fun prompts(step: RouteStep): List<TurnTiming.Prompt> =
+        step.spokenInstructions.map { TurnTiming.Prompt(it.text, it.triggerDistanceBeforeManeuver) }
 
     /** Reads the landmarks along [line] in small boxes, keeping those close to it. */
     private fun load(line: RouteLine) {
@@ -181,9 +338,10 @@ class GuidanceSupport(
 
     // GuidanceContext: called by the voice, off the main thread.
 
-    private fun stepOf(utteranceId: String): Int? {
-        val current = steps
-        val i = current.indexOfFirst { step -> step.spokenInstructions.any { it.utteranceId.toString() == utteranceId } }
+    private fun stepOf(utteranceId: String): Int? = stepIn(steps, utteranceId)
+
+    private fun stepIn(list: List<RouteStep>, utteranceId: String): Int? {
+        val i = list.indexOfFirst { step -> step.spokenInstructions.any { it.utteranceId.toString() == utteranceId } }
         return i.takeIf { it >= 0 }
     }
 
@@ -197,15 +355,49 @@ class GuidanceSupport(
     }
 
     override fun followUpFor(instruction: SpokenInstruction): String? {
+        // "Continue for 2 miles" isn't about the turn ahead; "..., then turn left" would skip it.
+        if (TurnTiming.isProgress(instruction.text)) return null
         val current = steps
-        val i = stepOf(instruction.utteranceId.toString()) ?: return null
+        val i = stepIn(current, instruction.utteranceId.toString()) ?: return null
+        // This prompt's turn ends step i; the next turn ends step i + 1, its length further on.
         val next = current.getOrNull(i + 1) ?: return null
-        if (next.distance >= FOLLOW_UP_M) return null
+        if (!TurnTiming.chains(next.distance, speedMps, voice.guidanceMode)) return null
         // The prompt Valhalla gives right at that turn is its plainest wording.
-        return next.spokenInstructions.minByOrNull { it.triggerDistanceBeforeManeuver }?.text
+        val now = TurnTiming.nowIndex(prompts(next)) ?: return null
+        val text = next.spokenInstructions.getOrNull(now)?.text ?: return null
+        // Arriving isn't chained ("..., then you have arrived"), so its own prompts stay.
+        return text.takeIf { GuidancePolicy.kindOf(it) != UtteranceKind.ARRIVAL }
     }
 
-    override fun isCurrent(utteranceId: String): Boolean = stepOf(utteranceId) != null
+    override fun isCurrent(utteranceId: String): Boolean {
+        val i = stepOf(utteranceId) ?: return false
+        // The current step's turn is under the car: too late to announce it.
+        return !(i == 0 && TurnTiming.tooLate(distanceToManeuver, speedMps))
+    }
+
+    override fun shouldSpeak(instruction: SpokenInstruction): Boolean {
+        if (InstructionText.isArrived(instruction.text)) {
+            // The app says its own, with the place's name: for a stop as its
+            // waypoint is passed, for the destination now (the trip ends once
+            // Ferrostar completes it).
+            if (waypointsLeft in 0..1) arrive(end = false)
+            return false
+        }
+        val id = instruction.utteranceId.toString()
+        if (id in chainedAway) return false
+        // Unknown yet (a new route before its first state): let it through, it is checked again before playing.
+        val i = stepOf(id) ?: return true
+        return !(i == 0 && TurnTiming.tooLate(distanceToManeuver, speedMps))
+    }
+
+    override fun followUpSpoken(instruction: SpokenInstruction) {
+        val current = steps
+        val i = stepIn(current, instruction.utteranceId.toString()) ?: return
+        val next = current.getOrNull(i + 1) ?: return
+        for (index in TurnTiming.skippedAfterChain(prompts(next))) {
+            next.spokenInstructions.getOrNull(index)?.let { chainedAway += it.utteranceId.toString() }
+        }
+    }
 
     /** Tells routes apart cheaply: a reroute changes the shape. */
     private data class RouteKey(val size: Int, val first: Pair<Double, Double>, val last: Pair<Double, Double>) {
@@ -222,7 +414,17 @@ class GuidanceSupport(
         /** Landmarks further than this from the route never matter to it. */
         const val NEAR_ROUTE_M = 60.0
 
-        /** A turn this soon after the previous one is said with it. */
-        const val FOLLOW_UP_M = 150.0
+        /**
+         * On the way to the destination, this close to the end of the route
+         * counts as arrived even if Ferrostar hasn't completed the trip (it
+         * wants 30 m with a fix better than 32 m).
+         */
+        const val ARRIVAL_NEAR_M = 25.0
+
+        /** The longest the trip waits for "You have arrived" to finish playing before it ends. */
+        const val ARRIVAL_SPEECH_TIMEOUT_MS = 10_000L
+
+        /** The arrival card (side of the street, parking) stays at least this long before the trip ends. */
+        const val ARRIVAL_MIN_SHOW_MS = 4_000L
     }
 }
