@@ -178,37 +178,68 @@ NYC transit trip planning runs on-device from MTA schedules, and realtime arriva
 
 Build NYC end to end first, then scale the same pipeline to the state. Each phase ends with a test you can run on the phone.
 
+### Where things stand (October 2026)
+
+- **Phases 0, 1 and 2 are done** and on `main`. The latest release is v0.1.2. Tested on the owner's phone:
+  - map, search, directions preview for drive, walk and bike, transit planning, departure boards, settings and in-app updates
+  - Phase 0's GPS follow and Phase 1's drive with spoken turns need a trip inside NYC; the owner lives outside NYC. Route preview works from anywhere with **Start here** on a place card.
+- **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with:
+  - the signed APK
+  - the four NYC packs (basemap, routing, search, transit)
+  - `southbound.json`, a manifest of sizes and SHA-256s
+
+  Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
+- **The app updates itself** from the latest release (`core/updates`):
+  - Map data downloads are on by default.
+  - App updates are off until turned on; after the first confirmed install, later ones install without a prompt.
+  - While the repo is private, a read-only GitHub token goes in Settings > Updates.
+- **Not verified yet:**
+  - Metro-North realtime trip-id matching: MTA's feeds weren't reachable from the dev environment, so the GTFS-RT parser is tested against fixtures only.
+  - A first-run download of all four packs on a fresh install.
+- **Next: Phase 3.** Planned order:
+  1. Statewide extract, regional basemap packs and one statewide routing pack.
+  2. Region picker in the pack manager.
+  3. 511NY incidents with closure avoidance (the owner needs a free 511NY key).
+  4. NYC DOT speeds.
+  5. Optional TomTom last.
+- **Working notes for the next session:**
+  - Android code only compiles in GitHub Actions; Google Maven is blocked in the dev container.
+  - Plain-Kotlin modules can be tested locally by copying sources into a small JVM Gradle project.
+  - `make -C pipeline test` runs the pipeline's Python tests.
+  - Release assets of the private repo can be fetched through `api.github.com` (they redirect to a signed download URL).
+  - Work goes through a PR on the session's branch; the owner merges from the GitHub app.
+
 **Phase 0: map on screen, NYC only**
 
-- [ ] Scaffold the Gradle multi-module project from the repo layout below
-- [ ] Pipeline: NYC extract through Planetiler into `basemap-nyc.pmtiles`
-- [ ] App loads the pack from files storage, with light and dark styles
-- [ ] Location puck from `LocationManager` GPS
+- [x] Scaffold the Gradle multi-module project from the repo layout below
+- [x] Pipeline: NYC extract through Planetiler into `basemap-nyc.pmtiles`
+- [x] App loads the pack from files storage, with light and dark styles
+- [x] Location puck from `LocationManager` GPS
 
 Exit test: the map renders and follows you with Network permission revoked.
 
 **Phase 1: search and directions, NYC**
 
-- [ ] Valhalla tiles for NYC and valhalla-mobile wired in
-- [ ] Address and place search with a place-card bottom sheet
-- [ ] Route preview for drive, walk and bike, with alternatives
-- [ ] Ferrostar turn-by-turn with rerouting
-- [ ] Voice guidance with every toggle, on system TTS and the bundled voice
+- [x] Valhalla tiles for NYC and valhalla-mobile wired in
+- [x] Address and place search with a place-card bottom sheet
+- [x] Route preview for drive, walk and bike, with alternatives
+- [x] Ferrostar turn-by-turn with rerouting
+- [x] Voice guidance with every toggle, on system TTS and the bundled voice
 
 Exit test: a full drive with spoken directions works in airplane mode.
 
 **Phase 2: NYC transit**
 
-- [ ] GTFS compiler and RAPTOR router
-- [ ] Trip planner and station departure boards
-- [ ] Realtime subway, LIRR, Metro-North and alerts, plus Bus Time with your key
+- [x] GTFS compiler and RAPTOR router
+- [x] Trip planner and station departure boards
+- [x] Realtime subway, LIRR, Metro-North and alerts, plus Bus Time with your key
 
 Exit test: planner results match MTA's published schedule on 10 sample trips.
 
 **Phase 3: statewide and live traffic**
 
 - [ ] Point the pipeline at the full NYS extract and cut regional basemap packs
-- [ ] Pack manager: download, verify, update, and import from a file
+- [ ] Pack manager: download, verify, update, and import from a file (download, verify, update and import done for NYC; region picker left)
 - [ ] 511NY incidents with closure avoidance, and the NYC DOT speed layer
 - [ ] Optional TomTom flow layer
 
@@ -220,7 +251,7 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Saved places, lists and recents, encrypted
 - [ ] Traffic-aware routing
 - [ ] Upstate transit systems
-- [ ] GitHub Actions: APK on each tag, monthly data rebuild
+- [x] GitHub Actions: APK on each tag, monthly data rebuild
 
 ## Repo layout and distribution
 
