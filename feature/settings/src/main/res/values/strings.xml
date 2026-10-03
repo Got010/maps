@@ -65,7 +65,7 @@
     <string name="voice_alpr_cameras_note">Flock and other ALPR cameras mapped in OpenStreetMap. Checked on the phone; nothing about your drive is sent.</string>
     <string name="voice_school_zones">School zones</string>
     <string name="settings_about">About</string>
-    <string name="settings_about_body">Southbound keeps maps, search, routing and voice on your phone. Map data © OpenStreetMap contributors (ODbL), shown with the OpenMapTiles schema (© OpenMapTiles). Routing by Valhalla; navigation by Ferrostar (Stadia Maps); map rendering by MapLibre. Built-in voice: Piper \"Amy\" (Mycroft mimic3-voices) run by sherpa-onnx.</string>
+    <string name="settings_about_body">Southbound keeps maps, search, routing and voice on your phone. Map data © OpenStreetMap contributors (ODbL), shown with the OpenMapTiles schema (© OpenMapTiles). Routing by Valhalla; navigation by Ferrostar (Stadia Maps); map rendering by MapLibre. Built-in voice: Piper \"Amy\" (Mycroft mimic3-voices) run by sherpa-onnx. Extra places in search: © Overture Maps Foundation (overturemaps.org), CDLA Permissive 2.0, kept apart from the OpenStreetMap data. They include data from Foursquare Labs, Inc. under the Apache License 2.0 (Copyright 2024 Foursquare Labs, Inc. All rights reserved.) and from AllThePlaces under CC0.</string>
     <string name="settings_live">Live data</string>
     <string name="settings_live_note">Everything above works offline. These extras go online only when turned on, and fetch whole feeds, so nothing sent says where you are, what you searched or where you\'re going.</string>
     <string name="live_transit">Live subway, LIRR and Metro-North</string>
