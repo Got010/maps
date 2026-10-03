@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_idle">Start a trip on your phone and it shows here.</string>
+    <string name="car_arrived">You\'ve arrived</string>
+    <string name="car_stop">Stop</string>
+    <string name="car_destination">Destination</string>
+</resources>
