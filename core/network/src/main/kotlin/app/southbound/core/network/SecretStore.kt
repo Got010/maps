@@ -19,6 +19,9 @@ enum class ApiKey {
 
     /** A read-only GitHub token, needed for updates while the repository is private. */
     GITHUB_RELEASES,
+
+    /** A free EIA key (eia.gov/opendata/register.php), for the weekly gas price. */
+    EIA,
 }
 
 /**

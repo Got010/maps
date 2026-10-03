@@ -83,6 +83,7 @@ import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.RouteRegions
 import app.southbound.core.packs.Regions
 import app.southbound.core.routing.DrivingPrefs
+import app.southbound.core.routing.FuelModel
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.RouteSummary
@@ -258,6 +259,8 @@ internal fun ExploreMap(
     var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
     val drivingPrefs = remember { DrivingPrefs.get(context) }
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
+    // Fuel economy and gas price for the cost on route cards; changing them never recomputes routes.
+    val fuel by services.fuelPrefs.settings.collectAsState()
     var clockMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -277,6 +280,19 @@ internal fun ExploreMap(
     val traffic by services.traffic.snapshot.collectAsState()
     var shownIncident by remember { mutableStateOf<Incident?>(null) }
     LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
+    // Gas price from EIA (opt-in, and rate-limited to one request a day): on resume, when directions open,
+    // and when the state is changed in Settings.
+    val directionsOpen = panel is Panel.Directions
+    LaunchedEffect(resumes, directionsOpen, fuel.region) {
+        if (services.gasPrices.isReady) attempt { services.gasPrices.refresh() }
+    }
+    // A new mpg in Settings reprices the routes already on screen.
+    LaunchedEffect(fuel.mpg) {
+        val ready = preview as? RoutePreviewState.Ready ?: return@LaunchedEffect
+        if (routes.size == ready.summaries.size) {
+            preview = ready.copy(fuelGallons = fuelGallonsFor(routes, ready.delaySeconds, fuel.mpg))
+        }
+    }
 
     // --- Phase 5 (map): touch, traffic on the route, faster route, arrival details ---
     // Re-center: while navigating, 10 s without a touch after leaving the puck snaps back to following.
@@ -356,7 +372,13 @@ internal fun ExploreMap(
         if (found.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
-            preview = RoutePreviewState.Ready(found.map(RouteSummary::of), selected = 0, delaySeconds = slow.map { it.delaySeconds })
+            val delays = slow.map { it.delaySeconds }
+            preview = RoutePreviewState.Ready(
+                summaries = found.map(RouteSummary::of),
+                selected = 0,
+                delaySeconds = delays,
+                fuelGallons = fuelGallonsFor(found, delays, services.fuelPrefs.settings.value.mpg),
+            )
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
                     MapPoint(from.latitude, from.longitude),
@@ -867,6 +889,7 @@ internal fun ExploreMap(
                         destinationName = current.place.name,
                         mode = current.mode,
                         state = preview,
+                        fuel = fuel,
                         onModeChange = { mode -> panel = current.copy(mode = mode) },
                         onSelect = { index ->
                             (preview as? RoutePreviewState.Ready)?.let { preview = it.copy(selected = index) }
@@ -1072,6 +1095,10 @@ private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Mo
         )
     }
 }
+
+/** Estimated gallons for each route at [mpg], with the live-traffic delay of each spent idling. */
+private fun fuelGallonsFor(routes: List<Route>, delaySeconds: List<Double>, mpg: Double): List<Double> =
+    routes.mapIndexed { i, route -> FuelModel.gallons(route, mpg, delaySeconds.getOrElse(i) { 0.0 }) }
 
 private fun TravelMode.guidanceMode(): GuidanceMode = when (this) {
     TravelMode.DRIVE -> GuidanceMode.DRIVING
