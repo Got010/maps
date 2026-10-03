@@ -30,6 +30,7 @@ class TrafficFeed(
     private val mutex = Mutex()
     private var incidents: Cached<List<Incident>>? = null
     private var speeds: Cached<List<SpeedLink>>? = null
+    private var speedsStale = false
     private val _snapshot = MutableStateFlow(TrafficSnapshot.EMPTY)
 
     /** The latest result, for screens that only want to watch. */
@@ -42,6 +43,10 @@ class TrafficFeed(
     /** 511NY is on and has a key. */
     val hasIncidents: Boolean
         get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) && !key511().isNullOrBlank()
+
+    /** 511NY is turned on but has no key yet, so nothing is fetched from it. */
+    val needsIncidentsKey: Boolean
+        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) && key511().isNullOrBlank()
 
     /**
      * Fetches whatever is stale among the feeds that are on and returns the
@@ -67,12 +72,15 @@ class TrafficFeed(
             val speedsJob = async {
                 if (!gate.isAllowed(NetworkFeature.TRAFFIC_NYC_DOT)) {
                     speeds = null
+                    speedsStale = false
                     null
                 } else if (!force && speeds?.fresh(now, SPEEDS_TTL_MILLIS) == true) {
                     speeds
                 } else {
                     load(now, speeds, errors, "NYC DOT") {
-                        NycDotSpeeds.parse(fetch(NetworkFeature.TRAFFIC_NYC_DOT, NycDotSpeeds.URL).decodeToString(), now)
+                        val report = NycDotSpeeds.parseReport(fetch(NetworkFeature.TRAFFIC_NYC_DOT, NycDotSpeeds.URL).decodeToString(), now)
+                        speedsStale = report.allStale
+                        report.links
                     }
                 }
             }
@@ -84,6 +92,7 @@ class TrafficFeed(
             speeds = speeds?.value.orEmpty(),
             fetchedAt = now,
             errors = errors,
+            speedsStale = speedsStale && speeds != null,
         ).also { _snapshot.value = it }
     }
 

@@ -32,17 +32,43 @@ object NycDotSpeeds {
      * are dropped; readings older than [maxAgeMillis] before [now] too, since
      * a sensor that stopped reporting says nothing about traffic now.
      */
-    fun parse(json: String, now: Long = System.currentTimeMillis(), maxAgeMillis: Long = DEFAULT_MAX_AGE_MILLIS): List<SpeedLink> {
+    fun parse(json: String, now: Long = System.currentTimeMillis(), maxAgeMillis: Long = DEFAULT_MAX_AGE_MILLIS): List<SpeedLink> =
+        parseReport(json, now, maxAgeMillis).links
+
+    /**
+     * Like [parse], but also says how many usable rows were dropped for being older than
+     * [maxAgeMillis], so an empty result can be told apart from a feed that has simply gone stale.
+     */
+    fun parseReport(json: String, now: Long = System.currentTimeMillis(), maxAgeMillis: Long = DEFAULT_MAX_AGE_MILLIS): SpeedReport {
         val rows = MiniJson.parse(json) as? List<*> ?: throw IllegalArgumentException("NYC DOT sent no row list")
         val byLink = LinkedHashMap<String, SpeedLink>()
+        var staleDropped = 0
+        var newestAsOf: Long? = null
         for (row in rows) {
             val m = row as? Map<*, *> ?: continue
             val link = speedLink(m) ?: continue
-            if (link.asOf != null && now - link.asOf > maxAgeMillis) continue
+            val newest = newestAsOf
+            if (link.asOf != null && (newest == null || link.asOf > newest)) newestAsOf = link.asOf
+            if (link.asOf != null && now - link.asOf > maxAgeMillis) {
+                staleDropped++
+                continue
+            }
             val have = byLink[link.id]
             if (have == null || (link.asOf ?: 0) > (have.asOf ?: 0)) byLink[link.id] = link
         }
-        return byLink.values.toList()
+        return SpeedReport(byLink.values.toList(), staleDropped, newestAsOf)
+    }
+
+    /** What [parseReport] found: the live links, plus how much was thrown away as too old. */
+    data class SpeedReport(
+        val links: List<SpeedLink>,
+        /** Usable rows (a speed and a shape) dropped because their reading was too old. */
+        val staleDropped: Int,
+        /** Newest reading time among all usable rows, kept or dropped; null if none had a time. */
+        val newestAsOf: Long?,
+    ) {
+        /** The feed had readings, but every one was too old to call live. */
+        val allStale: Boolean get() = links.isEmpty() && staleDropped > 0
     }
 
     private fun speedLink(m: Map<*, *>): SpeedLink? {
