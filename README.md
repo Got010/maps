@@ -7,8 +7,10 @@ from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 **Status: Phase 3.** Offline maps for all of New York State in five regional
 packs, statewide place and address search, drive, walk and bike directions
 with spoken turn-by-turn guidance, and NYC subway, bus, LIRR and Metro-North
-trip planning, all on the phone. Live transit times, 511NY incidents (with
-routes steering around closures) and NYC DOT traffic speeds are opt-in extras.
+trip planning, all on the phone, plus saved places and recents kept encrypted
+on the phone, speed limits while navigating and 3D buildings. Live transit
+times, 511NY incidents (with routes steering around closures) and NYC DOT
+traffic speeds are opt-in extras.
 
 ## Install
 
