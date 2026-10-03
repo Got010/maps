@@ -145,7 +145,7 @@ internal fun NavigationLandscape(
                                 theme = LandscapeInstructionRowTheme,
                             )
                             HighwaySign(instruction.primaryContent)
-                            // Lanes: the lane row goes here, under the banner, as in NavigationOverlay.
+                            CurrentLanes(trip)
                         }
                         CurrentRoadName(trip.remainingSteps.firstOrNull()?.roadName)
                         fasterRoute?.let { FasterRouteBanner(it) }
