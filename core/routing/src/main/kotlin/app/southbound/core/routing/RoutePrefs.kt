@@ -11,15 +11,16 @@ enum class BikeType(val valhalla: String) { ROAD("road"), HYBRID("hybrid"), MOUN
 /**
  * Walking preferences (Phase 7), sent as `costing_options.pedestrian`.
  *
- * Valhalla 3.x has no wheelchair profile, only penalties and factors, so these
- * are nudges, not guarantees: a stair is never forbidden, just made so costly
- * that any reasonable detour wins.
- *
- * - [avoidStairs]: `step_penalty` 600 s (the top of Valhalla's range; its
- *   default is 30 s) on every transition onto steps.
- * - [stepFree]: everything [avoidStairs] does, plus `use_hills` 0.1 (flat
- *   grades), `use_tracks` 0 and `max_hiking_difficulty` 0 (no rough trails)
- *   and `walking_speed` 4 km/h so the ETA is not a brisk walker's.
+ * - [avoidStairs]: `step_penalty` 600 s (Valhalla's default is 30 s) on every
+ *   transition onto steps. A penalty, not a ban: a flight of stairs that saves
+ *   more than ten minutes of detour can still win.
+ * - [stepFree]: Valhalla's wheelchair pedestrian type (`"type":"wheelchair"`,
+ *   in the 3.6 source but missing from its API reference): wheelchair access
+ *   only, compacted surfaces or better, 4 km/h, a 12 percent grade cap and a
+ *   600 s step penalty by default. We send the step penalty and `use_hills` 0.1
+ *   (flat streets) explicitly and `use_tracks` 0 as well. The grade cap and
+ *   `use_hills` need elevation in the routing pack and do nothing until it has
+ *   it (docs/elevation-spike.md).
  * - [preferPaths]: `walkway_factor` 0.5 and `sidewalk_factor` 0.7 (below 1 is
  *   favoured) so footways and streets with sidewalks beat plain roads.
  */
@@ -33,7 +34,7 @@ data class WalkPrefs(
     /** The body of `costing_options.pedestrian`, or null when nothing differs from Valhalla's defaults. */
     fun costingOptionsJson(): String? {
         val parts = buildList {
-            if (stepFree) add(""""walking_speed":4""")
+            if (stepFree) add(""""type":"wheelchair"""")
             if (stepFree || avoidStairs) add(""""step_penalty":$STEP_PENALTY_SECONDS""")
             if (preferPaths) {
                 add(""""walkway_factor":0.5""")
@@ -42,7 +43,6 @@ data class WalkPrefs(
             if (stepFree) {
                 add(""""use_hills":0.1""")
                 add(""""use_tracks":0""")
-                add(""""max_hiking_difficulty":0""")
             }
         }
         return if (parts.isEmpty()) null else parts.joinToString(",", prefix = "{", postfix = "}")
