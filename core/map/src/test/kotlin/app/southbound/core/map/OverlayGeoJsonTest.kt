@@ -1,6 +1,7 @@
 package app.southbound.core.map
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OverlayGeoJsonTest {
@@ -22,9 +23,9 @@ class OverlayGeoJsonTest {
         // Leader first; threads after it, the faster one last so it draws on top.
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
-                """{"type":"Feature","properties":{"rank":1,"role":"leader","color":"#F472B6","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.990000,40.720000]]}},""" +
-                """{"type":"Feature","properties":{"rank":2,"role":"thread","color":"#A78BFA","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.980000,40.730000]]}},""" +
-                """{"type":"Feature","properties":{"rank":0,"role":"thread","color":"#22D3EE","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}}]}""",
+                """{"type":"Feature","properties":{"rank":1,"role":"leader","color":"#3B82F6","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.990000,40.720000]]}},""" +
+                """{"type":"Feature","properties":{"rank":2,"role":"thread","color":"#3347E0","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.980000,40.730000]]}},""" +
+                """{"type":"Feature","properties":{"rank":0,"role":"thread","color":"#7DD3FC","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}}]}""",
             json,
         )
     }
@@ -35,7 +36,7 @@ class OverlayGeoJsonTest {
         val walk = MapLine(listOf(MapPoint(40.71, -74.01), MapPoint(40.72, -74.02)), MapLine.Role.WALK)
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
-                """{"type":"Feature","properties":{"rank":0,"role":"leader","color":"#0891B2","casing":"#FFFFFF"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}},""" +
+                """{"type":"Feature","properties":{"rank":0,"role":"leader","color":"#0284C7","casing":"#FFFFFF"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}},""" +
                 """{"type":"Feature","properties":{"rank":0,"role":"walk","color":"#9AA0A6","casing":"#FFFFFF"},"geometry":{"type":"LineString","coordinates":[[-74.010000,40.710000],[-74.020000,40.720000]]}}]}""",
             OverlayGeoJson.routes(listOf(walk, ride), darkTheme = false),
         )
@@ -43,10 +44,31 @@ class OverlayGeoJsonTest {
 
     @Test
     fun routeColoursRepeatPastTheThirdRoute() {
-        assertEquals("#22D3EE", RouteColors.hex(0, darkTheme = true))
-        assertEquals("#DB2777", RouteColors.hex(1, darkTheme = false))
+        assertEquals("#7DD3FC", RouteColors.hex(0, darkTheme = true))
+        assertEquals("#2563EB", RouteColors.hex(1, darkTheme = false))
         assertEquals(RouteColors.hex(0, darkTheme = true), RouteColors.hex(3, darkTheme = true))
-        assertEquals(0xFF7C3AED.toInt(), RouteColors.argb(2, darkTheme = false))
+        assertEquals(0xFF1E3A8A.toInt(), RouteColors.argb(2, darkTheme = false))
+    }
+
+    @Test
+    fun routeColoursAreBluesThatDarkenWithRank() {
+        for (dark in listOf(true, false)) {
+            val colours = (0..2).map { RouteColors.argb(it, dark) }
+            assertEquals(3, colours.toSet().size)
+            for (c in colours) {
+                val r = (c shr 16) and 0xFF
+                val g = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                // Blue dominates: no pink, violet or green sneaks back in.
+                assertTrue("blue should lead in $c", b > r && b > g)
+            }
+            // The fastest route is the lightest, and each next one is darker.
+            val lightness = colours.map { c ->
+                0.2126 * ((c shr 16) and 0xFF) + 0.7152 * ((c shr 8) and 0xFF) + 0.0722 * (c and 0xFF)
+            }
+            assertTrue(lightness[0] > lightness[1] + 10)
+            assertTrue(lightness[1] > lightness[2] + 10)
+        }
     }
 
     @Test
