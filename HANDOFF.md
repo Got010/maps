@@ -251,7 +251,7 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
-**Phase 5: the feel of the map and of guidance** (guidance half; see PHASES for the map half)
+**Phase 5: the feel of the map and of guidance** (guidance half)
 
 - [x] Landmark directions: a `landmark` table in the search pack (signals, stop signs, fuel, fast food, banks, pharmacies, supermarkets, churches, schools), matched to each turn on the phone (`core/search Landmarks`) and worked into the spoken prompt (`core/voice InstructionText`, `GuidancePolicy`). Needs the next search pack build; older packs work without landmarks.
 - [x] Smoother voice: next prompt synthesized ahead (`GuidanceVoice.prepare`), quick second turns chained with "then", no cut-offs except reroutes and closure alerts (`SpeechQueue`), chimes generated in code (`Chime`)
@@ -259,6 +259,19 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [x] Haptic turns even with voice on (Settings > Voice > Vibrate at turns)
 - [x] Speed camera, school zone and ALPR camera alerts from OSM tags in the same table, spoken ~300 m ahead; `ExploreServices.guidance.routeAlerts` lists them for the map
 - Not verified on a phone yet: the Android code was written without a local build (CI compiles it). School zones come only from `hazard=school_zone`, school traffic signs and `maxspeed:conditional` with "school"; plain `amenity=school` near the route is a landmark, not an alert, so NYC's many schools don't each set off a warning.
+
+Map half:
+
+- [x] Two-finger rotate and tilt, with a compass button that snaps back to north (MapLibre's compass, fades when facing north)
+- [x] One-finger zoom: double-tap and hold, slide up or down
+- [x] A "Re-center" pill when the map leaves the puck; tap it, or wait 10 s while navigating
+- [x] Slowdown colors on the active route and in the route picker, with "X min of delay" (`RouteTraffic.slowdowns`, NYC DOT links only; TomTom flow isn't built)
+- [x] ETA in red with "+X min" when traffic adds more than 2 min, "Typical: N min"
+- [x] Incident pins along the route line with the tap-to-read card
+- [x] "Faster route found, saves N min" banner every ~3 min mid-trip (`FasterRoute`)
+- [x] Arrival: side of street (computed on the phone from the route end, since Ferrostar's route model doesn't carry Valhalla's `side_of_street`), parking nearby from the search pack (`SearchIndex.nearby`; only named parking is in the pack)
+- [x] Highway signposts from the banner's exit numbers
+- Not verified: none of this has been built or run (the Android build can't run in the dev container); the pure parts are unit-tested.
 
 ## Repo layout and distribution
 
