@@ -104,14 +104,14 @@ class Navigator(context: Context, private val router: OfflineRouter) {
 
     /**
      * A fresh route from where the user is to the remaining waypoints around
-     * the current [avoid] polygons, without switching to it: the mid-trip
-     * "faster route" check compares it with the current one. Null when not
-     * navigating or no route was found.
+     * the current [avoid] polygons plus [extraAvoid] (e.g. around a crawl ahead),
+     * without switching to it: the mid-trip "faster route" check compares it
+     * with the current one. Null when not navigating or no route was found.
      */
-    suspend fun freshRoute(): Route? {
+    suspend fun freshRoute(extraAvoid: List<List<Pair<Double, Double>>> = emptyList()): Route? {
         val trip = state.value.tripState as? TripState.Navigating ?: return null
         return try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid) }.firstOrNull()
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid + extraAvoid) }.firstOrNull()
         } catch (e: RoutingException) {
             null
         }

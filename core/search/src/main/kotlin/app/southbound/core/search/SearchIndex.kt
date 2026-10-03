@@ -36,6 +36,29 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     }
 
     /**
+     * Places of one [category] (an OSM value such as "parking") within
+     * [radiusMeters] of ([lat], [lon]), nearest first. For "Parking nearby" on
+     * the arrival card. Only named places are in the pack.
+     */
+    fun nearby(category: String, lat: Double, lon: Double, radiusMeters: Double, limit: Int = 5): List<SearchResult> {
+        val center = LatLon(lat, lon)
+        val box = NearbyBox.around(center, radiusMeters / 1000)
+        val found = synchronized(connection) {
+            connection.prepare(
+                "SELECT $COLUMNS FROM feature f WHERE f.category = ? AND f.lat BETWEEN ? AND ? AND f.lon BETWEEN ? AND ? LIMIT $NEARBY_ROW_LIMIT",
+            ).use { stmt ->
+                stmt.bindText(1, category)
+                stmt.bindDouble(2, box.south)
+                stmt.bindDouble(3, box.north)
+                stmt.bindDouble(4, box.west)
+                stmt.bindDouble(5, box.east)
+                buildList { while (stmt.step()) add(stmt.readCandidate().place) }
+            }
+        }
+        return NearbyBox.within(found, center, radiusMeters, limit)
+    }
+
+    /**
      * Rows matching every word: the most important ones overall, plus (with
      * [near]) the most important ones close by, so a small local place isn't
      * crowded out by famous ones far away. Distance ranking happens in Kotlin
@@ -89,6 +112,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
 
     companion object {
         private const val CANDIDATE_LIMIT = 300
+        private const val NEARBY_ROW_LIMIT = 200
 
         /** How far "nearby" reaches when picking local candidates. */
         private const val NEARBY_KM = 15.0
