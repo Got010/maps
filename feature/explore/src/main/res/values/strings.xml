@@ -40,6 +40,10 @@
     <string name="explore_alert_school_zone">School zone ahead.</string>
     <string name="explore_alert_alpr_camera">License plate reader ahead.</string>
     <string name="explore_closure_spoken">Road closed ahead on %1$s. Finding another way.</string>
+    <string name="explore_police_spoken">Police activity ahead on %1$s.</string>
+    <string name="explore_police_spoken_no_road">Police activity ahead.</string>
+    <string name="explore_incident_police">Police activity</string>
+    <string name="explore_incident_police_on">Police activity \u00B7 %1$s</string>
     <string name="explore_incident_severity">Severity: %1$s</string>
     <string name="explore_incident_updated">Updated %1$s</string>
     <string name="explore_start_clear">Start from my location instead</string>
