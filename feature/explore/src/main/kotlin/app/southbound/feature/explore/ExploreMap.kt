@@ -54,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +67,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.southbound.core.map.ArrivalSide
 import app.southbound.core.map.Arrival
+import app.southbound.core.map.CameraPin
 import app.southbound.core.map.CameraRequest
 import app.southbound.core.map.MapLine
 import app.southbound.core.map.IncidentPin
@@ -91,6 +93,7 @@ import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.userdata.Shortcut
+import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
@@ -130,8 +133,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
 import uniffi.ferrostar.TripState
@@ -309,6 +315,16 @@ internal fun ExploreMap(
         scope.launch(Dispatchers.IO) { attempt { services.userData.recordRecent(place.toRef()) } }
     }
 
+    // Plate readers (Flock and others) from the search pack: on the map in every state, counted on
+    // each driving route option, and steered around with "Avoid plate readers".
+    var cameraPins by remember { mutableStateOf<List<CameraPin>>(emptyList()) }
+    var shownCamera by remember { mutableStateOf<CameraPin?>(null) }
+    LaunchedEffect(shownIncident) { if (shownIncident != null) shownCamera = null }
+    LaunchedEffect(searchIndex) {
+        val index = searchIndex
+        cameraPins = if (index == null) emptyList() else withContext(Dispatchers.IO) { attempt { PlateReaders.pins(index) } }.orEmpty()
+    }
+
     // Route preview: recompute when the destination or mode changes, or when
     // the first GPS fix arrives after "no location".
     val directions = panel as? Panel.Directions
@@ -339,13 +355,30 @@ internal fun ExploreMap(
         } else {
             emptyList()
         }
-        val found = try {
+        val plainRoutes = try {
             withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), waypoints, target.mode, avoid) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             emptyList()
         }
+        // Plate readers: with "Avoid plate readers" on, route again around the ones on the best route.
+        // The pack may still be opening on a cold start, so wait for it briefly.
+        val driving = target.mode == TravelMode.DRIVE
+        val cameraIndex = when {
+            !driving -> null
+            searchIndex != null -> searchIndex
+            withContext(Dispatchers.IO) { services.hasPack(PackKind.SEARCH) } -> withTimeoutOrNull(SEARCH_WAIT_MS) { snapshotFlow { searchIndex }.filterNotNull().first() }
+            else -> null
+        }
+        val found = if (driving && routePrefs.avoidAlpr && cameraIndex != null && plainRoutes.isNotEmpty()) {
+            withContext(Dispatchers.Default) {
+                attempt { PlateReaders.avoid(nav, cameraIndex, from.toUserLocation(), waypoints, target.mode, avoid, plainRoutes).routes }
+            } ?: plainRoutes.also { nav.cameraAvoid = emptyList() }
+        } else {
+            plainRoutes
+        }
+        val cameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
         routes = found
         // Live speeds laid over each option: coloured stretches and the delay they add.
         val speeds = snapshot?.speeds.orEmpty()
@@ -356,7 +389,13 @@ internal fun ExploreMap(
         if (found.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
-            preview = RoutePreviewState.Ready(found.map(RouteSummary::of), selected = 0, delaySeconds = slow.map { it.delaySeconds })
+            preview = RoutePreviewState.Ready(
+                found.map(RouteSummary::of),
+                selected = 0,
+                delaySeconds = slow.map { it.delaySeconds },
+                cameraCounts = cameraCounts,
+                cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && (cameraCounts.firstOrNull() ?: 0) > 0,
+            )
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
                     MapPoint(from.latitude, from.longitude),
@@ -619,7 +658,13 @@ internal fun ExploreMap(
     // Incidents along the route are pinned even when the traffic layer itself is hidden.
     // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
     val routeAlerts by services.guidance.routeAlerts.collectAsState()
-    val alertPins = if (inTrip) routeAlerts.map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) } else emptyList()
+    // Plate readers are on the always-on camera layer, so only speed cameras and school zones are pinned here.
+    val alertPins = if (inTrip) {
+        routeAlerts.filter { it.kind != AlertKind.ALPR_CAMERA }
+            .map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) }
+    } else {
+        emptyList()
+    }
     val trafficOverlay = baseTrafficOverlay.copy(
         incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() } + alertPins).distinctBy { it.id },
     )
@@ -686,7 +731,7 @@ internal fun ExploreMap(
             onFollowingDismissed = { following = false },
             modifier = Modifier.fillMaxSize(),
             contentPadding = WindowInsets.systemBars.asPaddingValues(),
-            overlays = overlays,
+            overlays = overlays.copy(cameras = cameraPins),
             cameraRequest = cameraRequest,
             navigating = inTrip,
             onLongPress = if (inTrip) {
@@ -703,6 +748,10 @@ internal fun ExploreMap(
             onTouchChanged = { down ->
                 touching = down
                 touchSerial++
+            },
+            onCameraTap = { id ->
+                shownIncident = null
+                shownCamera = cameraPins.firstOrNull { it.id == id }
             },
         )
 
@@ -924,6 +973,17 @@ internal fun ExploreMap(
                 },
             )
         }
+        // The tap-to-read card for a plate-reader dot.
+        shownCamera?.let { camera ->
+            CameraCard(
+                camera,
+                onClose = { shownCamera = null },
+                modifier = when {
+                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
+                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
+                },
+            )
+        }
     }
 }
 
@@ -1001,6 +1061,9 @@ private const val FASTER_ROUTE_OFFER_MS = 90_000L
 private const val FASTER_ROUTE_TRY_DETOUR_SECONDS = 120.0
 private const val DETOUR_MIN_DISTANCE_M = 300.0
 private const val DETOUR_MAX_SPOTS = 3
+
+// How long a route preview waits for the search pack to open before going without plate readers.
+private const val SEARCH_WAIT_MS = 5_000L
 
 /** A faster route found mid-trip, with its points for telling it apart later. */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
