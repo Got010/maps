@@ -19,6 +19,7 @@ class RouteOptionsStore private constructor(context: Context) {
             .putBoolean("avoid_tolls", next.avoidTolls)
             .putBoolean("avoid_highways", next.avoidHighways)
             .putBoolean("avoid_ferries", next.avoidFerries)
+            .putBoolean("avoid_alpr", next.avoidAlpr)
             .putString("vehicle", next.vehicle.name)
             .putFloat("height_ft", next.heightFt.toFloat())
             .putFloat("width_ft", next.widthFt.toFloat())
@@ -32,6 +33,7 @@ class RouteOptionsStore private constructor(context: Context) {
         avoidTolls = prefs.getBoolean("avoid_tolls", false),
         avoidHighways = prefs.getBoolean("avoid_highways", false),
         avoidFerries = prefs.getBoolean("avoid_ferries", false),
+        avoidAlpr = prefs.getBoolean("avoid_alpr", false),
         vehicle = VehicleKind.entries.firstOrNull { it.name == prefs.getString("vehicle", null) } ?: VehicleKind.CAR,
         heightFt = prefs.getFloat("height_ft", RoutePrefs.DEFAULT_HEIGHT_FT.toFloat()).toDouble(),
         widthFt = prefs.getFloat("width_ft", RoutePrefs.DEFAULT_WIDTH_FT.toFloat()).toDouble(),

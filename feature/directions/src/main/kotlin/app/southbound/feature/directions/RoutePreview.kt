@@ -55,12 +55,17 @@ sealed interface RoutePreviewState {
      * [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown.
      * [fuelGallons] is the estimated gas each route burns, in the same order (traffic idling included);
      * empty when unknown, which hides the fuel line.
+     * [cameraCounts] is how many plate readers each route passes, same order; empty when unknown (no
+     * search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
+     * route still passes some.
      */
     data class Ready(
         val summaries: List<RouteSummary>,
         val selected: Int,
         val delaySeconds: List<Double> = emptyList(),
         val fuelGallons: List<Double> = emptyList(),
+        val cameraCounts: List<Int> = emptyList(),
+        val cameraAvoidIncomplete: Boolean = false,
     ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
@@ -160,8 +165,10 @@ fun RoutePreviewSheet(
                                 fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
                                 leastGas = i == thriftiest,
                                 onClick = { onSelect(i) },
+                                cameras = state.cameraCounts.getOrNull(i),
                             )
                         }
+                        if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
                         beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
@@ -219,6 +226,8 @@ private fun RouteOption(
     fuelCost: Double?,
     leastGas: Boolean,
     onClick: () -> Unit,
+    /** Plate readers on this route; null hides the line. */
+    cameras: Int? = null,
 ) {
     // The route's line colour on the map. Outside a trip the map follows the system theme.
     val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
@@ -277,6 +286,7 @@ private fun RouteOption(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                cameras?.let { PlateReaderCount(it) }
                 if (leastGas) LeastGasBadge(fastest)
             }
             Column(horizontalAlignment = Alignment.End) {

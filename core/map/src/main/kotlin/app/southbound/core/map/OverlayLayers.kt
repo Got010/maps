@@ -3,12 +3,15 @@ package app.southbound.core.map
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.eq
 import org.maplibre.android.style.expressions.Expression.get
+import org.maplibre.android.style.expressions.Expression.interpolate
+import org.maplibre.android.style.expressions.Expression.linear
 import org.maplibre.android.style.expressions.Expression.literal
 import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.switchCase
 import org.maplibre.android.style.expressions.Expression.toColor
+import org.maplibre.android.style.expressions.Expression.zoom
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -24,6 +27,7 @@ import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import java.lang.ref.WeakReference
 
 /** Adds the route, pin and traffic layers to a freshly loaded style and fills them. */
 internal object OverlayLayers {
@@ -39,6 +43,11 @@ internal object OverlayLayers {
     const val ROUTE_CASING = "southbound-routes-casing"
     const val ROUTE_LEADER = "southbound-routes-line"
     const val ROUTE_THREADS = "southbound-routes-threads"
+
+    /** Plate readers from the search pack; drawn from [CAMERA_MIN_ZOOM], over routes and incidents. */
+    const val CAMERAS = "southbound-cameras"
+    private const val CAMERA_PURPLE = "#7B1FA2"
+    private const val CAMERA_MIN_ZOOM = 11f
 
     private const val PIN_RED = "#D93025"
     private const val DESTINATION = "#202124"
@@ -66,6 +75,7 @@ internal object OverlayLayers {
         style.addSource(GeoJsonSource(SPEEDS, OverlayGeoJson.speeds(emptyList())))
         style.addSource(GeoJsonSource(SLOWDOWNS, OverlayGeoJson.speeds(emptyList())))
         style.addSource(GeoJsonSource(INCIDENTS, OverlayGeoJson.incidents(emptyList())))
+        style.addSource(GeoJsonSource(CAMERAS, OverlayGeoJson.cameras(emptyList())))
 
         val speedColor = step(
             get("speed"), literal(SPEED_STOPPED),
@@ -160,6 +170,17 @@ internal object OverlayLayers {
                 circleStrokeWidth(2f),
             ),
         )
+        // Plate readers: always on, purple with a white ring, a little bigger as the map zooms in.
+        style.addLayer(
+            CircleLayer(CAMERAS, CAMERAS).withProperties(
+                circleRadius(
+                    interpolate(linear(), zoom(), stop(CAMERA_MIN_ZOOM, 3.5f), stop(15, 6f), stop(18, 8f)),
+                ),
+                circleColor(CAMERA_PURPLE),
+                circleStrokeColor("#FFFFFF"),
+                circleStrokeWidth(1.5f),
+            ).also { it.minZoom = CAMERA_MIN_ZOOM },
+        )
     }
 
     /** [darkTheme] is the loaded basemap's theme; it picks the route colours. */
@@ -169,5 +190,19 @@ internal object OverlayLayers {
         style.getSourceAs<GeoJsonSource>(SPEEDS)?.setGeoJson(OverlayGeoJson.speeds(overlays.traffic.speeds))
         style.getSourceAs<GeoJsonSource>(SLOWDOWNS)?.setGeoJson(OverlayGeoJson.speeds(overlays.slowdowns))
         style.getSourceAs<GeoJsonSource>(INCIDENTS)?.setGeoJson(OverlayGeoJson.incidents(overlays.traffic.incidents))
+        updateCameras(style, overlays.cameras)
+    }
+
+    // The camera list only changes when the search pack does, so its few thousand points
+    // aren't re-sent on every overlay update. Weak, so a closed map's style can go.
+    private var camerasShown: List<CameraPin>? = null
+    private var camerasStyle: WeakReference<Style>? = null
+
+    private fun updateCameras(style: Style, cameras: List<CameraPin>) {
+        if (camerasShown === cameras && camerasStyle?.get() === style) return
+        val source = style.getSourceAs<GeoJsonSource>(CAMERAS) ?: return
+        source.setGeoJson(OverlayGeoJson.cameras(cameras))
+        camerasShown = cameras
+        camerasStyle = WeakReference(style)
     }
 }
