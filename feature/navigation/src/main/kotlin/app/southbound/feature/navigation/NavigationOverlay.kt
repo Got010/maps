@@ -100,6 +100,7 @@ fun NavigationOverlay(
                             theme = DrivingInstructionRowTheme,
                         )
                         HighwaySign(instruction.primaryContent)
+                        CurrentLanes(trip, Modifier.align(Alignment.CenterHorizontally))
                     }
                     CurrentRoadName(trip.remainingSteps.firstOrNull()?.roadName)
                     fasterRoute?.let { FasterRouteBanner(it) }
