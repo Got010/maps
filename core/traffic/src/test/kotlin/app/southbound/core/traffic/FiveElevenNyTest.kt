@@ -17,7 +17,7 @@ class FiveElevenNyTest {
     @Test
     fun `parses the events feed and skips rows without a position`() {
         val events = FiveElevenNy.parseEvents(fixture)
-        assertEquals(listOf("NY-511-1001", "NY-511-1002", "NY-511-1003", "NY-511-1005"), events.map { it.id })
+        assertEquals(listOf("NY-511-1001", "NY-511-1002", "NY-511-1003", "NY-511-1005", "NY-511-1006", "NY-511-1007", "NY-511-1008", "NY-511-1009"), events.map { it.id })
 
         val crash = events[0]
         assertEquals(IncidentKind.CLOSURE, crash.kind) // a crash, but every lane is shut
@@ -42,6 +42,16 @@ class FiveElevenNyTest {
         assertEquals(IncidentKind.EVENT, parade.kind)
         assertNull(parade.roadway)
         assertEquals("Parade on 5th Avenue.", parade.title)
+
+        val police = events[4]
+        assertEquals(IncidentKind.POLICE, police.kind) // subtype, though filed under accidentsAndIncidents
+        assertFalse(police.isClosure)
+        assertEquals("I-87 Southbound", police.title)
+
+        assertEquals(IncidentKind.POLICE, events[5].kind) // wording alone, in an unclassified event
+        assertEquals(IncidentKind.CLOSURE, events[6].kind) // police activity that shuts every lane
+        assertTrue(events[6].isClosure)
+        assertEquals(IncidentKind.ACCIDENT, events[7].kind) // "police on scene" doesn't turn a disabled vehicle into police activity
     }
 
     @Test
@@ -70,6 +80,23 @@ class FiveElevenNyTest {
         assertEquals(IncidentKind.ROADWORK, FiveElevenNy.kindOf("roadwork", null, null, "x"))
         assertEquals(IncidentKind.EVENT, FiveElevenNy.kindOf("specialEvents", null, null, "x"))
         assertEquals(IncidentKind.OTHER, FiveElevenNy.kindOf("generalInfo", null, null, "x"))
+    }
+
+    @Test
+    fun `police activity is found by type, subtype or wording`() {
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("policeActivity", null, null, "x"))
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("accidentsAndIncidents", "Police Activity", null, "x"))
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("accidentsAndIncidents", "Law Enforcement Activity", "1 lane closed", "x"))
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("generalInfo", null, null, "Traffic stop on the shoulder"))
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("generalInfo", null, null, "Radar enforcement near Exit 4"))
+        assertEquals(IncidentKind.POLICE, FiveElevenNy.kindOf("generalInfo", null, null, "Speed enforcement on NY-17"))
+        // A police event that is also a closure stays a closure, by type, lanes or wording.
+        assertEquals(IncidentKind.CLOSURE, FiveElevenNy.kindOf("closures", "Police Activity", null, "x"))
+        assertEquals(IncidentKind.CLOSURE, FiveElevenNy.kindOf("accidentsAndIncidents", "Police Activity", "All lanes closed", "x"))
+        assertEquals(IncidentKind.CLOSURE, FiveElevenNy.kindOf(null, null, null, "Road closed for police activity"))
+        // Wording does not override an event the feed already classed.
+        assertEquals(IncidentKind.ACCIDENT, FiveElevenNy.kindOf("accidentsAndIncidents", "Crash", null, "Police on scene"))
+        assertEquals(IncidentKind.ROADWORK, FiveElevenNy.kindOf("roadwork", null, null, "Police detail for work zone"))
     }
 
     @Test

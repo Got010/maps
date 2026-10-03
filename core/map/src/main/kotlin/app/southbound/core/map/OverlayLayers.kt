@@ -61,6 +61,8 @@ internal object OverlayLayers {
     private const val INCIDENT_CLOSURE = "#C5221F"
     private const val INCIDENT_ACCIDENT = "#E8710A"
     private const val INCIDENT_ROADWORK = "#F29900"
+    // Navy, apart from the speed cameras' blue (#1A73E8) and the closure red.
+    private const val INCIDENT_POLICE = "#3B5BDB"
     private const val INCIDENT_OTHER = "#5F6368"
 
     // Alerts from the map data, pinned along the route while navigating.
@@ -161,6 +163,7 @@ internal object OverlayLayers {
                         stop("CLOSURE", literal(INCIDENT_CLOSURE)),
                         stop("ACCIDENT", literal(INCIDENT_ACCIDENT)),
                         stop("ROADWORK", literal(INCIDENT_ROADWORK)),
+                        stop("POLICE", literal(INCIDENT_POLICE)),
                         stop("SPEED_CAMERA", literal(ALERT_SPEED_CAMERA)),
                         stop("ALPR_CAMERA", literal(ALERT_ALPR_CAMERA)),
                         stop("SCHOOL_ZONE", literal(ALERT_SCHOOL_ZONE)),
