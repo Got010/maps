@@ -251,6 +251,32 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 5: driving essentials** (picked by the owner, October 2026)
+
+- [ ] Home and Work shortcuts: set from a place card, one tap from the search box to directions
+- [ ] Route options: avoid tolls, highways and ferries; a truck/RV profile with height and weight (Valhalla costing options, saved per mode)
+- [ ] Multi-stop trips: add stops from a place card, reorder them, skip one mid-trip
+- [ ] Navigation extras: current road name, arrival clock time, a bigger driving layout, night mode by sunset (computed on the phone from the fix)
+- [ ] Missing-region warning: before a trip that crosses a region whose basemap isn't installed, say so and offer the download
+
+Exit test: set Home, plan Home → a stop in Albany → Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
+
+**Phase 6: data and routing quality**
+
+- [ ] NYS Address Points in the search pack (CC0, twice-monthly) and a smaller `search-nys.sqlite`: index addresses from the state file instead of OSM, cap trigram text, measure before and after
+- [ ] Traffic-aware ETAs, then routing: adjust the ETA from NYC DOT speeds on the route's links; then the spike on live speeds in on-device Valhalla before committing to traffic-aware routing
+- [ ] Lane guidance: carry Valhalla's lane data through Ferrostar's banner parsing (patch or upstream, see Risks) and draw lanes under the instruction
+- [ ] Walking and cycling detail: step-free and stairs preferences for walking (pedestrian costing options), elevation profile for cycling (needs an elevation source in the pack)
+
+Exit test: an upstate house number searches to the right spot; a highway exit in NYC shows which lanes to take; an ETA across Manhattan changes with the live speeds.
+
+**Phase 7: live data and the car**
+
+- [ ] 511NY cameras and message signs on the map: tap a camera for its still, show sign text
+- [ ] Android Auto (car app library, no Play Services) or, failing that, a landscape driving layout
+
+Exit test: a camera still opens from the traffic layer; the app runs on a car screen or in landscape with a driving layout.
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
