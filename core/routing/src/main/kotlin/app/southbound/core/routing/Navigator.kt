@@ -45,10 +45,14 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     @Volatile
     var avoid: List<List<Pair<Double, Double>>> = emptyList()
 
+    // Phase 6: route options, used by previews, reroutes and skip-stop alike. Set by the app.
+    @Volatile
+    var prefs: RoutePrefs = RoutePrefs.DEFAULT
+
     private val core = FerrostarCore(
         customRouteProvider = object : CustomRouteProvider {
             override suspend fun getRoutes(userLocation: UserLocation, waypoints: List<Waypoint>): List<Route> =
-                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid) }
+                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid, prefs) }
         },
         httpClient = NoNetworkHttpClient,
         locationProvider = GpsLocationProvider(context.applicationContext),
@@ -94,7 +98,7 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         val trip = state.value.tripState as? TripState.Navigating ?: return false
         this.avoid = avoid
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid) }
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid, prefs) }
         } catch (e: RoutingException) {
             return false
         }
