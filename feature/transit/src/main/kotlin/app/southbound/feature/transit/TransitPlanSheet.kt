@@ -85,6 +85,8 @@ fun TransitPlanSheet(
     onClose: () -> Unit,
     nowSeconds: Int,
     modifier: Modifier = Modifier,
+    /** A chosen start point instead of GPS. */
+    startName: String? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -106,6 +108,14 @@ fun TransitPlanSheet(
                 }
             }
             ModeChips(mode = null, onModeChange = onModeChange, transitSelected = true, onTransit = {})
+            startName?.let {
+                Text(
+                    stringResource(R.string.transit_from, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             TimeRow(time, onTimeChange, nowSeconds)
             when (state) {
                 TransitPlanState.Loading -> Row(

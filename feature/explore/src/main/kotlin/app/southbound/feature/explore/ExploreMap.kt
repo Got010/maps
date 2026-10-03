@@ -11,6 +11,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
@@ -203,6 +205,17 @@ internal fun ExploreMap(
     var transitPlan by remember { mutableStateOf<TransitPlanState>(TransitPlanState.Loading) }
     var transitSelected by remember { mutableIntStateOf(0) }
     var boards by remember { mutableStateOf<List<StationBoard>>(emptyList()) }
+    // A start point picked on the map ("Start here"), e.g. to plan from outside NYC. Null: from GPS.
+    var startPlace by remember { mutableStateOf<Place?>(null) }
+    fun origin(): Location? = startPlace?.let { place ->
+        Location("start").apply {
+            latitude = place.lat
+            longitude = place.lon
+            accuracy = 5f
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        }
+    } ?: location
 
     fun showPlace(place: Place) {
         panel = Panel.PlaceShown(place)
@@ -213,15 +226,15 @@ internal fun ExploreMap(
     // Route preview: recompute when the destination or mode changes, or when
     // the first GPS fix arrives after "no location".
     val directions = panel as? Panel.Directions
-    val hasFix = location != null
-    LaunchedEffect(directions, hasFix, navigator) {
+    val hasFix = location != null || startPlace != null
+    LaunchedEffect(directions, hasFix, navigator, startPlace) {
         val target = directions?.takeIf { !it.transit } ?: return@LaunchedEffect
         routes = emptyList()
         val nav = navigator ?: run {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
             return@LaunchedEffect
         }
-        val from = location ?: run {
+        val from = origin() ?: run {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_LOCATION)
             return@LaunchedEffect
         }
@@ -247,10 +260,10 @@ internal fun ExploreMap(
     }
 
     // Transit: plan from the pack, then layer realtime on top if it's on.
-    LaunchedEffect(directions, transitTime, hasFix, transitPack) {
+    LaunchedEffect(directions, transitTime, hasFix, transitPack, startPlace) {
         val target = directions?.takeIf { it.transit } ?: return@LaunchedEffect
         val pack = transitPack ?: return@LaunchedEffect
-        val from = location ?: run {
+        val from = origin() ?: run {
             transitPlan = TransitPlanState.Failed(TransitPlanState.Reason.NO_LOCATION)
             return@LaunchedEffect
         }
@@ -335,7 +348,7 @@ internal fun ExploreMap(
             is Panel.PlaceShown -> MapOverlays(pin = MapPoint(current.place.lat, current.place.lon))
             is Panel.Directions -> if (current.transit) {
                 val journey = (transitPlan as? TransitPlanState.Ready)?.journeys?.getOrNull(transitSelected)
-                val origin = location?.let { MapPoint(it.latitude, it.longitude) }
+                val origin = origin()?.let { MapPoint(it.latitude, it.longitude) }
                 val end = MapPoint(current.place.lat, current.place.lon)
                 MapOverlays(
                     routes = if (journey != null && origin != null) journey.mapLines(origin, end) else emptyList(),
@@ -401,6 +414,7 @@ internal fun ExploreMap(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         SearchBar(onSearch = { panel = Panel.Search }, onOpenSettings = onOpenSettings)
+                        startPlace?.let { StartChip(it.name, onClear = { startPlace = null }) }
                         LocationStatus(hasPermission, location, asked, ::requestPermission)
                     }
                     if (location != null) {
@@ -426,6 +440,14 @@ internal fun ExploreMap(
                         .align(Alignment.BottomCenter)
                         .safeDrawingPadding()
                         .padding(8.dp),
+                    onStartHere = if (hasRouting || transitPack != null) {
+                        {
+                            startPlace = current.place
+                            panel = Panel.Browse
+                        }
+                    } else {
+                        null
+                    },
                     extra = if (boards.isNotEmpty()) {
                         { TransitDepartures(boards, nowSeconds) }
                     } else {
@@ -442,6 +464,7 @@ internal fun ExploreMap(
                         selected = transitSelected,
                         onSelect = { transitSelected = it },
                         onClose = { panel = Panel.PlaceShown(current.place) },
+                        startName = startPlace?.name,
                         nowSeconds = nowSeconds,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -459,6 +482,7 @@ internal fun ExploreMap(
                         },
                         onStart = ::startTrip,
                         onClose = { panel = Panel.PlaceShown(current.place) },
+                        startName = startPlace?.name,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .safeDrawingPadding()
@@ -470,6 +494,23 @@ internal fun ExploreMap(
                         },
                     )
                 }
+            }
+        }
+    }
+}
+
+/** The chosen start point, while one is set instead of GPS. */
+@Composable
+private fun StartChip(name: String, onClear: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.explore_start_from, name),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            IconButton(onClick = onClear) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_start_clear))
             }
         }
     }
