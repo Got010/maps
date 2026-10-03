@@ -14,6 +14,8 @@ import app.southbound.core.traffic.TrafficFeed
 import app.southbound.core.transit.AndroidTransitDb
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.transit.TransitRealtime
+import app.southbound.core.userdata.KeystoreSealer
+import app.southbound.core.userdata.UserDataStore
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.VoiceSettings
 import app.southbound.core.voice.VoiceSettingsStore
@@ -48,6 +50,9 @@ class ExploreServices private constructor(context: Context) {
     val networkGate = NetworkGate(networkToggles)
     val secrets = SecretStore(appContext)
     val realtime = TransitRealtime(networkGate, busKey = { secrets.get(ApiKey.MTA_BUS_TIME) })
+
+    /** Saved places, lists and recents: encrypted, outside backups, never sent anywhere. */
+    val userData by lazy { UserDataStore(File(appContext.noBackupFilesDir, UserDataStore.FILE_NAME), KeystoreSealer()) }
 
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
     val traffic = TrafficFeed(networkGate, key511 = { secrets.get(ApiKey.NY_511) })
