@@ -90,13 +90,13 @@ internal fun Journey.usesBus(): Boolean = rides.any { it.route.system == Transit
 /** Ride legs in colour, walks in grey, from [origin] to [destination]. */
 internal fun Journey.mapLines(origin: MapPoint, destination: MapPoint): List<MapLine> = legs.map { leg ->
     when (leg) {
-        is JourneyLeg.Ride -> MapLine(leg.stops.map { MapPoint(it.lat, it.lon) }, selected = true)
+        is JourneyLeg.Ride -> MapLine(leg.stops.map { MapPoint(it.lat, it.lon) }, MapLine.Role.LEADER)
         is JourneyLeg.Walk -> MapLine(
             listOf(
                 leg.from?.let { MapPoint(it.lat, it.lon) } ?: origin,
                 leg.to?.let { MapPoint(it.lat, it.lon) } ?: destination,
             ),
-            selected = false,
+            MapLine.Role.WALK,
         )
     }
 }

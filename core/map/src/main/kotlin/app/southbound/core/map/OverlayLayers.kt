@@ -8,6 +8,7 @@ import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.switchCase
+import org.maplibre.android.style.expressions.Expression.toColor
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -17,6 +18,7 @@ import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
+import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
 import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
@@ -31,10 +33,13 @@ internal object OverlayLayers {
     private const val SLOWDOWNS = "southbound-slowdowns"
     const val INCIDENTS = "southbound-incidents"
 
-    private const val ROUTE_BLUE = "#1A73E8"
-    private const val ROUTE_BLUE_CASING = "#0D47A1"
-    private const val ROUTE_ALT = "#9AA0A6"
-    private const val ROUTE_ALT_CASING = "#5F6368"
+    // Route layers, bottom to top: transit walks, the chosen route's casing and line, then the
+    // other alternatives as threads (the ones a tap can pick).
+    const val ROUTE_WALK = "southbound-routes-walk"
+    const val ROUTE_CASING = "southbound-routes-casing"
+    const val ROUTE_LEADER = "southbound-routes-line"
+    const val ROUTE_THREADS = "southbound-routes-threads"
+
     private const val PIN_RED = "#D93025"
     private const val DESTINATION = "#202124"
 
@@ -56,7 +61,7 @@ internal object OverlayLayers {
 
     fun install(style: Style) {
         if (style.getSource(ROUTES) != null) return
-        style.addSource(GeoJsonSource(ROUTES, OverlayGeoJson.routes(emptyList())))
+        style.addSource(GeoJsonSource(ROUTES, OverlayGeoJson.routes(emptyList(), darkTheme = false)))
         style.addSource(GeoJsonSource(PINS, OverlayGeoJson.pins(null, null)))
         style.addSource(GeoJsonSource(SPEEDS, OverlayGeoJson.speeds(emptyList())))
         style.addSource(GeoJsonSource(SLOWDOWNS, OverlayGeoJson.speeds(emptyList())))
@@ -74,20 +79,37 @@ internal object OverlayLayers {
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND),
         )
-        // The GeoJSON lists the selected route last, so it draws over alternatives.
-        val casing = LineLayer("$ROUTES-casing", ROUTES).withProperties(
-            lineColor(match(get("selected"), literal(ROUTE_ALT_CASING), stop(true, literal(ROUTE_BLUE_CASING)))),
-            lineWidth(9f),
+        // "Leader and threads": each feature brings its own colour (see OverlayGeoJson.routes), and
+        // each layer picks its role. Transit walks are grey dashes under everything else.
+        val walk = LineLayer(ROUTE_WALK, ROUTES).withProperties(
+            lineColor(toColor(get("color"))),
+            lineWidth(4f),
+            lineDasharray(arrayOf(1f, 1.5f)),
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND),
-        )
-        val line = LineLayer("$ROUTES-line", ROUTES).withProperties(
-            lineColor(match(get("selected"), literal(ROUTE_ALT), stop(true, literal(ROUTE_BLUE)))),
-            lineWidth(6f),
+        ).withFilter(eq(get("role"), literal("walk")))
+        // The chosen route: a casing, then a thick line in its colour.
+        val casing = LineLayer(ROUTE_CASING, ROUTES).withProperties(
+            lineColor(toColor(get("casing"))),
+            lineWidth(11f),
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND),
-        )
-        // The selected route's slow stretches, drawn over its blue line (same bands as the speed layer).
+        ).withFilter(eq(get("role"), literal("leader")))
+        val line = LineLayer(ROUTE_LEADER, ROUTES).withProperties(
+            lineColor(toColor(get("color"))),
+            lineWidth(8f),
+            lineCap(Property.LINE_CAP_ROUND),
+            lineJoin(Property.LINE_JOIN_ROUND),
+        ).withFilter(eq(get("role"), literal("leader")))
+        // Every other route: a thin thread over the leader, so a shared stretch reads as a stripe
+        // down the middle of the chosen route.
+        val threads = LineLayer(ROUTE_THREADS, ROUTES).withProperties(
+            lineColor(toColor(get("color"))),
+            lineWidth(2.4f),
+            lineCap(Property.LINE_CAP_ROUND),
+            lineJoin(Property.LINE_JOIN_ROUND),
+        ).withFilter(eq(get("role"), literal("thread")))
+        // The selected route's slow stretches, drawn over its line (same bands as the speed layer).
         val slowdowns = LineLayer("$SLOWDOWNS-line", SLOWDOWNS).withProperties(
             lineColor(speedColor),
             lineWidth(6f),
@@ -98,14 +120,18 @@ internal object OverlayLayers {
         val firstLabel = style.layers.firstOrNull { it is SymbolLayer }?.id
         if (firstLabel != null) {
             style.addLayerBelow(speeds, firstLabel)
+            style.addLayerBelow(walk, firstLabel)
             style.addLayerBelow(casing, firstLabel)
             style.addLayerBelow(line, firstLabel)
             style.addLayerBelow(slowdowns, firstLabel)
+            style.addLayerBelow(threads, firstLabel)
         } else {
             style.addLayer(speeds)
+            style.addLayer(walk)
             style.addLayer(casing)
             style.addLayer(line)
             style.addLayer(slowdowns)
+            style.addLayer(threads)
         }
         style.addLayer(
             CircleLayer(PINS, PINS).withProperties(
@@ -136,8 +162,9 @@ internal object OverlayLayers {
         )
     }
 
-    fun update(style: Style, overlays: MapOverlays) {
-        style.getSourceAs<GeoJsonSource>(ROUTES)?.setGeoJson(OverlayGeoJson.routes(overlays.routes))
+    /** [darkTheme] is the loaded basemap's theme; it picks the route colours. */
+    fun update(style: Style, overlays: MapOverlays, darkTheme: Boolean) {
+        style.getSourceAs<GeoJsonSource>(ROUTES)?.setGeoJson(OverlayGeoJson.routes(overlays.routes, darkTheme))
         style.getSourceAs<GeoJsonSource>(PINS)?.setGeoJson(OverlayGeoJson.pins(overlays.pin, overlays.destination))
         style.getSourceAs<GeoJsonSource>(SPEEDS)?.setGeoJson(OverlayGeoJson.speeds(overlays.traffic.speeds))
         style.getSourceAs<GeoJsonSource>(SLOWDOWNS)?.setGeoJson(OverlayGeoJson.speeds(overlays.slowdowns))
