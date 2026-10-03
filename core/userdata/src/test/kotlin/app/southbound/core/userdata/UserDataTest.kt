@@ -86,4 +86,24 @@ class UserDataTest {
         file.writeBytes("garbage".toByteArray())
         assertEquals(UserData(), UserDataStore(file, PlainSealer).data.value)
     }
+
+    @Test
+    fun `home and work shortcuts set, clear and round-trip`() {
+        var d = UserData()
+        assertEquals(null, d.shortcut(Shortcut.HOME))
+        d = d.withShortcut(Shortcut.HOME, cafe).withShortcut(Shortcut.WORK, pin)
+        assertEquals(cafe, d.shortcut(Shortcut.HOME))
+        assertEquals(setOf(Shortcut.HOME), d.shortcutsOf(sameCafeMoved))
+        assertEquals(setOf(Shortcut.WORK), d.shortcutsOf(pin))
+        assertEquals(UserData(), UserData().withShortcut(Shortcut.WORK, null))
+        assertEquals(d, UserDataCodec.decode(UserDataCodec.encode(d)))
+        d = d.withShortcut(Shortcut.HOME, null)
+        assertEquals(null, UserDataCodec.decode(UserDataCodec.encode(d)).home)
+        // A file written before shortcuts existed still opens.
+        assertEquals(UserData(), UserDataCodec.decode(UserDataCodec.encode(UserData()).replace(""","recents":[]""", ""","recents":[]""")))
+        val file = tmp.root.resolve("s/places.sealed")
+        val store = UserDataStore(file, PlainSealer)
+        store.setShortcut(Shortcut.HOME, cafe)
+        assertEquals(cafe, UserDataStore(file, PlainSealer).data.value.home)
+    }
 }
