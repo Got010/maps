@@ -36,6 +36,7 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     fun save(place: PlaceRef, listId: Long) = update { it.save(place, listId, clock()) }
     fun unsave(place: PlaceRef, listId: Long) = update { it.unsave(place, listId) }
     fun recordRecent(place: PlaceRef) = update { it.recordRecent(place, clock()) }
+    fun setShortcut(kind: Shortcut, place: PlaceRef?) = update { it.withShortcut(kind, place) }
 
     private fun load(): UserData {
         if (!file.isFile) return UserData()
