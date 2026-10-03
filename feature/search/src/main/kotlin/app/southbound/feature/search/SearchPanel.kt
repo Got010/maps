@@ -72,6 +72,8 @@ fun SearchPanel(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
+    // Shown instead of "No matches" when the lookup itself failed, so a broken pack is visible.
+    var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -79,10 +81,13 @@ fun SearchPanel(
     LaunchedEffect(query, index) {
         if (index == null || query.isBlank()) {
             results = emptyList()
+            error = null
             return@LaunchedEffect
         }
         delay(TYPING_DEBOUNCE_MS)
-        results = withContext(Dispatchers.IO) { runCatching { index.search(query, near) }.getOrDefault(emptyList()) }
+        val outcome = withContext(Dispatchers.IO) { runCatching { index.search(query, near) } }
+        results = outcome.getOrDefault(emptyList())
+        error = outcome.exceptionOrNull()?.let { "${it::class.simpleName}: ${it.message}" }
     }
 
     Surface(modifier.fillMaxSize()) {
@@ -118,6 +123,7 @@ fun SearchPanel(
             HorizontalDivider()
             when {
                 index == null -> Message(stringResource(R.string.search_no_pack))
+                error != null -> Message(stringResource(R.string.search_failed, error!!))
                 query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
                 else -> LazyColumn(Modifier.fillMaxWidth()) {
                     items(results, key = { it.place.id }) { result ->
