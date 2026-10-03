@@ -75,6 +75,8 @@ import app.southbound.core.map.MapLine
 import app.southbound.core.map.IncidentPin
 import app.southbound.core.map.MapOverlays
 import app.southbound.core.map.MapPoint
+import app.southbound.core.map.MessageSignPin
+import app.southbound.core.map.TrafficCameraPin
 import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
 import app.southbound.core.map.NYC_CENTER
@@ -163,6 +165,20 @@ private sealed interface Panel {
     data class PlaceShown(val place: Place) : Panel
     // Phase 6: [stops] are the places between here and [place], in order.
     data class Directions(val place: Place, val mode: TravelMode, val transit: Boolean = false, val stops: List<Place> = emptyList()) : Panel
+}
+
+/**
+ * The one tap-to-read card open over the map, if any: an incident pin, a
+ * plate reader, or (Phase 8) a 511NY traffic camera or message sign. One
+ * state, so opening one card closes the other.
+ */
+private sealed interface ShownThing {
+    data class IncidentShown(val incident: Incident) : ShownThing
+    data class PlateReader(val pin: CameraPin) : ShownThing
+
+    /** Looked up by id in the latest snapshot, so the card follows the feed. */
+    data class TrafficCam(val id: String) : ShownThing
+    data class Sign(val id: String) : ShownThing
 }
 
 private const val PLACE_ZOOM = 16.0
@@ -299,8 +315,12 @@ internal fun ExploreMap(
     var trafficVisible by rememberSaveable { mutableStateOf(false) }
     var trafficOn by remember { mutableStateOf(services.traffic.isEnabled) }
     val traffic by services.traffic.snapshot.collectAsState()
-    var shownIncident by remember { mutableStateOf<Incident?>(null) }
+    var shownThing by remember { mutableStateOf<ShownThing?>(null) }
     LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
+    // Cameras and signs belong to the traffic layer: hiding it closes their card.
+    LaunchedEffect(trafficVisible, trafficOn) {
+        if (!(trafficVisible && trafficOn) && (shownThing is ShownThing.TrafficCam || shownThing is ShownThing.Sign)) shownThing = null
+    }
     // Gas price from EIA (opt-in, and rate-limited to one request a day): on resume, when directions open,
     // and when the state is changed in Settings.
     val directionsOpen = panel is Panel.Directions
@@ -352,8 +372,6 @@ internal fun ExploreMap(
     // Plate readers (Flock and others) from the search pack: on the map in every state, counted on
     // each driving route option, and steered around with "Avoid plate readers".
     var cameraPins by remember { mutableStateOf<List<CameraPin>>(emptyList()) }
-    var shownCamera by remember { mutableStateOf<CameraPin?>(null) }
-    LaunchedEffect(shownIncident) { if (shownIncident != null) shownCamera = null }
     LaunchedEffect(searchIndex) {
         val index = searchIndex
         cameraPins = if (index == null) emptyList() else withContext(Dispatchers.IO) { attempt { PlateReaders.pins(index) } }.orEmpty()
@@ -512,7 +530,8 @@ internal fun ExploreMap(
     LaunchedEffect(trafficVisible, inTrip, trafficOn) {
         if (!trafficOn || !(trafficVisible || inTrip)) return@LaunchedEffect
         while (true) {
-            withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }
+            // With the layer shown, 511NY's cameras (daily) and message signs (every 5 min) come too.
+            withContext(Dispatchers.IO) { attempt { services.traffic.refresh(mapExtras = trafficVisible) } }
             delay(TRAFFIC_POLL_MS)
         }
     }
@@ -759,6 +778,14 @@ internal fun ExploreMap(
     }
 
     val baseTrafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
+    // Phase 8: 511NY cameras and signs with the traffic layer. Remembered per list, so the map only
+    // re-sends them when the feed brings a new one. Blank signs say nothing, so they aren't drawn.
+    val trafficCameraPins = remember(traffic.cameras) {
+        traffic.cameras.map { TrafficCameraPin(it.id, MapPoint(it.lat, it.lon), offline = !it.hasImage) }
+    }
+    val messageSignPins = remember(traffic.signs) {
+        traffic.signs.filterNot { it.isBlank }.map { MessageSignPin(it.id, MapPoint(it.lat, it.lon)) }
+    }
     // Incidents along the route are pinned even when the traffic layer itself is hidden.
     // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
     val routeAlerts by services.guidance.routeAlerts.collectAsState()
@@ -843,7 +870,11 @@ internal fun ExploreMap(
             onFollowingDismissed = { following = false },
             modifier = Modifier.fillMaxSize(),
             contentPadding = WindowInsets.systemBars.asPaddingValues(),
-            overlays = overlays.copy(cameras = cameraPins),
+            overlays = overlays.copy(
+                cameras = cameraPins,
+                trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
+                messageSigns = if (trafficVisible && trafficOn) messageSignPins else emptyList(),
+            ),
             cameraRequest = cameraRequest,
             navigating = inTrip,
             onLongPress = if (inTrip) {
@@ -856,7 +887,7 @@ internal fun ExploreMap(
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
-            onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            onIncidentTap = { id -> shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown) },
             // A tap on another route's line picks it, as tapping its card does.
             onRouteTap = { rank ->
                 val ready = preview as? RoutePreviewState.Ready
@@ -870,9 +901,10 @@ internal fun ExploreMap(
                 touchSerial++
             },
             onCameraTap = { id ->
-                shownIncident = null
-                shownCamera = cameraPins.firstOrNull { it.id == id }
+                shownThing = cameraPins.firstOrNull { it.id == id }?.let(ShownThing::PlateReader)
             },
+            onTrafficCameraTap = { id -> shownThing = ShownThing.TrafficCam(id) },
+            onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
         )
 
         saveDialogFor?.let { place ->
@@ -948,7 +980,13 @@ internal fun ExploreMap(
                     if (!following && location != null) {
                         RecenterPill(
                             { following = true },
-                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = if (shownIncident != null) 190.dp else 28.dp),
+                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(
+                                bottom = when (shownThing) {
+                                    null, is ShownThing.PlateReader -> 28.dp
+                                    is ShownThing.TrafficCam -> 400.dp
+                                    is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
+                                },
+                            ),
                         )
                     }
                     // Why the traffic layer may look empty: say so instead of showing nothing.
@@ -1107,26 +1145,22 @@ internal fun ExploreMap(
         }
 
         // --- Phase 5 (map): the tap-to-read card for incident pins, wherever the pin was tapped ---
-        shownIncident?.let { incident ->
-            IncidentCard(
-                incident,
-                onClose = { shownIncident = null },
-                modifier = when {
-                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
-                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
-                },
-            )
+        val cardModifier = when {
+            inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
+            else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
         }
-        // The tap-to-read card for a plate-reader dot.
-        shownCamera?.let { camera ->
-            CameraCard(
-                camera,
-                onClose = { shownCamera = null },
-                modifier = when {
-                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
-                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
-                },
-            )
+        when (val shown = shownThing) {
+            null -> Unit
+            is ShownThing.IncidentShown -> IncidentCard(shown.incident, onClose = { shownThing = null }, modifier = cardModifier)
+            // The tap-to-read card for a plate-reader dot.
+            is ShownThing.PlateReader -> CameraCard(shown.pin, onClose = { shownThing = null }, modifier = cardModifier)
+            // Phase 8: a 511NY camera's still, or what a message sign says. Gone from the feed: no card.
+            is ShownThing.TrafficCam -> traffic.cameras.firstOrNull { it.id == shown.id }?.let { camera ->
+                TrafficCameraCard(camera, services.networkGate, onClose = { shownThing = null }, modifier = cardModifier)
+            }
+            is ShownThing.Sign -> traffic.signs.firstOrNull { it.id == shown.id }?.let { sign ->
+                MessageSignCard(sign, onClose = { shownThing = null }, modifier = cardModifier)
+            }
         }
     }
 }

@@ -125,4 +125,32 @@ class OverlayGeoJsonTest {
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.cameras(emptyList()))
     }
+
+    @Test
+    fun trafficCamerasCarryIdKindAndOfflineWithLiveOnesOnTop() {
+        val json = OverlayGeoJson.trafficCameras(
+            listOf(
+                TrafficCameraPin("NYSDOT_4616", MapPoint(41.4518, -74.0547)),
+                TrafficCameraPin("1204", MapPoint(40.7835, -73.9431), offline = true),
+            ),
+        )
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"1204","kind":"camera","offline":true},"geometry":{"type":"Point","coordinates":[-73.943100,40.783500]}},""" +
+                """{"type":"Feature","properties":{"id":"NYSDOT_4616","kind":"camera","offline":false},"geometry":{"type":"Point","coordinates":[-74.054700,41.451800]}}]}""",
+            json,
+        )
+        assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.trafficCameras(emptyList()))
+    }
+
+    @Test
+    fun messageSignsCarryTheirIdAndKind() {
+        val json = OverlayGeoJson.messageSigns(listOf(MessageSignPin("VMS \"87\"", MapPoint(41.4, -74.07))))
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"VMS \"87\"","kind":"sign"},"geometry":{"type":"Point","coordinates":[-74.070000,41.400000]}}]}""",
+            json,
+        )
+        assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.messageSigns(emptyList()))
+    }
 }
