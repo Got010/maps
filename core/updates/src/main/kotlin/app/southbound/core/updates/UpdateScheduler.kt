@@ -98,9 +98,11 @@ object UpdateScheduler {
         WorkManager.getInstance(context).enqueueUniqueWork(NOW, policy, request)
     }
 
+    // No "storage not low" constraint: on a nearly full phone Android would
+    // never start the job, and nothing would say why. The updater checks free
+    // space itself and reports exactly how much the update needs.
     private fun constraints(context: Context, anyNetwork: Boolean) = Constraints.Builder()
         .setRequiredNetworkType(if (anyNetwork || allowMobileData(context)) NetworkType.CONNECTED else NetworkType.UNMETERED)
-        .setRequiresStorageNotLow(true)
         .build()
 
     const val NO_NETWORK_PERMISSION =
