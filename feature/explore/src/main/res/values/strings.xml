@@ -22,6 +22,7 @@
     <string name="explore_imported_routing">Directions data installed.</string>
     <string name="explore_imported_search">Search data installed.</string>
     <string name="explore_imported_transit">Transit data installed.</string>
+    <string name="explore_imported_voice">Voice installed. Pick it in Settings &gt; Voice.</string>
     <string name="explore_pack_share_hint">Or, in your browser\'s downloads, share the file to Southbound.</string>
     <string name="explore_pack_adb">Or copy a basemap here with adb, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>

@@ -59,6 +59,7 @@ fun PackKind.installedMessage(): Int = when (this) {
     PackKind.ROUTING -> R.string.explore_imported_routing
     PackKind.SEARCH -> R.string.explore_imported_search
     PackKind.TRANSIT -> R.string.explore_imported_transit
+    PackKind.VOICE -> R.string.explore_imported_voice
 }
 
 /** A small card reporting an import, shown over the map or the setup screen. */
