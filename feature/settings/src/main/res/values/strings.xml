@@ -82,7 +82,7 @@
     <string name="updates_token_saved">GitHub token saved (type to replace)</string>
     <string name="updates_token_save">Save token</string>
     <string name="updates_token_remove">Remove token</string>
-    <string name="updates_waiting">Queued: waiting for a network connection (Wi-Fi, unless mobile data is allowed).</string>
+    <string name="updates_waiting">Queued: Android starts it once there\'s a connection (Wi-Fi, unless mobile data is allowed). If this stays for more than a minute, close and reopen Southbound.</string>
     <string name="regions_title">Map regions</string>
     <string name="regions_note">Tick the parts of New York you want maps for. Search and directions cover the whole state in one download each; transit schedules cover NYC. Unticking a region deletes its map from the phone.</string>
     <string name="regions_installed">Installed · %1$d MB</string>
