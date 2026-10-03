@@ -4,10 +4,10 @@
     <string name="search_back">Back</string>
     <string name="search_clear">Clear</string>
     <string name="search_no_results">No matches. Try fewer words, or check the spelling.</string>
-    <string name="search_no_pack">Search data isn\'t installed. Download search-nyc.sqlite from the Map data release on GitHub and share it to Southbound.</string>
+    <string name="search_no_pack">Search data isn\'t installed. Download search-nyc.sqlite from the latest Southbound release on GitHub and share it to Southbound.</string>
     <string name="place_close">Close</string>
     <string name="place_directions">Directions</string>
     <string name="place_call">Call</string>
     <string name="place_website">Website</string>
-    <string name="place_no_routing">Directions need routing-nyc.tar from the Map data release. Share it to Southbound to install it.</string>
+    <string name="place_no_routing">Directions need routing-nyc.tar from the latest Southbound release. Share it to Southbound to install it.</string>
 </resources>

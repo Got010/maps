@@ -13,15 +13,22 @@ opt-in extra.
 
 Everything below works from a phone. No computer needed.
 
-Download `southbound-<version>.apk` from the latest release and open it to
-install. Each release also has a `.sha256` file. A newer APK installs over the
-old one and keeps your data. [Obtainium](https://github.com/ImranR98/Obtainium)
-is optional: it watches this repo's releases and installs new ones for you.
+Every merge to `main` publishes a new release automatically, with the APK and
+the NYC data packs together. Download `southbound-<version>.apk` from the
+latest release and open it to install. Each file has a `.sha256` next to it. A
+newer APK installs over the old one and keeps your data.
+
+Android always asks before an app is installed or updated, so a release can't
+install itself. [Obtainium](https://github.com/ImranR98/Obtainium) is the
+closest thing: it watches this repo's releases and, on Android 12 and later,
+updates Southbound in the background once it has installed it. Add the repo
+URL and set its APK filter to `southbound-.*\.apk`, since each release also
+carries the data packs.
 
 ## Load the NYC map
 
-The app ships without map data. There are three NYC packs, each in the Map
-data release:
+The app ships without map data. There are four NYC packs, in every release
+next to the APK:
 
 | File | What it adds |
 | --- | --- |
@@ -32,9 +39,7 @@ data release:
 
 Load each one the same way:
 
-1. On GitHub, open the repo's **Releases** and find the newest **Map data**
-   pre-release. If there isn't one, go to **Actions > Map data > Run workflow**
-   and wait about 15 minutes.
+1. On GitHub, open the repo's **Releases** and the latest release.
 2. Download the file from it in your phone's browser. Don't open it with a
    file manager, which may try to unpack it.
 3. Get it into Southbound, either way:
@@ -47,16 +52,17 @@ Load each one the same way:
    download afterwards.
 
 Southbound recognises each file by its contents, so a renamed download such as
-`routing-nyc (1).tar` still works. The Map data workflow also runs on the 2nd
-of every month. To swap in newer data, share the new file to Southbound the
-same way; it replaces the old one.
+`routing-nyc (1).tar` still works. Packs are rebuilt when the pipeline changes
+and on the 2nd of every month, from fresh OpenStreetMap and MTA data; other
+releases carry the previous packs over. To swap in newer data, share the new
+file to Southbound the same way; it replaces the old one.
 
 With a computer and adb you can instead push the pack straight to the app's
 import folder: `make -C pipeline push-nyc`.
 
 ## Build the NYC packs yourself
 
-The Map data workflow does this on GitHub. To run it locally you need Docker,
+The Release workflow does this on GitHub. To run it locally you need Docker,
 curl and about 6 GB free disk.
 
 ```sh
@@ -89,13 +95,27 @@ build one each.
 
 ## Releasing
 
-Push a tag (`git tag v0.1.0 && git push origin v0.1.0`) and GitHub Actions
-does the rest.
-`.github/workflows/release.yml` runs the tests, builds the release APK signed
-with your key, verifies the signature and publishes
-`southbound-0.1.0.apk` plus its checksum as a GitHub release. Tags must look
-like `v1.2.3` (each part 0-99). The version code is derived from the tag, so each
-new tag must be higher than the last or phones will refuse the update.
+Releases are automatic. `.github/workflows/release.yml` runs after every merge
+to `main` (changes to Markdown files alone don't count) and on the 2nd of each
+month. It:
+
+1. picks the next version: one patch above the newest `v*` tag, so v0.1.0 is
+   followed by v0.1.1;
+2. runs the tests and builds the APK signed with your key;
+3. rebuilds the data packs if the pipeline changed since the last release, on
+   the monthly run, or when you run it by hand (**Actions > Release > Run
+   workflow**, tick **Rebuild data**); otherwise it copies the last release's
+   packs;
+4. publishes one release with the APK, the packs and their checksums.
+
+A data rebuild takes about 30 minutes; a release without one, about 10. To set
+the version yourself (say, v1.0.0), push that tag or create it on the Releases
+page; later automatic releases continue from it. Tags must look like `v1.2.3`
+(each part 0-99), and the version code comes from the tag, so a new tag must be
+higher than the last or phones will refuse the update.
+
+`.github/workflows/data.yml` only checks, on pull requests that touch the
+pipeline, that the packs still build.
 
 ### One-time signing setup (in Termux)
 
@@ -125,10 +145,7 @@ app or website go to the repo's Settings > Secrets and variables > Actions and a
 
 Then delete `southbound-key.txt`; the `.jks` backup is what matters.
 
-To release, create a tag from the repo's Releases page (Draft a new release >
-Choose a tag > type `v0.1.0` > Create new tag > Publish), or push one with git.
-The Release workflow builds the APK and attaches it to that release within a
-few minutes; until then the release has no APK.
+With the secrets in place, merging a pull request is all it takes to release.
 
 ## Developing
 
@@ -213,7 +230,7 @@ simply shows the schedule.
 
 ## Phase 2 exit test
 
-1. Load `transit-nyc.sqlite` from the Map data release like the other packs.
+1. Load `transit-nyc.sqlite` from the latest release like the other packs.
 2. Long-press or search a destination, tap **Directions**, then **Transit**.
 3. For each trip below, set **Depart at** to a weekday morning time, then
    compare the first option with the MTA Trip Planner or the line's printed
