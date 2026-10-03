@@ -47,6 +47,11 @@ internal object OverlayLayers {
     private const val INCIDENT_ROADWORK = "#F29900"
     private const val INCIDENT_OTHER = "#5F6368"
 
+    // Alerts from the map data, pinned along the route while navigating.
+    private const val ALERT_SPEED_CAMERA = "#1A73E8"
+    private const val ALERT_ALPR_CAMERA = "#7B1FA2"
+    private const val ALERT_SCHOOL_ZONE = "#F9AB00"
+
     fun install(style: Style) {
         if (style.getSource(ROUTES) != null) return
         style.addSource(GeoJsonSource(ROUTES, OverlayGeoJson.routes(emptyList())))
@@ -117,6 +122,9 @@ internal object OverlayLayers {
                         stop("CLOSURE", literal(INCIDENT_CLOSURE)),
                         stop("ACCIDENT", literal(INCIDENT_ACCIDENT)),
                         stop("ROADWORK", literal(INCIDENT_ROADWORK)),
+                        stop("SPEED_CAMERA", literal(ALERT_SPEED_CAMERA)),
+                        stop("ALPR_CAMERA", literal(ALERT_ALPR_CAMERA)),
+                        stop("SCHOOL_ZONE", literal(ALERT_SCHOOL_ZONE)),
                     ),
                 ),
                 circleStrokeColor("#FFFFFF"),

@@ -566,8 +566,11 @@ internal fun ExploreMap(
 
     val baseTrafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
     // Incidents along the route are pinned even when the traffic layer itself is hidden.
+    // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
+    val routeAlerts by services.guidance.routeAlerts.collectAsState()
+    val alertPins = if (inTrip) routeAlerts.map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) } else emptyList()
     val trafficOverlay = baseTrafficOverlay.copy(
-        incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() }).distinctBy { it.id },
+        incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() } + alertPins).distinctBy { it.id },
     )
     val overlays = when {
         inTrip -> MapOverlays(
@@ -652,6 +655,7 @@ internal fun ExploreMap(
             )
         }
 
+        val mutedUntilTurn by services.voice.mutedUntilNextTurn.collectAsState()
         if (inTrip) {
             NavigationOverlay(
                 state = navState,
@@ -675,6 +679,8 @@ internal fun ExploreMap(
                 },
                 arrivalSide = arrivalSide,
                 parkingNearby = parkingNearby,
+                mutedUntilNextTurn = mutedUntilTurn,
+                onVoiceLongPress = { if (mutedUntilTurn) services.voice.resumeVoice() else services.voice.muteUntilNextTurn() },
             )
             if (!following && location != null) {
                 // Above the ETA and trip progress at the bottom.
