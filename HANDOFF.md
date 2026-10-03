@@ -251,6 +251,59 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 5: the feel of the map and of guidance** (picked by the owner, October 2026)
+
+Map touch
+- [ ] Two-finger rotate and tilt, with a compass button that snaps back to north
+- [ ] One-finger zoom: double-tap and hold, slide up or down
+- [ ] A "Re-center" pill as soon as the map is panned away from the puck; tap it, or wait 10 s while navigating, to snap back heading-up
+
+Guidance
+- [ ] Landmark directions, Apple style: "turn right after the next light", "at the stop sign", "past the gas station". Source: OSM `highway=traffic_signals` / `stop` nodes and POIs along the route, matched to the maneuver point on the phone (needs the signals and POIs in a pack: add a `landmarks` table to the search pack or a small side table in the routing pack)
+- [ ] Smoother voice: synthesize the next instruction ahead of time so it plays at once, merge back-to-back turns ("then turn left"), never cut a sentence off; a short chime before an instruction and another before an alert
+- [ ] Voice options: choice of bundled Piper voices, distance style, street names on/off (exists), mute until the next turn
+- [ ] Haptic turns even with voice on (a setting), for bikes and noisy cars
+
+Traffic visuals
+- [ ] Slowdown colors on the active route and in the route picker, with "X min of delay", from NYC DOT links (and TomTom flow if that layer ever ships)
+- [ ] ETA in red when traffic adds time, "Typical: 25 min" when it's faster than usual
+- [ ] Crash and closure icons pinned along the route line with a tap-to-read card
+- [ ] "Faster route found, saves 6 min" banner mid-trip, accepted with one tap (compare the current route against a fresh one every few minutes while 511NY/DOT are on)
+
+Small details
+- [ ] Arrival: which side of the street the destination is on (Valhalla gives `side_of_street`), and parking nearby from the search pack
+- [ ] Spoken alerts for speed cameras and school zones from OSM tags in the packs
+- [ ] Highway signposts: exit number and destination text in the instruction banner (Valhalla's `sign` data, which Ferrostar exposes in the banner)
+- [ ] Flock / ALPR camera alerts: OSM tags `man_made=surveillance` + `surveillance:type=ALPR` (the DeFlock project maps them; `operator=Flock Safety`), built into a pack, shown on the map and spoken on approach. Offline only, so nothing about the drive leaves the phone
+
+Exit test: on a drive, the map rotates with two fingers and recenters by itself; a turn is announced as "after the next light" with a chime and no clipped speech; a slow stretch shows in orange on the route with the delay in the ETA; an ALPR camera on the route is announced before it.
+
+**Phase 6: driving essentials** (picked by the owner, October 2026)
+
+- [ ] Home and Work shortcuts: set from a place card, one tap from the search box to directions
+- [ ] Route options: avoid tolls, highways and ferries; a truck/RV profile with height and weight (Valhalla costing options, saved per mode)
+- [ ] Multi-stop trips: add stops from a place card, reorder them, skip one mid-trip
+- [ ] Navigation extras: current road name, arrival clock time, a bigger driving layout, night mode by sunset (computed on the phone from the fix)
+- [ ] Missing-region warning: before a trip that crosses a region whose basemap isn't installed, say so and offer the download
+
+Exit test: set Home, plan Home → a stop in Albany → Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
+
+**Phase 7: data and routing quality**
+
+- [ ] NYS Address Points in the search pack (CC0, twice-monthly) and a smaller `search-nys.sqlite`: index addresses from the state file instead of OSM, cap trigram text, measure before and after
+- [ ] Traffic-aware ETAs, then routing: adjust the ETA from NYC DOT speeds on the route's links; then the spike on live speeds in on-device Valhalla before committing to traffic-aware routing
+- [ ] Lane guidance: carry Valhalla's lane data through Ferrostar's banner parsing (patch or upstream, see Risks) and draw lanes under the instruction
+- [ ] Walking and cycling detail: step-free and stairs preferences for walking (pedestrian costing options), elevation profile for cycling (needs an elevation source in the pack)
+
+Exit test: an upstate house number searches to the right spot; a highway exit in NYC shows which lanes to take; an ETA across Manhattan changes with the live speeds.
+
+**Phase 8: live data and the car**
+
+- [ ] 511NY cameras and message signs on the map: tap a camera for its still, show sign text
+- [ ] Android Auto (car app library, no Play Services) or, failing that, a landscape driving layout
+
+Exit test: a camera still opens from the traffic layer; the app runs on a car screen or in landscape with a driving layout.
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
