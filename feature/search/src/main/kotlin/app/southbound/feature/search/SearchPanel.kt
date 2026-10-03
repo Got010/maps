@@ -2,7 +2,9 @@ package app.southbound.feature.search
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -21,6 +23,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +67,9 @@ import kotlinx.coroutines.withContext
 /** A named group of places shown while the search box is empty: a saved list, or recents. */
 data class PlaceGroup(val title: String, val places: List<Place>, val recents: Boolean = false)
 
+/** Phase 6: the two one-tap places above the saved lists. */
+enum class ShortcutSlot { HOME, WORK }
+
 /**
  * Full-screen search: type, see results as you go, pick one. While the box is
  * empty, the user's saved lists and recent places are offered instead.
@@ -79,7 +86,14 @@ fun SearchPanel(
     modifier: Modifier = Modifier,
     groups: List<PlaceGroup> = emptyList(),
     onClearRecents: (() -> Unit)? = null,
+    // Phase 6: Home and Work chips. Null [onOpenShortcut] hides them (e.g. while picking a stop).
+    home: Place? = null,
+    work: Place? = null,
+    onOpenShortcut: ((Place) -> Unit)? = null,
+    onSetShortcut: ((ShortcutSlot, Place) -> Unit)? = null,
 ) {
+    // Phase 6: the chip that was tapped while unset; the next pick sets it.
+    var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
     // Shown instead of "No matches" when the lookup itself failed, so a broken pack is visible.
@@ -100,6 +114,15 @@ fun SearchPanel(
         error = outcome.exceptionOrNull()?.let { "${it::class.simpleName}: ${it.message}" }
     }
 
+    // Phase 6: a pick while a Home or Work chip is waiting sets that shortcut first.
+    val pick: (SearchResult) -> Unit = { result ->
+        settingSlot?.let { slot ->
+            onSetShortcut?.invoke(slot, result.place)
+            settingSlot = null
+        }
+        onPick(result)
+    }
+
     Surface(modifier.fillMaxSize()) {
         Column(Modifier.safeDrawingPadding().imePadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -114,7 +137,7 @@ fun SearchPanel(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = {
                         keyboard?.hide()
-                        results.firstOrNull()?.let(onPick)
+                        results.firstOrNull()?.let(pick)
                     }),
                     trailingIcon = {
                         if (query.isNotEmpty()) {
@@ -131,6 +154,23 @@ fun SearchPanel(
                 )
             }
             HorizontalDivider()
+            // Phase 6: Home and Work chips while the box is empty.
+            if (query.isBlank() && onOpenShortcut != null) {
+                ShortcutChips(
+                    home = home,
+                    work = work,
+                    pending = settingSlot,
+                    onTap = { slot, place ->
+                        if (place != null) {
+                            keyboard?.hide()
+                            onOpenShortcut(place)
+                        } else {
+                            settingSlot = slot
+                            focus.requestFocus()
+                        }
+                    },
+                )
+            }
             when {
                 query.isBlank() && groups.any { it.places.isNotEmpty() } -> LazyColumn(Modifier.fillMaxWidth()) {
                     for (group in groups.filter { it.places.isNotEmpty() }) {
@@ -148,7 +188,7 @@ fun SearchPanel(
                                 icon = if (group.recents) Icons.Filled.History else Icons.Filled.Bookmark,
                                 onClick = {
                                     keyboard?.hide()
-                                    onPick(SearchResult(place, null))
+                                    pick(SearchResult(place, null))
                                 },
                             )
                         }
@@ -161,11 +201,41 @@ fun SearchPanel(
                     items(results, key = { it.place.id }) { result ->
                         ResultRow(result, onClick = {
                             keyboard?.hide()
-                            onPick(result)
+                            pick(result)
                         })
                     }
                 }
             }
+        }
+    }
+}
+
+// Phase 6: Home and Work chips.
+@Composable
+private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, onTap: (ShortcutSlot, Place?) -> Unit) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((slot, place) in listOf(ShortcutSlot.HOME to home, ShortcutSlot.WORK to work)) {
+                AssistChip(
+                    onClick = { onTap(slot, place) },
+                    label = { Text(stringResource(if (slot == ShortcutSlot.HOME) R.string.search_home else R.string.search_work)) },
+                    leadingIcon = {
+                        Icon(
+                            if (slot == ShortcutSlot.HOME) Icons.Filled.Home else Icons.Filled.Work,
+                            contentDescription = null,
+                            Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
+        }
+        if (pending != null) {
+            Text(
+                stringResource(if (pending == ShortcutSlot.HOME) R.string.search_set_home_hint else R.string.search_set_work_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
     }
 }

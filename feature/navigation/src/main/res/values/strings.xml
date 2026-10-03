@@ -7,4 +7,6 @@
     <string name="navigation_arrived">You\'ve arrived</string>
     <string name="navigation_done">Done</string>
     <string name="navigation_speed_limit">SPEED\nLIMIT</string>
+    <string name="navigation_arrive">Arrive</string>
+    <string name="navigation_skip_stop">Skip stop</string>
 </resources>

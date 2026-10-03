@@ -14,6 +14,9 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
@@ -53,18 +56,29 @@ fun NavigationOverlay(
     modifier: Modifier = Modifier,
     /** The user's speed from GPS, to colour the sign when they're over the limit. */
     speedMph: Double? = null,
+    // Phase 6: skip the next stop (null hides the button) and the after-sunset dark overlay.
+    onSkipStop: (() -> Unit)? = null,
+    darkOverlay: Boolean = false,
+    nowMs: Long = System.currentTimeMillis(),
 ) {
     KeepScreenOnDisposableEffect()
+    // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
+    val colors = if (darkOverlay) dynamicDarkColorScheme(LocalContext.current) else MaterialTheme.colorScheme
+    MaterialTheme(colorScheme = colors, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
         when (val trip = state.tripState) {
             is TripState.Navigating -> {
-                trip.visualInstruction?.let { instruction ->
-                    InstructionsView(
-                        instructions = instruction,
-                        distanceToNextManeuver = trip.progress.distanceToNextManeuver,
-                        remainingSteps = trip.remainingSteps,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
-                    )
+                // Phase 6: bigger banner, with the road name under it.
+                Column(Modifier.align(Alignment.TopCenter).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    trip.visualInstruction?.let { instruction ->
+                        InstructionsView(
+                            instructions = instruction,
+                            distanceToNextManeuver = trip.progress.distanceToNextManeuver,
+                            remainingSteps = trip.remainingSteps,
+                            theme = DrivingInstructionRowTheme,
+                        )
+                    }
+                    CurrentRoadName(trip.remainingSteps.firstOrNull()?.roadName)
                 }
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp),
@@ -85,12 +99,20 @@ fun NavigationOverlay(
                         Box(Modifier.weight(1f))
                         VoiceButton(voiceMode, onVoiceModeChange)
                     }
+                    // Phase 6: arrival clock time and Skip stop.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        ArrivalTime(nowMs, trip.progress.durationRemaining)
+                        if (onSkipStop != null && trip.remainingWaypoints.size > 1) {
+                            OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
+                        }
+                    }
                     TripProgressView(progress = trip.progress, onTapExit = onEnd, modifier = Modifier.fillMaxWidth())
                 }
             }
             is TripState.Complete -> ArrivedCard(onEnd, Modifier.align(Alignment.BottomCenter).padding(16.dp))
             is TripState.Idle -> Unit
         }
+    }
     }
 }
 
