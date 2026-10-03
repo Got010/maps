@@ -74,7 +74,7 @@ private val NAVIGATION_COMPASS_OFFSET = 120.dp
  * new request. While [navigating], the camera follows the puck heading-up and
  * tilted, as turn-by-turn apps do. A long press reports the spot to
  * [onLongPress], e.g. to drop a pin; a tap on an incident pin reports its id
- * to [onIncidentTap].
+ * to [onIncidentTap], and a tap on an alternative route its rank to [onRouteTap].
  *
  * Two-finger rotate and tilt, double-tap zoom and one-finger "double tap and
  * drag" zoom are on, with MapLibre's compass (it fades when facing north and
@@ -98,6 +98,8 @@ fun SouthboundMap(
     /** Screen edges covered by panels; camera moves keep their subject clear of them. */
     obscured: PaddingValues = PaddingValues(),
     onIncidentTap: ((String) -> Unit)? = null,
+    /** A tap on an alternative route's line reports its [MapLine.rank]. */
+    onRouteTap: ((Int) -> Unit)? = null,
     /** Where the map opens before the first fix, e.g. the middle of the installed regions. */
     initialCenter: MapPoint = NYC_CENTER,
     initialZoom: Double = START_ZOOM,
@@ -198,9 +200,9 @@ fun SouthboundMap(
         }
     }
 
-    LaunchedEffect(style, overlays) {
+    LaunchedEffect(style, overlays, darkTheme) {
         val loaded = style ?: return@LaunchedEffect
-        OverlayLayers.update(loaded, overlays)
+        OverlayLayers.update(loaded, overlays, darkTheme)
     }
 
     val currentOnLongPress by rememberUpdatedState(onLongPress)
@@ -216,18 +218,37 @@ fun SouthboundMap(
     }
 
     val currentOnIncidentTap by rememberUpdatedState(onIncidentTap)
+    val currentOnRouteTap by rememberUpdatedState(onRouteTap)
     DisposableEffect(map) {
         val loadedMap = map ?: return@DisposableEffect onDispose { }
+        // Returns true only when the tap was used, so other click listeners still see the rest.
         val listener = MapLibreMap.OnMapClickListener { latLng ->
-            val handler = currentOnIncidentTap ?: return@OnMapClickListener false
-            if (loadedMap.style?.getLayer(OverlayLayers.INCIDENTS) == null) return@OnMapClickListener false
+            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
             val screen = loadedMap.projection.toScreenLocation(latLng)
-            // A finger is wider than a pin: search a small box around the tap.
+            // A finger is wider than a pin or a thin line: search a small box around the tap.
             val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
-            val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.INCIDENTS).firstOrNull() ?: return@OnMapClickListener false
-            val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
-            handler(id)
-            true
+            // Incidents first: they sit on top of the routes.
+            val incidentHandler = currentOnIncidentTap
+            if (incidentHandler != null && loadedStyle.getLayer(OverlayLayers.INCIDENTS) != null) {
+                val id = loadedMap.queryRenderedFeatures(box, OverlayLayers.INCIDENTS).firstOrNull()?.getStringProperty("id")
+                if (id != null) {
+                    incidentHandler(id)
+                    return@OnMapClickListener true
+                }
+            }
+            // Then the other routes. Only threads can be picked (the leader is already chosen); on a
+            // stretch several share, the fastest of them wins.
+            val routeHandler = currentOnRouteTap
+            if (routeHandler != null && loadedStyle.getLayer(OverlayLayers.ROUTE_THREADS) != null) {
+                val rank = loadedMap.queryRenderedFeatures(box, OverlayLayers.ROUTE_THREADS)
+                    .mapNotNull { it.getNumberProperty("rank")?.toInt() }
+                    .minOrNull()
+                if (rank != null) {
+                    routeHandler(rank)
+                    return@OnMapClickListener true
+                }
+            }
+            false
         }
         loadedMap.addOnMapClickListener(listener)
         onDispose { loadedMap.removeOnMapClickListener(listener) }
