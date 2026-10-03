@@ -48,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.southbound.core.voice.AudioOutput
+import app.southbound.core.voice.BuiltInVoice
 import app.southbound.core.voice.DetailLevel
+import app.southbound.core.voice.DistanceStyle
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.GuidanceVolume
 import app.southbound.core.voice.OtherAudio
@@ -122,13 +124,38 @@ fun SettingsScreen(
                     },
                 ),
             ) { e -> update { it.copy(engine = e) } }
+            Choice(
+                R.string.voice_built_in_voice,
+                BuiltInVoice.entries,
+                settings.builtInVoice,
+                { stringResource(it.label()) },
+                note = stringResource(R.string.voice_built_in_voice_note),
+            ) { v -> update { it.copy(builtInVoice = v) } }
 
             Toggle(R.string.voice_street_names, settings.streetNames) { v -> update { it.copy(streetNames = v) } }
             Choice(R.string.voice_detail, DetailLevel.entries, settings.detail, { stringResource(it.label()) }) { d ->
                 update { it.copy(detail = d) }
             }
+            Choice(
+                R.string.voice_distance_style,
+                DistanceStyle.entries,
+                settings.distanceStyle,
+                { stringResource(it.label()) },
+                note = stringResource(R.string.voice_distance_style_note),
+            ) { d -> update { it.copy(distanceStyle = d) } }
+            Toggle(R.string.voice_instruction_chime, settings.instructionChime) { v -> update { it.copy(instructionChime = v) } }
+            Toggle(R.string.voice_alert_chime, settings.alertChime) { v -> update { it.copy(alertChime = v) } }
+            Toggle(R.string.voice_haptic_turns, settings.hapticTurns, R.string.voice_haptic_turns_note) { v ->
+                update { it.copy(hapticTurns = v) }
+            }
             Toggle(R.string.voice_traffic, settings.trafficAlerts) { v -> update { it.copy(trafficAlerts = v) } }
             Toggle(R.string.voice_speed_limits, settings.speedLimitWarnings) { v -> update { it.copy(speedLimitWarnings = v) } }
+            Subheading(R.string.voice_road_alerts)
+            Toggle(R.string.voice_speed_cameras, settings.speedCameraAlerts) { v -> update { it.copy(speedCameraAlerts = v) } }
+            Toggle(R.string.voice_alpr_cameras, settings.alprCameraAlerts, R.string.voice_alpr_cameras_note) { v ->
+                update { it.copy(alprCameraAlerts = v) }
+            }
+            Toggle(R.string.voice_school_zones, settings.schoolZoneAlerts) { v -> update { it.copy(schoolZoneAlerts = v) } }
             Toggle(R.string.voice_reroute, settings.rerouteAnnouncement) { v -> update { it.copy(rerouteAnnouncement = v) } }
             Toggle(R.string.voice_transit_stops, settings.transitStopAlerts) { v -> update { it.copy(transitStopAlerts = v) } }
             Choice(R.string.voice_volume, GuidanceVolume.entries, settings.volume, { stringResource(it.label()) }) { v ->
@@ -316,6 +343,16 @@ private fun engineLabel(engine: VoiceEngine?) = when (engine) {
 private fun DetailLevel.label() = when (this) {
     DetailLevel.FULL -> R.string.voice_detail_full
     DetailLevel.BRIEF -> R.string.voice_detail_brief
+}
+
+private fun BuiltInVoice.label() = when (this) {
+    BuiltInVoice.AMY -> R.string.voice_built_in_amy
+    BuiltInVoice.NORMAN -> R.string.voice_built_in_norman
+}
+
+private fun DistanceStyle.label() = when (this) {
+    DistanceStyle.FULL -> R.string.voice_distance_full
+    DistanceStyle.SHORT -> R.string.voice_distance_short
 }
 
 private fun GuidanceVolume.label() = when (this) {
