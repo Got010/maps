@@ -1,18 +1,9 @@
-# Builds the map data packs on GitHub's machines, so no computer is needed.
-# Run it from the Actions tab (Run workflow), or wait for the monthly schedule.
-# Each run publishes a "Map data" pre-release with the NYC packs: the map
-# (basemap-nyc.pmtiles), directions (routing-nyc.tar), search
-# (search-nyc.sqlite) and transit schedules (transit-nyc.sqlite). Download
-# them on the phone and share each to Southbound.
-#
-# On pull requests that touch the pipeline it only builds, to prove the
-# pipeline still works, and publishes nothing.
+# Proves the data pipeline still builds, on pull requests that touch it.
+# Publishing happens in release.yml, which puts the packs and the APK in one
+# release after the PR is merged.
 name: Map data
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '17 6 2 * *'   # 06:17 UTC on the 2nd of each month
   pull_request:
     paths:
       - 'pipeline/tiles/**'
@@ -24,7 +15,7 @@ on:
       - '.github/workflows/data.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: map-data-${{ github.ref }}
@@ -58,20 +49,3 @@ jobs:
             sha256sum "$pack" | tee "$pack.sha256"
           done
           ls -lh
-
-      - name: Publish map data release
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="data-$(date -u +%Y.%m.%d-%H%M)"
-          # Pre-release and not "latest", so Obtainium keeps tracking APK releases only.
-          cd pipeline/data/out
-          gh release create "$TAG" \
-            basemap-nyc.pmtiles basemap-nyc.pmtiles.sha256 \
-            routing-nyc.tar routing-nyc.tar.sha256 \
-            search-nyc.sqlite search-nyc.sqlite.sha256 \
-            transit-nyc.sqlite transit-nyc.sqlite.sha256 \
-            --title "Map data $(date -u +%Y-%m-%d)" \
-            --notes "NYC packs built from the Geofabrik New York extract: the map (basemap-nyc.pmtiles), directions (routing-nyc.tar) and search (search-nyc.sqlite), plus transit schedules (transit-nyc.sqlite) from MTA GTFS. Download each on your phone and share it to Southbound. Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA." \
-            --prerelease --latest=false

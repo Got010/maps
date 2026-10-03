@@ -7,7 +7,7 @@
     <string name="explore_location_settings">Open settings</string>
     <string name="explore_pack_missing_title">NYC map not installed</string>
     <string name="explore_pack_invalid_title">NYC map file is damaged</string>
-    <string name="explore_pack_body">Download basemap-nyc.pmtiles from the Southbound map data release on GitHub, then import it here. The map stays on this phone.</string>
+    <string name="explore_pack_body">Download basemap-nyc.pmtiles from the latest Southbound release on GitHub, then import it here. The map stays on this phone.</string>
     <string name="explore_import">Import map file</string>
     <string name="explore_importing">Importing…</string>
     <string name="explore_import_not_a_pack">That file isn\'t a Southbound map or data pack.</string>
