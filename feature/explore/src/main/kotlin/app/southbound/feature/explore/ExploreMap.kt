@@ -664,7 +664,16 @@ internal fun ExploreMap(
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         services.voice.guidanceMode = target.mode.guidanceMode()
-        nav.start(route, target.mode)
+        // Says "Starting. You'll arrive at about 1:11 PM, 12 miles." before the first turn.
+        val summary = ready.summaries.getOrNull(ready.selected) ?: RouteSummary.of(route)
+        services.guidance.startTrip(
+            navigator = nav,
+            route = route,
+            mode = target.mode,
+            places = (target.stops + target.place).map { it.name },
+            durationSeconds = summary.durationSeconds + ready.delaySeconds.getOrElse(ready.selected) { 0.0 },
+            distanceMeters = summary.distanceMeters,
+        )
     }
 
     BackHandler(enabled = !inTrip && panel != Panel.Browse) {
