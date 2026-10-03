@@ -13,12 +13,20 @@ package app.southbound.core.voice
  */
 class SpeechQueue(private val maxWaitMillis: Long = MAX_WAIT_MS) {
 
-    /** One sentence to say. [utteranceId] ties a route prompt to its turn, for staleness. */
+    /**
+     * One sentence to say. [utteranceId] ties a route prompt to its turn, for
+     * staleness. The player calls [onStart] just before the sound starts and
+     * [onDone] once it is finished with the sentence (played, cut off, or
+     * found stale just before playing). A sentence the queue drops (cleared,
+     * replaced or stale) gets neither.
+     */
     data class Item(
         val action: GuidanceAction.Speak,
         val kind: UtteranceKind,
         val queuedAt: Long,
         val utteranceId: String? = null,
+        val onStart: (() -> Unit)? = null,
+        val onDone: (() -> Unit)? = null,
     )
 
     private val waiting = ArrayDeque<Item>()

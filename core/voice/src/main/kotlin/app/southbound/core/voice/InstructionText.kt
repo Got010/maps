@@ -71,6 +71,15 @@ object InstructionText {
         return "$first, then ${second.replaceFirstChar { it.lowercaseChar() }}."
     }
 
+    private val ARRIVED = Regex("""\barrived\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * True for the route's own "You have arrived at your destination."; the
+     * app says its own arrival ("You have arrived at Joe's Pizza.") instead.
+     * "You will arrive ..." and "Your destination is on the right." are not.
+     */
+    fun isArrived(text: String): Boolean = ARRIVED.containsMatchIn(text)
+
     private fun firstSentence(text: String): String =
         text.split(Regex("""(?<=\.)\s+""")).first().trim().trimEnd('.', ' ', ',')
 }

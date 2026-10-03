@@ -33,4 +33,18 @@ object TripStops {
 
     /** True when there is a stop to skip, i.e. more than the destination remains. */
     fun canSkip(remainingCount: Int): Boolean = remainingCount > 1
+
+    /**
+     * A stop was reached on the way: the waypoints left dropped from [before]
+     * to [after] while the route stayed the same. Returns the stop just
+     * reached and the next place to go, from [route] (the stops, then the
+     * destination; see [route]). Null when nothing was reached, or the counts
+     * don't fit [route].
+     */
+    fun <T> reached(route: List<T>, before: Int, after: Int): Pair<T, T>? {
+        if (after < 1 || after >= before || before > route.size) return null
+        val next = route.getOrNull(route.size - after) ?: return null
+        val stop = route.getOrNull(route.size - after - 1) ?: return null
+        return stop to next
+    }
 }
