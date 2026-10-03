@@ -17,6 +17,20 @@ interface GuidanceContext {
      */
     fun followUpFor(instruction: SpokenInstruction): String?
 
-    /** False once the turn the prompt [utteranceId] announces is behind the driver. */
+    /**
+     * False once the turn the prompt [utteranceId] announces is behind the
+     * driver, or so close that the prompt would be heard during it. Asked
+     * again just before the prompt plays.
+     */
     fun isCurrent(utteranceId: String): Boolean
+
+    /**
+     * False for a route prompt the app doesn't want said at all: one whose
+     * turn was already said as a follow-up, or the route's own "You have
+     * arrived" (the app says its own). Asked as Ferrostar triggers it.
+     */
+    fun shouldSpeak(instruction: SpokenInstruction): Boolean = true
+
+    /** [instruction], chained with the turn after it ([followUpFor]), has started playing. */
+    fun followUpSpoken(instruction: SpokenInstruction) {}
 }
