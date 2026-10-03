@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Build the basemap pack pipeline/data/out/basemap-<region>.pmtiles
 #
-# Downloads the Geofabrik New York extract (verified against its .md5), then
-# runs Planetiler in Docker with the OpenMapTiles profile, bounded to the
-# region (see pipeline/regions.json). Water polygons and Natural Earth data
-# are fetched by Planetiler's --download on the first run and cached in
-# pipeline/data/sources.
+# Downloads the region's Geofabrik extract (New York, or New Jersey for njn;
+# verified against its .md5), then runs Planetiler in Docker with the
+# OpenMapTiles profile, bounded to the region (see pipeline/regions.json).
+# Water polygons and Natural Earth data are fetched by Planetiler's --download
+# on the first run and cached in pipeline/data/sources. The njn map holds New
+# Jersey only: the New York side of its box is drawn by the nyc and hudson maps.
 #
 # Usage: build.sh <region>      e.g. build.sh nyc, build.sh western
 set -euo pipefail
@@ -19,7 +20,7 @@ PLANETILER_IMAGE="${PLANETILER_IMAGE:-ghcr.io/onthegomap/planetiler:0.10.2}"
 PLANETILER_HEAP="${PLANETILER_HEAP:-4g}"
 
 region_bounds "$REGION"
-fetch_extract
+primary_extract "$REGION"
 
 OUTPUT="basemap-$REGION.pmtiles"
 echo "==> Planetiler ($PLANETILER_IMAGE) -> $OUTPUT ($BOUNDS)"

@@ -5,8 +5,8 @@
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
 
-REGIONS := nyc li hudson capital western nys
-BASEMAP_REGIONS := nyc li hudson capital western
+REGIONS := nyc li hudson capital western njn nys
+BASEMAP_REGIONS := nyc li hudson capital western njn
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
@@ -18,7 +18,7 @@ ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGION
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: five regional basemaps, statewide routing and search, NYC transit, voice packs
+## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys), NYC transit, voice packs
 state: $(STATE_PACKS)
 
 $(addprefix tiles-,$(REGIONS)): tiles-%:

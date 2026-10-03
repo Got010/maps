@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Build the routing pack pipeline/data/out/routing-<region>.tar
 #
-# Clips the Geofabrik New York extract to the region (or takes the whole
-# extract for nys), then builds Valhalla routing tiles in Docker and packs
-# them into one tar. The app opens the tar with valhalla-mobile, so the
+# Builds the region's extract (see clip_extract in lib/common.sh: New York cut
+# to the region, or for nys the whole New York extract merged with northern
+# New Jersey), then builds Valhalla routing tiles in Docker and packs them into
+# one tar. The app opens the tar with valhalla-mobile, so the
 # Valhalla version here must match the one that library is built on
 # (valhalla-mobile 0.6.3 pins Valhalla 3.6.3).
 #
-# Releases ship routing-nys.tar, one graph for the whole state, so a trip
-# from Buffalo to Montauk routes offline. routing-nyc.tar still builds for
+# Releases ship routing-nys.tar, one graph for New York and northern New
+# Jersey, so a trip from Buffalo to Montauk, or from Newark to Albany, routes
+# offline. (The id stays nys; renaming it is a pack migration.) routing-nyc.tar still builds for
 # quick tests.
 #
 # Usage: build.sh <region>      e.g. build.sh nys
