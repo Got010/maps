@@ -13,6 +13,9 @@ object UserDataCodec {
             "lists" to data.lists.map { mapOf("id" to it.id, "name" to it.name, "builtIn" to it.builtIn) },
             "saved" to data.saved.map { mapOf("id" to it.id, "list" to it.listId, "savedAt" to it.savedAt, "place" to place(it.place)) },
             "recents" to data.recents.map { mapOf("seenAt" to it.seenAt, "place" to place(it.place)) },
+        ) + listOfNotNull(
+            data.home?.let { "home" to place(it) },
+            data.work?.let { "work" to place(it) },
         ),
     )
 
@@ -34,7 +37,11 @@ object UserDataCodec {
             RecentPlace(placeRef(m["place"]), m.long("seenAt"))
         }
         val lastId = (root["lastId"] as? Long) ?: maxOf(lists.maxOfOrNull { it.id } ?: 0, saved.maxOfOrNull { it.id } ?: 0)
-        return UserData(lists.ifEmpty { UserData.DEFAULT_LISTS }, saved, recents, lastId)
+        return UserData(
+            lists.ifEmpty { UserData.DEFAULT_LISTS }, saved, recents, lastId,
+            home = root["home"]?.let(::placeRef),
+            work = root["work"]?.let(::placeRef),
+        )
     }
 
     private fun place(p: PlaceRef): Map<String, Any?> = mapOf(

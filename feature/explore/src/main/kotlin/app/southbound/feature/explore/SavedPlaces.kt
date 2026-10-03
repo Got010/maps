@@ -1,5 +1,6 @@
 package app.southbound.feature.explore
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceKind
 import app.southbound.core.userdata.PlaceRef
+import app.southbound.core.userdata.Shortcut
 import app.southbound.core.userdata.UserData
 import app.southbound.feature.search.PlaceGroup
 
@@ -49,6 +52,8 @@ fun SaveDialog(
     onToggle: (listId: Long, saved: Boolean) -> Unit,
     onCreateList: (String) -> Unit,
     onDismiss: () -> Unit,
+    // Phase 6: Set as Home / Set as Work; called with null to clear it.
+    onSetShortcut: (Shortcut, Boolean) -> Unit = { _, _ -> },
 ) {
     val ref = place.toRef()
     val inLists = data.listsContaining(ref).map { it.id }.toSet()
@@ -62,6 +67,26 @@ fun SaveDialog(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = list.id in inLists, onCheckedChange = { onToggle(list.id, it) })
                         Text(list.name, Modifier.weight(1f))
+                    }
+                }
+                // Phase 6: Home and Work.
+                val shortcuts = data.shortcutsOf(ref)
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (kind in Shortcut.entries) {
+                        val isSet = kind in shortcuts
+                        OutlinedButton(onClick = { onSetShortcut(kind, !isSet) }) {
+                            Text(
+                                stringResource(
+                                    when {
+                                        kind == Shortcut.HOME && isSet -> R.string.explore_shortcut_clear_home
+                                        kind == Shortcut.HOME -> R.string.explore_shortcut_set_home
+                                        isSet -> R.string.explore_shortcut_clear_work
+                                        else -> R.string.explore_shortcut_set_work
+                                    },
+                                ),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {

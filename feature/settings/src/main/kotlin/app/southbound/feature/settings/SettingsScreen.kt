@@ -227,6 +227,10 @@ fun SettingsScreen(
                 Text(stringResource(R.string.voice_test), Modifier.padding(start = 8.dp))
             }
 
+            // Phase 6: driving options.
+            HorizontalDivider(Modifier.padding(top = 24.dp))
+            DrivingSection()
+
             if (network != null && secrets != null) {
                 HorizontalDivider(Modifier.padding(top = 24.dp))
                 UpdatesSection(network, secrets)

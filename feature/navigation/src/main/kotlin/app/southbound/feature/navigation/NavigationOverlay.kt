@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
@@ -62,6 +65,9 @@ fun NavigationOverlay(
     modifier: Modifier = Modifier,
     /** The user's speed from GPS, to colour the sign when they're over the limit. */
     speedMph: Double? = null,
+    // Phase 6: skip the next stop (null hides the button) and the after-sunset dark overlay.
+    onSkipStop: (() -> Unit)? = null,
+    darkOverlay: Boolean = false,
     /** Time live traffic adds to what's left of the trip, in seconds; 0 when unknown or none. */
     delaySeconds: Double = 0.0,
     /** A faster route was found: minutes it saves, with the buttons that act on it. Null when there is none. */
@@ -76,6 +82,9 @@ fun NavigationOverlay(
     onVoiceLongPress: () -> Unit = {},
 ) {
     KeepScreenOnDisposableEffect()
+    // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
+    val colors = if (darkOverlay) dynamicDarkColorScheme(LocalContext.current) else MaterialTheme.colorScheme
+    MaterialTheme(colorScheme = colors, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
         when (val trip = state.tripState) {
             is TripState.Navigating -> {
@@ -88,9 +97,11 @@ fun NavigationOverlay(
                             instructions = instruction,
                             distanceToNextManeuver = trip.progress.distanceToNextManeuver,
                             remainingSteps = trip.remainingSteps,
+                            theme = DrivingInstructionRowTheme,
                         )
                         HighwaySign(instruction.primaryContent)
                     }
+                    CurrentRoadName(trip.remainingSteps.firstOrNull()?.roadName)
                     fasterRoute?.let { FasterRouteBanner(it) }
                 }
                 Column(
@@ -112,13 +123,20 @@ fun NavigationOverlay(
                         Box(Modifier.weight(1f))
                         VoiceButton(voiceMode, onVoiceModeChange, mutedUntilNextTurn, onVoiceLongPress)
                     }
-                    EtaLine(trip.progress.durationRemaining, delaySeconds)
+                    // Arrival time with any traffic delay, and Skip stop while more stops remain.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        EtaLine(trip.progress.durationRemaining, delaySeconds)
+                        if (onSkipStop != null && trip.remainingWaypoints.size > 1) {
+                            OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
+                        }
+                    }
                     TripProgressView(progress = trip.progress, onTapExit = onEnd, modifier = Modifier.fillMaxWidth())
                 }
             }
             is TripState.Complete -> ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier.align(Alignment.BottomCenter).padding(16.dp))
             is TripState.Idle -> Unit
         }
+    }
     }
 }
 

@@ -18,6 +18,9 @@ data class PlaceRef(
     internal fun key(): String = String.format(java.util.Locale.ROOT, "%.5f,%.5f", lat, lon)
 }
 
+/** The two special places the search box offers in one tap. */
+enum class Shortcut { HOME, WORK }
+
 /** A named list of saved places. [builtIn] lists can't be deleted. */
 data class PlaceList(val id: Long, val name: String, val builtIn: Boolean = false)
 
@@ -36,7 +39,20 @@ data class UserData(
     val recents: List<RecentPlace> = emptyList(),
     /** Ids handed out so far; never reused, so a deleted list's id can't come back. */
     val lastId: Long = DEFAULT_LISTS.maxOf { it.id },
+    // Phase 6: Home and Work shortcuts.
+    val home: PlaceRef? = null,
+    val work: PlaceRef? = null,
 ) {
+    fun shortcut(kind: Shortcut): PlaceRef? = if (kind == Shortcut.HOME) home else work
+
+    /** Which shortcut [place] is, if any; Home wins when both point at the same place. */
+    fun shortcutsOf(place: PlaceRef): Set<Shortcut> =
+        listOfNotNull(Shortcut.HOME.takeIf { home?.sameAs(place) == true }, Shortcut.WORK.takeIf { work?.sameAs(place) == true }).toSet()
+
+    /** Sets or, with null, clears a shortcut. */
+    fun withShortcut(kind: Shortcut, place: PlaceRef?): UserData =
+        if (kind == Shortcut.HOME) copy(home = place) else copy(work = place)
+
     fun listsContaining(place: PlaceRef): List<PlaceList> {
         val ids = saved.filter { it.place.sameAs(place) }.map { it.listId }.toSet()
         return lists.filter { it.id in ids }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
@@ -58,6 +59,8 @@ fun PlaceCard(
     saved: Boolean = false,
     /** More rows under the actions, such as transit departures nearby. */
     extra: (@Composable () -> Unit)? = null,
+    // Phase 6: while planning a trip, add this place as a stop before the destination.
+    onAddStop: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     Surface(
@@ -94,6 +97,13 @@ fun PlaceCard(
                     Button(onClick = onDirections) {
                         Icon(Icons.Filled.Directions, contentDescription = null, Modifier.size(18.dp))
                         Text(stringResource(R.string.place_directions), Modifier.padding(start = 8.dp))
+                    }
+                }
+                // Phase 6: Add stop.
+                onAddStop?.let {
+                    Button(onClick = it) {
+                        Icon(Icons.Filled.AddLocationAlt, contentDescription = null, Modifier.size(18.dp))
+                        Text(stringResource(R.string.place_add_stop), Modifier.padding(start = 8.dp))
                     }
                 }
                 onSave?.let {

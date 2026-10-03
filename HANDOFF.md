@@ -274,15 +274,15 @@ Map half:
 - [x] Highway signposts from the banner's exit numbers
 - Not verified: none of this has been built or run (the Android build can't run in the dev container); the pure parts are unit-tested.
 
-**Phase 6: driving essentials** (picked by the owner, October 2026)
+**Phase 6: driving essentials** (picked by the owner, October 2026; built, not yet run on a phone)
 
-- [ ] Home and Work shortcuts: set from a place card, one tap from the search box to directions
-- [ ] Route options: avoid tolls, highways and ferries; a truck/RV profile with height and weight (Valhalla costing options, saved per mode)
-- [ ] Multi-stop trips: add stops from a place card, reorder them, skip one mid-trip
-- [ ] Navigation extras: current road name, arrival clock time, a bigger driving layout, night mode by sunset (computed on the phone from the fix)
-- [ ] Missing-region warning: before a trip that crosses a region whose basemap isn't installed, say so and offer the download
+- [x] Home and Work shortcuts: set from the place card's Save dialog (Set as Home / Set as Work), two chips at the top of the search panel while the box is empty. An unset chip asks you to search and pick; the pick sets it.
+- [x] Route options: avoid tolls, highways and ferries, and a Car or Truck/RV profile (height, width, length in feet, weight in tons) in an Options sheet on the route preview. Saved in preferences (`RouteOptionsStore`), applied as Valhalla `costing_options` injected into each request (`RouteOptions.withPrefs`), and so also used by reroutes and skip-stop. Driving only; walking and cycling ignore them.
+- [x] Multi-stop trips: Add stop on a place card while planning (or from the route sheet), stops listed in the sheet with up, down and remove, Skip stop during a trip. Not done: adding a stop in the middle of a trip.
+- [x] Navigation extras: current road name, arrival clock time in the phone's 12/24 hour format, larger instruction text (Ferrostar `InstructionRowTheme`), and night mode by sunset (NOAA equations in `core/map SunTimes`, Settings > Driving toggle, on by default).
+- [x] Missing-region warning in the route preview with a Download button that ticks the region and starts an update check.
 
-Exit test: set Home, plan Home → a stop in Albany → Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
+Exit test: set Home, plan Home, a stop in Albany, then Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
 
 **Phase 7: data and routing quality**
 

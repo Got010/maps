@@ -46,5 +46,9 @@
     <string name="explore_save_add">Add</string>
     <string name="explore_save_done">Done</string>
     <string name="explore_speeding_spoken">The speed limit is %1$d miles per hour.</string>
+    <string name="explore_shortcut_set_home">Set as Home</string>
+    <string name="explore_shortcut_set_work">Set as Work</string>
+    <string name="explore_shortcut_clear_home">Remove as Home</string>
+    <string name="explore_shortcut_clear_work">Remove as Work</string>
     <string name="explore_recenter">Re-center</string>
 </resources>
