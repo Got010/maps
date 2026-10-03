@@ -44,8 +44,8 @@ class TrafficFeedTest {
         assertTrue(feed(ny511 = true, dot = false, key = null).refresh().incidents.isEmpty())
         assertTrue(requested.isEmpty())
         val snapshot = feed(ny511 = true, dot = false).refresh()
-        assertEquals(4, snapshot.incidents.size)
-        assertEquals(2, snapshot.closures.size)
+        assertEquals(8, snapshot.incidents.size)
+        assertEquals(3, snapshot.closures.size)
         assertEquals(listOf(NetworkFeature.TRAFFIC_511NY), requested.map { it.first })
         assertTrue(requested.single().second.startsWith("https://511ny.org/api/getevents?key=KEY"))
     }

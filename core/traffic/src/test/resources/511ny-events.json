@@ -57,5 +57,48 @@
     "Latitude": 40.78,
     "Longitude": -73.96,
     "Extra": {"nested": [1, 2, 3]}
+  },
+  {
+    "ID": "NY-511-1006",
+    "RoadwayName": "I-87",
+    "DirectionOfTravel": "Southbound",
+    "Description": "Police activity on I-87 Southbound near Exit 15.",
+    "LanesStatus": "1 Right lane closed",
+    "EventType": "accidentsAndIncidents",
+    "EventSubType": "Police Activity",
+    "Severity": "Minor",
+    "LastUpdated": "10/02/2026 11:00:00 PM",
+    "Latitude": 41.1,
+    "Longitude": -74.15
+  },
+  {
+    "ID": "NY-511-1007",
+    "RoadwayName": "NY-17",
+    "DirectionOfTravel": "Both Directions",
+    "Description": "Speed enforcement on NY-17 near Exit 130.",
+    "EventType": "generalInfo",
+    "Latitude": 41.35,
+    "Longitude": -74.45
+  },
+  {
+    "ID": "NY-511-1008",
+    "RoadwayName": "I-95",
+    "DirectionOfTravel": "Northbound",
+    "Description": "Police activity on I-95 Northbound; all lanes closed.",
+    "LanesStatus": "All lanes closed",
+    "EventType": "accidentsAndIncidents",
+    "EventSubType": "Police Activity",
+    "Latitude": 40.85,
+    "Longitude": -73.93
+  },
+  {
+    "ID": "NY-511-1009",
+    "RoadwayName": "I-684",
+    "DirectionOfTravel": "Southbound",
+    "Description": "Disabled vehicle on I-684, police on scene.",
+    "EventType": "accidentsAndIncidents",
+    "EventSubType": "Disabled Vehicle",
+    "Latitude": 41.2,
+    "Longitude": -73.7
   }
 ]
