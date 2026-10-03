@@ -36,6 +36,8 @@ data class MapOverlays(
     /** Where a route ends, drawn when it differs from [pin]. */
     val destination: MapPoint? = null,
     val traffic: TrafficOverlay = TrafficOverlay.NONE,
+    /** Stretches of the selected route coloured by live speed; drawn on top of the route line. */
+    val slowdowns: List<SpeedLine> = emptyList(),
 )
 
 /**

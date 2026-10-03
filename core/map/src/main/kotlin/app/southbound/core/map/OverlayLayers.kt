@@ -26,6 +26,7 @@ internal object OverlayLayers {
     private const val ROUTES = "southbound-routes"
     private const val PINS = "southbound-pins"
     private const val SPEEDS = "southbound-speeds"
+    private const val SLOWDOWNS = "southbound-slowdowns"
     const val INCIDENTS = "southbound-incidents"
 
     private const val ROUTE_BLUE = "#1A73E8"
@@ -51,16 +52,16 @@ internal object OverlayLayers {
         style.addSource(GeoJsonSource(ROUTES, OverlayGeoJson.routes(emptyList())))
         style.addSource(GeoJsonSource(PINS, OverlayGeoJson.pins(null, null)))
         style.addSource(GeoJsonSource(SPEEDS, OverlayGeoJson.speeds(emptyList())))
+        style.addSource(GeoJsonSource(SLOWDOWNS, OverlayGeoJson.speeds(emptyList())))
         style.addSource(GeoJsonSource(INCIDENTS, OverlayGeoJson.incidents(emptyList())))
 
+        val speedColor = step(
+            get("speed"), literal(SPEED_STOPPED),
+            stop(10, literal(SPEED_SLOW)), stop(25, literal(SPEED_MOVING)), stop(40, literal(SPEED_FREE)),
+        )
         // Live speeds colour the road; they sit under the routes.
         val speeds = LineLayer("$SPEEDS-line", SPEEDS).withProperties(
-            lineColor(
-                step(
-                    get("speed"), literal(SPEED_STOPPED),
-                    stop(10, literal(SPEED_SLOW)), stop(25, literal(SPEED_MOVING)), stop(40, literal(SPEED_FREE)),
-                ),
-            ),
+            lineColor(speedColor),
             lineWidth(4f),
             lineOpacity(0.9f),
             lineCap(Property.LINE_CAP_ROUND),
@@ -79,16 +80,25 @@ internal object OverlayLayers {
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND),
         )
+        // The selected route's slow stretches, drawn over its blue line (same bands as the speed layer).
+        val slowdowns = LineLayer("$SLOWDOWNS-line", SLOWDOWNS).withProperties(
+            lineColor(speedColor),
+            lineWidth(6f),
+            lineCap(Property.LINE_CAP_ROUND),
+            lineJoin(Property.LINE_JOIN_ROUND),
+        )
         // Routes sit under the basemap's labels so street names stay readable.
         val firstLabel = style.layers.firstOrNull { it is SymbolLayer }?.id
         if (firstLabel != null) {
             style.addLayerBelow(speeds, firstLabel)
             style.addLayerBelow(casing, firstLabel)
             style.addLayerBelow(line, firstLabel)
+            style.addLayerBelow(slowdowns, firstLabel)
         } else {
             style.addLayer(speeds)
             style.addLayer(casing)
             style.addLayer(line)
+            style.addLayer(slowdowns)
         }
         style.addLayer(
             CircleLayer(PINS, PINS).withProperties(
@@ -119,6 +129,7 @@ internal object OverlayLayers {
         style.getSourceAs<GeoJsonSource>(ROUTES)?.setGeoJson(OverlayGeoJson.routes(overlays.routes))
         style.getSourceAs<GeoJsonSource>(PINS)?.setGeoJson(OverlayGeoJson.pins(overlays.pin, overlays.destination))
         style.getSourceAs<GeoJsonSource>(SPEEDS)?.setGeoJson(OverlayGeoJson.speeds(overlays.traffic.speeds))
+        style.getSourceAs<GeoJsonSource>(SLOWDOWNS)?.setGeoJson(OverlayGeoJson.speeds(overlays.slowdowns))
         style.getSourceAs<GeoJsonSource>(INCIDENTS)?.setGeoJson(OverlayGeoJson.incidents(overlays.traffic.incidents))
     }
 }

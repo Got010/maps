@@ -8,6 +8,10 @@
     <string name="directions_no_location">Waiting for your location. Step outside or near a window.</string>
     <string name="directions_start">Start</string>
     <string name="directions_via">via %1$s</string>
+    <string name="directions_arrive">Arrive %1$s</string>
+    <string name="directions_eta_plus">+%1$d min</string>
+    <string name="directions_delay">%1$d min of delay</string>
+    <string name="directions_typical">Typical: %1$s</string>
     <string name="mode_drive">Drive</string>
     <string name="mode_walk">Walk</string>
     <string name="mode_bike">Bike</string>
