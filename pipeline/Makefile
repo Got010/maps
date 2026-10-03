@@ -3,18 +3,22 @@
 #
 # Regions are listed in regions.json. Any pack builds as <kind>-<region>:
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
+# Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
 
 REGIONS := nyc li hudson capital western nys
 BASEMAP_REGIONS := nyc li hudson capital western
-STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc
-ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS)))
+# Downloadable voices; amy is bundled in the APK instead.
+VOICES := norman
+VOICE_PACKS := $(addprefix voice-,$(VOICES))
+STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS)
+ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
 .PHONY: nyc state release $(ALL_PACKS) push-nyc styles glyphs test clean
 
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: five regional basemaps, statewide routing and search, NYC transit
+## state: what a release ships: five regional basemaps, statewide routing and search, NYC transit, voice packs
 state: $(STATE_PACKS)
 
 $(addprefix tiles-,$(REGIONS)): tiles-%:
@@ -28,6 +32,9 @@ $(addprefix search-,$(REGIONS)): search-%:
 
 $(addprefix transit-,$(REGIONS)): transit-%:
 	transit/build.sh $*
+
+$(VOICE_PACKS): voice-%:
+	voices/build.sh $*
 
 ## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium)
 test:

@@ -16,7 +16,7 @@ import re
 import sys
 
 SCHEMA = 1
-PACK = re.compile(r"^(basemap|routing|search|transit)-([a-z0-9-]+)\.(pmtiles|tar|sqlite)$")
+PACK = re.compile(r"^(basemap|routing|search|transit|voice)-([a-z0-9-]+)\.(pmtiles|tar|sqlite|zip)$")
 
 
 def sha256(path):
