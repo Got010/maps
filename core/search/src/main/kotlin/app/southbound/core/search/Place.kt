@@ -29,6 +29,11 @@ data class Place(
     val cuisine: String? = null,
     /** "n123", "w456" or "r789": the OSM object this came from. */
     val osmRef: String? = null,
+    /**
+     * An address whose number isn't in the data: the spot is worked out from
+     * the nearest numbers on the same street ([AddressLookup.nearestHouse]).
+     */
+    val approximate: Boolean = false,
 ) {
     /** "Coffee shop" from "coffee_shop", for the place card. */
     val categoryLabel: String?

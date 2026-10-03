@@ -243,9 +243,11 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
 @Composable
 private fun ResultRow(result: SearchResult, onClick: () -> Unit, icon: ImageVector = result.place.kind.icon()) {
     val place = result.place
+    val approximate = if (place.approximate) stringResource(R.string.search_approximate) else null
+    val supporting = listOfNotNull(approximate, place.secondaryLine()).joinToString(" · ").ifEmpty { null }
     ListItem(
         headlineContent = { Text(place.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent = place.secondaryLine()?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+        supportingContent = supporting?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
         leadingContent = { Icon(icon, contentDescription = null) },
         trailingContent = result.distanceMeters?.let { { Text(Units.distance(it), style = MaterialTheme.typography.labelMedium) } },
         modifier = Modifier.clickable(onClick = onClick),
@@ -262,11 +264,14 @@ private fun Message(text: String) {
     )
 }
 
-/** "Cafe · 224 West 20th Street, New York 10011" */
-fun Place.secondaryLine(): String? =
-    listOfNotNull(categoryLabel.takeIf { kind != PlaceKind.ADDRESS }, address)
-        .joinToString(" · ")
-        .ifEmpty { null }
+/**
+ * "Cafe · 224 West 20th Street, New York 10011"; for an address, the rest of
+ * its full address after the name: "Nyack, NY 10960" under "123 Main Street".
+ */
+fun Place.secondaryLine(): String? = when (kind) {
+    PlaceKind.ADDRESS -> address?.removePrefix("$name, ")?.takeIf { it.isNotBlank() && it != name }
+    else -> listOfNotNull(categoryLabel, address).joinToString(" · ").ifEmpty { null }
+}
 
 fun PlaceKind.icon(): ImageVector = when (this) {
     PlaceKind.LOCALITY -> Icons.Filled.LocationCity

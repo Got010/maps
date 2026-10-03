@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="southbound-test">
+  <!-- The OSM side of test_addresses.py; address_points.csv is the state file side. -->
+  <!-- Upstate: a village, an address without a town, and a cafe tagged with
+       the same address a few metres away (one house, so one address row) -->
+  <node id="50" version="1" lat="41.0907" lon="-73.9179">
+    <tag k="place" v="village"/>
+    <tag k="name" v="Nyack"/>
+  </node>
+  <node id="51" version="1" lat="41.0910" lon="-73.9200">
+    <tag k="addr:housenumber" v="123"/>
+    <tag k="addr:street" v="Main Street"/>
+  </node>
+  <node id="52" version="1" lat="41.09103" lon="-73.92003">
+    <tag k="amenity" v="cafe"/>
+    <tag k="name" v="Main Street Cafe"/>
+    <tag k="addr:housenumber" v="123"/>
+    <tag k="addr:street" v="Main Street"/>
+  </node>
+  <node id="56" version="1" lat="41.0905" lon="-73.9195"/>
+  <node id="57" version="1" lat="41.0915" lon="-73.9205"/>
+  <way id="205" version="1">
+    <nd ref="56"/><nd ref="57"/>
+    <tag k="highway" v="residential"/><tag k="name" v="Main Street"/>
+  </way>
+  <!-- The same number and street in another town -->
+  <node id="53" version="1" lat="40.7359" lon="-73.0821">
+    <tag k="place" v="town"/>
+    <tag k="name" v="Sayville"/>
+  </node>
+  <node id="54" version="1" lat="40.7365" lon="-73.0830">
+    <tag k="addr:housenumber" v="123"/>
+    <tag k="addr:street" v="Main Street"/>
+    <tag k="addr:city" v="Sayville"/>
+    <tag k="addr:postcode" v="11782"/>
+  </node>
+  <!-- A Queens hyphenated number -->
+  <node id="55" version="1" lat="40.7600" lon="-73.9150">
+    <tag k="addr:housenumber" v="31-05"/>
+    <tag k="addr:street" v="Steinway Street"/>
+    <tag k="addr:city" v="Astoria"/>
+    <tag k="addr:postcode" v="11103"/>
+  </node>
+  <!-- A house "number" with no number: skipped -->
+  <node id="58" version="1" lat="40.7000" lon="-73.9500">
+    <tag k="addr:housenumber" v="rear"/>
+    <tag k="addr:street" v="Court Street"/>
+  </node>
+  <!-- New Jersey with no addr:state: states.state_at says NJ -->
+  <node id="59" version="1" lat="40.7357" lon="-74.1724">
+    <tag k="addr:housenumber" v="1"/>
+    <tag k="addr:street" v="Broad Street"/>
+    <tag k="addr:city" v="Newark"/>
+  </node>
+  <!-- A Manhattan cafe with a full address -->
+  <node id="60" version="1" lat="40.7351" lon="-73.9910">
+    <tag k="amenity" v="cafe"/>
+    <tag k="name" v="Café Grumpy"/>
+    <tag k="addr:housenumber" v="224"/>
+    <tag k="addr:street" v="West 20th Street"/>
+    <tag k="addr:city" v="New York"/>
+    <tag k="addr:postcode" v="10011"/>
+  </node>
+  <!-- A road far from any town -->
+  <node id="61" version="1" lat="42.5000" lon="-75.0000"/>
+  <node id="62" version="1" lat="42.5010" lon="-75.0010"/>
+  <way id="206" version="1">
+    <nd ref="61"/><nd ref="62"/>
+    <tag k="highway" v="tertiary"/><tag k="name" v="County Route 1"/>
+  </way>
+</osm>

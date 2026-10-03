@@ -204,6 +204,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build ${{ matrix.pack }}
+        env:
+          # Optional repository variables (Settings > Secrets and variables >
+          # Actions > Variables). ADDRESS_POINTS_URL adds the NYS Address Points
+          # to the search pack; unset, search has OSM's addresses only.
+          ADDRESS_POINTS_URL: ${{ vars.ADDRESS_POINTS_URL }}
+          ADDRESS_POINTS_LAYER: ${{ vars.ADDRESS_POINTS_LAYER }}
         run: |
           # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys;
           # voice-norman.zip -> voice-norman
