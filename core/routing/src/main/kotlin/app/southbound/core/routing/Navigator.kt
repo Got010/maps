@@ -106,6 +106,25 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         return true
     }
 
+    // Phase 6: skip the next stop of a multi-stop trip.
+    /**
+     * Drops the next waypoint (a stop, never the destination) and routes from
+     * where the user is to what remains, switching to that route. False when
+     * there is no stop to skip, or no route was found (the trip carries on).
+     */
+    suspend fun skipNextStop(): Boolean {
+        val trip = state.value.tripState as? TripState.Navigating ?: return false
+        if (!TripStops.canSkip(trip.remainingWaypoints.size)) return false
+        val remaining = TripStops.skipNext(trip.remainingWaypoints)
+        val routes = try {
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, remaining, mode, avoid, prefs) }
+        } catch (e: RoutingException) {
+            return false
+        }
+        core.replaceRoute(routes.first(), controllerConfig(mode))
+        return true
+    }
+
     fun stop() = core.stopNavigation()
 
     companion object {
