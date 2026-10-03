@@ -42,7 +42,7 @@ class BuildTest(unittest.TestCase):
 
     def test_header_marks_a_search_pack(self):
         self.assertEqual(0x53425331, self.db.execute("PRAGMA application_id").fetchone()[0])
-        self.assertEqual(1, self.db.execute("PRAGMA user_version").fetchone()[0])
+        self.assertEqual(2, self.db.execute("PRAGMA user_version").fetchone()[0])
         with open(self.out, "rb") as f:
             header = f.read(72)
         self.assertEqual(b"SQLite format 3\x00", header[:16])
@@ -77,7 +77,19 @@ class BuildTest(unittest.TestCase):
         self.assertEqual([("Flatiron District", "neighbourhood", None)], self.rows(build_search.LOCALITY))
 
     def test_addresses(self):
-        self.assertEqual([("123 Court Street", None, "Brooklyn 11201")], self.rows(build_search.ADDRESS))
+        # Since schema 2 addresses have their own tables (see test_addresses.py).
+        self.assertEqual([], self.rows(build_search.ADDRESS))
+        rows = self.db.execute(
+            "SELECT a.number, s.street, s.city, s.state, a.postcode FROM address a"
+            " JOIN address_street s ON s.id = a.street_id ORDER BY a.number_key"
+        ).fetchall()
+        self.assertEqual(
+            [
+                ("123", "Court Street", "Brooklyn", "NY", "11201"),
+                ("224", "West 20th Street", "New York", "NY", "10011"),  # Café Grumpy's
+            ],
+            rows,
+        )
 
     def test_streets_are_grouped_per_cell(self):
         # Two nearby Broadway segments make one row; the far one makes another.
@@ -104,7 +116,7 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(["Café Grumpy"], search("grump"))
         self.assertEqual(["Café Grumpy"], search("Cafe W 20th"))
         self.assertEqual(["Café Grumpy"], search("coffee"))
-        self.assertEqual(["123 Court Street"], search("123 Court"))
+        self.assertEqual(["Café Grumpy"], search("224 W 20"))
         self.assertEqual(["Empire State Building"], search("empire"))
         # A word must start at a word boundary, so "rumpy" finds nothing.
         self.assertEqual([], search("rumpy"))
@@ -118,7 +130,10 @@ class BuildTest(unittest.TestCase):
                 # Brand beats the name: "past the Shell".
                 ("fuel", "Shell", 40.742, -73.991),
                 ("speed_camera", None, 40.743, -73.99),
-                ("alpr_camera", None, 40.744, -73.99),
+                # Plate readers keep who makes them, for the map's camera card.
+                ("alpr_camera", "Flock Safety", 40.744, -73.99),
+                ("alpr_camera", "Motorola Solutions", 40.7445, -73.99),
+                ("alpr_camera", None, 40.7448, -73.99),
                 # Node 35 is a plain camera: not an alert.
                 ("school_zone", None, 40.746, -73.99),
                 # The start of a road with a school speed limit.
@@ -136,6 +151,33 @@ class BuildTest(unittest.TestCase):
             )
         )
         self.assertIn("landmark_lat_lon", plan)
+
+    def test_category_box_query_uses_the_category_index(self):
+        # The app loads every plate reader, and the ones near each route, by category.
+        plan = " ".join(
+            str(r[-1])
+            for r in self.db.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM landmark WHERE category = 'alpr_camera'"
+                " AND lat BETWEEN 40.73 AND 40.75 AND lon BETWEEN -74.0 AND -73.98"
+            )
+        )
+        self.assertIn("landmark_category_lat_lon", plan)
+        whole = " ".join(
+            str(r[-1])
+            for r in self.db.execute("EXPLAIN QUERY PLAN SELECT id FROM landmark WHERE category = 'alpr_camera'")
+        )
+        self.assertIn("landmark_category_lat_lon", whole)
+
+    def test_alpr_name(self):
+        name = build_search.alpr_name
+        self.assertEqual("Flock Safety", name({"manufacturer": "Flock Safety"}))
+        self.assertEqual("Flock Safety", name({"brand": "Flock", "operator": "Town Police"}))
+        self.assertEqual("Flock Safety", name({"operator": "flock safety"}))
+        self.assertEqual("Motorola Solutions", name({"manufacturer": "Motorola Solutions", "operator": "NYPD"}))
+        self.assertEqual("NYPD", name({"operator": " NYPD "}))
+        self.assertIsNone(name({"surveillance:type": "ALPR"}))
+        # Guidance never names signals or other alerts.
+        self.assertIsNone(build_search.landmark_name({"highway": "speed_camera", "operator": "NYC DOT"}, "speed_camera"))
 
     def test_landmark_category(self):
         cat = build_search.landmark_category

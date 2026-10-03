@@ -58,6 +58,20 @@ class RouteLine(val points: List<LatLon>) {
         return best
     }
 
+    /** The point [along] metres from the start, clamped to the line's ends. Null for an empty line. */
+    fun pointAt(along: Double): LatLon? {
+        if (points.isEmpty()) return null
+        if (points.size == 1 || along <= 0.0) return points.first()
+        if (along >= length) return points.last()
+        var i = 1
+        while (i < points.size - 1 && cumulative[i] < along) i++
+        val a = points[i - 1]
+        val b = points[i]
+        val segment = cumulative[i] - cumulative[i - 1]
+        val t = if (segment > 0) (along - cumulative[i - 1]) / segment else 0.0
+        return LatLon(a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon))
+    }
+
     /**
      * Boxes covering the line in pieces of about [chunkMeters], each grown by
      * [padMeters]: small boxes keep a long diagonal route from selecting a

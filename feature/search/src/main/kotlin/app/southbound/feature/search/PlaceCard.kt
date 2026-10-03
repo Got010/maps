@@ -85,6 +85,13 @@ fun PlaceCard(
             }
             Column(Modifier.padding(end = 12.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 place.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                if (place.approximate) {
+                    Text(
+                        stringResource(R.string.search_approximate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 place.openingHours?.let { DetailRow(Icons.Filled.Schedule, it) }
                 place.cuisine?.let { Text(it.replace(';', ',').replace('_', ' '), style = MaterialTheme.typography.bodySmall) }
             }

@@ -20,6 +20,9 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
     TRAFFIC_TOMTOM(enabledByDefault = false),
     TRANSIT_REALTIME(enabledByDefault = false),
     TRANSIT_BUS_TIME(enabledByDefault = false),
+
+    /** The weekly average gas price for the state the user picked, from EIA. */
+    GAS_PRICES(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

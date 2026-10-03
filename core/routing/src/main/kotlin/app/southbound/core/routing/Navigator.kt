@@ -45,6 +45,15 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     @Volatile
     var avoid: List<List<Pair<Double, Double>>> = emptyList()
 
+    /**
+     * Squares around plate readers the trip steers clear of ("Avoid plate
+     * readers", see [CameraAvoidance]), kept apart from the closures in
+     * [avoid] so a closure reroute doesn't drop them. Every route request gets
+     * both, merged under Valhalla's perimeter limit.
+     */
+    @Volatile
+    var cameraAvoid: List<List<Pair<Double, Double>>> = emptyList()
+
     // Phase 6: route options, used by previews, reroutes and skip-stop alike. Set by the app.
     @Volatile
     var prefs: RoutePrefs = RoutePrefs.DEFAULT
@@ -52,7 +61,7 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     private val core = FerrostarCore(
         customRouteProvider = object : CustomRouteProvider {
             override suspend fun getRoutes(userLocation: UserLocation, waypoints: List<Waypoint>): List<Route> =
-                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid, prefs) }
+                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, allAvoid(), prefs) }
         },
         httpClient = NoNetworkHttpClient,
         locationProvider = GpsLocationProvider(context.applicationContext),
@@ -72,17 +81,26 @@ class Navigator(context: Context, private val router: OfflineRouter) {
             core.spokenInstructionObserver = value
         }
 
-    /** Routes for preview, best first, around [avoid] (kept for the trip's reroutes). */
+    /**
+     * Routes for preview, best first, around [avoid] (closures) and
+     * [cameraAvoid] (plate readers), both kept for the trip's reroutes.
+     */
     suspend fun routes(
         from: UserLocation,
         waypoints: List<Waypoint>,
         mode: TravelMode,
         avoid: List<List<Pair<Double, Double>>> = this.avoid,
+        cameraAvoid: List<List<Pair<Double, Double>>> = emptyList(),
     ): List<Route> {
         this.mode = mode
         this.avoid = avoid
+        this.cameraAvoid = cameraAvoid
         return core.getRoutes(from, waypoints)
     }
+
+    /** Closures (plus [extra]) first, then as many camera squares as Valhalla's limit leaves room for. */
+    private fun allAvoid(extra: List<List<Pair<Double, Double>>> = emptyList()): List<List<Pair<Double, Double>>> =
+        CameraAvoidance.merge(avoid + extra, cameraAvoid)
 
     fun start(route: Route, mode: TravelMode) {
         this.mode = mode
@@ -92,13 +110,14 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     /**
      * Mid-trip, routes again from where the user is to the remaining waypoints
      * around [avoid] (a closure that just appeared on the route) and switches
-     * to the new route. False when not navigating or no route was found.
+     * to the new route. The plate readers in [cameraAvoid] stay avoided.
+     * False when not navigating or no route was found.
      */
     suspend fun rerouteAround(avoid: List<List<Pair<Double, Double>>>): Boolean {
         val trip = state.value.tripState as? TripState.Navigating ?: return false
         this.avoid = avoid
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid, prefs) }
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, allAvoid(), prefs) }
         } catch (e: RoutingException) {
             return false
         }
@@ -117,7 +136,7 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         if (!TripStops.canSkip(trip.remainingWaypoints.size)) return false
         val remaining = TripStops.skipNext(trip.remainingWaypoints)
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, remaining, mode, avoid, prefs) }
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, remaining, mode, allAvoid(), prefs) }
         } catch (e: RoutingException) {
             return false
         }
@@ -127,14 +146,15 @@ class Navigator(context: Context, private val router: OfflineRouter) {
 
     /**
      * A fresh route from where the user is to the remaining waypoints around
-     * the current [avoid] polygons plus [extraAvoid] (e.g. around a crawl ahead),
+     * the current [avoid] polygons plus [extraAvoid] (e.g. around a crawl ahead)
+     * and [cameraAvoid], with the driver's route options,
      * without switching to it: the mid-trip "faster route" check compares it
      * with the current one. Null when not navigating or no route was found.
      */
     suspend fun freshRoute(extraAvoid: List<List<Pair<Double, Double>>> = emptyList()): Route? {
         val trip = state.value.tripState as? TripState.Navigating ?: return null
         return try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid + extraAvoid) }.firstOrNull()
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, allAvoid(extraAvoid), prefs) }.firstOrNull()
         } catch (e: RoutingException) {
             null
         }

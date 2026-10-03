@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The card for a tapped plate-reader dot on the map. -->
+<resources>
+    <string name="explore_camera_title">Plate reader</string>
+    <string name="explore_camera_by">%1$s camera</string>
+    <string name="explore_camera_unknown">License plate camera; maker not mapped</string>
+    <string name="explore_camera_source">Mapped by volunteers in OpenStreetMap (DeFlock). It may have moved or be missing.</string>
+    <string name="explore_camera_close">Close</string>
+</resources>

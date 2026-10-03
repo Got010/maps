@@ -1,5 +1,5 @@
 {
-  "_comment": "The data pack regions. Bounds are minlon,minlat,maxlon,maxlat (WGS84). Basemaps are cut per region so a phone installs only what it needs; routing and search are built once for the whole state (nys) so cross-region trips work. core/packs Regions.kt mirrors this file and a unit test keeps the two in step.",
+  "_comment": "The data pack regions. Bounds are minlon,minlat,maxlon,maxlat (WGS84). Basemaps are cut per region so a phone installs only what it needs; routing and search are built once for the whole area (nys: New York plus northern New Jersey) so cross-region trips work. core/packs Regions.kt mirrors this file and a unit test keeps the two in step. 'area' (optional) is a polygon of [lon,lat] points: where a point belongs to the region when its box overlaps others; njn's box takes in Staten Island, Rockland and the Bronx, its area is only the New Jersey side of the state line (approximate, within about a kilometre). 'sources' (optional) says which Geofabrik extracts a region is built from: the default is the New York extract cut to the region's own bounds; each entry maps an extract to null (whole), 'self' (cut to this region's bounds) or another region's id (cut to that region's bounds), and several entries are merged (see pipeline/lib/common.sh clip_extract).",
   "regions": {
     "nyc": {
       "name": "New York City",
@@ -26,10 +26,38 @@
       "bounds": [-79.77, 41.99, -75.5, 45.02],
       "basemap": true
     },
+    "njn": {
+      "name": "Northern New Jersey",
+      "bounds": [-74.75, 40.3, -73.88, 41.36],
+      "basemap": true,
+      "sources": { "new-jersey": "self" },
+      "area": [
+        [-74.75, 40.3],
+        [-73.88, 40.3],
+        [-73.88, 40.46],
+        [-74.255, 40.46],
+        [-74.255, 40.505],
+        [-74.235, 40.54],
+        [-74.21, 40.585],
+        [-74.19, 40.62],
+        [-74.18, 40.645],
+        [-74.07, 40.65],
+        [-74.06, 40.66],
+        [-74.04, 40.7],
+        [-74.02, 40.75],
+        [-73.995, 40.8],
+        [-73.965, 40.85],
+        [-73.935, 40.92],
+        [-73.92, 41.0],
+        [-74.69, 41.357],
+        [-74.75, 41.36]
+      ]
+    },
     "nys": {
-      "name": "All of New York State",
-      "bounds": [-79.77, 40.47, -71.75, 45.02],
-      "basemap": false
+      "name": "New York and Northern New Jersey",
+      "bounds": [-79.77, 40.3, -71.75, 45.02],
+      "basemap": false,
+      "sources": { "new-york": null, "new-jersey": "njn" }
     }
   }
 }
