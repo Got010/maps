@@ -160,7 +160,7 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         when (val action = decide(kind, text, triggerDistance, instruction)) {
             is GuidanceAction.Speak -> {
                 if (action.vibrate) vibrate()
-                val item = SpeechQueue.Item(action, kind, SystemClock.elapsedRealtime(), instruction?.utteranceId)
+                val item = SpeechQueue.Item(action, kind, SystemClock.elapsedRealtime(), instruction?.utteranceId?.toString())
                 if (speech.offer(item)) player.stop()
                 wake.trySend(Unit)
             }

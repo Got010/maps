@@ -45,6 +45,9 @@ class ExploreServices private constructor(context: Context) {
         voiceStore.settings.stateIn(scope, SharingStarted.Eagerly, VoiceSettings())
     val voice = GuidanceVoice(appContext, voiceSettings)
 
+    /** Landmarks in turn prompts, camera and school zone alerts, audio made ahead (Phase 5). */
+    val guidance = GuidanceSupport(appContext, voice, voiceSettings) { openSearch() }
+
     /** Network toggles (all off but pack downloads until the user turns one on) and API keys. */
     val networkToggles = PreferenceNetworkToggles.get(appContext)
     val networkGate = NetworkGate(networkToggles)
@@ -84,7 +87,10 @@ class ExploreServices private constructor(context: Context) {
         current?.value?.first?.close()
         routing = null
         val router = runCatching { OfflineRouter(appContext, file) }.getOrNull() ?: return null
-        val navigator = Navigator(appContext, router).also { it.spokenInstructionObserver = voice }
+        val navigator = Navigator(appContext, router).also {
+            it.spokenInstructionObserver = voice
+            guidance.attach(it)
+        }
         routing = Opened(file, router to navigator)
         return navigator
     }
