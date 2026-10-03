@@ -43,8 +43,19 @@ import app.southbound.core.routing.TravelMode
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
     data object Loading : RoutePreviewState
-    /** [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown. */
-    data class Ready(val summaries: List<RouteSummary>, val selected: Int, val delaySeconds: List<Double> = emptyList()) : RoutePreviewState
+    /**
+     * [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown.
+     * [cameraCounts] is how many plate readers each route passes, same order; empty when unknown (no
+     * search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
+     * route still passes some.
+     */
+    data class Ready(
+        val summaries: List<RouteSummary>,
+        val selected: Int,
+        val delaySeconds: List<Double> = emptyList(),
+        val cameraCounts: List<Int> = emptyList(),
+        val cameraAvoidIncomplete: Boolean = false,
+    ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
     enum class Reason { NO_ROUTE, NO_LOCATION }
@@ -132,8 +143,10 @@ fun RoutePreviewSheet(
                                 selected = i == state.selected,
                                 fastest = i == 0,
                                 onClick = { onSelect(i) },
+                                cameras = state.cameraCounts.getOrNull(i),
                             )
                         }
+                        if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
                         beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
@@ -182,7 +195,15 @@ fun ModeChips(
 }
 
 @Composable
-private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: Boolean, fastest: Boolean, onClick: () -> Unit) {
+private fun RouteOption(
+    summary: RouteSummary,
+    delaySeconds: Double,
+    selected: Boolean,
+    fastest: Boolean,
+    onClick: () -> Unit,
+    /** Plate readers on this route; null hides the line. */
+    cameras: Int? = null,
+) {
     val late = Eta.isLate(delaySeconds)
     val total = summary.durationSeconds + delaySeconds
     val red = MaterialTheme.colorScheme.error
@@ -237,6 +258,7 @@ private fun RouteOption(summary: RouteSummary, delaySeconds: Double, selected: B
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                cameras?.let { PlateReaderCount(it) }
             }
             Text(Units.distance(summary.distanceMeters), style = MaterialTheme.typography.bodyMedium)
         }
