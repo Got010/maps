@@ -64,4 +64,19 @@
     <string name="explore_arrived_plain_spoken">You have arrived.</string>
     <!-- A stop of a multi-stop trip: the stop, then where the trip goes next. -->
     <string name="explore_arrived_stop_spoken">Arrived at %1$s, continuing to %2$s.</string>
+    <!-- Phase 8: 511NY traffic cameras and message signs, tapped on the traffic layer. -->
+    <string name="explore_traffic_camera_source">511NY traffic camera</string>
+    <string name="explore_traffic_camera_close">Close camera</string>
+    <string name="explore_traffic_camera_offline">Camera offline</string>
+    <string name="explore_traffic_camera_loading">Loading the latest image…</string>
+    <string name="explore_traffic_camera_failed">Couldn\'t load the image: %1$s</string>
+    <string name="explore_traffic_camera_not_image">511NY sent something that isn\'t an image.</string>
+    <string name="explore_traffic_camera_turned_off">511NY is turned off in Settings.</string>
+    <string name="explore_traffic_camera_refresh">Refresh</string>
+    <!-- When the shown still was downloaded, as a clock time. -->
+    <string name="explore_traffic_camera_fetched">Image from %1$s</string>
+    <string name="explore_traffic_camera_image">Latest still from %1$s</string>
+    <string name="explore_sign_source">511NY message sign</string>
+    <string name="explore_sign_close">Close sign</string>
+    <string name="explore_sign_blank">The sign is blank right now.</string>
 </resources>

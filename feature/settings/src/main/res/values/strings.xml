@@ -78,7 +78,7 @@
     <string name="live_key_remove">Remove key</string>
     <string name="live_traffic">Live traffic</string>
     <string name="live_511">Incidents and closures (511NY)</string>
-    <string name="live_511_note">Crashes, closures and work zones across the state, fetched whole every few minutes. Routes steer around closures. Needs a free developer key from 511ny.org.</string>
+    <string name="live_511_note">Crashes, closures and work zones across the state, fetched whole every few minutes. Routes steer around closures. Also shows traffic cameras and message signs on the map. Needs a free developer key from 511ny.org.</string>
     <string name="live_511_key">511NY key</string>
     <string name="live_511_key_saved">511NY key saved (type to replace)</string>
     <string name="live_dot">Traffic speeds (NYC DOT)</string>

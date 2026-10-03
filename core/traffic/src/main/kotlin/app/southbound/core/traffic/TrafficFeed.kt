@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.Collections
 
 /**
  * Fetches the traffic feeds the user turned on, through [NetworkGate], and
@@ -31,6 +32,8 @@ class TrafficFeed(
     private var incidents: Cached<List<Incident>>? = null
     private var speeds: Cached<List<SpeedLink>>? = null
     private var speedsStale = false
+    private var cameras: Cached<List<TrafficCamera>>? = null
+    private var signs: Cached<List<MessageSign>>? = null
     private val _snapshot = MutableStateFlow(TrafficSnapshot.EMPTY)
 
     /** The latest result, for screens that only want to watch. */
@@ -52,10 +55,16 @@ class TrafficFeed(
      * Fetches whatever is stale among the feeds that are on and returns the
      * combined snapshot. Off feeds contribute nothing; a feed that fails keeps
      * its last good data and adds an error. Suspends on IO.
+     *
+     * [mapExtras] also fetches 511NY's camera list (daily) and message signs
+     * (every few minutes), for the map's traffic layer; without it the last
+     * ones fetched are kept but nothing is requested for them.
      */
-    suspend fun refresh(force: Boolean = false): TrafficSnapshot = mutex.withLock {
+    suspend fun refresh(force: Boolean = false, mapExtras: Boolean = false): TrafficSnapshot = mutex.withLock {
         val now = clock()
-        val errors = ArrayList<String>()
+        // The feeds load side by side, possibly on several threads.
+        val errors: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val extraErrors: MutableList<String> = Collections.synchronizedList(ArrayList())
         coroutineScope {
             val incidentsJob = async {
                 if (!hasIncidents) {
@@ -84,14 +93,42 @@ class TrafficFeed(
                     }
                 }
             }
+            // Cameras and signs: the same 511NY toggle and key, the whole state each time.
+            val camerasJob = async {
+                when {
+                    !hasIncidents -> null
+                    !mapExtras || (!force && cameras?.fresh(now, CAMERAS_TTL_MILLIS) == true) -> cameras
+                    else -> load(now, cameras, extraErrors, "511NY cameras") {
+                        FiveElevenNy.parseCameras(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNy.camerasUrl(key511()!!)).decodeToString())
+                    }
+                }
+            }
+            val signsJob = async {
+                when {
+                    !hasIncidents -> null
+                    !mapExtras || (!force && signs?.fresh(now, SIGNS_TTL_MILLIS) == true) -> signs
+                    else -> load(now, signs, extraErrors, "511NY signs") {
+                        FiveElevenNy.parseSigns(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNy.signsUrl(key511()!!)).decodeToString())
+                    }
+                }
+            }
             incidents = incidentsJob.await()
             speeds = speedsJob.await()
+            cameras = camerasJob.await()
+            signs = signsJob.await()
+        }
+        // A refused key fails all three 511NY requests alike: say it once.
+        val mainErrors = errors.toList()
+        val shownErrors = mainErrors + extraErrors.toList().filterNot { extra ->
+            mainErrors.any { it.substringAfter(": ") == extra.substringAfter(": ") }
         }
         TrafficSnapshot(
             incidents = incidents?.value.orEmpty(),
             speeds = speeds?.value.orEmpty(),
+            cameras = cameras?.value.orEmpty(),
+            signs = signs?.value.orEmpty(),
             fetchedAt = now,
-            errors = errors,
+            errors = shownErrors,
             speedsStale = speedsStale && speeds != null,
         ).also { _snapshot.value = it }
     }
@@ -118,5 +155,11 @@ class TrafficFeed(
     companion object {
         const val INCIDENTS_TTL_MILLIS = 180_000L
         const val SPEEDS_TTL_MILLIS = 90_000L
+
+        /** Cameras come and go rarely; their stills are fetched one at a time when opened. */
+        const val CAMERAS_TTL_MILLIS = 24 * 60 * 60_000L
+
+        /** What signs say changes with the traffic. */
+        const val SIGNS_TTL_MILLIS = 5 * 60_000L
     }
 }

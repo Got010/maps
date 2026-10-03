@@ -108,6 +108,10 @@ fun SouthboundMap(
     onTouchChanged: ((Boolean) -> Unit)? = null,
     /** A tap on a plate-reader dot ([MapOverlays.cameras]) reports its id. */
     onCameraTap: ((String) -> Unit)? = null,
+    /** A tap on a 511NY traffic camera ([MapOverlays.trafficCameras]) reports its id. */
+    onTrafficCameraTap: ((String) -> Unit)? = null,
+    /** A tap on a 511NY message sign ([MapOverlays.messageSigns]) reports its id. */
+    onMessageSignTap: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -210,6 +214,43 @@ fun SouthboundMap(
     LaunchedEffect(style, overlays, darkTheme) {
         val loaded = style ?: return@LaunchedEffect
         OverlayLayers.update(loaded, overlays, darkTheme)
+    }
+
+    // 511NY cameras and signs: their own listener, added first, since their icons draw on top of
+    // everything. Where several are under the finger, the one nearest the tap wins.
+    val currentOnTrafficCameraTap by rememberUpdatedState(onTrafficCameraTap)
+    val currentOnMessageSignTap by rememberUpdatedState(onMessageSignTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val cameraHandler = currentOnTrafficCameraTap
+            val signHandler = currentOnMessageSignTap
+            if (cameraHandler == null && signHandler == null) return@OnMapClickListener false
+            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
+            val layers = listOfNotNull(
+                OverlayLayers.TRAFFIC_CAMERAS.takeIf { cameraHandler != null && loadedStyle.getLayer(it) != null },
+                OverlayLayers.MESSAGE_SIGNS.takeIf { signHandler != null && loadedStyle.getLayer(it) != null },
+            )
+            if (layers.isEmpty()) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, *layers.toTypedArray())
+                .filter { it.getStringProperty("id") != null }
+                .minByOrNull { feature ->
+                    val point = feature.geometry() as? org.maplibre.geojson.Point ?: return@minByOrNull Float.MAX_VALUE
+                    val at = loadedMap.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
+                    (at.x - screen.x) * (at.x - screen.x) + (at.y - screen.y) * (at.y - screen.y)
+                } ?: return@OnMapClickListener false
+            val handler = when (hit.getStringProperty("kind")) {
+                "camera" -> cameraHandler
+                "sign" -> signHandler
+                else -> null
+            } ?: return@OnMapClickListener false
+            handler(hit.getStringProperty("id"))
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
     }
 
     // Plate-reader taps get their own listener, added before the incident one so a camera
