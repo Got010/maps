@@ -119,6 +119,8 @@ CREATE TABLE landmark (
 INDEXES = """
 CREATE INDEX feature_name_key ON feature(name_key);
 CREATE INDEX landmark_lat_lon ON landmark(lat, lon);
+-- Every plate reader for the app's camera layer, and one category along a route.
+CREATE INDEX landmark_category_lat_lon ON landmark(category, lat, lon);
 CREATE VIRTUAL TABLE feature_fts USING fts5(
   search_text, content='', tokenize='trigram', detail='none'
 );
@@ -195,9 +197,27 @@ def is_school_zone(tags):
     return "school" in (tags.get("maxspeed:conditional") or "").lower()
 
 
+def alpr_name(tags):
+    """Who makes or runs a plate reader, for the map's camera card.
+
+    "Flock Safety" whenever Flock appears anywhere (DeFlock spells it several
+    ways), otherwise the manufacturer, brand or operator as tagged, or None.
+    """
+    values = [tags.get(k) for k in ("manufacturer", "brand", "operator")]
+    if any(v and "flock" in v.lower() for v in values):
+        return "Flock Safety"
+    return next((v.strip() for v in values if v and v.strip()), None)
+
+
 def landmark_name(tags, category):
-    """Signals, signs and alerts are spoken by category; places by name or brand."""
-    if category in ("traffic_signals", "stop", "speed_camera", "alpr_camera", "school_zone"):
+    """Signals, signs and alerts are spoken by category; places by name or brand.
+
+    Plate readers keep their maker or operator so the map can say whose they
+    are; guidance never speaks it (it names only places).
+    """
+    if category == "alpr_camera":
+        return alpr_name(tags)
+    if category in ("traffic_signals", "stop", "speed_camera", "school_zone"):
         return None
     return tags.get("brand") or tags.get("name")
 
