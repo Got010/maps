@@ -86,7 +86,7 @@ class PackStoreTest {
         assertEquals(store.packsDir.resolve("basemap-nyc.pmtiles"), status.file)
         assertTrue(validPack.contentEquals(status.file.readBytes()))
         assertEquals(status, store.basemapStatus("nyc"))
-        assertEquals(listOf("basemap-nyc.pmtiles"), store.packsDir.list()!!.toList())
+        assertEquals(listOf("basemap-nyc.pmtiles", "basemap-nyc.pmtiles.sha256"), store.packsDir.list()!!.sorted())
     }
 
     @Test
@@ -118,7 +118,7 @@ class PackStoreTest {
         val pack = store.importPack(validPack.inputStream(), "basemap-nyc (1).pmtiles")
         assertEquals(ImportedPack(PackKind.BASEMAP, "nyc", store.packsDir.resolve("basemap-nyc.pmtiles")), pack)
         assertEquals(PackStatus.Installed(pack.file), store.basemapStatus("nyc"))
-        assertEquals(listOf("basemap-nyc.pmtiles"), store.packsDir.list()!!.toList())
+        assertEquals(listOf("basemap-nyc.pmtiles", "basemap-nyc.pmtiles.sha256"), store.packsDir.list()!!.sorted())
     }
 
     @Test
@@ -168,5 +168,56 @@ class PackStoreTest {
     private fun sqlite(applicationId: Int): ByteArray = ByteArray(100).also {
         "SQLite format 3\u0000".toByteArray().copyInto(it)
         for (i in 0 until 4) it[68 + i] = (applicationId ushr (24 - 8 * i)).toByte()
+    }
+
+    private fun sha256(bytes: ByteArray) =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun importRecordsChecksum() {
+        val store = store()
+        store.importPack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        assertEquals(sha256(validPack), store.installedSha256(PackKind.BASEMAP, "nyc"))
+        assertEquals("${sha256(validPack)}  basemap-nyc.pmtiles\n", store.packsDir.resolve("basemap-nyc.pmtiles.sha256").readText())
+    }
+
+    @Test
+    fun checksumComputedForPacksWithoutOne() {
+        val store = store()
+        write(store.importPacksDir!!, validPack)
+        assertEquals(sha256(validPack), store.installedSha256(PackKind.BASEMAP, "nyc"))
+        assertEquals(null, store.installedSha256(PackKind.ROUTING, "nyc"))
+    }
+
+    @Test
+    fun staleChecksumIsRecomputed() {
+        val store = store()
+        val file = write(store.packsDir, validPack)
+        store.packsDir.resolve("basemap-nyc.pmtiles.sha256").apply {
+            writeText("${"0".repeat(64)}  basemap-nyc.pmtiles\n")
+            setLastModified(file.lastModified() - 10_000)
+        }
+        assertEquals(sha256(validPack), store.installedSha256(PackKind.BASEMAP, "nyc"))
+    }
+
+    @Test
+    fun installDownloadedChecksKindAndReplaces() {
+        val store = store()
+        write(store.packsDir, validPack)
+        val newer = validPack + byteArrayOf(1)
+        val pack = ReleasePack(PackKind.BASEMAP, "nyc", ReleaseFile("basemap-nyc.pmtiles", newer.size.toLong(), sha256(newer)))
+        val download = store.downloadDir.apply { mkdirs() }.resolve("basemap-nyc.pmtiles").apply { writeBytes(newer) }
+        val installed = store.installDownloaded(download, pack, sha256(newer))
+        assertEquals(store.packsDir.resolve("basemap-nyc.pmtiles"), installed.file)
+        assertTrue(installed.file.readBytes().contentEquals(newer))
+        assertEquals(sha256(newer), store.installedSha256(PackKind.BASEMAP, "nyc"))
+
+        val junk = store.downloadDir.resolve("routing-nyc.tar").apply { writeBytes("junk".toByteArray()) }
+        val routing = ReleasePack(PackKind.ROUTING, "nyc", ReleaseFile("routing-nyc.tar", 4, sha256("junk".toByteArray())))
+        try {
+            store.installDownloaded(junk, routing, routing.file.sha256)
+            fail("junk accepted")
+        } catch (expected: UnrecognizedPackException) {
+        }
     }
 }

@@ -13,15 +13,43 @@ opt-in extra.
 
 Everything below works from a phone. No computer needed.
 
-Download `southbound-<version>.apk` from the latest release and open it to
-install. Each release also has a `.sha256` file. A newer APK installs over the
-old one and keeps your data. [Obtainium](https://github.com/ImranR98/Obtainium)
-is optional: it watches this repo's releases and installs new ones for you.
+Every merge to `main` publishes a new release automatically, with the APK, the
+NYC data packs and `southbound.json` (a manifest of every file's size and
+SHA-256). Download `southbound-<version>.apk` from the latest release and open
+it to install. That's the only install you do.
+
+### Updates, from inside the app
+
+Southbound keeps itself current from its own releases (Settings > Updates):
+
+- **Map data** (on by default): on first start, and then daily, Southbound
+  reads the latest release's manifest and downloads only the packs that
+  changed, on Wi-Fi unless you allow mobile data. Each download is checked
+  against its published SHA-256 before it replaces the old pack, and the map
+  switches to it straight away. **Download now** on the first screen fetches
+  everything at once on any network.
+- **App updates** (off until you turn them on): a newer APK is downloaded,
+  checked to be Southbound, newer, signed with the same key and matching its
+  checksum, then handed to Android's installer. Android asks you to allow
+  "Install unknown apps" for Southbound and to confirm the first update. After
+  that Southbound is its own installer, so later updates install without a
+  prompt (Android 12+).
+- **GitHub token**: while this repository is private, GitHub only shows its
+  releases to a token. Create a fine-grained personal access token (GitHub >
+  Settings > Developer settings > Fine-grained tokens) with access to
+  `StrongHorse44/maps` and the read-only **Contents** permission, and paste it
+  into Settings > Updates. It's stored encrypted and sent only to
+  `api.github.com`. Making the repository public removes this step.
+
+Requests go to GitHub only and carry nothing about you: no location, search or
+route. With the Network permission revoked the app keeps working from the
+packs it has.
 
 ## Load the NYC map
 
-The app ships without map data. There are three NYC packs, each in the Map
-data release:
+The app downloads its data by itself (see above). You can also load packs by
+hand, for example without a token. There are four NYC packs, in every release
+next to the APK:
 
 | File | What it adds |
 | --- | --- |
@@ -32,9 +60,7 @@ data release:
 
 Load each one the same way:
 
-1. On GitHub, open the repo's **Releases** and find the newest **Map data**
-   pre-release. If there isn't one, go to **Actions > Map data > Run workflow**
-   and wait about 15 minutes.
+1. On GitHub, open the repo's **Releases** and the latest release.
 2. Download the file from it in your phone's browser. Don't open it with a
    file manager, which may try to unpack it.
 3. Get it into Southbound, either way:
@@ -47,16 +73,17 @@ Load each one the same way:
    download afterwards.
 
 Southbound recognises each file by its contents, so a renamed download such as
-`routing-nyc (1).tar` still works. The Map data workflow also runs on the 2nd
-of every month. To swap in newer data, share the new file to Southbound the
-same way; it replaces the old one.
+`routing-nyc (1).tar` still works. Packs are rebuilt when the pipeline changes
+and on the 2nd of every month, from fresh OpenStreetMap and MTA data; other
+releases carry the previous packs over. To swap in newer data, share the new
+file to Southbound the same way; it replaces the old one.
 
 With a computer and adb you can instead push the pack straight to the app's
 import folder: `make -C pipeline push-nyc`.
 
 ## Build the NYC packs yourself
 
-The Map data workflow does this on GitHub. To run it locally you need Docker,
+The Release workflow does this on GitHub. To run it locally you need Docker,
 curl and about 6 GB free disk.
 
 ```sh
@@ -89,13 +116,27 @@ build one each.
 
 ## Releasing
 
-Push a tag (`git tag v0.1.0 && git push origin v0.1.0`) and GitHub Actions
-does the rest.
-`.github/workflows/release.yml` runs the tests, builds the release APK signed
-with your key, verifies the signature and publishes
-`southbound-0.1.0.apk` plus its checksum as a GitHub release. Tags must look
-like `v1.2.3` (each part 0-99). The version code is derived from the tag, so each
-new tag must be higher than the last or phones will refuse the update.
+Releases are automatic. `.github/workflows/release.yml` runs after every merge
+to `main` (changes to Markdown files alone don't count) and on the 2nd of each
+month. It:
+
+1. picks the next version: one patch above the newest `v*` tag, so v0.1.0 is
+   followed by v0.1.1;
+2. runs the tests and builds the APK signed with your key;
+3. rebuilds the data packs if the pipeline changed since the last release, on
+   the monthly run, or when you run it by hand (**Actions > Release > Run
+   workflow**, tick **Rebuild data**); otherwise it copies the last release's
+   packs;
+4. publishes one release with the APK, the packs and their checksums.
+
+A data rebuild takes about 30 minutes; a release without one, about 10. To set
+the version yourself (say, v1.0.0), push that tag or create it on the Releases
+page; later automatic releases continue from it. Tags must look like `v1.2.3`
+(each part 0-99), and the version code comes from the tag, so a new tag must be
+higher than the last or phones will refuse the update.
+
+`.github/workflows/data.yml` only checks, on pull requests that touch the
+pipeline, that the packs still build.
 
 ### One-time signing setup (in Termux)
 
@@ -125,10 +166,7 @@ app or website go to the repo's Settings > Secrets and variables > Actions and a
 
 Then delete `southbound-key.txt`; the `.jks` backup is what matters.
 
-To release, create a tag from the repo's Releases page (Draft a new release >
-Choose a tag > type `v0.1.0` > Create new tag > Publish), or push one with git.
-The Release workflow builds the APK and attaches it to that release within a
-few minutes; until then the release has no APK.
+With the secrets in place, merging a pull request is all it takes to release.
 
 ## Developing
 
@@ -155,7 +193,8 @@ pull request, and checks the styles and pipeline scripts.
 | `app/` | Application module: `MainActivity`, theme, MapLibre init, release signing |
 | `core/map/` | `SouthboundMap` composable, style loading, GPS-only location flow |
 | `core/packs/` | `PackStore`: where packs live and whether one is valid |
-| `core/network/` | `NetworkGate`, the saved per-feature toggles and the encrypted API key store |
+| `core/network/` | `NetworkGate`, the saved per-feature toggles, the encrypted API key store and the GitHub releases client |
+| `core/updates/` | The updater: release manifest check, pack downloads, self-update through Android's installer |
 | `core/search/` | Search over the search pack: query parsing, FTS5 lookup, ranking |
 | `core/routing/` | Valhalla on the phone (valhalla-mobile) and Ferrostar navigation, GPS only |
 | `core/transit/` | Transit pack reader, RAPTOR planner, departure boards, GTFS-realtime parser and MTA feeds |
@@ -213,7 +252,7 @@ simply shows the schedule.
 
 ## Phase 2 exit test
 
-1. Load `transit-nyc.sqlite` from the Map data release like the other packs.
+1. Load `transit-nyc.sqlite` from the latest release like the other packs.
 2. Long-press or search a destination, tap **Directions**, then **Transit**.
 3. For each trip below, set **Depart at** to a weekday morning time, then
    compare the first option with the MTA Trip Planner or the line's printed

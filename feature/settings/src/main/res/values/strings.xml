@@ -53,4 +53,25 @@
     <string name="live_bus_key_saved">Bus Time key saved (type to replace)</string>
     <string name="live_bus_key_save">Save key</string>
     <string name="live_bus_key_remove">Remove key</string>
+    <string name="settings_updates">Updates</string>
+    <string name="updates_version">Installed %1$s · latest %2$s · checked %3$s</string>
+    <string name="updates_version_never">Installed %1$s · not checked yet</string>
+    <string name="updates_check_now">Check now</string>
+    <string name="updates_checking">Checking the latest release…</string>
+    <string name="updates_downloading">Downloading %1$s: %2$d of %3$d MB</string>
+    <string name="updates_awaiting">Version %1$s is ready. Confirm the install when Android asks.</string>
+    <string name="updates_up_to_date">Everything is up to date.</string>
+    <string name="updates_installed">Installed: %1$s</string>
+    <string name="updates_packs">Download map data</string>
+    <string name="updates_packs_note">Maps, search, directions and transit data from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
+    <string name="updates_app">Install app updates</string>
+    <string name="updates_app_note">New versions of Southbound from the same releases, checked to be signed with the same key. Android asks you to confirm the first one; after that Southbound updates itself.</string>
+    <string name="updates_allow_install">Allow Southbound to install updates</string>
+    <string name="updates_mobile">Use mobile data</string>
+    <string name="updates_mobile_note">Off: downloads wait for Wi-Fi. Check now always downloads straight away.</string>
+    <string name="updates_token_note">The repository is private, so GitHub needs a token: a fine-grained personal access token with read-only Contents access to StrongHorse44/maps. It\'s stored encrypted on this phone and sent only to api.github.com.</string>
+    <string name="updates_token">GitHub token</string>
+    <string name="updates_token_saved">GitHub token saved (type to replace)</string>
+    <string name="updates_token_save">Save token</string>
+    <string name="updates_token_remove">Remove token</string>
 </resources>

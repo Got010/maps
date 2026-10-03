@@ -3,6 +3,8 @@ package app.southbound.core.packs
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.security.DigestInputStream
+import java.security.MessageDigest
 
 /**
  * Where data packs live on the device. MapLibre reads PMTiles through
@@ -46,11 +48,12 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         packsDir.mkdirs()
         val temp = File(packsDir, "import.part")
         try {
-            copy(source, temp)
+            val sha256 = copy(source, temp)
             val kind = PackKind.detect(temp) ?: throw UnrecognizedPackException()
             val region = PackKind.regionFromName(kind, displayName) ?: fallbackRegion
             val target = File(packsDir, kind.fileName(region))
             moveIntoPlace(temp, target)
+            writeChecksum(target, sha256)
             return ImportedPack(kind, region, target)
         } finally {
             temp.delete()
@@ -68,17 +71,73 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         val target = File(packsDir, PackKind.BASEMAP.fileName(region))
         val temp = File(packsDir, "${target.name}.part")
         try {
-            copy(source, temp)
+            val sha256 = copy(source, temp)
             if (!PackKind.BASEMAP.matches(temp)) throw NotAPmtilesFileException()
             moveIntoPlace(temp, target)
+            writeChecksum(target, sha256)
             return PackStatus.Installed(target)
         } finally {
             temp.delete()
         }
     }
 
-    private fun copy(source: InputStream, target: File) {
-        source.use { input -> target.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) } }
+    /**
+     * Installs a pack the updater downloaded into [downloadDir], already checked
+     * against the release manifest ([sha256]). It must still be the kind the
+     * manifest says; then it replaces the installed copy in one rename.
+     *
+     * @throws UnrecognizedPackException if the file isn't a [pack] of that kind.
+     */
+    fun installDownloaded(download: File, pack: ReleasePack, sha256: String): ImportedPack {
+        if (PackKind.detect(download) != pack.kind) throw UnrecognizedPackException("Download isn't a ${pack.kind.prefix} pack")
+        packsDir.mkdirs()
+        val target = File(packsDir, pack.kind.fileName(pack.region))
+        moveIntoPlace(download, target)
+        writeChecksum(target, sha256)
+        return ImportedPack(pack.kind, pack.region, target)
+    }
+
+    /** Where the updater stages downloads: inside [packsDir], so installing is a rename. */
+    val downloadDir: File get() = File(packsDir, "download")
+
+    /**
+     * The SHA-256 of the installed pack, or null when none is installed. Read
+     * from a `.sha256` file next to the pack, written at import; computed (and
+     * saved) when that's missing or older than the pack. Can take a second for
+     * a large pack: call off the main thread.
+     */
+    fun installedSha256(kind: PackKind, region: String): String? {
+        val file = (status(kind, region) as? PackStatus.Installed)?.file ?: return null
+        val sidecar = checksumFile(file)
+        if (sidecar.isFile && sidecar.lastModified() >= file.lastModified()) {
+            CHECKSUM_LINE.find(sidecar.readText())?.let { return it.value }
+        }
+        val sha256 = file.inputStream().use { input ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(COPY_BUFFER_BYTES)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+            digest.digest().toHex()
+        }
+        runCatching { writeChecksum(file, sha256) }
+        return sha256
+    }
+
+    /** Copies [source] to [target] and returns its SHA-256. */
+    private fun copy(source: InputStream, target: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        DigestInputStream(source, digest).use { input -> target.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) } }
+        return digest.digest().toHex()
+    }
+
+    private fun checksumFile(pack: File) = File(pack.parentFile, "${pack.name}.sha256")
+
+    /** `sha256sum` format, so the file means something to a person too. */
+    private fun writeChecksum(pack: File, sha256: String) {
+        checksumFile(pack).writeText("$sha256  ${pack.name}\n")
     }
 
     private fun moveIntoPlace(temp: File, target: File) {
@@ -89,6 +148,9 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         const val PACKS_DIR = "packs"
         const val DEFAULT_REGION = "nyc"
         private const val COPY_BUFFER_BYTES = 1 shl 20
+        private val CHECKSUM_LINE = Regex("^[0-9a-f]{64}")
+
+        private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
         fun basemapFileName(region: String): String = PackKind.BASEMAP.fileName(region)
     }

@@ -1,28 +1,114 @@
-# Push a tag like v0.1.0 to build a signed APK and publish it as a GitHub
-# release. Obtainium on the phone picks up the new release from there.
+# One release with everything: the signed APK and the NYC data packs.
+#
+# Runs on its own after every merge to main, and on the 2nd of each month to
+# pick up fresh OpenStreetMap and MTA data. Each run publishes the next
+# version (v0.2.0 -> v0.2.1 ...), so a phone or Obtainium only ever has to
+# look at the latest release.
+#
+# Packs are rebuilt only when needed (pipeline changed, the monthly run, or
+# Run workflow with "Rebuild data"); otherwise the new release carries the
+# packs from the previous one, so the app and its data always ship together.
+#
+# Pushing a tag like v1.0.0 by hand still works and sets the version.
 name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  schedule:
+    - cron: '17 6 2 * *'   # 06:17 UTC on the 2nd of each month
+  workflow_dispatch:
+    inputs:
+      rebuild_data:
+        description: Rebuild the map data packs
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+# One release at a time, in order; never cancel one halfway through.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  PACKS: basemap-nyc.pmtiles routing-nyc.tar search-nyc.sqlite transit-nyc.sqlite
+
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      previous: ${{ steps.plan.outputs.previous }}
+      data: ${{ steps.plan.outputs.data }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check tag format
+      - name: Pick the version and whether to rebuild data
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REBUILD: ${{ inputs.rebuild_data }}
         run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Tag must look like v1.2.3, got $GITHUB_REF_NAME"
-            exit 1
+          previous="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tag="$GITHUB_REF_NAME"
+            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Tag must look like v1.2.3, got $tag"
+              exit 1
+            fi
+            # The previous release is the newest tag other than this one.
+            previous="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -vx "$tag" | head -1)"
+          else
+            # Next patch version; versionCode allows 0-99 per part.
+            IFS=. read -r major minor patch <<< "${previous#v}"
+            major=${major:-0}; minor=${minor:-1}; patch=${patch:--1}
+            patch=$((patch + 1))
+            if (( patch > 99 )); then patch=0; minor=$((minor + 1)); fi
+            if (( minor > 99 )); then minor=0; major=$((major + 1)); fi
+            tag="v$major.$minor.$patch"
           fi
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
+          data=false
+          reason="reusing packs from $previous"
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$REBUILD" == true ]]; then
+            data=true; reason="monthly refresh or requested"
+          elif [[ -z "$previous" ]]; then
+            data=true; reason="no earlier release"
+          elif ! gh release view "$previous" --json assets --jq '.assets[].name' > assets.txt 2>/dev/null; then
+            data=true; reason="$previous has no release"
+          else
+            for pack in $PACKS; do
+              grep -qx "$pack" assets.txt || { data=true; reason="$previous lacks $pack"; }
+            done
+            if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles'; then :; else
+              data=true; reason="pipeline changed since $previous"
+            fi
+          fi
+
+          echo "Release $tag; data: $data ($reason)"
+          {
+            echo "version=${tag#v}"
+            echo "tag=$tag"
+            echo "previous=$previous"
+            echo "data=$data"
+          } >> "$GITHUB_OUTPUT"
+
+  app:
+    needs: plan
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -56,26 +142,124 @@ jobs:
 
       - name: Verify signature and checksum
         run: |
-          APK="southbound-$VERSION.apk"
+          mkdir -p out
+          APK="out/southbound-$VERSION.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
           "$APKSIGNER" verify --print-certs "$APK"
-          sha256sum "$APK" > "$APK.sha256"
-          echo "APK=$APK" >> "$GITHUB_ENV"
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The release may already exist if it was made on the website
-          # (Draft a new release > Publish); then just attach the APK to it.
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$APK" "$APK.sha256" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "$APK" "$APK.sha256" \
-              --title "Southbound $VERSION" --generate-notes
-          fi
+          (cd out && sha256sum "$(basename "$APK")" > "$(basename "$APK").sha256")
 
       - name: Remove signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/
+          retention-days: 1
+
+  data:
+    needs: plan
+    if: needs.plan.outputs.data == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build basemap-nyc.pmtiles
+        env:
+          PLANETILER_HEAP: 8g
+        run: make -C pipeline tiles-nyc
+
+      - name: Build routing-nyc.tar
+        run: make -C pipeline routing-nyc
+
+      - name: Build search-nyc.sqlite
+        run: make -C pipeline search-nyc
+
+      - name: Build transit-nyc.sqlite
+        run: make -C pipeline transit-nyc
+
+      - name: Checksum
+        run: |
+          cd pipeline/data/out
+          for pack in $PACKS; do sha256sum "$pack" | tee "$pack.sha256"; done
+          ls -lh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packs
+          path: |
+            pipeline/data/out/*.pmtiles
+            pipeline/data/out/*.tar
+            pipeline/data/out/*.sqlite
+            pipeline/data/out/*.sha256
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    needs: [plan, app, data]
+    # Runs when the data job ran and passed, or was skipped because the
+    # previous release's packs are reused.
+    if: always() && needs.app.result == 'success' && (needs.data.result == 'success' || needs.data.result == 'skipped')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      PREVIOUS: ${{ needs.plan.outputs.previous }}
+      DATA: ${{ needs.plan.outputs.data }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: out
+
+      - uses: actions/download-artifact@v4
+        if: env.DATA == 'true'
+        with:
+          name: packs
+          path: out
+
+      - name: Carry packs over from the previous release
+        if: env.DATA != 'true'
+        run: |
+          for pack in $PACKS; do
+            gh release download "$PREVIOUS" --repo "$GITHUB_REPOSITORY" --dir out \
+              --pattern "$pack" --pattern "$pack.sha256"
+          done
+          (cd out && sha256sum -c ./*.sha256)
+
+      # The app reads this to see what changed and checks every download against it.
+      - name: Write the release manifest
+        run: |
+          python3 src/scripts/release-manifest.py out "$VERSION" > southbound.json
+          mv southbound.json out/
+          cat out/southbound.json
+
+      - name: Publish release
+        run: |
+          cd out
+          ls -lh
+          if [[ "$DATA" == true ]]; then
+            data_note="Map data rebuilt for this release."
+          else
+            data_note="Map data unchanged since $PREVIOUS."
+          fi
+          notes="Install southbound-$VERSION.apk once; Southbound then downloads the NYC data and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-nyc.pmtiles (the map), search-nyc.sqlite (search), routing-nyc.tar (directions) and transit-nyc.sqlite (transit schedules). $data_note
+
+          Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A tag released from the website: attach everything to it.
+            gh release upload "$TAG" ./* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            # Tags made with this token don't start another run, so no loop.
+            gh release create "$TAG" ./* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Southbound $VERSION" --notes "$notes" --latest
+          fi

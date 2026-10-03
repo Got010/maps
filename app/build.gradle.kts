@@ -49,8 +49,10 @@ dependencies {
     implementation(project(":feature:settings"))
     implementation(project(":core:voice"))
     implementation(project(":core:network"))
+    implementation(project(":core:updates"))
     implementation(libs.maplibre.android)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
 }
 
 /** 1.2.3 -> 10203. Android requires every update to have a higher versionCode. */
