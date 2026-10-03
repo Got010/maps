@@ -16,4 +16,26 @@
     <string name="mode_walk">Walk</string>
     <string name="mode_bike">Bike</string>
     <string name="mode_transit">Transit</string>
+    <string name="options_chip">Options</string>
+    <string name="options_chip_active">Options (on)</string>
+    <string name="options_title">Route options</string>
+    <string name="options_note">For driving. Changes apply right away and are kept for next time.</string>
+    <string name="options_avoid_tolls">Avoid tolls</string>
+    <string name="options_avoid_highways">Avoid highways</string>
+    <string name="options_avoid_ferries">Avoid ferries</string>
+    <string name="options_vehicle">Vehicle</string>
+    <string name="options_car">Car</string>
+    <string name="options_truck">Truck or RV</string>
+    <string name="options_height">Height (ft)</string>
+    <string name="options_width">Width (ft)</string>
+    <string name="options_length">Length (ft)</string>
+    <string name="options_weight">Weight (tons)</string>
+    <string name="options_done">Done</string>
+    <string name="stop_row">%1$d. %2$s</string>
+    <string name="stop_up">Move %1$s up</string>
+    <string name="stop_down">Move %1$s down</string>
+    <string name="stop_remove">Remove %1$s</string>
+    <string name="stop_add">Add stop</string>
+    <string name="region_missing">Map for %1$s isn\'t installed; roads still route but the map will be blank there.</string>
+    <string name="region_download">Download</string>
 </resources>

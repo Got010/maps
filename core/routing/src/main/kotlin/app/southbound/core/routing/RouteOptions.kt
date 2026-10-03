@@ -20,6 +20,31 @@ internal object RouteOptions {
         return """{"alternates":$ALTERNATES,"units":"miles","language":"en-US"$costing}"""
     }
 
+    // Phase 6: route preferences (tolls, highways, ferries, truck/RV profile).
+    /**
+     * Applies the driver's [prefs] to a request [body] Ferrostar built: adds
+     * `costing_options` and, for a truck or RV, swaps the costing to "truck".
+     * Only driving has options; walking and cycling bodies come back as they
+     * were. Like closures, this goes in per request, not into the adapter, so a
+     * change in the options sheet takes effect on the next route and reroute.
+     */
+    fun withPrefs(body: String, mode: TravelMode, prefs: RoutePrefs): String {
+        if (mode != TravelMode.DRIVE) return body
+        val costing = prefs.costing
+        val options = prefs.costingOptionsJson() ?: return body
+        val start = body.indexOf('{')
+        require(start >= 0) { "Route request isn't a JSON object" }
+        var out = body
+        if (costing != TravelMode.DRIVE.valhallaCosting) {
+            val swapped = COSTING_AUTO.replace(out, "\"costing\":\"$costing\"")
+            require(swapped != out) { "Route request has no auto costing to switch" }
+            out = swapped
+        }
+        return out.substring(0, start + 1) + """"costing_options":{"$costing":$options},""" + out.substring(start + 1)
+    }
+
+    private val COSTING_AUTO = Regex(""""costing"\s*:\s*"auto"""")
+
     /**
      * Adds Valhalla `exclude_polygons` (rings of (lon, lat) pairs, e.g. around
      * road closures) to a request [body] Ferrostar built. The adapter's options

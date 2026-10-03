@@ -27,4 +27,59 @@ class RouteOptionsTest {
     fun `options ask for alternatives in miles`() {
         assertEquals("""{"alternates":2,"units":"miles","language":"en-US"}""", RouteOptions.json(TravelMode.DRIVE))
     }
+
+    // Phase 6
+    private val autoBody = """{"format":"osrm","costing":"auto","locations":[]}"""
+
+    @Test
+    fun `default prefs and other modes leave the body alone`() {
+        assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs.DEFAULT))
+        val avoid = RoutePrefs(avoidTolls = true)
+        assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.WALK, avoid))
+        assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.BIKE, avoid))
+        // Truck dimensions alone don't matter while the profile is Car.
+        assertEquals(autoBody, RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(heightFt = 12.0)))
+    }
+
+    @Test
+    fun `avoid toggles become use_ options at zero`() {
+        assertEquals(
+            """{"costing_options":{"auto":{"use_tolls":0,"use_highways":0,"use_ferry":0}},"format":"osrm","costing":"auto","locations":[]}""",
+            RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidTolls = true, avoidHighways = true, avoidFerries = true)),
+        )
+        assertEquals(
+            """{"costing_options":{"auto":{"use_tolls":0}},"format":"osrm","costing":"auto","locations":[]}""",
+            RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidTolls = true)),
+        )
+    }
+
+    @Test
+    fun `truck profile switches costing and converts feet and tons`() {
+        val prefs = RoutePrefs(avoidFerries = true, vehicle = VehicleKind.TRUCK, heightFt = 13.5, widthFt = 8.5, lengthFt = 50.0, weightTons = 20.0)
+        assertEquals(
+            """{"costing_options":{"truck":{"use_ferry":0,"height":4.11,"width":2.59,"length":15.24,"weight":18.14}},"format":"osrm","costing":"truck","locations":[]}""",
+            RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, prefs),
+        )
+        val spaced = """{"costing" : "auto"}"""
+        assertEquals(true, RouteOptions.withPrefs(spaced, TravelMode.DRIVE, prefs).contains(""""costing":"truck""""))
+    }
+
+    @Test
+    fun `prefs compose with exclude polygons and stay valid json shape`() {
+        val ring = listOf(-74.0 to 40.7, -73.99 to 40.7, -73.99 to 40.71, -74.0 to 40.7)
+        val body = RouteOptions.withExcludePolygons(RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidHighways = true)), listOf(ring))
+        assertEquals(true, body.startsWith("""{"exclude_polygons":[[["""))
+        assertEquals(true, body.contains(""""costing_options":{"auto":{"use_highways":0}}"""))
+    }
+
+    @Test
+    fun `sanitized keeps dimensions in range`() {
+        val p = RoutePrefs(vehicle = VehicleKind.TRUCK, heightFt = 0.0, widthFt = 99.0, lengthFt = -1.0, weightTons = 1000.0).sanitized()
+        assertEquals(3.0, p.heightFt, 0.0)
+        assertEquals(12.0, p.widthFt, 0.0)
+        assertEquals(5.0, p.lengthFt, 0.0)
+        assertEquals(80.0, p.weightTons, 0.0)
+        assertEquals("truck", p.costing)
+        assertEquals(true, RoutePrefs.DEFAULT.isDefault)
+    }
 }

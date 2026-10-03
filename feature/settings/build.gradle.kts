@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:routing"))
     implementation(project(":core:voice"))
     implementation(project(":core:network"))
     implementation(project(":core:updates"))

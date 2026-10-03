@@ -68,6 +68,9 @@ fun RoutePreviewSheet(
     onTransit: (() -> Unit)? = null,
     /** A chosen start point instead of GPS; routes can be previewed but not navigated from it. */
     startName: String? = null,
+    // Phase 6: options chip, stops editor and region warning, composed by the caller.
+    afterModes: (@Composable () -> Unit)? = null,
+    beforeStart: (@Composable () -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -89,6 +92,7 @@ fun RoutePreviewSheet(
                 }
             }
             ModeChips(mode, onModeChange, transitSelected = false, onTransit = onTransit)
+            afterModes?.invoke() // Phase 6
             startName?.let {
                 Text(
                     stringResource(R.string.directions_from, it),
@@ -130,6 +134,7 @@ fun RoutePreviewSheet(
                                 onClick = { onSelect(i) },
                             )
                         }
+                        beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
                             Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))

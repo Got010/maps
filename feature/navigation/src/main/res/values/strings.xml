@@ -19,4 +19,5 @@
     <string name="navigation_destination_right">Your destination is on the right</string>
     <string name="navigation_destination_ahead">Your destination is straight ahead</string>
     <string name="navigation_voice_until_turn">Voice muted until the next turn. Long-press to resume.</string>
+    <string name="navigation_skip_stop">Skip stop</string>
 </resources>

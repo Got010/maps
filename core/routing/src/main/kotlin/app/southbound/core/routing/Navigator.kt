@@ -45,10 +45,14 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     @Volatile
     var avoid: List<List<Pair<Double, Double>>> = emptyList()
 
+    // Phase 6: route options, used by previews, reroutes and skip-stop alike. Set by the app.
+    @Volatile
+    var prefs: RoutePrefs = RoutePrefs.DEFAULT
+
     private val core = FerrostarCore(
         customRouteProvider = object : CustomRouteProvider {
             override suspend fun getRoutes(userLocation: UserLocation, waypoints: List<Waypoint>): List<Route> =
-                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid) }
+                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid, prefs) }
         },
         httpClient = NoNetworkHttpClient,
         locationProvider = GpsLocationProvider(context.applicationContext),
@@ -94,7 +98,26 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         val trip = state.value.tripState as? TripState.Navigating ?: return false
         this.avoid = avoid
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid) }
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid, prefs) }
+        } catch (e: RoutingException) {
+            return false
+        }
+        core.replaceRoute(routes.first(), controllerConfig(mode))
+        return true
+    }
+
+    // Phase 6: skip the next stop of a multi-stop trip.
+    /**
+     * Drops the next waypoint (a stop, never the destination) and routes from
+     * where the user is to what remains, switching to that route. False when
+     * there is no stop to skip, or no route was found (the trip carries on).
+     */
+    suspend fun skipNextStop(): Boolean {
+        val trip = state.value.tripState as? TripState.Navigating ?: return false
+        if (!TripStops.canSkip(trip.remainingWaypoints.size)) return false
+        val remaining = TripStops.skipNext(trip.remainingWaypoints)
+        val routes = try {
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, remaining, mode, avoid, prefs) }
         } catch (e: RoutingException) {
             return false
         }
