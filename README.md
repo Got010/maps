@@ -92,3 +92,18 @@ the map. Both feeds are fetched whole for the state or city, so the requests
 say nothing about where you are. Directions steer around 511NY closures, and
 a closure that appears on your route while navigating is spoken and routed
 around.
+
+## Voice guidance
+
+Settings > Voice holds every voice option. Turn prompts name a landmark when
+the map data has one at the turn ("Turn right after the next light", "at the
+stop sign", "past the Shell gas station"), say two quick turns together
+("..., then turn left"), and play a short chime first (a different one before
+alerts). Speed cameras, school zones and license plate readers (Flock and
+other ALPR cameras mapped in OpenStreetMap) on your route are announced about
+300 m ahead, each behind its own toggle. All of it comes from the search pack
+on the phone, so nothing about the drive is sent; a search pack built before
+October 2026 has no landmarks, and guidance simply goes without them until
+the next pack update. Two built-in voices ship in the app (Amy and Norman),
+for phones without a text-to-speech engine. Long-press the voice button while
+navigating to mute until the next turn.
