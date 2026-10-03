@@ -1,6 +1,8 @@
 package app.southbound.core.updates
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -8,7 +10,10 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import java.util.concurrent.TimeUnit
 
 /**
@@ -56,8 +61,34 @@ object UpdateScheduler {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(DAILY, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
+    /**
+     * GrapheneOS's Network toggle revokes INTERNET. Then WorkManager sees no
+     * network and an update would wait forever, so say so instead.
+     */
+    fun networkPermitted(context: Context): Boolean =
+        context.checkSelfPermission(Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
+
+    /** Whether a round is queued (waiting for a network, Wi-Fi or a retry), running, or neither. */
+    enum class Queue { IDLE, WAITING, RUNNING }
+
+    fun queue(context: Context): Flow<Queue> {
+        val work = WorkManager.getInstance(context)
+        return combine(work.getWorkInfosForUniqueWorkFlow(NOW), work.getWorkInfosForUniqueWorkFlow(DAILY)) { now, daily ->
+            val all = now + daily
+            when {
+                all.any { it.state == WorkInfo.State.RUNNING } -> Queue.RUNNING
+                now.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED } -> Queue.WAITING
+                else -> Queue.IDLE
+            }
+        }
+    }
+
     /** Checks right away; [anyNetwork] lets a download the user asked for use mobile data. */
     fun checkNow(context: Context, anyNetwork: Boolean) {
+        if (!networkPermitted(context)) {
+            UpdateStatus.set(UpdateState.Failed(NO_NETWORK_PERMISSION))
+            return
+        }
         val request = OneTimeWorkRequestBuilder<UpdateWorker>()
             .setConstraints(constraints(context, anyNetwork))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
@@ -71,6 +102,10 @@ object UpdateScheduler {
         .setRequiredNetworkType(if (anyNetwork || allowMobileData(context)) NetworkType.CONNECTED else NetworkType.UNMETERED)
         .setRequiresStorageNotLow(true)
         .build()
+
+    const val NO_NETWORK_PERMISSION =
+        "Southbound's Network permission is off, so it can't reach GitHub. Turn it on in Settings > Apps > " +
+            "Southbound > Permissions to update, then off again if you like."
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
