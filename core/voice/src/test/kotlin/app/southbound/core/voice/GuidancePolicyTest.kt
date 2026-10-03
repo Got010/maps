@@ -51,7 +51,8 @@ class GuidancePolicyTest {
         assertEquals(Speak("x"), decide(alerts, kind = ARRIVAL, text = "x"))
         assertEquals(Speak("x"), decide(alerts, kind = REROUTE, text = "x"))
         assertEquals(Speak("x"), decide(alerts, kind = TRAFFIC_ALERT, text = "x"))
-        assertEquals(Silent, decide(alerts.copy(speedLimitWarnings = true), kind = SPEED_LIMIT))
+        assertEquals(Silent, decide(alerts.copy(speedAlerts = SpeedAlertMode.VOICE), kind = SPEED_LIMIT))
+        assertEquals(Silent, decide(alerts.copy(speedAlerts = SpeedAlertMode.BEEP), kind = SPEED_LIMIT))
         assertEquals(Silent, decide(alerts, kind = TRANSIT_STOP))
     }
 
@@ -96,8 +97,52 @@ class GuidancePolicyTest {
         assertEquals(Silent, decide(defaults.copy(rerouteAnnouncement = false), kind = REROUTE))
         assertEquals(Silent, decide(defaults.copy(trafficAlerts = false), kind = TRAFFIC_ALERT))
         assertEquals(Silent, decide(kind = SPEED_LIMIT)) // off by default
-        assertEquals(Speak(turn), decide(defaults.copy(speedLimitWarnings = true), kind = SPEED_LIMIT))
+        assertEquals(Speak(turn), decide(defaults.copy(speedAlerts = SpeedAlertMode.VOICE), kind = SPEED_LIMIT))
         assertEquals(Silent, decide(defaults.copy(transitStopAlerts = false), kind = TRANSIT_STOP))
+    }
+
+    @Test
+    fun speedLimitAlertModes() {
+        val limit = "The speed limit is 55 miles per hour."
+        val off = defaults.copy(speedAlerts = SpeedAlertMode.OFF)
+        val voice = defaults.copy(speedAlerts = SpeedAlertMode.VOICE)
+        val beep = defaults.copy(speedAlerts = SpeedAlertMode.BEEP)
+        assertEquals(SpeedAlertMode.OFF, VoiceSettings().speedAlerts)
+        assertEquals(Silent, decide(off, kind = SPEED_LIMIT, text = limit))
+        assertEquals(Speak(limit), decide(voice, kind = SPEED_LIMIT, text = limit))
+        // Beep: a tone and no words, whatever the alert chime says.
+        val beeped = Speak("", chime = ChimeKind.SPEED_BEEP)
+        assertEquals(beeped, decide(beep, kind = SPEED_LIMIT, text = limit))
+        assertEquals(beeped, decide(beep.copy(alertChime = true), kind = SPEED_LIMIT, text = limit))
+        assertEquals(true, beeped.isChimeOnly)
+        assertEquals(false, Speak("x", chime = ChimeKind.ALERT).isChimeOnly)
+        assertEquals(false, Speak("").isChimeOnly)
+        // Voice keeps the alert chime when that's on.
+        assertEquals(
+            Speak(limit, chime = ChimeKind.ALERT),
+            decide(voice.copy(alertChime = true), kind = SPEED_LIMIT, text = limit),
+        )
+    }
+
+    @Test
+    fun speedLimitAlertsFollowTheVoiceButtonAndTravelMode() {
+        val beep = defaults.copy(speedAlerts = SpeedAlertMode.BEEP)
+        assertEquals(Silent, decide(beep.copy(mode = VoiceMode.MUTED), kind = SPEED_LIMIT))
+        assertEquals(Silent, decide(beep.copy(driving = false), kind = SPEED_LIMIT))
+        assertEquals(Silent, decide(beep, mode = WALKING, kind = SPEED_LIMIT)) // walking is off by default
+    }
+
+    @Test
+    fun speedAlertModeMigratesTheOldToggle() {
+        assertEquals(SpeedAlertMode.OFF, SpeedAlertMode.fromStored(null, null))
+        assertEquals(SpeedAlertMode.OFF, SpeedAlertMode.fromStored(null, false))
+        assertEquals(SpeedAlertMode.VOICE, SpeedAlertMode.fromStored(null, true))
+        // A stored mode wins over the old toggle.
+        assertEquals(SpeedAlertMode.BEEP, SpeedAlertMode.fromStored("BEEP", true))
+        assertEquals(SpeedAlertMode.OFF, SpeedAlertMode.fromStored("OFF", true))
+        // An unrecognised name falls back to the old toggle.
+        assertEquals(SpeedAlertMode.VOICE, SpeedAlertMode.fromStored("LOUD", true))
+        assertEquals(SpeedAlertMode.OFF, SpeedAlertMode.fromStored("LOUD", null))
     }
 
     @Test

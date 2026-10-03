@@ -22,7 +22,10 @@ enum class UtteranceKind {
 /** What to do with one utterance. */
 sealed interface GuidanceAction {
     /** [vibrate]: buzz as well (Haptic turns). [chime]: the tone to play first, if any. */
-    data class Speak(val text: String, val vibrate: Boolean = false, val chime: ChimeKind? = null) : GuidanceAction
+    data class Speak(val text: String, val vibrate: Boolean = false, val chime: ChimeKind? = null) : GuidanceAction {
+        /** A tone with nothing to say, e.g. the speed limit beep. */
+        val isChimeOnly: Boolean get() = text.isEmpty() && chime != null
+    }
 
     /** Walking with voice off: buzz at the turn instead. */
     data object Vibrate : GuidanceAction
@@ -53,6 +56,7 @@ object GuidancePolicy {
         followUp: String? = null,
     ): GuidanceAction {
         if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text, chime = chimeFor(settings, kind))
+        if (kind == UtteranceKind.SPEED_LIMIT) return speedLimitAction(settings, mode, text)
         val modeOn = settings.enabledFor(mode)
         val voiceOn = modeOn && settings.mode != VoiceMode.MUTED
         val atTurn = triggerDistanceMeters <= BRIEF_MAX_TRIGGER_METERS
@@ -64,7 +68,7 @@ object GuidancePolicy {
             UtteranceKind.TRAFFIC_ALERT -> settings.trafficAlerts
             // Which alerts (cameras, school zones) is decided by the app, per toggle.
             UtteranceKind.HAZARD_ALERT -> true
-            UtteranceKind.SPEED_LIMIT -> settings.speedLimitWarnings && settings.mode == VoiceMode.ON
+            UtteranceKind.SPEED_LIMIT -> false // decided above, by its own mode
             UtteranceKind.TRANSIT_STOP -> settings.transitStopAlerts && settings.mode == VoiceMode.ON
             UtteranceKind.TEST -> true
         }
@@ -80,6 +84,23 @@ object GuidancePolicy {
             )
             buzz -> GuidanceAction.Vibrate
             else -> GuidanceAction.Silent
+        }
+    }
+
+    /**
+     * Speed limit alerts: off, spoken (with the alert chime if that's on), or
+     * a double beep and no words. They follow the voice button like turn
+     * prompts do: muted or alerts-only silences them, beeps included.
+     */
+    private fun speedLimitAction(settings: VoiceSettings, mode: GuidanceMode, text: String): GuidanceAction {
+        if (settings.mode != VoiceMode.ON || !settings.enabledFor(mode)) return GuidanceAction.Silent
+        return when (settings.speedAlerts) {
+            SpeedAlertMode.OFF -> GuidanceAction.Silent
+            SpeedAlertMode.VOICE -> GuidanceAction.Speak(
+                if (settings.streetNames) text else withoutStreetNames(text),
+                chime = chimeFor(settings, UtteranceKind.SPEED_LIMIT),
+            )
+            SpeedAlertMode.BEEP -> GuidanceAction.Speak("", chime = ChimeKind.SPEED_BEEP)
         }
     }
 
