@@ -5,8 +5,22 @@ import java.util.Locale
 /** A point on the map, in WGS84 degrees. */
 data class MapPoint(val lat: Double, val lon: Double)
 
-/** A route drawn on the map; the [selected] one is drawn on top, in colour. */
-data class MapLine(val points: List<MapPoint>, val selected: Boolean)
+/**
+ * A route drawn on the map. [rank] is the route's place among the
+ * alternatives (0 = fastest) and picks its colour from [RouteColors].
+ */
+data class MapLine(val points: List<MapPoint>, val role: Role, val rank: Int = 0) {
+    enum class Role {
+        /** The chosen route: a thick line in its colour over a casing. */
+        LEADER,
+
+        /** Another alternative: a thin line in its colour, drawn over the leader. */
+        THREAD,
+
+        /** A transit walk leg: thin grey dashes. */
+        WALK,
+    }
+}
 
 /** A road segment coloured by its live speed. */
 data class SpeedLine(val points: List<MapPoint>, val speedMph: Double)
@@ -62,13 +76,22 @@ sealed interface CameraRequest {
 /** GeoJSON for the overlay sources, built by hand to keep the dependency surface small. */
 internal object OverlayGeoJson {
 
-    fun routes(lines: List<MapLine>): String = featureCollection(
-        // Alternatives first so the selected route is drawn last, on top.
-        lines.sortedBy { it.selected }.filter { it.points.size >= 2 }.map { line ->
-            val coordinates = line.points.joinToString(",") { coordinate(it) }
-            """{"type":"Feature","properties":{"selected":${line.selected}},""" +
-                """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
-        },
+    /**
+     * Each line carries its rank, role and colours, so the layers only filter
+     * on role and read the colour: no theme logic in the style. Within a role,
+     * higher ranks come first so the faster routes draw on top.
+     */
+    fun routes(lines: List<MapLine>, darkTheme: Boolean): String = featureCollection(
+        lines.filter { it.points.size >= 2 }
+            .sortedWith(compareBy<MapLine>({ it.role.ordinal }, { -it.rank }))
+            .map { line ->
+                val coordinates = line.points.joinToString(",") { coordinate(it) }
+                val color = if (line.role == MapLine.Role.WALK) RouteColors.WALK else RouteColors.hex(line.rank, darkTheme)
+                val role = line.role.name.lowercase(Locale.ROOT)
+                """{"type":"Feature","properties":{"rank":${line.rank},"role":"$role","color":"$color",""" +
+                    """"casing":"${RouteColors.casingHex(darkTheme)}"},""" +
+                    """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
+            },
     )
 
     fun pins(pin: MapPoint?, destination: MapPoint?): String = featureCollection(

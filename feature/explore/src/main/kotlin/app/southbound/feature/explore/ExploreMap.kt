@@ -633,7 +633,7 @@ internal fun ExploreMap(
     )
     val overlays = when {
         inTrip -> MapOverlays(
-            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, selected = true)),
+            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, MapLine.Role.LEADER)),
             destination = (trip as? TripState.Navigating)?.remainingWaypoints?.lastOrNull()
                 ?.let { MapPoint(it.coordinate.lat, it.coordinate.lng) },
             traffic = trafficOverlay,
@@ -654,7 +654,8 @@ internal fun ExploreMap(
                 val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
-                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, selected = i == selected)
+                        val role = if (i == selected) MapLine.Role.LEADER else MapLine.Role.THREAD
+                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, role, rank = i)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
                     traffic = trafficOverlay,
@@ -710,6 +711,14 @@ internal fun ExploreMap(
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
             onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            // A tap on another route's line picks it, as tapping its card does.
+            onRouteTap = { rank ->
+                val ready = preview as? RoutePreviewState.Ready
+                val driving = (panel as? Panel.Directions)?.transit == false
+                if (!inTrip && driving && ready != null && rank in ready.summaries.indices) {
+                    preview = ready.copy(selected = rank)
+                }
+            },
             onTouchChanged = { down ->
                 touching = down
                 touchSerial++
