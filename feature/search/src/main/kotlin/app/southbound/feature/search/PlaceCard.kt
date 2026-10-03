@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Language
@@ -51,6 +53,9 @@ fun PlaceCard(
     modifier: Modifier = Modifier,
     /** Use this place as the start of directions instead of GPS. */
     onStartHere: (() -> Unit)? = null,
+    /** Opens the save-to-list dialog; [saved] fills the bookmark when the place is in a list. */
+    onSave: (() -> Unit)? = null,
+    saved: Boolean = false,
     /** More rows under the actions, such as transit departures nearby. */
     extra: (@Composable () -> Unit)? = null,
 ) {
@@ -89,6 +94,12 @@ fun PlaceCard(
                     Button(onClick = onDirections) {
                         Icon(Icons.Filled.Directions, contentDescription = null, Modifier.size(18.dp))
                         Text(stringResource(R.string.place_directions), Modifier.padding(start = 8.dp))
+                    }
+                }
+                onSave?.let {
+                    TextButton(onClick = it) {
+                        Icon(if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, contentDescription = null, Modifier.size(18.dp))
+                        Text(stringResource(if (saved) R.string.place_saved else R.string.place_save), Modifier.padding(start = 6.dp))
                     }
                 }
                 onStartHere?.let {
