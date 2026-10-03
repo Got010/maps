@@ -14,6 +14,12 @@ data class RoutePrefs(
     val avoidTolls: Boolean = false,
     val avoidHighways: Boolean = false,
     val avoidFerries: Boolean = false,
+    /**
+     * Steer clear of licence-plate readers (Flock and others, as DeFlock maps
+     * them). Not a Valhalla costing option: the app squares off the cameras
+     * on each route and routes again (see [CameraAvoidance]).
+     */
+    val avoidAlpr: Boolean = false,
     val vehicle: VehicleKind = VehicleKind.CAR,
     val heightFt: Double = DEFAULT_HEIGHT_FT,
     val widthFt: Double = DEFAULT_WIDTH_FT,
@@ -24,7 +30,7 @@ data class RoutePrefs(
     val costing: String get() = if (vehicle == VehicleKind.TRUCK) "truck" else TravelMode.DRIVE.valhallaCosting
 
     /** True when every option is at its default, so requests stay as Ferrostar built them. */
-    val isDefault: Boolean get() = costingOptionsJson() == null
+    val isDefault: Boolean get() = costingOptionsJson() == null && !avoidAlpr
 
     /**
      * The body of `costing_options.<costing>`, or null when nothing differs
