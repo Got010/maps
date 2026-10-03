@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.TripOrigin
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -92,7 +91,7 @@ fun PlaceCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                place.openingHours?.let { DetailRow(Icons.Filled.Schedule, it) }
+                place.openingHours?.let { HoursRow(it) }
                 place.cuisine?.let { Text(it.replace(';', ',').replace('_', ' '), style = MaterialTheme.typography.bodySmall) }
             }
             Row(
@@ -152,7 +151,7 @@ fun PlaceCard(
 }
 
 @Composable
-private fun DetailRow(icon: ImageVector, text: String) {
+internal fun DetailRow(icon: ImageVector, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(icon, contentDescription = null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
