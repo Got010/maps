@@ -251,6 +251,15 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 5: the feel of the map and of guidance** (guidance half; see PHASES for the map half)
+
+- [x] Landmark directions: a `landmark` table in the search pack (signals, stop signs, fuel, fast food, banks, pharmacies, supermarkets, churches, schools), matched to each turn on the phone (`core/search Landmarks`) and worked into the spoken prompt (`core/voice InstructionText`, `GuidancePolicy`). Needs the next search pack build; older packs work without landmarks.
+- [x] Smoother voice: next prompt synthesized ahead (`GuidanceVoice.prepare`), quick second turns chained with "then", no cut-offs except reroutes and closure alerts (`SpeechQueue`), chimes generated in code (`Chime`)
+- [x] Voice options: a second bundled Piper voice (Norman, public domain, +58 MB APK), distance style, chimes; mute until the next turn is in `GuidanceVoice` (the voice button's long-press needs wiring in `NavigationOverlay`)
+- [x] Haptic turns even with voice on (Settings > Voice > Vibrate at turns)
+- [x] Speed camera, school zone and ALPR camera alerts from OSM tags in the same table, spoken ~300 m ahead; `ExploreServices.guidance.routeAlerts` lists them for the map
+- Not verified on a phone yet: the Android code was written without a local build (CI compiles it). School zones come only from `hazard=school_zone`, school traffic signs and `maxspeed:conditional` with "school"; plain `amenity=school` near the route is a landmark, not an alert, so NYC's many schools don't each set off a warning.
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
