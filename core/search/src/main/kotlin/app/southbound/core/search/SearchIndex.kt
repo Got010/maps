@@ -35,6 +35,38 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         }
     }
 
+    /** Packs built before landmarks existed lack the table; guidance then simply has none. */
+    private val hasLandmarks: Boolean by lazy {
+        synchronized(connection) {
+            connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landmark'").use { it.step() }
+        }
+    }
+
+    /**
+     * Signals, signs, roadside places and alert points inside [box], for
+     * spoken landmarks and camera alerts along a route (see [Landmarks] and
+     * [RouteAlerts]). Empty for an older pack without the table.
+     */
+    fun landmarks(box: NearbyBox, limit: Int = LANDMARK_LIMIT): List<Landmark> {
+        if (!hasLandmarks) return emptyList()
+        return synchronized(connection) {
+            connection.prepare(
+                "SELECT id, category, name, lat, lon FROM landmark" +
+                    " WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT $limit",
+            ).use { stmt ->
+                stmt.bindDouble(1, box.south)
+                stmt.bindDouble(2, box.north)
+                stmt.bindDouble(3, box.west)
+                stmt.bindDouble(4, box.east)
+                buildList {
+                    while (stmt.step()) {
+                        add(Landmark(stmt.getLong(0), stmt.getText(1), stmt.textOrNull(2), stmt.getDouble(3), stmt.getDouble(4)))
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Rows matching every word: the most important ones overall, plus (with
      * [near]) the most important ones close by, so a small local place isn't
@@ -89,6 +121,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
 
     companion object {
         private const val CANDIDATE_LIMIT = 300
+
+        /** Per box; a 2 km piece of route in Midtown has a few hundred. */
+        private const val LANDMARK_LIMIT = 5_000
 
         /** How far "nearby" reaches when picking local candidates. */
         private const val NEARBY_KM = 15.0
