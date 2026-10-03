@@ -36,7 +36,7 @@ $(addprefix transit-,$(REGIONS)): transit-%:
 $(VOICE_PACKS): voice-%:
 	voices/build.sh $*
 
-## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium)
+## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium; duckdb, if installed, also tests the Overture fetch query)
 test:
 	python3 -m unittest discover -s search/tests
 	python3 -m unittest discover -s transit/tests

@@ -210,6 +210,11 @@ jobs:
           # to the search pack; unset, search has OSM's addresses only.
           ADDRESS_POINTS_URL: ${{ vars.ADDRESS_POINTS_URL }}
           ADDRESS_POINTS_LAYER: ${{ vars.ADDRESS_POINTS_LAYER }}
+          # Overture Places in the search pack, in their own tables (see
+          # pipeline/search/overture.py). Set the variable OVERTURE to 0 to
+          # leave them out, OVERTURE_RELEASE to pin a release or "latest".
+          OVERTURE: ${{ vars.OVERTURE || '1' }}
+          OVERTURE_RELEASE: ${{ vars.OVERTURE_RELEASE }}
         run: |
           # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys;
           # voice-norman.zip -> voice-norman
