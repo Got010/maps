@@ -6,4 +6,5 @@
     <string name="navigation_voice_muted">Voice muted. Tap to turn on.</string>
     <string name="navigation_arrived">You\'ve arrived</string>
     <string name="navigation_done">Done</string>
+    <string name="navigation_speed_limit">SPEED\nLIMIT</string>
 </resources>

@@ -1,5 +1,6 @@
 package app.southbound.feature.navigation
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +15,23 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.voice.VoiceMode
 import com.stadiamaps.ferrostar.composeui.runtime.KeepScreenOnDisposableEffect
 import com.stadiamaps.ferrostar.composeui.views.components.InstructionsView
@@ -33,7 +41,8 @@ import uniffi.ferrostar.TripState
 
 /**
  * Drawn over the map while navigating: the next turn at the top, time and
- * distance left at the bottom, the voice button and End. Keeps the screen on.
+ * distance left at the bottom, the speed limit of the road, the voice button
+ * and End. Keeps the screen on.
  */
 @Composable
 fun NavigationOverlay(
@@ -42,6 +51,8 @@ fun NavigationOverlay(
     onVoiceModeChange: (VoiceMode) -> Unit,
     onEnd: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The user's speed from GPS, to colour the sign when they're over the limit. */
+    speedMph: Double? = null,
 ) {
     KeepScreenOnDisposableEffect()
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
@@ -68,12 +79,37 @@ fun NavigationOverlay(
                             }
                         }
                     }
-                    VoiceButton(voiceMode, onVoiceModeChange)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        val limit = remember(state) { SpeedLimits.currentMph(state) }
+                        if (limit != null) SpeedLimitSign(limit, over = speedMph != null && speedMph > limit + SpeedLimits.TOLERANCE_MPH)
+                        Box(Modifier.weight(1f))
+                        VoiceButton(voiceMode, onVoiceModeChange)
+                    }
                     TripProgressView(progress = trip.progress, onTapExit = onEnd, modifier = Modifier.fillMaxWidth())
                 }
             }
             is TripState.Complete -> ArrivedCard(onEnd, Modifier.align(Alignment.BottomCenter).padding(16.dp))
             is TripState.Idle -> Unit
+        }
+    }
+}
+
+/** A US speed limit sign: white, black border, red when the user is over it. */
+@Composable
+private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
+    OutlinedCard(
+        colors = CardDefaults.outlinedCardColors(containerColor = Color.White, contentColor = Color.Black),
+        border = BorderStroke(2.dp, if (over) Color(0xFFD93025) else Color.Black),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(stringResource(R.string.navigation_speed_limit), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+            Text(
+                "$limitMph",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (over) Color(0xFFD93025) else Color.Black,
+            )
         }
     }
 }

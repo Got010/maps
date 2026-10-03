@@ -189,6 +189,11 @@ Build NYC end to end first, then scale the same pipeline to the state. Each phas
   - The app shows a region picker (first run and Settings > Updates); the updater fetches a basemap per ticked region plus the statewide packs, and drops `routing-nyc`/`search-nyc` once the `nys` ones arrive. Several basemaps draw as one map (StyleTemplate duplicates the source and layers per pack).
   - 511NY incidents and NYC DOT speeds are a traffic layer behind their toggles (Settings > Live data), with the 511NY key stored encrypted. Closures near a trip become Valhalla `exclude_polygons` on route requests; a closure that appears on the route mid-trip is spoken and the trip is rerouted around it. 511NY's and NYC DOT's hosts were unreachable from the dev container, so both parsers are tested against hand-written fixtures only: **check the first real fetch** (Settings shows feed errors under the traffic button).
   - Not done: the optional TomTom flow layer (read its terms first), and NYS Address Points for upstate search.
+- **Phase 4 is started** (same caveat: test on the phone):
+  - Saved places, lists and recents live in `core/userdata`: one JSON document, AES-GCM under an Android Keystore key, in the no-backup directory. The place card has Save (checkbox per list, new lists), and the search panel shows the lists and recents while the box is empty.
+  - Speed limits come from the route itself: Ferrostar already asks Valhalla for `shape_attributes.speed_limit`, so `SpeedLimits` reads the current one from the navigation state. The navigation screen shows a US-style sign, red when over, and the Speed limit warnings toggle speaks a warning after 8 s over the limit, at most once a minute. Only where OSM has `maxspeed`.
+  - Buildings stand up from zoom 15 (`building-3d` fill-extrusion layer in build_styles.py).
+  - Left: lane guidance, traffic-aware routing, upstate transit (see the Phase 4 list).
 - **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with the signed APK, the packs and `southbound.json`. Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
 - **The app updates itself** from the latest release (`core/updates`). Map data downloads are on by default; app updates are off until turned on. While the repo is private, a read-only GitHub token goes in Settings > Updates.
 - **Not verified yet:**
@@ -240,10 +245,10 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 
 **Phase 4: polish toward Google-grade**
 
-- [ ] Lane guidance, speed limits and 3D buildings
-- [ ] Saved places, lists and recents, encrypted
-- [ ] Traffic-aware routing
-- [ ] Upstate transit systems
+- [ ] Lane guidance (Ferrostar's banner `laneInfo` is empty for Valhalla routes; see the risk below), [x] speed limits, [x] 3D buildings
+- [x] Saved places, lists and recents, encrypted
+- [ ] Traffic-aware routing (needs the live-traffic-in-Valhalla spike first)
+- [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
 ## Repo layout and distribution

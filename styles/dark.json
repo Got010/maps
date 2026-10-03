@@ -319,6 +319,7 @@
       "source": "openmaptiles",
       "source-layer": "building",
       "minzoom": 13,
+      "maxzoom": 16,
       "paint": {
         "fill-color": "#2a2e35",
         "fill-outline-color": "#33373f",
@@ -336,6 +337,57 @@
           14.5,
           1
         ]
+      }
+    },
+    {
+      "id": "building-3d",
+      "type": "fill-extrusion",
+      "source": "openmaptiles",
+      "source-layer": "building",
+      "minzoom": 15,
+      "paint": {
+        "fill-extrusion-color": "#2a2e35",
+        "fill-extrusion-height": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          0,
+          16,
+          [
+            "coalesce",
+            [
+              "get",
+              "render_height"
+            ],
+            5
+          ]
+        ],
+        "fill-extrusion-base": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          0,
+          16,
+          [
+            "coalesce",
+            [
+              "get",
+              "render_min_height"
+            ],
+            0
+          ]
+        ],
+        "fill-extrusion-opacity": 0.75
       }
     },
     {
