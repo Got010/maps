@@ -9,6 +9,7 @@ class NetworkGateTest {
 
     @Test
     fun onlyPackDownloadsAreOnByDefault() {
+        // CLAUDE.md: each feature off by default except pack downloads.
         val toggles = InMemoryNetworkToggles()
         val enabled = NetworkFeature.entries.filter(toggles::isEnabled)
         assertEquals(listOf(NetworkFeature.PACK_DOWNLOADS), enabled)

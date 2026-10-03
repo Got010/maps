@@ -11,7 +11,12 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** API keys the user types into Settings (MTA Bus Time, later 511NY and TomTom). */
-enum class ApiKey { MTA_BUS_TIME }
+enum class ApiKey {
+    MTA_BUS_TIME,
+
+    /** A read-only GitHub token, needed for updates while the repository is private. */
+    GITHUB_RELEASES,
+}
 
 /**
  * Stores API keys encrypted with AES-GCM under a key held in the Android

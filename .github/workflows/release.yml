@@ -211,6 +211,11 @@ jobs:
       PREVIOUS: ${{ needs.plan.outputs.previous }}
       DATA: ${{ needs.plan.outputs.data }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          sparse-checkout: scripts
+
       - uses: actions/download-artifact@v4
         with:
           name: apk
@@ -231,6 +236,13 @@ jobs:
           done
           (cd out && sha256sum -c ./*.sha256)
 
+      # The app reads this to see what changed and checks every download against it.
+      - name: Write the release manifest
+        run: |
+          python3 src/scripts/release-manifest.py out "$VERSION" > southbound.json
+          mv southbound.json out/
+          cat out/southbound.json
+
       - name: Publish release
         run: |
           cd out
@@ -240,7 +252,7 @@ jobs:
           else
             data_note="Map data unchanged since $PREVIOUS."
           fi
-          notes="Install southbound-$VERSION.apk. To load or update the NYC data, share each pack file to Southbound: basemap-nyc.pmtiles (the map), search-nyc.sqlite (search), routing-nyc.tar (directions) and transit-nyc.sqlite (transit schedules). $data_note
+          notes="Install southbound-$VERSION.apk once; Southbound then downloads the NYC data and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-nyc.pmtiles (the map), search-nyc.sqlite (search), routing-nyc.tar (directions) and transit-nyc.sqlite (transit schedules). $data_note
 
           Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then

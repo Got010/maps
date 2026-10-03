@@ -7,9 +7,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The user's network toggles, saved on the phone. Reads are synchronous so
- * [NetworkGate] can check them on any thread.
+ * [NetworkGate] can check them on any thread. One per process ([get]), so a
+ * change in Settings reaches background work at once.
  */
-class PreferenceNetworkToggles(context: Context) : NetworkToggles {
+class PreferenceNetworkToggles private constructor(context: Context) : NetworkToggles {
 
     private val prefs = context.applicationContext.getSharedPreferences("network", Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(read())
@@ -26,4 +27,12 @@ class PreferenceNetworkToggles(context: Context) : NetworkToggles {
 
     private fun read(): Map<NetworkFeature, Boolean> =
         NetworkFeature.entries.associateWith { prefs.getBoolean(it.name, it.enabledByDefault) }
+
+    companion object {
+        @Volatile
+        private var instance: PreferenceNetworkToggles? = null
+
+        fun get(context: Context): PreferenceNetworkToggles =
+            instance ?: synchronized(this) { instance ?: PreferenceNetworkToggles(context.applicationContext).also { instance = it } }
+    }
 }
