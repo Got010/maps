@@ -26,7 +26,7 @@ import uniffi.ferrostar.SpokenInstruction
  * Ferrostar calls [onSpokenInstructionTrigger] at the right moment for each
  * route instruction; the app calls [announce] for reroutes, incidents,
  * cameras and transit stops. With a [guidanceContext] set, turn prompts gain
- * landmarks and chain a quick second turn, and stale ones are dropped;
+ * landmarks and lane advice and chain a quick second turn, and stale ones are dropped;
  * [prepare] makes the next prompt's audio ahead of time. [speakEarly] says a
  * prompt before Ferrostar would (at speed), [startTrip] says the arrival time
  * before the first turn, and [announceAndWait] lets the app end a trip once
@@ -204,7 +204,8 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         val context = guidanceContext.takeIf { kind == UtteranceKind.INSTRUCTION }
         val landmark = instruction?.let { runCatching { context?.landmarkFor(it) }.getOrNull() }
         val followUp = instruction?.let { runCatching { context?.followUpFor(it) }.getOrNull() }
-        return Decision(GuidancePolicy.decide(settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp), followUp)
+        val lanes = instruction?.let { runCatching { context?.lanesFor(it) }.getOrNull() }
+        return Decision(GuidancePolicy.decide(settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp, lanes), followUp)
     }
 
     /** A prompt from the route, from Ferrostar or [speakEarly]. On [intake]. */
