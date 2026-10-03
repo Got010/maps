@@ -71,15 +71,23 @@ import app.southbound.core.map.MapPoint
 import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
 import app.southbound.core.map.NYC_CENTER
+import app.southbound.core.map.NightMode
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.RouteRegions
 import app.southbound.core.packs.Regions
+import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.Navigator
+import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.routing.TravelMode
+import app.southbound.core.routing.TripStops
+import app.southbound.core.updates.UpdateScheduler
+import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
@@ -91,11 +99,16 @@ import app.southbound.core.traffic.TrafficSnapshot
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.UtteranceKind
+import app.southbound.feature.directions.MissingRegionWarning
+import app.southbound.feature.directions.RouteOptionsChip
+import app.southbound.feature.directions.RouteOptionsSheet
 import app.southbound.feature.directions.RoutePreviewSheet
 import app.southbound.feature.directions.RoutePreviewState
+import app.southbound.feature.directions.StopsEditor
 import app.southbound.feature.navigation.NavigationOverlay
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.SearchPanel
+import app.southbound.feature.search.ShortcutSlot
 import app.southbound.feature.transit.StationBoard
 import app.southbound.feature.transit.TransitDepartures
 import app.southbound.feature.transit.TransitPlanSheet
@@ -122,10 +135,14 @@ private sealed interface Panel {
     data object Browse : Panel
     data object Search : Panel
     data class PlaceShown(val place: Place) : Panel
-    data class Directions(val place: Place, val mode: TravelMode, val transit: Boolean = false) : Panel
+    // Phase 6: [stops] are the places between here and [place], in order.
+    data class Directions(val place: Place, val mode: TravelMode, val transit: Boolean = false, val stops: List<Place> = emptyList()) : Panel
 }
 
 private const val PLACE_ZOOM = 16.0
+
+// Phase 6: a new stop closer than this to an existing one (or the destination) is the same stop.
+private const val SAME_STOP_METERS = 30.0
 
 /** Space the bottom sheets take, so camera moves keep places and routes above them. */
 private val SHEET_HEIGHT = 300.dp
@@ -224,6 +241,27 @@ internal fun ExploreMap(
     val userData by services.userData.data.collectAsState()
     var saveDialogFor by remember { mutableStateOf<Place?>(null) }
 
+    // Phase 6: route options, stops being picked, night mode.
+    val routeOptions = remember { RouteOptionsStore.get(context) }
+    val routePrefs by routeOptions.options.collectAsState()
+    var showRouteOptions by remember { mutableStateOf(false) }
+    // The route preview that is waiting while the user searches for a stop to add to it.
+    var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
+    val drivingPrefs = remember { DrivingPrefs.get(context) }
+    val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
+    var clockMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            clockMs = System.currentTimeMillis()
+        }
+    }
+    fun addStop(to: Panel.Directions, place: Place) {
+        val sameSpot = { a: Place, b: Place -> SearchRanking.distanceMeters(LatLon(a.lat, a.lon), b.lat, b.lon) < SAME_STOP_METERS }
+        panel = to.copy(stops = if (sameSpot(place, to.place)) to.stops else TripStops.add(to.stops, place, sameSpot))
+        addingStopTo = null
+    }
+
     // Live traffic: shown on request, and watched for closures during a trip.
     var trafficVisible by rememberSaveable { mutableStateOf(false) }
     var trafficOn by remember { mutableStateOf(services.traffic.isEnabled) }
@@ -251,7 +289,7 @@ internal fun ExploreMap(
     // the first GPS fix arrives after "no location".
     val directions = panel as? Panel.Directions
     val hasFix = location != null || startPlace != null
-    LaunchedEffect(directions, hasFix, navigator, startPlace) {
+    LaunchedEffect(directions, hasFix, navigator, startPlace, routePrefs) {
         val target = directions?.takeIf { !it.transit } ?: return@LaunchedEffect
         routes = emptyList()
         val nav = navigator ?: run {
@@ -263,7 +301,11 @@ internal fun ExploreMap(
             return@LaunchedEffect
         }
         preview = RoutePreviewState.Loading
-        val destination = Waypoint(GeographicCoordinate(target.place.lat, target.place.lon), WaypointKind.BREAK)
+        // Phase 6: stops first, then the destination; the driver's route options apply to this and later reroutes.
+        val waypoints = TripStops.route(target.stops, target.place).map {
+            Waypoint(GeographicCoordinate(it.lat, it.lon), WaypointKind.BREAK)
+        }
+        nav.prefs = routePrefs
         // Steer around 511NY closures near the trip, when that feed is on.
         val avoid = if (services.traffic.hasIncidents) {
             val closures = withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }?.closures.orEmpty()
@@ -272,7 +314,7 @@ internal fun ExploreMap(
             emptyList()
         }
         val found = try {
-            withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), listOf(destination), target.mode, avoid) }
+            withContext(Dispatchers.Default) { nav.routes(from.toUserLocation(), waypoints, target.mode, avoid) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -331,6 +373,9 @@ internal fun ExploreMap(
         } ?: return@LaunchedEffect
         boards = withContext(Dispatchers.Default) { attempt { boardsNear(pack, place.lat, place.lon, snapshot) } } ?: scheduled
     }
+
+    // Phase 6: reroutes and skip-stop use the options in force now.
+    LaunchedEffect(navigator, routePrefs) { navigator?.prefs = routePrefs }
 
     // A trip takes over the map and follows the user; ending it returns to browsing.
     LaunchedEffect(inTrip) {
@@ -405,6 +450,12 @@ internal fun ExploreMap(
     }
 
     BackHandler(enabled = !inTrip && panel != Panel.Browse) {
+        // Phase 6: backing out of picking a stop returns to the route being planned.
+        addingStopTo?.let {
+            panel = it
+            addingStopTo = null
+            return@BackHandler
+        }
         panel = when (val current = panel) {
             is Panel.Directions -> Panel.PlaceShown(current.place)
             else -> Panel.Browse
@@ -445,17 +496,29 @@ internal fun ExploreMap(
     }
     // While on route, the puck sits on the road rather than wandering with GPS noise.
     val shownLocation = (trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location
+    // Phase 6: night mode by sunset, from the last fix and the clock.
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = NightMode.useDark(systemDark, inTrip, nightBySunset, location?.latitude, location?.longitude, clockMs)
     val sheetOpen = !inTrip && (panel is Panel.PlaceShown || panel is Panel.Directions)
     val droppedPin = stringResource(R.string.explore_dropped_pin)
 
     // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
     val home = remember(basemaps) { Regions.boundsOf(basemaps.map { it.region }) }
+    // Phase 6: basemap regions the selected route crosses without the map installed.
+    val installedRegions = remember(basemaps) { basemaps.map { it.region }.toSet() }
+    val selectedRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
+    val missingRegions = remember(selectedRoute, installedRegions) {
+        selectedRoute?.let { RouteRegions.missing(it.geometry.map { p -> p.lat to p.lng }, installedRegions) }.orEmpty()
+    }
     Box(Modifier.fillMaxSize()) {
+        if (showRouteOptions) {
+            RouteOptionsSheet(prefs = routePrefs, onChange = routeOptions::set, onDismiss = { showRouteOptions = false })
+        }
         SouthboundMap(
             basemaps = basemaps.map { it.region to it.file },
             initialCenter = home?.let { MapPoint(it.centerLat, it.centerLon) } ?: NYC_CENTER,
             initialZoom = home?.let { (log2(360.0 / maxOf(it.maxLon - it.minLon, (it.maxLat - it.minLat) * 1.4)) + 1.5).coerceIn(6.5, 11.0) } ?: 11.0,
-            darkTheme = isSystemInDarkTheme(),
+            darkTheme = darkTheme, // Phase 6: system theme, or after sunset while navigating
             location = shownLocation,
             following = following,
             onFollowingDismissed = { following = false },
@@ -468,6 +531,8 @@ internal fun ExploreMap(
                 null
             } else {
                 { point ->
+                    // Phase 6: a long press while planning a route can become a stop.
+                    (panel as? Panel.Directions)?.takeIf { !it.transit }?.let { addingStopTo = it }
                     showPlace(Place.pin(point.lat, point.lon, droppedPin))
                 }
             },
@@ -486,6 +551,10 @@ internal fun ExploreMap(
                 },
                 onCreateList = { name -> scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.createList(name) } } } },
                 onDismiss = { saveDialogFor = null },
+                // Phase 6: Set as Home / Work.
+                onSetShortcut = { kind, on ->
+                    scope.launch(Dispatchers.IO) { attempt { services.userData.setShortcut(kind, if (on) place.toRef() else null) } }
+                },
             )
         }
 
@@ -496,6 +565,10 @@ internal fun ExploreMap(
                 onVoiceModeChange = { mode -> scope.launch { services.voiceStore.update { it.copy(mode = mode) } } },
                 onEnd = { navigator?.stop() },
                 speedMph = speedMph,
+                // Phase 6: skip stop, after-sunset dark overlay, clock for the arrival time.
+                onSkipStop = { scope.launch { navigator?.skipNextStop() } },
+                darkOverlay = darkTheme && !systemDark,
+                nowMs = clockMs,
             )
             if (!following && location != null) {
                 RecenterButton(following, { following = true }, Modifier.align(Alignment.CenterEnd))
@@ -538,7 +611,22 @@ internal fun ExploreMap(
                     index = searchIndex,
                     near = near,
                     onPick = { showPlace(it.place) },
-                    onClose = { panel = Panel.Browse },
+                    onClose = {
+                        // Phase 6: closing the stop search returns to the route being planned.
+                        panel = addingStopTo?.also { addingStopTo = null } ?: Panel.Browse
+                    },
+                    // Phase 6: Home and Work chips (not while picking a stop).
+                    home = userData.home?.toPlace(),
+                    work = userData.work?.toPlace(),
+                    onOpenShortcut = if (addingStopTo == null) {
+                        { place -> panel = Panel.Directions(place, TravelMode.DRIVE, transit = !hasRouting) }
+                    } else {
+                        null
+                    },
+                    onSetShortcut = { slot, place ->
+                        val kind = if (slot == ShortcutSlot.HOME) Shortcut.HOME else Shortcut.WORK
+                        scope.launch(Dispatchers.IO) { attempt { services.userData.setShortcut(kind, place.toRef()) } }
+                    },
                     groups = userData.placeGroups(),
                     onClearRecents = { scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.clearRecents() } } } },
                 )
@@ -550,11 +638,13 @@ internal fun ExploreMap(
                     } else {
                         null
                     },
-                    onClose = { panel = Panel.Browse },
+                    onClose = { panel = addingStopTo?.also { addingStopTo = null } ?: Panel.Browse },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .safeDrawingPadding()
                         .padding(8.dp),
+                    // Phase 6: Add stop, while a route is being planned.
+                    onAddStop = addingStopTo?.let { planned -> { addStop(planned, current.place) } },
                     onStartHere = if (hasRouting || transitPack != null) {
                         {
                             startPlace = current.place
@@ -608,6 +698,31 @@ internal fun ExploreMap(
                             { panel = current.copy(transit = true) }
                         } else {
                             null
+                        },
+                        // Phase 6: options chip and stops under the mode chips; region warning above Start.
+                        afterModes = {
+                            if (current.mode == TravelMode.DRIVE) {
+                                RouteOptionsChip(active = !routePrefs.isDefault, onClick = { showRouteOptions = true })
+                            }
+                            StopsEditor(
+                                stops = current.stops.map { it.name },
+                                onMove = { i, delta -> panel = current.copy(stops = TripStops.move(current.stops, i, delta)) },
+                                onRemove = { i -> panel = current.copy(stops = TripStops.remove(current.stops, i)) },
+                                onAdd = {
+                                    addingStopTo = current
+                                    panel = Panel.Search
+                                },
+                            )
+                        },
+                        beforeStart = {
+                            MissingRegionWarning(
+                                regionNames = missingRegions.map { it.name },
+                                onDownload = {
+                                    val selection = RegionSelection.get(context)
+                                    missingRegions.forEach { selection.set(it.id, true) }
+                                    UpdateScheduler.checkNow(context, anyNetwork = false)
+                                },
+                            )
                         },
                     )
                 }

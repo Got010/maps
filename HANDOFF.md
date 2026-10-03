@@ -251,6 +251,16 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
 
+**Phase 6: driving essentials** (picked by the owner, October 2026; built, not yet run on a phone)
+
+- [x] Home and Work shortcuts: set from the place card's Save dialog (Set as Home / Set as Work), two chips at the top of the search panel while the box is empty. An unset chip asks you to search and pick; the pick sets it.
+- [x] Route options: avoid tolls, highways and ferries, and a Car or Truck/RV profile (height, width, length in feet, weight in tons) in an Options sheet on the route preview. Saved in preferences (`RouteOptionsStore`), applied as Valhalla `costing_options` injected into each request (`RouteOptions.withPrefs`), and so also used by reroutes and skip-stop. Driving only; walking and cycling ignore them.
+- [x] Multi-stop trips: Add stop on a place card while planning (or from the route sheet), stops listed in the sheet with up, down and remove, Skip stop during a trip. Not done: adding a stop in the middle of a trip.
+- [x] Navigation extras: current road name, arrival clock time in the phone's 12/24 hour format, larger instruction text (Ferrostar `InstructionRowTheme`), and night mode by sunset (NOAA equations in `core/map SunTimes`, Settings > Driving toggle, on by default).
+- [x] Missing-region warning in the route preview with a Download button that ticks the region and starts an update check.
+
+Exit test: set Home, plan Home, a stop in Albany, then Buffalo avoiding tolls, start it, and the map warns about any missing region first; the navigation screen shows the road name and arrival time.
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.

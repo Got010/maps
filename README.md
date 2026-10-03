@@ -83,6 +83,17 @@ and on the 2nd of every month, from fresh OpenStreetMap and MTA data; other
 releases carry the previous packs over. To swap in newer data, share the new
 file to Southbound the same way; it replaces the old one.
 
+## Driving
+
+Save a place as Home or Work from its card and both appear as one-tap chips in
+the search box. In route preview, Options avoids tolls, highways and ferries
+and switches to a truck or RV profile with your vehicle's size and weight;
+Add stop builds a trip with several stops, which you can reorder, remove or
+skip while driving. The navigation screen shows the road you're on and your
+arrival time, and after sunset the map and screen go dark (Settings > Driving).
+If a route crosses a region whose map isn't installed, the preview says so and
+offers to download it.
+
 ## Live traffic
 
 Settings > Live data has a toggle for 511NY incidents and closures (needs a
