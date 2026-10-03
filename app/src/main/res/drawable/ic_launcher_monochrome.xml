@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon silhouette of the fin: one tone, so no stripes, but the open dot stays. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,28.7 C54,28.7 77.76,49.05 77.76,63.9 C77.76,72.15 75.56,79.3 68.85,79.3 C58.95,79.3 49.05,79.3 39.15,79.3 C32.44,79.3 30.24,72.15 30.24,63.9 C30.24,49.05 54,28.7 54,28.7 Z M46.3,62.8 A7.7,7.7 0 1 1 61.7,62.8 A7.7,7.7 0 1 1 46.3,62.8 Z" />
+</vector>

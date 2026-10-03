@@ -35,6 +35,8 @@ import org.maplibre.android.gestures.RotateGestureDetector
 import org.maplibre.android.gestures.ShoveGestureDetector
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentConstants
+import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.OnCameraTrackingChangedListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -42,6 +44,8 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.layers.Property
+import org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -282,8 +286,6 @@ fun SouthboundMap(
         val loadedMap = map ?: return@LaunchedEffect
         val puck = loadedMap.locationComponent
         if (style == null || !puck.isLocationComponentEnabled) return@LaunchedEffect
-        // While navigating the puck shows travel direction, not the compass.
-        puck.renderMode = if (navigating) RenderMode.GPS else RenderMode.NORMAL
         // Padding from a place or route view would otherwise stay and shift the puck.
         if (following) loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
         when {
@@ -327,9 +329,16 @@ private fun activateLocationPuck(
         LocationComponentActivationOptions.builder(context, style)
             // Fixes come from our own LocationManager GPS flow, never MapLibre's engine.
             .useDefaultLocationEngine(false)
+            .locationComponentOptions(finPuckOptions(context))
             .build(),
     )
+    // The fin is drawn side-on, so it never turns with the travel direction: NORMAL keeps it
+    // upright on screen in every camera mode, navigation included.
     puck.renderMode = RenderMode.NORMAL
+    // MapLibre lays the puck flat on the map; on the tilted navigation camera that would squash
+    // the fin onto the road. Stand it up facing the screen instead.
+    style.getLayer(LocationComponentConstants.FOREGROUND_LAYER)
+        ?.setProperties(iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT))
     if (firstActivation) {
         puck.addOnCameraTrackingChangedListener(object : OnCameraTrackingChangedListener {
             override fun onCameraTrackingDismissed() = onTrackingDismissed()
@@ -337,6 +346,18 @@ private fun activateLocationPuck(
         })
     }
 }
+
+/** The user's position as a tiger shark fin in the water instead of MapLibre's blue dot. */
+private fun finPuckOptions(context: Context): LocationComponentOptions =
+    LocationComponentOptions.builder(context)
+        .foregroundDrawable(R.drawable.location_fin)
+        .gpsDrawable(R.drawable.location_fin)
+        .foregroundDrawableStale(R.drawable.location_fin_stale)
+        // No white ring behind the fin, and no shadow cast from one.
+        .backgroundDrawable(R.drawable.location_none)
+        .backgroundDrawableStale(R.drawable.location_none)
+        .elevation(0f)
+        .build()
 
 // Only called with a real fix, which requires location permission.
 @SuppressLint("MissingPermission")

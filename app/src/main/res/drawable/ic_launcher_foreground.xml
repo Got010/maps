@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Map pin centered in the 72dp safe zone of a 108dp adaptive icon. -->
+<!-- Tiger shark dorsal fin: the old map pin turned over, widened, set on a flat waterline,
+     with pale tiger stripes. Centred in the 72dp safe zone of a 108dp adaptive icon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Fin, with the open dot punched through. -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M54,30c-9.94,0 -18,8.06 -18,18c0,13.5 18,32 18,32s18,-18.5 18,-32c0,-9.94 -8.06,-18 -18,-18zM54,55a7,7 0,1 1,0 -14a7,7 0,1 1,0 14z" />
+        android:fillType="evenOdd"
+        android:pathData="M54,28.7 C54,28.7 77.76,49.05 77.76,63.9 C77.76,72.15 75.56,79.3 68.85,79.3 C58.95,79.3 49.05,79.3 39.15,79.3 C32.44,79.3 30.24,72.15 30.24,63.9 C30.24,49.05 54,28.7 54,28.7 Z M46.3,62.8 A7.7,7.7 0 1 1 61.7,62.8 A7.7,7.7 0 1 1 46.3,62.8 Z" />
+    <!-- Horizontal stripes, cut exactly to the fin outline. -->
+    <path
+        android:fillColor="#FFBFD6FB"
+        android:pathData="M63.19,37.7 C64.5,39.13 65.86,40.67 67.19,42.3 C58.4,42.3 49.6,42.3 40.81,42.3 C42.14,40.67 43.5,39.13 44.81,37.7 C50.94,37.7 57.06,37.7 63.19,37.7 Z M71.62,48.2 C72.64,49.71 73.58,51.25 74.41,52.8 C60.8,52.8 47.2,52.8 33.59,52.8 C34.42,51.25 35.36,49.71 36.38,48.2 C48.13,48.2 59.87,48.2 71.62,48.2 Z M76.92,58.7 C77.39,60.27 77.68,61.81 77.75,63.3 C61.92,63.3 46.08,63.3 30.25,63.3 C30.32,61.81 30.61,60.27 31.08,58.7 C46.36,58.7 61.64,58.7 76.92,58.7 Z M77.4,69.2 C77.16,70.88 76.77,72.44 76.22,73.8 C61.41,73.8 46.59,73.8 31.78,73.8 C31.23,72.44 30.84,70.88 30.6,69.2 C46.2,69.2 61.8,69.2 77.4,69.2 Z" />
+    <!-- Re-opens the dot where the stripes cross it; same colour as the icon background. -->
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M46.3,62.8 A7.7,7.7 0 1 1 61.7,62.8 A7.7,7.7 0 1 1 46.3,62.8 Z" />
 </vector>
