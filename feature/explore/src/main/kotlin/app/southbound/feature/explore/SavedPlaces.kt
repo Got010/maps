@@ -110,3 +110,18 @@ fun SaveDialog(
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.explore_save_done)) } },
     )
 }
+
+/**
+ * Shown when the saved places file exists but could not be read. "Keep trying" leaves the file
+ * alone; "Start fresh" sets it aside under a new name (never deleting it) and begins empty.
+ */
+@Composable
+fun UnreadableDataDialog(onKeepTrying: () -> Unit, onStartFresh: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onKeepTrying,
+        title = { Text(stringResource(R.string.explore_unreadable_title)) },
+        text = { Text(stringResource(R.string.explore_unreadable_body)) },
+        confirmButton = { TextButton(onClick = onKeepTrying) { Text(stringResource(R.string.explore_unreadable_keep)) } },
+        dismissButton = { TextButton(onClick = onStartFresh) { Text(stringResource(R.string.explore_unreadable_fresh)) } },
+    )
+}

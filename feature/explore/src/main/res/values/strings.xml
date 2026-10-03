@@ -52,6 +52,10 @@
     <string name="explore_save_new_list">New list</string>
     <string name="explore_save_add">Add</string>
     <string name="explore_save_done">Done</string>
+    <string name="explore_unreadable_title">Saved places</string>
+    <string name="explore_unreadable_body">Your saved places could not be read. They have not been deleted. Nothing new can be saved until you choose. Start fresh keeps the old file aside under a new name and begins with an empty list.</string>
+    <string name="explore_unreadable_keep">Keep trying</string>
+    <string name="explore_unreadable_fresh">Start fresh</string>
     <string name="explore_speeding_spoken">The speed limit is %1$d miles per hour.</string>
     <string name="explore_shortcut_set_home">Set as Home</string>
     <string name="explore_shortcut_set_work">Set as Work</string>

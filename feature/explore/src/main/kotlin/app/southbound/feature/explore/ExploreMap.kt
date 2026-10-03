@@ -102,6 +102,7 @@ import app.southbound.core.routing.SpeedWarningPolicy
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.updates.UpdateScheduler
+import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
@@ -292,6 +293,9 @@ internal fun ExploreMap(
     // Saved places and recents, kept encrypted on the phone.
     val userData by services.userData.data.collectAsState()
     var saveDialogFor by remember { mutableStateOf<Place?>(null) }
+    // An unreadable saved-places file is never overwritten; the user decides what happens to it.
+    val userDataState by services.userData.loadState.collectAsState()
+    var unreadableAcknowledged by remember { mutableStateOf(false) }
 
     // Phase 6: route options, stops being picked, night mode.
     val routeOptions = remember { RouteOptionsStore.get(context) }
@@ -928,6 +932,13 @@ internal fun ExploreMap(
             onTrafficCameraTap = { id -> shownThing = ShownThing.TrafficCam(id) },
             onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
         )
+
+        if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
+            UnreadableDataDialog(
+                onKeepTrying = { unreadableAcknowledged = true },
+                onStartFresh = { scope.launch(Dispatchers.IO) { attempt { services.userData.startFresh() } } },
+            )
+        }
 
         saveDialogFor?.let { place ->
             SaveDialog(
