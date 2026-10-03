@@ -28,7 +28,12 @@ class ChimeTest {
             val beep = Chime.render(ChimeKind.SPEED_BEEP, rate)
             // Two 120 ms beeps with a 90 ms gap: 330 ms, ending on the second beep.
             assertEquals(330 * rate / 1000, beep.size, 2)
-            assertNotEquals(Chime.render(ChimeKind.ALERT, rate).size, beep.size)
+            // Same 330 ms as the alert, so tell them apart by rhythm: in the alert's
+            // first pause (70-120 ms) the alert is silent while the long beep still sounds.
+            val alert = Chime.render(ChimeKind.ALERT, rate)
+            val alertPause = (80 * rate / 1000) until (110 * rate / 1000)
+            assertTrue(alert.slice(alertPause).all { it.toInt() == 0 })
+            assertTrue(beep.slice(alertPause).maxOf { abs(it.toInt()) } > Short.MAX_VALUE / 3)
             // Audible alone over road noise, but never clipping.
             val peak = beep.maxOf { abs(it.toInt()) }
             assertTrue(peak > Short.MAX_VALUE / 3 && peak < Short.MAX_VALUE * 0.8)
