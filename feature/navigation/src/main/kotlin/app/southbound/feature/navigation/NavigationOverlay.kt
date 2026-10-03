@@ -2,6 +2,9 @@ package app.southbound.feature.navigation
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +23,6 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -28,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +70,10 @@ fun NavigationOverlay(
     arrivalSide: ArrivalSide? = null,
     /** True when the search pack lists parking within a short walk of the destination. */
     parkingNearby: Boolean = false,
+    /** The voice is quiet until the next turn (a long-press on the voice button); the button shows it. */
+    mutedUntilNextTurn: Boolean = false,
+    /** Long-press on the voice button: mute until the next turn, or lift that mute. */
+    onVoiceLongPress: () -> Unit = {},
 ) {
     KeepScreenOnDisposableEffect()
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
@@ -103,7 +110,7 @@ fun NavigationOverlay(
                         val limit = remember(state) { SpeedLimits.currentMph(state) }
                         if (limit != null) SpeedLimitSign(limit, over = speedMph != null && speedMph > limit + SpeedLimits.TOLERANCE_MPH)
                         Box(Modifier.weight(1f))
-                        VoiceButton(voiceMode, onVoiceModeChange)
+                        VoiceButton(voiceMode, onVoiceModeChange, mutedUntilNextTurn, onVoiceLongPress)
                     }
                     EtaLine(trip.progress.durationRemaining, delaySeconds)
                     TripProgressView(progress = trip.progress, onTapExit = onEnd, modifier = Modifier.fillMaxWidth())
@@ -135,23 +142,37 @@ private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
     }
 }
 
-/** Cycles On -> Alerts only -> Muted, like the toggle in Settings. */
+/**
+ * Cycles On -> Alerts only -> Muted, like the toggle in Settings. A long
+ * press mutes until the next turn (or lifts that), shown as a dimmed icon.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit) {
-    SmallFloatingActionButton(onClick = { onChange(mode.next()) }) {
+private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUntilNextTurn: Boolean, onLongPress: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+        modifier = Modifier.combinedClickable(onClick = { onChange(mode.next()) }, onLongClick = onLongPress),
+    ) {
         Icon(
-            when (mode) {
-                VoiceMode.ON -> Icons.Filled.VolumeUp
-                VoiceMode.ALERTS_ONLY -> Icons.Filled.NotificationsActive
-                VoiceMode.MUTED -> Icons.Filled.VolumeOff
+            when {
+                mutedUntilNextTurn -> Icons.Filled.VolumeOff
+                mode == VoiceMode.ON -> Icons.Filled.VolumeUp
+                mode == VoiceMode.ALERTS_ONLY -> Icons.Filled.NotificationsActive
+                else -> Icons.Filled.VolumeOff
             },
             contentDescription = stringResource(
-                when (mode) {
-                    VoiceMode.ON -> R.string.navigation_voice_on
-                    VoiceMode.ALERTS_ONLY -> R.string.navigation_voice_alerts
-                    VoiceMode.MUTED -> R.string.navigation_voice_muted
+                when {
+                    mutedUntilNextTurn -> R.string.navigation_voice_until_turn
+                    mode == VoiceMode.ON -> R.string.navigation_voice_on
+                    mode == VoiceMode.ALERTS_ONLY -> R.string.navigation_voice_alerts
+                    else -> R.string.navigation_voice_muted
                 },
             ),
+            modifier = Modifier.padding(12.dp).alpha(if (mutedUntilNextTurn) 0.5f else 1f),
         )
     }
 }
