@@ -5,8 +5,88 @@ import java.util.Locale
 /** What the driver is in: a car, or something tall, wide, long or heavy. */
 enum class VehicleKind { CAR, TRUCK }
 
+/** Which kind of bicycle the rider is on; Valhalla's `bicycle_type` tunes speed and surface tolerance. */
+enum class BikeType(val valhalla: String) { ROAD("road"), HYBRID("hybrid"), MOUNTAIN("mountain") }
+
 /**
- * The driver's route preferences (Phase 6). Dimensions are in the units
+ * Walking preferences (Phase 7), sent as `costing_options.pedestrian`.
+ *
+ * Valhalla 3.x has no wheelchair profile, only penalties and factors, so these
+ * are nudges, not guarantees: a stair is never forbidden, just made so costly
+ * that any reasonable detour wins.
+ *
+ * - [avoidStairs]: `step_penalty` 600 s (the top of Valhalla's range; its
+ *   default is 30 s) on every transition onto steps.
+ * - [stepFree]: everything [avoidStairs] does, plus `use_hills` 0.1 (flat
+ *   grades), `use_tracks` 0 and `max_hiking_difficulty` 0 (no rough trails)
+ *   and `walking_speed` 4 km/h so the ETA is not a brisk walker's.
+ * - [preferPaths]: `walkway_factor` 0.5 and `sidewalk_factor` 0.7 (below 1 is
+ *   favoured) so footways and streets with sidewalks beat plain roads.
+ */
+data class WalkPrefs(
+    val avoidStairs: Boolean = false,
+    val stepFree: Boolean = false,
+    val preferPaths: Boolean = false,
+) {
+    val isDefault: Boolean get() = !avoidStairs && !stepFree && !preferPaths
+
+    /** The body of `costing_options.pedestrian`, or null when nothing differs from Valhalla's defaults. */
+    fun costingOptionsJson(): String? {
+        val parts = buildList {
+            if (stepFree) add(""""walking_speed":4""")
+            if (stepFree || avoidStairs) add(""""step_penalty":$STEP_PENALTY_SECONDS""")
+            if (preferPaths) {
+                add(""""walkway_factor":0.5""")
+                add(""""sidewalk_factor":0.7""")
+            }
+            if (stepFree) {
+                add(""""use_hills":0.1""")
+                add(""""use_tracks":0""")
+                add(""""max_hiking_difficulty":0""")
+            }
+        }
+        return if (parts.isEmpty()) null else parts.joinToString(",", prefix = "{", postfix = "}")
+    }
+
+    companion object {
+        const val STEP_PENALTY_SECONDS = 600
+    }
+}
+
+/**
+ * Cycling preferences (Phase 7), sent as `costing_options.bicycle`. Unlike
+ * walking, cycling always sends options: the app's own defaults (a hybrid
+ * bike, `use_roads` 0.3 so bike lanes and quiet streets win over Valhalla's
+ * 0.5) are part of the request. [avoidHills] sets `use_hills` 0.1 (default
+ * 0.5, and it only helps where the routing pack has elevation) and
+ * [avoidBusyRoads] drops `use_roads` to 0.1. Ferries follow
+ * [RoutePrefs.avoidFerries].
+ */
+data class BikePrefs(
+    val type: BikeType = BikeType.HYBRID,
+    val avoidHills: Boolean = false,
+    val avoidBusyRoads: Boolean = false,
+) {
+    val isDefault: Boolean get() = this == BikePrefs()
+
+    fun costingOptionsJson(avoidFerries: Boolean): String {
+        val parts = buildList {
+            add(""""bicycle_type":"${type.valhalla}"""")
+            add(""""use_roads":${if (avoidBusyRoads) "0.1" else DEFAULT_USE_ROADS}""")
+            if (avoidHills) add(""""use_hills":0.1""")
+            if (avoidFerries) add(""""use_ferry":0""")
+        }
+        return parts.joinToString(",", prefix = "{", postfix = "}")
+    }
+
+    companion object {
+        const val DEFAULT_USE_ROADS = "0.3"
+    }
+}
+
+/**
+ * The driver's route preferences (Phase 6), with walking and cycling
+ * preferences (Phase 7) alongside. Dimensions are in the units
  * people know for vehicles in the US: feet and short tons. Valhalla wants
  * meters and metric tonnes, so [costingOptionsJson] converts.
  */
@@ -25,16 +105,31 @@ data class RoutePrefs(
     val widthFt: Double = DEFAULT_WIDTH_FT,
     val lengthFt: Double = DEFAULT_LENGTH_FT,
     val weightTons: Double = DEFAULT_WEIGHT_TONS,
+    /** Used only for [TravelMode.WALK]. */
+    val walk: WalkPrefs = WalkPrefs(),
+    /** Used only for [TravelMode.BIKE]; [avoidFerries] applies to cycling too. */
+    val bike: BikePrefs = BikePrefs(),
 ) {
     /** The Valhalla costing model this profile routes with. */
     val costing: String get() = if (vehicle == VehicleKind.TRUCK) "truck" else TravelMode.DRIVE.valhallaCosting
 
-    /** True when every option is at its default, so requests stay as Ferrostar built them. */
+    /** True when every driving option is at its default, so requests stay as Ferrostar built them. */
     val isDefault: Boolean get() = costingOptionsJson() == null && !avoidAlpr
+
+    /** [isDefault] for the options that apply to [mode] only, e.g. a walk preference doesn't light up the Drive chip. */
+    fun isDefaultFor(mode: TravelMode): Boolean = when (mode) {
+        TravelMode.DRIVE -> isDefault
+        TravelMode.WALK -> walk.isDefault
+        TravelMode.BIKE -> bike.isDefault && !avoidFerries
+    }
+
+    /** `costing_options.bicycle`, always present (see [BikePrefs]). */
+    fun bikeCostingOptionsJson(): String = bike.costingOptionsJson(avoidFerries)
 
     /**
      * The body of `costing_options.<costing>`, or null when nothing differs
-     * from a plain car trip. Valhalla's 0 for use_tolls, use_highways and
+     * from a plain car trip (driving only; see [WalkPrefs] and [BikePrefs]).
+     * Valhalla's 0 for use_tolls, use_highways and
      * use_ferry means avoid as far as possible; unset keeps its own default.
      */
     fun costingOptionsJson(): String? {

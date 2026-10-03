@@ -25,6 +25,12 @@ class RouteOptionsStore private constructor(context: Context) {
             .putFloat("width_ft", next.widthFt.toFloat())
             .putFloat("length_ft", next.lengthFt.toFloat())
             .putFloat("weight_tons", next.weightTons.toFloat())
+            .putBoolean("walk_avoid_stairs", next.walk.avoidStairs)
+            .putBoolean("walk_step_free", next.walk.stepFree)
+            .putBoolean("walk_prefer_paths", next.walk.preferPaths)
+            .putString("bike_type", next.bike.type.name)
+            .putBoolean("bike_avoid_hills", next.bike.avoidHills)
+            .putBoolean("bike_avoid_busy_roads", next.bike.avoidBusyRoads)
             .apply()
         _options.value = next
     }
@@ -39,6 +45,16 @@ class RouteOptionsStore private constructor(context: Context) {
         widthFt = prefs.getFloat("width_ft", RoutePrefs.DEFAULT_WIDTH_FT.toFloat()).toDouble(),
         lengthFt = prefs.getFloat("length_ft", RoutePrefs.DEFAULT_LENGTH_FT.toFloat()).toDouble(),
         weightTons = prefs.getFloat("weight_tons", RoutePrefs.DEFAULT_WEIGHT_TONS.toFloat()).toDouble(),
+        walk = WalkPrefs(
+            avoidStairs = prefs.getBoolean("walk_avoid_stairs", false),
+            stepFree = prefs.getBoolean("walk_step_free", false),
+            preferPaths = prefs.getBoolean("walk_prefer_paths", false),
+        ),
+        bike = BikePrefs(
+            type = BikeType.entries.firstOrNull { it.name == prefs.getString("bike_type", null) } ?: BikeType.HYBRID,
+            avoidHills = prefs.getBoolean("bike_avoid_hills", false),
+            avoidBusyRoads = prefs.getBoolean("bike_avoid_busy_roads", false),
+        ),
     ).sanitized()
 
     companion object {
