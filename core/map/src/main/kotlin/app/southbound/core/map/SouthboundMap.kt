@@ -26,7 +26,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponent
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.OnCameraTrackingChangedListener
@@ -44,6 +46,10 @@ private val NYC_CENTER = LatLng(40.7128, -74.0060)
 private const val START_ZOOM = 11.0
 private const val MIN_ZOOM = 8.0
 private const val FOLLOW_ZOOM = 16.0
+private const val NAVIGATION_ZOOM = 17.0
+private const val NAVIGATION_TILT = 45.0
+private const val CAMERA_ANIMATION_MS = 800
+private val FIT_PADDING = 64.dp
 
 /**
  * The basemap, drawn from a local PMTiles pack, with the user's position.
@@ -51,6 +57,11 @@ private const val FOLLOW_ZOOM = 16.0
  * Location is pushed in from [location] rather than read by MapLibre, so the
  * app controls exactly which provider is used. While [following] is true the
  * camera tracks the puck; a pan by the user calls [onFollowingDismissed].
+ *
+ * [overlays] draws routes and pins; [cameraRequest] moves the camera once per
+ * new request. While [navigating], the camera follows the puck heading-up and
+ * tilted, as turn-by-turn apps do. A long press reports the spot to
+ * [onLongPress], e.g. to drop a pin.
  */
 @Composable
 fun SouthboundMap(
@@ -61,6 +72,12 @@ fun SouthboundMap(
     onFollowingDismissed: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
+    overlays: MapOverlays = MapOverlays(),
+    cameraRequest: CameraRequest? = null,
+    navigating: Boolean = false,
+    onLongPress: ((MapPoint) -> Unit)? = null,
+    /** Screen edges covered by panels; camera moves keep their subject clear of them. */
+    obscured: PaddingValues = PaddingValues(),
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -86,7 +103,68 @@ fun SouthboundMap(
         val json = withContext(Dispatchers.IO) { BasemapStyle.load(context, darkTheme, basemap) }
         loadedMap.setStyle(Style.Builder().fromJson(json)) { loaded ->
             activateLocationPuck(context, loadedMap, loaded) { currentOnFollowingDismissed() }
+            OverlayLayers.install(loaded)
             style = loaded
+        }
+    }
+
+    LaunchedEffect(style, overlays) {
+        val loaded = style ?: return@LaunchedEffect
+        OverlayLayers.update(loaded, overlays)
+    }
+
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapLongClickListener { latLng ->
+            val handler = currentOnLongPress ?: return@OnMapLongClickListener false
+            handler(MapPoint(latLng.latitude, latLng.longitude))
+            true
+        }
+        loadedMap.addOnMapLongClickListener(listener)
+        onDispose { loadedMap.removeOnMapLongClickListener(listener) }
+    }
+
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    LaunchedEffect(style, cameraRequest) {
+        val loadedMap = map ?: return@LaunchedEffect
+        val request = cameraRequest ?: return@LaunchedEffect
+        if (style == null) return@LaunchedEffect
+        // An explicit move ends following; the recenter button brings it back.
+        if (loadedMap.locationComponent.isLocationComponentActivated) {
+            loadedMap.locationComponent.cameraMode = CameraMode.NONE
+        }
+        val insets = with(density) {
+            val ld = layoutDirection
+            listOf(
+                obscured.calculateLeftPadding(ld),
+                obscured.calculateTopPadding(),
+                obscured.calculateRightPadding(ld),
+                obscured.calculateBottomPadding(),
+            ).map { (it + FIT_PADDING).roundToPx() }
+        }
+        when (request) {
+            is CameraRequest.Show -> loadedMap.animateCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder()
+                        .target(LatLng(request.point.lat, request.point.lon))
+                        .zoom(request.zoom)
+                        .padding(insets[0].toDouble(), insets[1].toDouble(), insets[2].toDouble(), insets[3].toDouble())
+                        .build(),
+                ),
+                CAMERA_ANIMATION_MS,
+            )
+            is CameraRequest.Fit -> {
+                if (request.points.isEmpty()) return@LaunchedEffect
+                val bounds = LatLngBounds.Builder()
+                    .includes(request.points.map { LatLng(it.lat, it.lon) })
+                    .build()
+                loadedMap.animateCamera(
+                    CameraUpdateFactory.newLatLngBounds(bounds, insets[0], insets[1], insets[2], insets[3]),
+                    CAMERA_ANIMATION_MS,
+                )
+            }
         }
     }
 
@@ -98,20 +176,26 @@ fun SouthboundMap(
         showFix(loadedMap.locationComponent, location)
     }
 
-    LaunchedEffect(style, following, location != null) {
+    LaunchedEffect(style, following, navigating, location != null) {
         val loadedMap = map ?: return@LaunchedEffect
         val puck = loadedMap.locationComponent
         if (style == null || !puck.isLocationComponentEnabled) return@LaunchedEffect
-        if (following) {
-            val zoom = if (loadedMap.cameraPosition.zoom < FOLLOW_ZOOM - 2) FOLLOW_ZOOM else null
-            puck.setCameraMode(CameraMode.TRACKING, 750L, zoom, null, null, null)
-        } else if (puck.cameraMode != CameraMode.NONE) {
-            puck.cameraMode = CameraMode.NONE
+        // While navigating the puck shows travel direction, not the compass.
+        puck.renderMode = if (navigating) RenderMode.GPS else RenderMode.NORMAL
+        // Padding from a place or route view would otherwise stay and shift the puck.
+        if (following) loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+        when {
+            following && navigating ->
+                puck.setCameraMode(CameraMode.TRACKING_GPS, 750L, NAVIGATION_ZOOM, null, NAVIGATION_TILT, null)
+            following -> {
+                val zoom = if (loadedMap.cameraPosition.zoom < FOLLOW_ZOOM - 2) FOLLOW_ZOOM else null
+                // Back to north-up after navigation.
+                puck.setCameraMode(CameraMode.TRACKING, 750L, zoom, 0.0, 0.0, null)
+            }
+            puck.cameraMode != CameraMode.NONE -> puck.cameraMode = CameraMode.NONE
         }
     }
 
-    val density = LocalDensity.current
-    val layoutDirection = LocalLayoutDirection.current
     LaunchedEffect(map, contentPadding) {
         val ui = map?.uiSettings ?: return@LaunchedEffect
         with(density) {

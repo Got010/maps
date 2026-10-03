@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="directions_to">To %1$s</string>
+    <string name="directions_close">Close directions</string>
+    <string name="directions_finding">Finding routes…</string>
+    <string name="directions_no_route">No route found. The place may be off the road network or outside the NYC routing data.</string>
+    <string name="directions_no_location">Waiting for your location. Step outside or near a window.</string>
+    <string name="directions_start">Start</string>
+    <string name="directions_via">via %1$s</string>
+    <string name="mode_drive">Drive</string>
+    <string name="mode_walk">Walk</string>
+    <string name="mode_bike">Bike</string>
+</resources>

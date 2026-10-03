@@ -9,9 +9,19 @@
     <string name="explore_pack_invalid_title">NYC map file is damaged</string>
     <string name="explore_pack_body">Download basemap-nyc.pmtiles from the Southbound map data release on GitHub, then import it here. The map stays on this phone.</string>
     <string name="explore_import">Import map file</string>
-    <string name="explore_importing">Importing map…</string>
-    <string name="explore_import_not_a_map">That file isn\'t a Southbound map. Pick basemap-nyc.pmtiles.</string>
+    <string name="explore_importing">Importing…</string>
+    <string name="explore_import_not_a_pack">That file isn\'t a Southbound map or data pack.</string>
     <string name="explore_import_failed">Import failed.</string>
+    <string name="explore_import_ok">OK</string>
+    <string name="explore_imported_basemap">Map installed.</string>
+    <string name="explore_imported_routing">Directions data installed.</string>
+    <string name="explore_imported_search">Search data installed.</string>
+    <string name="explore_imported_transit">Transit data installed.</string>
+    <string name="explore_pack_share_hint">Or, in your browser\'s downloads, share the file to Southbound.</string>
     <string name="explore_pack_adb">Or copy it here with adb, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>
+    <string name="explore_search">Search places and addresses</string>
+    <string name="explore_settings">Settings</string>
+    <string name="explore_dropped_pin">Dropped pin</string>
+    <string name="explore_rerouting_spoken">Rerouting.</string>
 </resources>

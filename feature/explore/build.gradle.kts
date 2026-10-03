@@ -10,6 +10,13 @@ android {
 dependencies {
     implementation(project(":core:map"))
     implementation(project(":core:packs"))
+    implementation(project(":core:routing"))
+    implementation(project(":core:search"))
+    implementation(project(":core:voice"))
+    implementation(project(":feature:directions"))
+    implementation(project(":feature:navigation"))
+    implementation(project(":feature:search"))
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)

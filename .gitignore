@@ -15,5 +15,11 @@ captures/
 pipeline/data/
 *.pmtiles
 *.osm.pbf
+*.sqlite
+*.tar
 
 .DS_Store
+__pycache__/
+
+# Downloaded by scripts/fetch-voice.sh
+third-party/
