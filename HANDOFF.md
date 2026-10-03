@@ -1,6 +1,6 @@
 # Private NYS Maps - Claude Code Handoff
 
-Last updated: 2026-09-29
+Last updated: 2026-10-03
 
 ## Overview
 
@@ -180,32 +180,25 @@ Build NYC end to end first, then scale the same pipeline to the state. Each phas
 
 ### Where things stand (October 2026)
 
-- **Phases 0, 1 and 2 are done** and on `main`. The latest release is v0.1.2. Tested on the owner's phone:
+- **Phases 0, 1 and 2 are done** and on `main`. Tested on the owner's phone:
   - map, search, directions preview for drive, walk and bike, transit planning, departure boards, settings and in-app updates
   - Phase 0's GPS follow and Phase 1's drive with spoken turns need a trip inside NYC; the owner lives outside NYC. Route preview works from anywhere with **Start here** on a place card.
-- **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with:
-  - the signed APK
-  - the four NYC packs (basemap, routing, search, transit)
-  - `southbound.json`, a manifest of sizes and SHA-256s
-
-  Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
-- **The app updates itself** from the latest release (`core/updates`):
-  - Map data downloads are on by default.
-  - App updates are off until turned on; after the first confirmed install, later ones install without a prompt.
-  - While the repo is private, a read-only GitHub token goes in Settings > Updates.
+- **Phase 3 is built, pending its first statewide release and a test on the phone:**
+  - `pipeline/regions.json` defines five basemap regions (nyc, li, hudson, capital, western) and `nys`, the whole state. `make -C pipeline state` builds what a release ships: five basemaps, `routing-nys.tar`, `search-nys.sqlite`, `transit-nyc.sqlite`. `core/packs Regions.kt` mirrors the file (unit-tested against it).
+  - The release workflow creates a draft release first and every job uploads straight to it (one job per pack, since a private repo's Actions artifact storage can't hold 2 GB), then `publish` writes the manifest and publishes. **Watch the first run:** a statewide Valhalla build on a 2-core, 7 GB runner is untested; the data job has a 5-hour timeout. A full data rebuild costs roughly 300 Actions minutes of the 2000 a private repo gets per month.
+  - The app shows a region picker (first run and Settings > Updates); the updater fetches a basemap per ticked region plus the statewide packs, and drops `routing-nyc`/`search-nyc` once the `nys` ones arrive. Several basemaps draw as one map (StyleTemplate duplicates the source and layers per pack).
+  - 511NY incidents and NYC DOT speeds are a traffic layer behind their toggles (Settings > Live data), with the 511NY key stored encrypted. Closures near a trip become Valhalla `exclude_polygons` on route requests; a closure that appears on the route mid-trip is spoken and the trip is rerouted around it. 511NY's and NYC DOT's hosts were unreachable from the dev container, so both parsers are tested against hand-written fixtures only: **check the first real fetch** (Settings shows feed errors under the traffic button).
+  - Not done: the optional TomTom flow layer (read its terms first), and NYS Address Points for upstate search.
+- **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with the signed APK, the packs and `southbound.json`. Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
+- **The app updates itself** from the latest release (`core/updates`). Map data downloads are on by default; app updates are off until turned on. While the repo is private, a read-only GitHub token goes in Settings > Updates.
 - **Not verified yet:**
   - Metro-North realtime trip-id matching: MTA's feeds weren't reachable from the dev environment, so the GTFS-RT parser is tested against fixtures only.
-  - A first-run download of all four packs on a fresh install.
-- **Next: Phase 3.** Planned order:
-  1. Statewide extract, regional basemap packs and one statewide routing pack.
-  2. Region picker in the pack manager.
-  3. 511NY incidents with closure avoidance (the owner needs a free 511NY key).
-  4. NYC DOT speeds.
-  5. Optional TomTom last.
+  - A first-run download of all packs on a fresh install.
+  - The Phase 3 exit test: a Buffalo to Montauk route, and a new 511NY incident appearing within 5 minutes.
 - **Working notes for the next session:**
   - Android code only compiles in GitHub Actions; Google Maven is blocked in the dev container.
-  - Plain-Kotlin modules can be tested locally by copying sources into a small JVM Gradle project.
-  - `make -C pipeline test` runs the pipeline's Python tests.
+  - Plain-Kotlin modules can be tested locally by copying sources into a small JVM Gradle project (core/network, core/packs, core/traffic, core/map's pure files, core/routing's RouteOptions).
+  - `make -C pipeline test` runs the pipeline's Python tests, including the regions check.
   - Release assets of the private repo can be fetched through `api.github.com` (they redirect to a signed download URL).
   - Work goes through a PR on the session's branch; the owner merges from the GitHub app.
 
@@ -238,12 +231,12 @@ Exit test: planner results match MTA's published schedule on 10 sample trips.
 
 **Phase 3: statewide and live traffic**
 
-- [ ] Point the pipeline at the full NYS extract and cut regional basemap packs
-- [ ] Pack manager: download, verify, update, and import from a file (download, verify, update and import done for NYC; region picker left)
-- [ ] 511NY incidents with closure avoidance, and the NYC DOT speed layer
+- [x] Point the pipeline at the full NYS extract and cut regional basemap packs
+- [x] Pack manager: download, verify, update, and import from a file, with a region picker
+- [x] 511NY incidents with closure avoidance, and the NYC DOT speed layer
 - [ ] Optional TomTom flow layer
 
-Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident appears within 5 minutes.
+Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident appears within 5 minutes. (Code is in; run it on the phone after the first statewide release.)
 
 **Phase 4: polish toward Google-grade**
 

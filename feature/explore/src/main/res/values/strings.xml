@@ -5,13 +5,12 @@
     <string name="explore_location_needed">Allow precise location to see where you are</string>
     <string name="explore_location_allow">Allow</string>
     <string name="explore_location_settings">Open settings</string>
-    <string name="explore_pack_missing_title">NYC map not installed</string>
-    <string name="explore_pack_invalid_title">NYC map file is damaged</string>
+    <string name="explore_pack_missing_title">Pick your map regions</string>
     <string name="explore_pack_body">Or load the packs by hand: download them from the latest Southbound release on GitHub, then import them here. Everything stays on this phone.</string>
-    <string name="explore_download_wifi">Southbound downloads the NYC maps, search, directions and transit data from its latest release, next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
+    <string name="explore_download_wifi">Southbound downloads the maps for the regions ticked above, plus statewide search and directions and NYC transit data, from its latest release next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
     <string name="explore_download_off">Map downloads are turned off in Settings &gt; Updates.</string>
     <string name="explore_download_checking">Checking the latest release…</string>
-    <string name="explore_download_progress">Downloading NYC data: %1$d of %2$d MB</string>
+    <string name="explore_download_progress">Downloading map data: %1$d of %2$d MB</string>
     <string name="explore_download_now">Download now</string>
     <string name="explore_open_settings">Open Settings</string>
     <string name="explore_import">Import map file</string>
@@ -24,12 +23,17 @@
     <string name="explore_imported_search">Search data installed.</string>
     <string name="explore_imported_transit">Transit data installed.</string>
     <string name="explore_pack_share_hint">Or, in your browser\'s downloads, share the file to Southbound.</string>
-    <string name="explore_pack_adb">Or copy it here with adb, then tap Check again:</string>
+    <string name="explore_pack_adb">Or copy a basemap here with adb, then tap Check again:</string>
     <string name="explore_pack_retry">Check again</string>
     <string name="explore_search">Search places and addresses</string>
     <string name="explore_settings">Settings</string>
     <string name="explore_dropped_pin">Dropped pin</string>
     <string name="explore_rerouting_spoken">Rerouting.</string>
     <string name="explore_start_from">Directions start from %1$s</string>
+    <string name="explore_traffic_show">Show live traffic</string>
+    <string name="explore_traffic_hide">Hide live traffic</string>
+    <string name="explore_closure_spoken">Road closed ahead on %1$s. Finding another way.</string>
+    <string name="explore_incident_severity">Severity: %1$s</string>
+    <string name="explore_incident_updated">Updated %1$s</string>
     <string name="explore_start_clear">Start from my location instead</string>
 </resources>
