@@ -85,6 +85,14 @@ fun NavigationOverlay(
     // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
     val colors = if (darkOverlay) dynamicDarkColorScheme(LocalContext.current) else MaterialTheme.colorScheme
     MaterialTheme(colorScheme = colors, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
+    // Phase 8: on its side the phone gets the driving column (NavigationLandscape.kt); portrait is as it was.
+    if (rememberDrivingLandscape()) {
+        NavigationLandscape(
+            state, voiceMode, onVoiceModeChange, onEnd, modifier, speedMph, onSkipStop, delaySeconds,
+            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress,
+        )
+        return@MaterialTheme
+    }
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
         when (val trip = state.tripState) {
             is TripState.Navigating -> {
@@ -142,7 +150,7 @@ fun NavigationOverlay(
 
 /** A US speed limit sign: white, black border, red when the user is over it. */
 @Composable
-private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
+internal fun SpeedLimitSign(limitMph: Int, over: Boolean) {
     OutlinedCard(
         colors = CardDefaults.outlinedCardColors(containerColor = Color.White, contentColor = Color.Black),
         border = BorderStroke(2.dp, if (over) Color(0xFFD93025) else Color.Black),
@@ -166,7 +174,7 @@ private fun SpeedLimitSign(limitMph: Int, over: Boolean) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUntilNextTurn: Boolean, onLongPress: () -> Unit) {
+internal fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUntilNextTurn: Boolean, onLongPress: () -> Unit) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -196,7 +204,7 @@ private fun VoiceButton(mode: VoiceMode, onChange: (VoiceMode) -> Unit, mutedUnt
 }
 
 @Composable
-private fun ArrivedCard(onDone: () -> Unit, side: ArrivalSide?, parkingNearby: Boolean, modifier: Modifier) {
+internal fun ArrivedCard(onDone: () -> Unit, side: ArrivalSide?, parkingNearby: Boolean, modifier: Modifier) {
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, tonalElevation = 3.dp, shadowElevation = 6.dp) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.navigation_arrived), style = MaterialTheme.typography.titleLarge)
@@ -224,7 +232,7 @@ fun ArrivalSide.sentence(): Int = when (this) {
 data class FasterRouteOffer(val savesMinutes: Int, val onAccept: () -> Unit, val onDismiss: () -> Unit)
 
 @Composable
-private fun FasterRouteBanner(offer: FasterRouteOffer) {
+internal fun FasterRouteBanner(offer: FasterRouteOffer) {
     Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             Text(stringResource(R.string.navigation_faster_route, offer.savesMinutes), style = MaterialTheme.typography.titleSmall)
@@ -241,7 +249,7 @@ private fun FasterRouteBanner(offer: FasterRouteOffer) {
  * more than two minutes the time turns red with "+X min".
  */
 @Composable
-private fun EtaLine(remainingSeconds: Double, delaySeconds: Double) {
+internal fun EtaLine(remainingSeconds: Double, delaySeconds: Double) {
     val late = Eta.isLate(delaySeconds)
     // Recomputed whenever Ferrostar updates the remaining time (about once a second).
     val arrival = remember(remainingSeconds, delaySeconds) { Eta.clock(System.currentTimeMillis(), remainingSeconds + delaySeconds) }
@@ -268,7 +276,7 @@ private fun EtaLine(remainingSeconds: Double, delaySeconds: Double) {
  * when Valhalla's banner carries exit numbers (Ferrostar passes them on).
  */
 @Composable
-private fun HighwaySign(content: VisualInstructionContent) {
+internal fun HighwaySign(content: VisualInstructionContent) {
     if (content.exitNumbers.isEmpty()) return
     Surface(
         color = Color(0xFF0B6B3A),
