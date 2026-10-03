@@ -58,12 +58,53 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
                 stmt.bindDouble(2, box.north)
                 stmt.bindDouble(3, box.west)
                 stmt.bindDouble(4, box.east)
-                buildList {
-                    while (stmt.step()) {
-                        add(Landmark(stmt.getLong(0), stmt.getText(1), stmt.textOrNull(2), stmt.getDouble(3), stmt.getDouble(4)))
-                    }
+                buildList { while (stmt.step()) add(stmt.readLandmark()) }
+            }
+        }
+    }
+
+    /**
+     * Landmarks of one [category] (e.g. [Landmark.ALPR_CAMERA]) inside [box],
+     * e.g. the plate readers along a route option. Uses the pack's
+     * landmark_category_lat_lon index when it has one. Empty for an older
+     * pack without the table.
+     */
+    fun landmarks(box: NearbyBox, category: String, limit: Int = LANDMARK_LIMIT): List<Landmark> {
+        if (!hasLandmarks) return emptyList()
+        return synchronized(connection) {
+            connection.prepare(
+                "SELECT id, category, name, lat, lon FROM landmark" +
+                    " WHERE category = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT $limit",
+            ).use { stmt ->
+                stmt.bindText(1, category)
+                stmt.bindDouble(2, box.south)
+                stmt.bindDouble(3, box.north)
+                stmt.bindDouble(4, box.west)
+                stmt.bindDouble(5, box.east)
+                buildList { while (stmt.step()) add(stmt.readLandmark()) }
+            }
+        }
+    }
+
+    /**
+     * Every licence-plate reader in the pack, for the always-on camera layer.
+     * DeFlock maps a few thousand across the state, so one read is cheap.
+     * Empty for an older pack without the landmark table; on any read error
+     * too, since the map is fine without them.
+     */
+    fun alprCameras(limit: Int = ALPR_LIMIT): List<Landmark> {
+        if (!hasLandmarks) return emptyList()
+        return try {
+            synchronized(connection) {
+                connection.prepare(
+                    "SELECT id, category, name, lat, lon FROM landmark WHERE category = ? LIMIT $limit",
+                ).use { stmt ->
+                    stmt.bindText(1, Landmark.ALPR_CAMERA)
+                    buildList { while (stmt.step()) add(stmt.readLandmark()) }
                 }
             }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -149,6 +190,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         /** Per box; a 2 km piece of route in Midtown has a few hundred. */
         private const val LANDMARK_LIMIT = 5_000
 
+        /** Plate readers for the whole pack; far more than NYS has mapped today. */
+        private const val ALPR_LIMIT = 50_000
+
         /** How far "nearby" reaches when picking local candidates. */
         private const val NEARBY_KM = 15.0
         private const val COLUMNS =
@@ -172,6 +216,10 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         private const val SEARCH_APPLICATION_ID = 0x53425331L
 
         private fun SQLiteStatement.textOrNull(index: Int): String? = if (isNull(index)) null else getText(index)
+
+        /** A row of "SELECT id, category, name, lat, lon FROM landmark". */
+        private fun SQLiteStatement.readLandmark(): Landmark =
+            Landmark(getLong(0), getText(1), textOrNull(2), getDouble(3), getDouble(4))
 
         private fun SQLiteStatement.readCandidate(): Candidate = Candidate(
             place = Place(

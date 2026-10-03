@@ -55,4 +55,21 @@ class OverlayGeoJsonTest {
             incidents,
         )
     }
+
+    @Test
+    fun camerasCarryTheirIdAndMaker() {
+        val json = OverlayGeoJson.cameras(
+            listOf(
+                CameraPin("alpr:7", MapPoint(40.744, -73.99), "Flock Safety"),
+                CameraPin("alpr:8", MapPoint(40.7445, -73.99)),
+            ),
+        )
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"alpr:7","name":"Flock Safety"},"geometry":{"type":"Point","coordinates":[-73.990000,40.744000]}},""" +
+                """{"type":"Feature","properties":{"id":"alpr:8"},"geometry":{"type":"Point","coordinates":[-73.990000,40.744500]}}]}""",
+            json,
+        )
+        assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.cameras(emptyList()))
+    }
 }

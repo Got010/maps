@@ -14,6 +14,13 @@ data class SpeedLine(val points: List<MapPoint>, val speedMph: Double)
 /** An incident pin; [kind] is the IncidentKind name, [id] comes back from a tap. */
 data class IncidentPin(val id: String, val point: MapPoint, val kind: String, val closure: Boolean)
 
+/**
+ * A licence-plate reader (Flock and others) from the search pack, drawn at
+ * all times. [id] comes back from a tap; [name] is who makes or runs it,
+ * when mapped.
+ */
+data class CameraPin(val id: String, val point: MapPoint, val name: String? = null)
+
 /** The live traffic layer: speeds under the routes, incidents over them. */
 data class TrafficOverlay(
     val speeds: List<SpeedLine> = emptyList(),
@@ -38,6 +45,8 @@ data class MapOverlays(
     val traffic: TrafficOverlay = TrafficOverlay.NONE,
     /** Stretches of the selected route coloured by live speed; drawn on top of the route line. */
     val slowdowns: List<SpeedLine> = emptyList(),
+    /** Plate readers, shown in every state (browsing, planning, driving) from zoom 11. */
+    val cameras: List<CameraPin> = emptyList(),
 )
 
 /**
@@ -90,6 +99,14 @@ internal object OverlayGeoJson {
         // Closures last, so they draw on top of lesser incidents.
         pins.sortedBy { it.closure }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":${quote(pin.kind)},"closure":${pin.closure}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun cameras(pins: List<CameraPin>): String = featureCollection(
+        pins.map { pin ->
+            val name = pin.name?.let { ""","name":${quote(it)}""" } ?: ""
+            """{"type":"Feature","properties":{"id":${quote(pin.id)}$name},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )

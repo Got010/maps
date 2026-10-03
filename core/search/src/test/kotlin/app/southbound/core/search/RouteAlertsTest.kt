@@ -62,6 +62,32 @@ class RouteAlertsTest {
     }
 
     @Test
+    fun countsPlateReadersOnTheRouteOnly() {
+        val onRoad = Hand.mark(Landmark.ALPR_CAMERA, 10.0, 300.0)
+        val otherRoad = Hand.mark(Landmark.ALPR_CAMERA, 60.0, 500.0)
+        val speedCam = Hand.mark(Landmark.SPEED_CAMERA, 0.0, 700.0)
+        val secondLeg = Hand.mark(Landmark.ALPR_CAMERA, 400.0, 1030.0)
+        val marks = listOf(onRoad, otherRoad, speedCam, secondLeg)
+        assertEquals(2, RouteAlerts.count(route, marks, AlertKind.ALPR_CAMERA))
+        // A wider corridor picks up the one on the parallel road.
+        assertEquals(3, RouteAlerts.count(route, marks, AlertKind.ALPR_CAMERA, withinMeters = 70.0))
+        assertEquals(1, RouteAlerts.count(route, marks, AlertKind.SPEED_CAMERA))
+        assertEquals(0, RouteAlerts.count(route, emptyList(), AlertKind.ALPR_CAMERA))
+    }
+
+    @Test
+    fun aPoleFacingBothWaysIsOnePlateReader() {
+        val north = Hand.mark(Landmark.ALPR_CAMERA, 5.0, 400.0)
+        val south = Hand.mark(Landmark.ALPR_CAMERA, -5.0, 410.0)
+        val further = Hand.mark(Landmark.ALPR_CAMERA, 0.0, 480.0)
+        // The same row twice, as overlapping route boxes return it.
+        val marks = listOf(north, south, north, further)
+        assertEquals(2, RouteAlerts.count(route, marks, AlertKind.ALPR_CAMERA))
+        assertEquals(3, RouteAlerts.alongRoute(route, marks, AlertKind.ALPR_CAMERA).size)
+        assertEquals(3, RouteAlerts.count(route, marks, AlertKind.ALPR_CAMERA, sameSpotMeters = 0.0))
+    }
+
+    @Test
     fun boxesCoverTheRouteInPieces() {
         // Pieces end at the line's own points, so this one makes one box per leg.
         val boxes = route.boxes(chunkMeters = 500.0, padMeters = 50.0)
