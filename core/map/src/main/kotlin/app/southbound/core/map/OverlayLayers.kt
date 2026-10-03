@@ -19,6 +19,10 @@ import org.maplibre.android.style.layers.PropertyFactory.circleColor
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
@@ -64,6 +68,17 @@ internal object OverlayLayers {
     // Navy, apart from the speed cameras' blue (#1A73E8) and the closure red.
     private const val INCIDENT_POLICE = "#3B5BDB"
     private const val INCIDENT_OTHER = "#5F6368"
+
+    /** 511NY traffic cameras, with the traffic layer: a teal camera badge, grey when offline. */
+    const val TRAFFIC_CAMERAS = "southbound-traffic-cameras"
+    private const val TRAFFIC_CAMERA_ICON = "southbound-traffic-camera"
+    private const val TRAFFIC_CAMERA_OFF_ICON = "southbound-traffic-camera-off"
+    private const val TRAFFIC_CAMERA_MIN_ZOOM = 12f
+
+    /** 511NY message signs, with the traffic layer: a small amber-on-black board. */
+    const val MESSAGE_SIGNS = "southbound-message-signs"
+    private const val MESSAGE_SIGN_ICON = "southbound-message-sign"
+    private const val MESSAGE_SIGN_MIN_ZOOM = 11f
 
     // Alerts from the map data, pinned along the route while navigating.
     private const val ALERT_SPEED_CAMERA = "#1A73E8"
@@ -184,6 +199,33 @@ internal object OverlayLayers {
                 circleStrokeWidth(1.5f),
             ).also { it.minZoom = CAMERA_MIN_ZOOM },
         )
+        installTrafficCamerasAndSigns(style)
+    }
+
+    /** 511NY cameras and signs: icons drawn in code, over everything else, so a tap finds them. */
+    private fun installTrafficCamerasAndSigns(style: Style) {
+        style.addImage(TRAFFIC_CAMERA_ICON, TrafficIcons.camera(TrafficIcons.CAMERA_TEAL))
+        style.addImage(TRAFFIC_CAMERA_OFF_ICON, TrafficIcons.camera(TrafficIcons.CAMERA_OFFLINE_GREY))
+        style.addImage(MESSAGE_SIGN_ICON, TrafficIcons.sign())
+        style.addSource(GeoJsonSource(MESSAGE_SIGNS, OverlayGeoJson.messageSigns(emptyList())))
+        style.addSource(GeoJsonSource(TRAFFIC_CAMERAS, OverlayGeoJson.trafficCameras(emptyList())))
+        // Every icon shows (no collision culling): a hidden camera couldn't be tapped.
+        style.addLayer(
+            SymbolLayer(MESSAGE_SIGNS, MESSAGE_SIGNS).withProperties(
+                iconImage(MESSAGE_SIGN_ICON),
+                iconSize(interpolate(linear(), zoom(), stop(MESSAGE_SIGN_MIN_ZOOM, 0.7f), stop(15, 1f), stop(18, 1.2f))),
+                iconAllowOverlap(true),
+                iconIgnorePlacement(true),
+            ).also { it.minZoom = MESSAGE_SIGN_MIN_ZOOM },
+        )
+        style.addLayer(
+            SymbolLayer(TRAFFIC_CAMERAS, TRAFFIC_CAMERAS).withProperties(
+                iconImage(switchCase(eq(get("offline"), literal(true)), literal(TRAFFIC_CAMERA_OFF_ICON), literal(TRAFFIC_CAMERA_ICON))),
+                iconSize(interpolate(linear(), zoom(), stop(TRAFFIC_CAMERA_MIN_ZOOM, 0.75f), stop(15, 1f), stop(18, 1.2f))),
+                iconAllowOverlap(true),
+                iconIgnorePlacement(true),
+            ).also { it.minZoom = TRAFFIC_CAMERA_MIN_ZOOM },
+        )
     }
 
     /** [darkTheme] is the loaded basemap's theme; it picks the route colours. */
@@ -194,6 +236,27 @@ internal object OverlayLayers {
         style.getSourceAs<GeoJsonSource>(SLOWDOWNS)?.setGeoJson(OverlayGeoJson.speeds(overlays.slowdowns))
         style.getSourceAs<GeoJsonSource>(INCIDENTS)?.setGeoJson(OverlayGeoJson.incidents(overlays.traffic.incidents))
         updateCameras(style, overlays.cameras)
+        trafficCamerasSource.update(style, overlays.trafficCameras) { OverlayGeoJson.trafficCameras(it) }
+        messageSignsSource.update(style, overlays.messageSigns) { OverlayGeoJson.messageSigns(it) }
+    }
+
+    // 511NY's cameras and signs are thousands of points that change every few minutes at most:
+    // like the plate readers, they're only re-sent when the list itself changes.
+    private val trafficCamerasSource = ListSource<TrafficCameraPin>(TRAFFIC_CAMERAS)
+    private val messageSignsSource = ListSource<MessageSignPin>(MESSAGE_SIGNS)
+
+    /** A GeoJSON source fed from a list, skipping updates while the same list (by identity) is shown on the same style. */
+    private class ListSource<T>(private val id: String) {
+        private var shown: List<T>? = null
+        private var shownOn: WeakReference<Style>? = null
+
+        fun update(style: Style, items: List<T>, geoJson: (List<T>) -> String) {
+            if (shown === items && shownOn?.get() === style) return
+            val source = style.getSourceAs<GeoJsonSource>(id) ?: return
+            source.setGeoJson(geoJson(items))
+            shown = items
+            shownOn = WeakReference(style)
+        }
     }
 
     // The camera list only changes when the search pack does, so its few thousand points
