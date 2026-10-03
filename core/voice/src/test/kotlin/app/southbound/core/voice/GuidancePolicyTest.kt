@@ -17,7 +17,8 @@ import org.junit.Test
 
 class GuidancePolicyTest {
 
-    private val defaults = VoiceSettings()
+    // Chimes are covered on their own below; without them Speak(text) compares plainly.
+    private val defaults = VoiceSettings(instructionChime = false, alertChime = false)
     private val turn = "Turn left onto West 20th Street."
 
     private fun decide(
@@ -26,7 +27,9 @@ class GuidancePolicyTest {
         kind: UtteranceKind = INSTRUCTION,
         text: String = turn,
         trigger: Double = 0.0,
-    ) = GuidancePolicy.decide(settings, mode, kind, text, trigger)
+        landmark: String? = null,
+        followUp: String? = null,
+    ) = GuidancePolicy.decide(settings, mode, kind, text, trigger, landmark, followUp)
 
     @Test
     fun defaultsSpeakDrivingInstructions() {
@@ -107,6 +110,72 @@ class GuidancePolicyTest {
         assertEquals(ARRIVAL, GuidancePolicy.kindOf("You have arrived at your destination."))
         assertEquals(ARRIVAL, GuidancePolicy.kindOf("Your destination is on the right."))
         assertEquals(INSTRUCTION, GuidancePolicy.kindOf(turn))
+    }
+
+    @Test
+    fun hapticTurnsBuzzWithTheVoice() {
+        val haptic = defaults.copy(hapticTurns = true)
+        assertEquals(Speak(turn, vibrate = true), decide(haptic, trigger = 30.0))
+        // Only the prompt at the turn, not the early warning or alerts.
+        assertEquals(Speak(turn), decide(haptic, trigger = 800.0))
+        assertEquals(Speak("x"), decide(haptic, kind = REROUTE, text = "x"))
+        // Voice muted or alerts only: still buzzes at the turn.
+        assertEquals(Vibrate, decide(haptic.copy(mode = VoiceMode.MUTED), trigger = 30.0))
+        assertEquals(Vibrate, decide(haptic.copy(mode = VoiceMode.ALERTS_ONLY), trigger = 30.0))
+        assertEquals(Silent, decide(trigger = 30.0, settings = defaults.copy(mode = VoiceMode.MUTED)))
+    }
+
+    @Test
+    fun shortDistanceStyleDropsTheDistanceAtTheTurn() {
+        val short = defaults.copy(distanceStyle = DistanceStyle.SHORT)
+        val near = "In 200 feet, Turn left onto Elm Street."
+        assertEquals(Speak("Turn left onto Elm Street."), decide(short, text = near, trigger = 60.0))
+        // The early warning keeps it: that's when the distance helps.
+        val early = "In a quarter mile, Turn left onto Elm Street."
+        assertEquals(Speak(early), decide(short, text = early, trigger = 400.0))
+        assertEquals(Speak(near), decide(text = near, trigger = 60.0))
+    }
+
+    @Test
+    fun landmarkAndFollowUp() {
+        assertEquals(
+            Speak("Turn right after the next light onto Main Street, then turn left onto Elm Street."),
+            decide(
+                text = "Turn right onto Main Street.",
+                landmark = "after the next light",
+                followUp = "Turn left onto Elm Street.",
+            ),
+        )
+        // Street names off: names go, the landmark stays.
+        assertEquals(
+            Speak("Turn right at the next light, then turn left."),
+            decide(
+                defaults.copy(streetNames = false),
+                text = "Turn right onto Main Street.",
+                landmark = "at the next light",
+                followUp = "Turn left onto Elm Street.",
+            ),
+        )
+        // Not for alerts.
+        assertEquals(Speak("x"), decide(kind = REROUTE, text = "x", landmark = "at the next light"))
+    }
+
+    @Test
+    fun chimes() {
+        val on = VoiceSettings()
+        assertEquals(Speak(turn, chime = ChimeKind.INSTRUCTION), decide(on))
+        assertEquals(Speak("x", chime = ChimeKind.ALERT), decide(on, kind = TRAFFIC_ALERT, text = "x"))
+        assertEquals(Speak("x", chime = ChimeKind.ALERT), decide(on, kind = UtteranceKind.HAZARD_ALERT, text = "x"))
+        assertEquals(Speak("x"), decide(on, kind = REROUTE, text = "x"))
+        assertEquals(Speak(turn), decide(on.copy(instructionChime = false)))
+        assertEquals(Speak("x"), decide(on.copy(alertChime = false), kind = TRAFFIC_ALERT, text = "x"))
+    }
+
+    @Test
+    fun hazardAlertsSpeakInAlertsOnly() {
+        val alerts = defaults.copy(mode = VoiceMode.ALERTS_ONLY)
+        assertEquals(Speak("x"), decide(alerts, kind = UtteranceKind.HAZARD_ALERT, text = "x"))
+        assertEquals(Silent, decide(alerts.copy(mode = VoiceMode.MUTED), kind = UtteranceKind.HAZARD_ALERT, text = "x"))
     }
 
     @Test

@@ -32,7 +32,8 @@ class ReleaseManifestTest {
         assertEquals(101L, m.versionCode)
         assertEquals("southbound-0.1.1.apk", m.app!!.name)
         assertEquals(3L, m.app!!.size)
-        assertEquals(listOf(PackKind.BASEMAP, PackKind.TRANSIT), m.packs.map { it.kind })
+        assertEquals(listOf(PackKind.BASEMAP, PackKind.TRANSIT, PackKind.VOICE), m.packs.map { it.kind })
+        assertEquals("norman", m.pack(PackKind.VOICE, "norman")!!.region)
         assertEquals("nyc", m.packs[0].region)
         assertEquals("1d34761baf6b2ddf969d913d7f3fd59d3b4d46ef9fefec80a565e7f1ebeebc8e", m.pack(PackKind.BASEMAP, "nyc")!!.file.sha256)
         assertNull(m.pack(PackKind.ROUTING, "nyc"))
@@ -80,6 +81,21 @@ class ReleaseManifestTest {
         assertEquals(2, UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 1, includeApp = false).packs.size)
         // No basemap region wanted: transit (not a basemap) still comes.
         assertEquals(listOf(PackKind.TRANSIT), UpdatePlan.of(m, emptySet(), emptyMap(), installedVersionCode = 101, includeApp = true).packs.map { it.kind })
+    }
+
+    @Test
+    fun `plan fetches a voice pack only for a picked voice`() {
+        val m = ReleaseManifest.parse(fixture)
+        val none = UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 101, includeApp = false)
+        assertTrue(none.packs.none { it.kind == PackKind.VOICE })
+        val picked = UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 101, includeApp = false, voices = setOf("norman"))
+        assertEquals(listOf("voice-norman.zip"), picked.packs.filter { it.kind == PackKind.VOICE }.map { it.file.name })
+        // Another voice id fetches nothing; an installed, current one isn't fetched again.
+        assertTrue(UpdatePlan.of(m, emptySet(), emptyMap(), installedVersionCode = 101, includeApp = false, voices = setOf("amy")).packs.none { it.kind == PackKind.VOICE })
+        val current = mapOf((PackKind.VOICE to "norman") to m.pack(PackKind.VOICE, "norman")!!.file.sha256)
+        assertTrue(UpdatePlan.of(m, emptySet(), current, installedVersionCode = 101, includeApp = false, voices = setOf("norman")).packs.none { it.kind == PackKind.VOICE })
+        // Pack downloads off: no voice either.
+        assertTrue(UpdatePlan.of(m, emptySet(), emptyMap(), wanted = emptySet(), installedVersionCode = 101, includeApp = false, voices = setOf("norman")).packs.isEmpty())
     }
 
     @Test

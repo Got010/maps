@@ -7,6 +7,17 @@
     <string name="navigation_arrived">You\'ve arrived</string>
     <string name="navigation_done">Done</string>
     <string name="navigation_speed_limit">SPEED\nLIMIT</string>
-    <string name="navigation_arrive">Arrive</string>
+    <string name="navigation_arrive">Arrive %1$s</string>
+    <string name="navigation_eta_plus">+%1$d min</string>
+    <string name="navigation_typical">Typical: %1$s</string>
+    <string name="navigation_faster_route">Faster route found, saves %1$d min</string>
+    <string name="navigation_faster_accept">Take it</string>
+    <string name="navigation_faster_dismiss">Dismiss</string>
+    <string name="navigation_exit">EXIT %1$s</string>
+    <string name="navigation_parking_nearby">Parking nearby</string>
+    <string name="navigation_destination_left">Your destination is on the left</string>
+    <string name="navigation_destination_right">Your destination is on the right</string>
+    <string name="navigation_destination_ahead">Your destination is straight ahead</string>
+    <string name="navigation_voice_until_turn">Voice muted until the next turn. Long-press to resume.</string>
     <string name="navigation_skip_stop">Skip stop</string>
 </resources>

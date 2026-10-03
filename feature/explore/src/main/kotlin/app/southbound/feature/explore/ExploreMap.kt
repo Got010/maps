@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +64,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import app.southbound.core.map.ArrivalSide
+import app.southbound.core.map.Arrival
 import app.southbound.core.map.CameraRequest
 import app.southbound.core.map.MapLine
 import app.southbound.core.map.IncidentPin
@@ -93,8 +96,13 @@ import app.southbound.core.search.Place
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.traffic.ClosureAvoidance
+import app.southbound.core.traffic.FasterRoute
+import app.southbound.core.traffic.Geo
 import app.southbound.core.traffic.GeoPoint
 import app.southbound.core.traffic.Incident
+import app.southbound.core.traffic.RouteSlowdowns
+import app.southbound.core.traffic.RouteTraffic
+import app.southbound.core.traffic.SpeedBand
 import app.southbound.core.traffic.TrafficSnapshot
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
@@ -105,6 +113,7 @@ import app.southbound.feature.directions.RouteOptionsSheet
 import app.southbound.feature.directions.RoutePreviewSheet
 import app.southbound.feature.directions.RoutePreviewState
 import app.southbound.feature.directions.StopsEditor
+import app.southbound.feature.navigation.FasterRouteOffer
 import app.southbound.feature.navigation.NavigationOverlay
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.SearchPanel
@@ -268,6 +277,21 @@ internal fun ExploreMap(
     val traffic by services.traffic.snapshot.collectAsState()
     var shownIncident by remember { mutableStateOf<Incident?>(null) }
     LaunchedEffect(resumes) { trafficOn = services.traffic.isEnabled }
+
+    // --- Phase 5 (map): touch, traffic on the route, faster route, arrival details ---
+    // Re-center: while navigating, 10 s without a touch after leaving the puck snaps back to following.
+    var touching by remember { mutableStateOf(false) }
+    var touchSerial by remember { mutableIntStateOf(0) }
+    // Slowdowns and incidents along the selected route (preview) or what's left of the trip.
+    var previewTraffic by remember { mutableStateOf<List<RouteSlowdowns>>(emptyList()) }
+    var tripTraffic by remember { mutableStateOf(RouteSlowdowns.NONE) }
+    var routeIncidents by remember { mutableStateOf<List<Incident>>(emptyList()) }
+    var fasterOffer by remember { mutableStateOf<FasterOffer?>(null) }
+    val dismissedRoutes = remember { FasterRoute.Dismissals() }
+    var arrivalSide by remember { mutableStateOf<ArrivalSide?>(null) }
+    var arrivalPoint by remember { mutableStateOf<MapPoint?>(null) }
+    var parkingNearby by remember { mutableStateOf(false) }
+    // --- end Phase 5 (map) state ---
     fun origin(): Location? = startPlace?.let { place ->
         Location("start").apply {
             latitude = place.lat
@@ -292,6 +316,7 @@ internal fun ExploreMap(
     LaunchedEffect(directions, hasFix, navigator, startPlace, routePrefs) {
         val target = directions?.takeIf { !it.transit } ?: return@LaunchedEffect
         routes = emptyList()
+        previewTraffic = emptyList()
         val nav = navigator ?: run {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
             return@LaunchedEffect
@@ -307,9 +332,10 @@ internal fun ExploreMap(
         }
         nav.prefs = routePrefs
         // Steer around 511NY closures near the trip, when that feed is on.
+        // Any traffic feed that is on is fetched (cached for its interval) so options can show their delay.
+        val snapshot = if (services.traffic.isEnabled) withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } } else null
         val avoid = if (services.traffic.hasIncidents) {
-            val closures = withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } }?.closures.orEmpty()
-            ClosureAvoidance.polygons(closures, GeoPoint(from.latitude, from.longitude), GeoPoint(target.place.lat, target.place.lon))
+            ClosureAvoidance.polygons(snapshot?.closures.orEmpty(), GeoPoint(from.latitude, from.longitude), GeoPoint(target.place.lat, target.place.lon))
         } else {
             emptyList()
         }
@@ -321,10 +347,16 @@ internal fun ExploreMap(
             emptyList()
         }
         routes = found
+        // Live speeds laid over each option: coloured stretches and the delay they add.
+        val speeds = snapshot?.speeds.orEmpty()
+        val slow = withContext(Dispatchers.Default) {
+            found.map { RouteTraffic.slowdowns(it.geometry.map { p -> GeoPoint(p.lat, p.lng) }, speeds) }
+        }
+        previewTraffic = slow
         if (found.isEmpty()) {
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
-            preview = RoutePreviewState.Ready(found.map(RouteSummary::of), selected = 0)
+            preview = RoutePreviewState.Ready(found.map(RouteSummary::of), selected = 0, delaySeconds = slow.map { it.delaySeconds })
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
                     MapPoint(from.latitude, from.longitude),
@@ -409,6 +441,127 @@ internal fun ExploreMap(
         nav.rerouteAround(ClosureAvoidance.polygons(traffic.closures))
     }
 
+    // --- Phase 5 (map): re-center timer, route traffic, faster route, arrival ---
+    LaunchedEffect(inTrip, following, touching, touchSerial) {
+        if (!inTrip || following || touching) return@LaunchedEffect
+        delay(AUTO_RECENTER_MS)
+        following = true
+    }
+
+    // Slow stretches and incidents ahead on the trip, redone as traffic or progress changes.
+    val tripProgressBucket = ((trip as? TripState.Navigating)?.progress?.distanceRemaining ?: 0.0).toInt() / 250
+    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+        val navigating = trip as? TripState.Navigating
+        if (navigating == null) {
+            tripTraffic = RouteSlowdowns.NONE
+            routeIncidents = emptyList()
+            return@LaunchedEffect
+        }
+        val here = navigating.snappedUserLocation.coordinates
+        val speeds = traffic.speeds
+        val incidents = traffic.incidents
+        val geometry = navState.routeGeometry
+        withContext(Dispatchers.Default) {
+            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
+            tripTraffic = RouteTraffic.slowdowns(ahead, speeds)
+            routeIncidents = RouteTraffic.incidentsOnRoute(ahead, incidents)
+        }
+    }
+    // Preview: incidents along the selected option.
+    val previewSelected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
+    LaunchedEffect(directions, routes, previewSelected, traffic.incidents) {
+        if (directions == null || directions.transit || inTrip) return@LaunchedEffect
+        val route = routes.getOrNull(previewSelected) ?: run {
+            routeIncidents = emptyList()
+            return@LaunchedEffect
+        }
+        val incidents = traffic.incidents
+        routeIncidents = withContext(Dispatchers.Default) {
+            RouteTraffic.incidentsOnRoute(route.geometry.map { GeoPoint(it.lat, it.lng) }, incidents)
+        }
+    }
+    LaunchedEffect(directions, inTrip) { if (directions == null && !inTrip) routeIncidents = emptyList() }
+
+    // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?
+    val latestNav by rememberUpdatedState(navState)
+    val latestTraffic by rememberUpdatedState(traffic)
+    LaunchedEffect(inTrip, trafficOn, navigator) {
+        if (!inTrip) {
+            fasterOffer = null
+            return@LaunchedEffect
+        }
+        val nav = navigator
+        if (!trafficOn || nav == null) return@LaunchedEffect
+        while (true) {
+            delay(FasterRoute.CHECK_MILLIS)
+            val snapshot = latestNav
+            val tripNow = snapshot.tripState as? TripState.Navigating ?: continue
+            if (snapshot.isCalculatingNewRoute || fasterOffer != null) continue
+            val speeds = latestTraffic.speeds
+            val here = tripNow.snappedUserLocation.coordinates.let { GeoPoint(it.lat, it.lng) }
+            val current = RouteTraffic.remaining(snapshot.routeGeometry.map { GeoPoint(it.lat, it.lng) }, here)
+            val currentSlow = withContext(Dispatchers.Default) { RouteTraffic.slowdowns(current, speeds) }
+            // Valhalla on the phone doesn't know live speeds, so a plain fresh route is usually the same road.
+            // When the route ahead crawls, also try one that steers around the worst stretches.
+            val detours = if (currentSlow.delaySeconds >= FASTER_ROUTE_TRY_DETOUR_SECONDS) {
+                currentSlow.segments
+                    .filter { it.band != SpeedBand.FREE && it.points.size >= 2 }
+                    .map { it.points[it.points.size / 2] }
+                    .filter { Geo.distanceMeters(here, it) > DETOUR_MIN_DISTANCE_M }
+                    .take(DETOUR_MAX_SPOTS)
+                    .map { ClosureAvoidance.square(it) }
+            } else {
+                emptyList()
+            }
+            var best: FasterOffer? = null
+            val attempts: List<List<List<Pair<Double, Double>>>> = if (detours.isEmpty()) listOf(emptyList()) else listOf(emptyList(), detours)
+            for (extra in attempts) {
+                val candidate = attempt { withContext(Dispatchers.Default) { nav.freshRoute(extra) } } ?: continue
+                val points = candidate.geometry.map { GeoPoint(it.lat, it.lng) }
+                if (dismissedRoutes.isDismissed(points, System.currentTimeMillis())) continue
+                val candidateDelay = withContext(Dispatchers.Default) { RouteTraffic.slowdowns(points, speeds).delaySeconds }
+                val saving = FasterRoute.savingSeconds(
+                    tripNow.progress.durationRemaining,
+                    currentSlow.delaySeconds,
+                    RouteSummary.of(candidate).durationSeconds,
+                    candidateDelay,
+                )
+                val minutes = FasterRoute.offerMinutes(saving) ?: continue
+                if (best == null || minutes > best.savesMinutes) best = FasterOffer(candidate, points, minutes)
+            }
+            fasterOffer = best
+        }
+    }
+    // An offer nobody answers goes away on its own, and isn't counted as dismissed.
+    LaunchedEffect(fasterOffer) {
+        if (fasterOffer == null) return@LaunchedEffect
+        delay(FASTER_ROUTE_OFFER_MS)
+        fasterOffer = null
+    }
+
+    // Which side of the street the destination is on, from the route's end, and parking near it on arrival.
+    val navigatingNow = trip as? TripState.Navigating
+    val lastWaypoint = navigatingNow?.remainingWaypoints?.lastOrNull()
+    LaunchedEffect(lastWaypoint, navState.routeGeometry.size) {
+        if (!inTrip || lastWaypoint == null) return@LaunchedEffect
+        val destination = MapPoint(lastWaypoint.coordinate.lat, lastWaypoint.coordinate.lng)
+        arrivalPoint = destination
+        arrivalSide = Arrival.side(navState.routeGeometry.takeLast(30).map { MapPoint(it.lat, it.lng) }, destination)
+    }
+    LaunchedEffect(trip is TripState.Complete) {
+        if (trip !is TripState.Complete) {
+            parkingNearby = false
+            if (!inTrip) arrivalSide = null
+            return@LaunchedEffect
+        }
+        val point = arrivalPoint ?: return@LaunchedEffect
+        val index = searchIndex ?: return@LaunchedEffect
+        parkingNearby = withContext(Dispatchers.IO) {
+            attempt { index.nearby("parking", point.lat, point.lon, PARKING_RADIUS_M, limit = 1).isNotEmpty() }
+        } == true
+    }
+    // --- end Phase 5 (map) effects ---
+
     // Over the limit for a while: one warning, then quiet for a minute (Settings > Speed limit warnings).
     val speedMph = location?.takeIf { inTrip && it.hasSpeed() }?.let { SpeedLimits.mph(it.speed) }
     val speedLimit = remember(navState) { if (inTrip) SpeedLimits.currentMph(navState) else null }
@@ -462,13 +615,21 @@ internal fun ExploreMap(
         }
     }
 
-    val trafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
+    val baseTrafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
+    // Incidents along the route are pinned even when the traffic layer itself is hidden.
+    // Cameras and school zones ahead on the trip, from the search pack, drawn as pins too.
+    val routeAlerts by services.guidance.routeAlerts.collectAsState()
+    val alertPins = if (inTrip) routeAlerts.map { IncidentPin("alert:${it.id}", MapPoint(it.lat, it.lon), it.kind.name, closure = false) } else emptyList()
+    val trafficOverlay = baseTrafficOverlay.copy(
+        incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() } + alertPins).distinctBy { it.id },
+    )
     val overlays = when {
         inTrip -> MapOverlays(
             routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, selected = true)),
             destination = (trip as? TripState.Navigating)?.remainingWaypoints?.lastOrNull()
                 ?.let { MapPoint(it.coordinate.lat, it.coordinate.lng) },
             traffic = trafficOverlay,
+            slowdowns = tripTraffic.toSpeedLines(),
         )
         else -> when (val current = panel) {
             is Panel.PlaceShown -> MapOverlays(pin = MapPoint(current.place.lat, current.place.lon))
@@ -489,6 +650,7 @@ internal fun ExploreMap(
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
                     traffic = trafficOverlay,
+                    slowdowns = previewTraffic.getOrNull(selected)?.toSpeedLines().orEmpty(),
                 )
             }
             else -> MapOverlays(traffic = trafficOverlay)
@@ -538,6 +700,10 @@ internal fun ExploreMap(
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
             onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            onTouchChanged = { down ->
+                touching = down
+                touchSerial++
+            },
         )
 
         saveDialogFor?.let { place ->
@@ -558,6 +724,7 @@ internal fun ExploreMap(
             )
         }
 
+        val mutedUntilTurn by services.voice.mutedUntilNextTurn.collectAsState()
         if (inTrip) {
             NavigationOverlay(
                 state = navState,
@@ -568,10 +735,28 @@ internal fun ExploreMap(
                 // Phase 6: skip stop, after-sunset dark overlay, clock for the arrival time.
                 onSkipStop = { scope.launch { navigator?.skipNextStop() } },
                 darkOverlay = darkTheme && !systemDark,
-                nowMs = clockMs,
+                delaySeconds = tripTraffic.delaySeconds,
+                fasterRoute = fasterOffer?.let { offer ->
+                    FasterRouteOffer(
+                        savesMinutes = offer.savesMinutes,
+                        onAccept = {
+                            navigator?.switchTo(offer.route)
+                            fasterOffer = null
+                        },
+                        onDismiss = {
+                            dismissedRoutes.dismiss(offer.points, System.currentTimeMillis())
+                            fasterOffer = null
+                        },
+                    )
+                },
+                arrivalSide = arrivalSide,
+                parkingNearby = parkingNearby,
+                mutedUntilNextTurn = mutedUntilTurn,
+                onVoiceLongPress = { if (mutedUntilTurn) services.voice.resumeVoice() else services.voice.muteUntilNextTurn() },
             )
             if (!following && location != null) {
-                RecenterButton(following, { following = true }, Modifier.align(Alignment.CenterEnd))
+                // Above the ETA and trip progress at the bottom.
+                RecenterPill({ following = true }, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp))
             }
         } else {
             when (val current = panel) {
@@ -591,11 +776,10 @@ internal fun ExploreMap(
                         if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
                         if (location != null) RecenterButton(following, { following = true }, Modifier)
                     }
-                    shownIncident?.let { incident ->
-                        IncidentCard(
-                            incident,
-                            onClose = { shownIncident = null },
-                            modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = 8.dp),
+                    if (!following && location != null) {
+                        RecenterPill(
+                            { following = true },
+                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = if (shownIncident != null) 190.dp else 28.dp),
                         )
                     }
                     if (trafficVisible && traffic.errors.isNotEmpty()) {
@@ -728,6 +912,18 @@ internal fun ExploreMap(
                 }
             }
         }
+
+        // --- Phase 5 (map): the tap-to-read card for incident pins, wherever the pin was tapped ---
+        shownIncident?.let { incident ->
+            IncidentCard(
+                incident,
+                onClose = { shownIncident = null },
+                modifier = when {
+                    inTrip -> Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp)
+                    else -> Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = if (panel == Panel.Browse) 8.dp else SHEET_HEIGHT)
+                },
+            )
+        }
     }
 }
 
@@ -799,6 +995,20 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
 }
 
 private const val TRAFFIC_POLL_MS = 60_000L
+private const val AUTO_RECENTER_MS = 10_000L
+private const val PARKING_RADIUS_M = 300.0
+private const val FASTER_ROUTE_OFFER_MS = 90_000L
+private const val FASTER_ROUTE_TRY_DETOUR_SECONDS = 120.0
+private const val DETOUR_MIN_DISTANCE_M = 300.0
+private const val DETOUR_MAX_SPOTS = 3
+
+/** A faster route found mid-trip, with its points for telling it apart later. */
+private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
+
+private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
+    segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
+
+private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.lon), kind.name, isClosure)
 private const val SPEEDING_GRACE_MS = 8_000L
 private const val SPEEDING_REPEAT_MS = 60_000L
 
@@ -845,7 +1055,7 @@ private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modi
 
 private fun TrafficSnapshot.toOverlay() = TrafficOverlay(
     speeds = speeds.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) },
-    incidents = incidents.map { IncidentPin(it.id, MapPoint(it.location.lat, it.location.lon), it.kind.name, it.isClosure) },
+    incidents = incidents.map { it.toPin() },
 )
 
 @Composable

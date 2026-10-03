@@ -61,4 +61,26 @@
     <nd ref="20"/><nd ref="22"/>
     <tag k="highway" v="footway"/><tag k="name" v="Some Path"/>
   </way>
+  <!-- Landmarks for spoken directions and alerts -->
+  <node id="30" version="1" lat="40.7400" lon="-73.9900"><tag k="highway" v="traffic_signals"/></node>
+  <node id="31" version="1" lat="40.7410" lon="-73.9900"><tag k="highway" v="stop"/></node>
+  <node id="32" version="1" lat="40.7420" lon="-73.9910">
+    <tag k="amenity" v="fuel"/><tag k="name" v="Shell Gas"/><tag k="brand" v="Shell"/>
+  </node>
+  <node id="33" version="1" lat="40.7430" lon="-73.9900"><tag k="highway" v="speed_camera"/></node>
+  <node id="34" version="1" lat="40.7440" lon="-73.9900">
+    <tag k="man_made" v="surveillance"/><tag k="surveillance:type" v="ALPR"/>
+    <tag k="operator" v="Flock Safety"/>
+  </node>
+  <node id="35" version="1" lat="40.7450" lon="-73.9900">
+    <tag k="man_made" v="surveillance"/><tag k="surveillance:type" v="camera"/>
+  </node>
+  <node id="36" version="1" lat="40.7460" lon="-73.9900"><tag k="hazard" v="school_zone"/></node>
+  <node id="37" version="1" lat="40.7470" lon="-73.9900"/>
+  <node id="38" version="1" lat="40.7480" lon="-73.9900"/>
+  <way id="204" version="1">
+    <nd ref="37"/><nd ref="38"/>
+    <tag k="highway" v="residential"/><tag k="name" v="School Lane"/>
+    <tag k="maxspeed:conditional" v="15 mph @ (Mo-Fr 07:00-16:00; school)"/>
+  </way>
 </osm>

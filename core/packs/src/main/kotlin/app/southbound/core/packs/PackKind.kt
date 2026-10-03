@@ -20,6 +20,13 @@ enum class PackKind(val prefix: String, val extension: String) {
 
     /** SQLite database compiled from GTFS. */
     TRANSIT("transit", "sqlite"),
+
+    /**
+     * A Piper voice for the built-in speech engine (ZIP of model.onnx,
+     * tokens.txt, voice.sha256). The "region" is the voice's id, e.g.
+     * `voice-norman.zip`; fetched only for the voice the user picks.
+     */
+    VOICE("voice", "zip"),
     ;
 
     fun fileName(region: String): String = "$prefix-$region.$extension"
@@ -42,6 +49,8 @@ enum class PackKind(val prefix: String, val extension: String) {
         private const val SQLITE_APPLICATION_ID_OFFSET = 68
         private val TAR_MAGIC = "ustar".toByteArray(Charsets.US_ASCII)
         private const val TAR_MAGIC_OFFSET = 257
+        /** A ZIP's local file header; the routing pack is a tar, so the two can't be confused. */
+        private val ZIP_MAGIC = byteArrayOf(0x50, 0x4b, 0x03, 0x04)
         private const val HEADER_BYTES = 512
 
         /** The kind whose header [file] has, or null if it's no pack at all. */
@@ -72,6 +81,8 @@ enum class PackKind(val prefix: String, val extension: String) {
                 read >= TAR_MAGIC_OFFSET + TAR_MAGIC.size &&
                     header.copyOfRange(TAR_MAGIC_OFFSET, TAR_MAGIC_OFFSET + TAR_MAGIC.size)
                         .contentEquals(TAR_MAGIC) -> ROUTING
+
+                read >= ZIP_MAGIC.size && header.startsWith(ZIP_MAGIC) -> VOICE
 
                 else -> null
             }

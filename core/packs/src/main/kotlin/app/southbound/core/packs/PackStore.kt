@@ -85,10 +85,11 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
     /**
      * After installing a pack of a kind the app uses one of (routing, search,
      * transit), drops the other regions' copies: a phone that moved from
-     * routing-nyc to routing-nys shouldn't keep both.
+     * routing-nyc to routing-nys shouldn't keep both. Basemaps and voices
+     * are one per region or voice, and never pruned here.
      */
     fun deleteOtherRegions(kind: PackKind, keep: String): List<String> {
-        if (kind == PackKind.BASEMAP) return emptyList()
+        if (kind == PackKind.BASEMAP || kind == PackKind.VOICE) return emptyList()
         val others = installed().filter { it.kind == kind && it.region != keep }.map { it.region }
         others.forEach { delete(kind, it) }
         return others
