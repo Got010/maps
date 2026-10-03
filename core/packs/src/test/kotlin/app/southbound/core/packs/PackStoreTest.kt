@@ -220,4 +220,45 @@ class PackStoreTest {
         } catch (expected: UnrecognizedPackException) {
         }
     }
+
+    @Test
+    fun installedListsEveryPackByRegion() {
+        val store = store()
+        store.importPack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        store.importPack(validPack.inputStream(), "basemap-hudson.pmtiles")
+        store.importPack(tar().inputStream(), "routing-nys.tar")
+        store.importPacksDir!!.mkdirs()
+        store.importPacksDir!!.resolve("basemap-western.pmtiles").writeBytes(validPack)
+        store.importPacksDir!!.resolve("basemap-li.pmtiles").writeBytes("junk".toByteArray())
+        store.packsDir.resolve("download").mkdirs()
+        store.packsDir.resolve("import.part").writeBytes(validPack)
+
+        assertEquals(
+            listOf("basemap-nyc.pmtiles", "basemap-hudson.pmtiles", "basemap-western.pmtiles"),
+            store.installedBasemaps().map { it.file.name },
+        )
+        assertEquals(setOf("nyc", "hudson", "western"), store.installedBasemaps().map { it.region }.toSet())
+        assertEquals(4, store.installed().size)
+        assertEquals(ImportedPack(PackKind.ROUTING, "nys", store.packsDir.resolve("routing-nys.tar")), store.installedAny(PackKind.ROUTING))
+        assertEquals(null, store.installedAny(PackKind.SEARCH))
+    }
+
+    @Test
+    fun installedAnyPrefersStatewideThenNyc() {
+        val store = store()
+        store.importPack(tar().inputStream(), "routing-nyc.tar")
+        store.importPack(tar().inputStream(), "routing-western.tar")
+        assertEquals("nyc", store.installedAny(PackKind.ROUTING)!!.region)
+        store.importPack(tar().inputStream(), "routing-nys.tar")
+        assertEquals("nys", store.installedAny(PackKind.ROUTING)!!.region)
+        assertEquals(setOf("nyc", "western"), store.deleteOtherRegions(PackKind.ROUTING, "nys").toSet())
+        assertEquals(listOf("routing-nys.tar", "routing-nys.tar.sha256"), store.packsDir.list()!!.sorted())
+        // Basemaps are one per region, never pruned.
+        store.importPack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        store.importPack(validPack.inputStream(), "basemap-li.pmtiles")
+        assertEquals(emptyList<String>(), store.deleteOtherRegions(PackKind.BASEMAP, "li"))
+        assertEquals(2, store.installedBasemaps().size)
+        store.delete(PackKind.BASEMAP, "li")
+        assertEquals(listOf("nyc"), store.installedBasemaps().map { it.region })
+    }
 }

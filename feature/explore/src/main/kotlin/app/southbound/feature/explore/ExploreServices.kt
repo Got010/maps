@@ -6,11 +6,11 @@ import app.southbound.core.network.NetworkGate
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackKind
-import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
 import app.southbound.core.search.SearchIndex
+import app.southbound.core.traffic.TrafficFeed
 import app.southbound.core.transit.AndroidTransitDb
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.transit.TransitRealtime
@@ -49,14 +49,17 @@ class ExploreServices private constructor(context: Context) {
     val secrets = SecretStore(appContext)
     val realtime = TransitRealtime(networkGate, busKey = { secrets.get(ApiKey.MTA_BUS_TIME) })
 
+    /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
+    val traffic = TrafficFeed(networkGate, key511 = { secrets.get(ApiKey.NY_511) })
+
     private var search: Opened<SearchIndex>? = null
     private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
 
     /** The search index, reopened if a newer search pack was imported. Null without one. */
     @Synchronized
-    fun openSearch(region: String = PackStore.DEFAULT_REGION): SearchIndex? {
-        val file = installed(PackKind.SEARCH, region) ?: return null
+    fun openSearch(): SearchIndex? {
+        val file = installed(PackKind.SEARCH) ?: return null
         search?.takeIf { it.matches(file) }?.let { return it.value }
         search?.value?.close()
         search = null
@@ -69,8 +72,8 @@ class ExploreServices private constructor(context: Context) {
      * only between trips, never mid-navigation.
      */
     @Synchronized
-    fun openNavigator(region: String = PackStore.DEFAULT_REGION, navigating: Boolean = false): Navigator? {
-        val file = installed(PackKind.ROUTING, region) ?: return routing?.value?.second
+    fun openNavigator(navigating: Boolean = false): Navigator? {
+        val file = installed(PackKind.ROUTING) ?: return routing?.value?.second
         val current = routing
         if (current != null && (current.matches(file) || navigating)) return current.value.second
         current?.value?.first?.close()
@@ -83,8 +86,8 @@ class ExploreServices private constructor(context: Context) {
 
     /** The transit pack with its network loaded, reopened after a newer import. Null without one. */
     @Synchronized
-    fun openTransit(region: String = PackStore.DEFAULT_REGION): TransitPack? {
-        val file = installed(PackKind.TRANSIT, region) ?: return null
+    fun openTransit(): TransitPack? {
+        val file = installed(PackKind.TRANSIT) ?: return null
         transit?.takeIf { it.matches(file) }?.let { return it.value }
         transit?.value?.close()
         transit = null
@@ -92,10 +95,10 @@ class ExploreServices private constructor(context: Context) {
             ?.also { transit = Opened(file, it) }
     }
 
-    fun hasPack(kind: PackKind, region: String = PackStore.DEFAULT_REGION): Boolean = installed(kind, region) != null
+    fun hasPack(kind: PackKind): Boolean = installed(kind) != null
 
-    private fun installed(kind: PackKind, region: String): File? =
-        (packStore.status(kind, region) as? PackStatus.Installed)?.file
+    /** The statewide pack when installed, else NYC's (see PackStore.installedAny). */
+    private fun installed(kind: PackKind): File? = packStore.installedAny(kind)?.file
 
     /** Remembers which file (and version of it) an open resource came from. */
     private class Opened<T>(file: File, val value: T) {

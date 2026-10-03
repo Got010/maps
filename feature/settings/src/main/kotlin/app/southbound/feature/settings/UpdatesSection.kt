@@ -35,9 +35,8 @@ import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
-import app.southbound.core.packs.PackKind
-import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
+import app.southbound.core.packs.Regions
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.updates.UpdateState
 import app.southbound.core.updates.UpdateStatus
@@ -54,13 +53,14 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
     val state by UpdateStatus.state.collectAsState()
     val queue by remember { UpdateScheduler.queue(context) }.collectAsState(UpdateScheduler.Queue.IDLE)
     var networkPermitted by remember { mutableStateOf(UpdateScheduler.networkPermitted(context)) }
-    var packs by remember { mutableStateOf(installedPacks(context)) }
+    val packStore = remember { PackStore(context.filesDir, context.getExternalFilesDir(null)) }
+    var packs by remember { mutableStateOf(installedPacks(packStore)) }
     var mobileData by remember { mutableStateOf(UpdateScheduler.allowMobileData(context)) }
     var canInstall by remember { mutableStateOf(context.packageManager.canRequestPackageInstalls()) }
     LifecycleResumeEffect(Unit) {
         canInstall = context.packageManager.canRequestPackageInstalls()
         networkPermitted = UpdateScheduler.networkPermitted(context)
-        packs = installedPacks(context)
+        packs = installedPacks(packStore)
         onPauseOrDispose { }
     }
 
@@ -98,19 +98,15 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
         UpdateScheduler.setAllowMobileData(context, it)
     }
     GitHubToken(secrets)
+    Section(R.string.regions_title)
+    RegionPicker(packStore)
     InstalledPacks(packs)
 }
 
 private data class PackLine(val name: String, val sizeMb: Long, val modified: Long)
 
-private fun installedPacks(context: Context): List<PackLine> {
-    val store = PackStore(context.filesDir, context.getExternalFilesDir(null))
-    return PackKind.entries.mapNotNull { kind ->
-        (store.status(kind, PackStore.DEFAULT_REGION) as? PackStatus.Installed)?.file?.let {
-            PackLine(it.name, it.length() shr 20, it.lastModified())
-        }
-    }
-}
+private fun installedPacks(store: PackStore): List<PackLine> =
+    store.installed().map { PackLine("${it.file.name} (${Regions.nameOf(it.region)})", it.file.length() shr 20, it.file.lastModified()) }
 
 /** What's on the phone now, so a missing or stale pack is easy to spot. */
 @Composable

@@ -1,0 +1,117 @@
+package app.southbound.core.traffic
+
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sqrt
+
+/** A point in WGS84 degrees. */
+data class GeoPoint(val lat: Double, val lon: Double)
+
+enum class IncidentKind {
+    /** A road or ramp is shut: routing steers around it. */
+    CLOSURE,
+    ACCIDENT,
+    ROADWORK,
+    EVENT,
+    OTHER,
+}
+
+/** One 511NY event: a crash, closure, work zone or special event, at a point. */
+data class Incident(
+    val id: String,
+    val kind: IncidentKind,
+    /** "I-87", "Broadway". */
+    val roadway: String?,
+    /** "Northbound", "Both Directions". */
+    val direction: String?,
+    val description: String,
+    val location: GeoPoint,
+    /** "Minor", "Major" or whatever the feed says; null when it doesn't. */
+    val severity: String?,
+    /** "All lanes closed", "1 right lane closed". */
+    val lanesStatus: String?,
+    /** POSIX millis of the feed's last update to this event, or null. */
+    val updatedAt: Long?,
+) {
+    /** A closure proper, or any event that shuts every lane. */
+    val isClosure: Boolean
+        get() = kind == IncidentKind.CLOSURE || lanesStatus?.lowercase()?.let { "all lanes" in it && "closed" in it } == true
+
+    /** "I-87 Northbound" or the description when the feed gives no road. */
+    val title: String
+        get() = listOfNotNull(roadway?.takeIf { it.isNotBlank() }, direction?.takeIf { it.isNotBlank() }).joinToString(" ")
+            .ifEmpty { description.take(60) }
+}
+
+/** One NYC DOT sensor link with its latest reading. */
+data class SpeedLink(
+    val id: String,
+    val name: String?,
+    val borough: String?,
+    val speedMph: Double,
+    /** Travel time over the link, seconds; null when unknown. */
+    val travelTimeSeconds: Int?,
+    /** The link's shape. */
+    val points: List<GeoPoint>,
+    /** POSIX millis of the reading, or null. */
+    val asOf: Long?,
+) {
+    val isStale: Boolean get() = asOf == null
+}
+
+/** Everything traffic knows right now, from the feeds the user turned on. */
+data class TrafficSnapshot(
+    val incidents: List<Incident> = emptyList(),
+    val speeds: List<SpeedLink> = emptyList(),
+    /** POSIX millis. */
+    val fetchedAt: Long = 0,
+    /** Feeds that couldn't be fetched, in plain words. */
+    val errors: List<String> = emptyList(),
+) {
+    val isEmpty: Boolean get() = incidents.isEmpty() && speeds.isEmpty()
+    val closures: List<Incident> get() = incidents.filter { it.isClosure }
+
+    companion object {
+        val EMPTY = TrafficSnapshot()
+    }
+}
+
+/** Small-area distances, good to a fraction of a percent over a state. */
+object Geo {
+    private const val EARTH_RADIUS_M = 6_371_008.8
+    private const val DEG = Math.PI / 180
+
+    fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
+        val dLat = (b.lat - a.lat) * DEG
+        val dLon = (b.lon - a.lon) * DEG * cos((a.lat + b.lat) / 2 * DEG)
+        return sqrt(dLat * dLat + dLon * dLon) * EARTH_RADIUS_M
+    }
+
+    /** Metres from [p] to the segment [a]-[b]. */
+    fun distanceToSegmentMeters(p: GeoPoint, a: GeoPoint, b: GeoPoint): Double {
+        val k = cos(p.lat * DEG)
+        val ax = a.lon * k; val ay = a.lat
+        val bx = b.lon * k; val by = b.lat
+        val px = p.lon * k; val py = p.lat
+        val dx = bx - ax; val dy = by - ay
+        val len2 = dx * dx + dy * dy
+        val t = if (len2 == 0.0) 0.0 else (((px - ax) * dx + (py - ay) * dy) / len2).coerceIn(0.0, 1.0)
+        val cx = ax + t * dx; val cy = ay + t * dy
+        val ddx = (px - cx) * DEG; val ddy = (py - cy) * DEG
+        return sqrt(ddx * ddx + ddy * ddy) * EARTH_RADIUS_M
+    }
+
+    /** Metres from [p] to the polyline [line]; infinity for an empty line. */
+    fun distanceToLineMeters(p: GeoPoint, line: List<GeoPoint>): Double {
+        if (line.isEmpty()) return Double.POSITIVE_INFINITY
+        if (line.size == 1) return distanceMeters(p, line[0])
+        var best = Double.POSITIVE_INFINITY
+        for (i in 0 until line.size - 1) {
+            // Skip segments whose box is far away; cheap, and routes have thousands of points.
+            val a = line[i]; val b = line[i + 1]
+            if (abs(p.lat - a.lat) > 0.05 && abs(p.lat - b.lat) > 0.05) continue
+            best = minOf(best, distanceToSegmentMeters(p, a, b))
+        }
+        return best
+    }
+}

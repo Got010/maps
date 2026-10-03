@@ -1,0 +1,8 @@
+[
+  {"id": "1", "speed": "52.19", "travel_time": "122", "status": "0", "data_as_of": "2026-10-02T22:16:04.000", "link_id": "4616337", "link_points": "40.74047,-74.009251 40.74137,-74.00893 40.7431,-74.00846", "link_name": "11th ave n ganservoort - 12th ave @ 40 st", "borough": "Manhattan"},
+  {"id": "2", "speed": "12.43", "travel_time": "600", "status": "0", "data_as_of": "2026-10-02T22:11:04.000", "link_id": "4616337", "link_points": "40.74047,-74.009251 40.74137,-74.00893", "link_name": "11th ave n ganservoort - 12th ave @ 40 st", "borough": "Manhattan"},
+  {"id": "3", "speed": "31.07", "travel_time": "310", "status": "0", "data_as_of": "2026-10-02T22:16:04.000", "link_id": "4456479", "link_points": "40.84033,-73.92961 40.8395,-73.92932 40.8381 40.83706,-73.9289", "link_name": "MDE N 155TH ST - 165TH ST", "borough": "Manhattan"},
+  {"id": "4", "speed": "40.0", "travel_time": "100", "status": "0", "data_as_of": "2026-09-25T10:51:04.000", "link_id": "4329500", "link_points": "40.6,-73.95 40.61,-73.95", "link_name": "stale sensor", "borough": "Brooklyn"},
+  {"id": "5", "speed": "40.0", "travel_time": "100", "status": "0", "data_as_of": "2026-10-02T22:16:04.000", "link_id": "4329501", "link_points": "40.6,-73.95", "link_name": "one point only", "borough": "Brooklyn"},
+  {"id": "6", "speed": "", "travel_time": "100", "status": "0", "data_as_of": "2026-10-02T22:16:04.000", "link_id": "4329502", "link_points": "40.6,-73.95 40.61,-73.95", "link_name": "no speed", "borough": "Brooklyn"}
+]

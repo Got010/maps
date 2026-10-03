@@ -198,13 +198,34 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_bus, toggles.getValue(NetworkFeature.TRANSIT_BUS_TIME), R.string.live_bus_note) {
         network.set(NetworkFeature.TRANSIT_BUS_TIME, it)
     }
-    var hasKey by remember { mutableStateOf(secrets.has(ApiKey.MTA_BUS_TIME)) }
+    KeyField(secrets, ApiKey.MTA_BUS_TIME, R.string.live_bus_key, R.string.live_bus_key_saved)
+
+    Subheading(R.string.live_traffic)
+    Toggle(R.string.live_511, toggles.getValue(NetworkFeature.TRAFFIC_511NY), R.string.live_511_note) {
+        network.set(NetworkFeature.TRAFFIC_511NY, it)
+    }
+    KeyField(secrets, ApiKey.NY_511, R.string.live_511_key, R.string.live_511_key_saved)
+    Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
+        network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
+    }
+    Text(
+        stringResource(R.string.live_traffic_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+}
+
+/** A password-style field that saves an API key encrypted, with Remove once one is saved. */
+@Composable
+private fun KeyField(secrets: SecretStore, key: ApiKey, @StringRes label: Int, @StringRes savedLabel: Int) {
+    var hasKey by remember { mutableStateOf(secrets.has(key)) }
     var draft by remember { mutableStateOf("") }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = draft,
             onValueChange = { draft = it },
-            label = { Text(stringResource(if (hasKey) R.string.live_bus_key_saved else R.string.live_bus_key)) },
+            label = { Text(stringResource(if (hasKey) savedLabel else label)) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
@@ -212,15 +233,15 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
-                secrets.set(ApiKey.MTA_BUS_TIME, draft)
-                hasKey = secrets.has(ApiKey.MTA_BUS_TIME)
+                secrets.set(key, draft)
+                hasKey = secrets.has(key)
                 draft = ""
-            }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.live_bus_key_save)) }
+            }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.live_key_save)) }
             if (hasKey) {
                 TextButton(onClick = {
-                    secrets.set(ApiKey.MTA_BUS_TIME, null)
+                    secrets.set(key, null)
                     hasKey = false
-                }) { Text(stringResource(R.string.live_bus_key_remove)) }
+                }) { Text(stringResource(R.string.live_key_remove)) }
             }
         }
     }

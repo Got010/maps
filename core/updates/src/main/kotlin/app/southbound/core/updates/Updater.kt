@@ -16,6 +16,7 @@ import app.southbound.core.packs.ManifestException
 import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
+import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.ReleaseManifest
 import app.southbound.core.packs.UnrecognizedPackException
 import app.southbound.core.packs.UpdatePlan
@@ -32,11 +33,15 @@ import java.security.MessageDigest
  * then (if app updates are on) a newer APK, checked and handed to Android's
  * installer. Every request goes through NetworkGate: pack downloads are on by
  * default, app updates off until the user turns them on.
+ *
+ * Which packs: a basemap for each region picked in Settings, and the
+ * statewide routing and search packs and NYC transit that every release has.
  */
-class Updater(context: Context, private val region: String = PackStore.DEFAULT_REGION) {
+class Updater(context: Context) {
 
     private val app = context.applicationContext
     private val packStore = PackStore(app.filesDir, app.getExternalFilesDir(null))
+    private val regions = RegionSelection.get(app)
     private val gate = NetworkGate(PreferenceNetworkToggles.get(app))
     private val secrets = SecretStore(app)
     private val client = GitHubReleases(gate, { secrets.get(ApiKey.GITHUB_RELEASES) })
@@ -60,9 +65,9 @@ class Updater(context: Context, private val region: String = PackStore.DEFAULT_R
             val manifest = ReleaseManifest.parse(client.text(checkFeature, manifestAsset))
             UpdateScheduler.recordCheck(app, manifest.version)
 
-            val installed = PackKind.entries.associateWith { packStore.installedSha256(it, region) }
+            val installed = packStore.installed().associate { (it.kind to it.region) to packStore.installedSha256(it.kind, it.region) }
             val plan = UpdatePlan.of(
-                manifest, region, installed,
+                manifest, regions.regions.value, installed,
                 wanted = if (packsOn) PackKind.entries.toSet() else emptySet(),
                 installedVersionCode = installedVersionCode(),
                 includeApp = appOn,
@@ -82,6 +87,8 @@ class Updater(context: Context, private val region: String = PackStore.DEFAULT_R
                     }, cancelled = { !isActive })
                     if (sha != pack.file.sha256) throw IOException("${pack.file.name} doesn't match its published checksum")
                     PackEvents.emit(packStore.installDownloaded(part, pack, sha))
+                    // routing-nys replaces routing-nyc, and so on: don't keep both.
+                    packStore.deleteOtherRegions(pack.kind, pack.region)
                 } finally {
                     part.delete()
                 }

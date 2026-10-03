@@ -1,0 +1,61 @@
+[
+  {
+    "ID": "NY-511-1001",
+    "Organization": "NYSDOT",
+    "RoadwayName": "I-87",
+    "DirectionOfTravel": "Northbound",
+    "Description": "Road closed on I-87 Northbound at Exit 17 due to a crash.",
+    "Location": "At Exit 17",
+    "LanesAffected": "All lanes",
+    "LanesStatus": "All lanes closed",
+    "EventType": "accidentsAndIncidents",
+    "EventSubType": "Crash",
+    "Severity": "Major",
+    "Reported": "10/02/2026 9:58:00 PM",
+    "LastUpdated": "10/02/2026 10:15:00 PM",
+    "Latitude": 41.4518,
+    "Longitude": -74.0547
+  },
+  {
+    "ID": "NY-511-1002",
+    "RoadwayName": "Broadway",
+    "DirectionOfTravel": "Both Directions",
+    "Description": "Construction on Broadway between W 96th St and W 110th St.",
+    "LanesAffected": "1 Right lane",
+    "LanesStatus": "1 Right lane closed",
+    "EventType": "roadwork",
+    "EventSubType": "Construction",
+    "Severity": "Minor",
+    "LastUpdated": "10/02/2026 6:00:00 AM",
+    "Latitude": "40.7995",
+    "Longitude": "-73.9685"
+  },
+  {
+    "ID": "NY-511-1003",
+    "RoadwayName": "NY-17",
+    "DirectionOfTravel": "Westbound",
+    "Description": "Ramp closed from NY-17 Westbound to Exit 120.",
+    "EventType": "closures",
+    "EventSubType": "Ramp Closure",
+    "LastUpdated": "not a date",
+    "Latitude": 41.3,
+    "Longitude": -74.3
+  },
+  {
+    "ID": "NY-511-1004",
+    "RoadwayName": "Somewhere",
+    "Description": "An event with no position.",
+    "EventType": "specialEvents",
+    "Latitude": 0,
+    "Longitude": 0
+  },
+  {
+    "ID": "NY-511-1005",
+    "Description": "Parade on 5th Avenue.",
+    "EventType": "specialEvents",
+    "EventSubType": "Parade",
+    "Latitude": 40.78,
+    "Longitude": -73.96,
+    "Extra": {"nested": [1, 2, 3]}
+  }
+]

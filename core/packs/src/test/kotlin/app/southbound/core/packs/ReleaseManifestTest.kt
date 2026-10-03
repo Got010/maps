@@ -65,7 +65,8 @@ class ReleaseManifestTest {
     fun `plan fetches only changed packs and a newer app`() {
         val m = ReleaseManifest.parse(fixture)
         val basemapSha = m.pack(PackKind.BASEMAP, "nyc")!!.file.sha256
-        val plan = UpdatePlan.of(m, "nyc", mapOf(PackKind.BASEMAP to basemapSha, PackKind.TRANSIT to "old"), installedVersionCode = 100, includeApp = true)
+        val installed = mapOf((PackKind.BASEMAP to "nyc") to basemapSha, (PackKind.TRANSIT to "nyc") to "old")
+        val plan = UpdatePlan.of(m, setOf("nyc"), installed, installedVersionCode = 100, includeApp = true)
         assertEquals(listOf(PackKind.TRANSIT), plan.packs.map { it.kind })
         assertEquals("southbound-0.1.1.apk", plan.app?.name)
         assertEquals(1L + 3L, plan.bytes)
@@ -74,16 +75,42 @@ class ReleaseManifestTest {
     @Test
     fun `plan skips the app when it's current or app updates are off`() {
         val m = ReleaseManifest.parse(fixture)
-        assertNull(UpdatePlan.of(m, "nyc", emptyMap(), installedVersionCode = 101, includeApp = true).app)
-        assertNull(UpdatePlan.of(m, "nyc", emptyMap(), installedVersionCode = 1, includeApp = false).app)
-        assertEquals(2, UpdatePlan.of(m, "nyc", emptyMap(), installedVersionCode = 1, includeApp = false).packs.size)
-        assertTrue(UpdatePlan.of(m, "albany", emptyMap(), installedVersionCode = 101, includeApp = true).isEmpty)
+        assertNull(UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 101, includeApp = true).app)
+        assertNull(UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 1, includeApp = false).app)
+        assertEquals(2, UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 1, includeApp = false).packs.size)
+        // No basemap region wanted: transit (not a basemap) still comes.
+        assertEquals(listOf(PackKind.TRANSIT), UpdatePlan.of(m, emptySet(), emptyMap(), installedVersionCode = 101, includeApp = true).packs.map { it.kind })
     }
 
     @Test
     fun `plan respects the wanted kinds`() {
         val m = ReleaseManifest.parse(fixture)
-        val plan = UpdatePlan.of(m, "nyc", emptyMap(), wanted = setOf(PackKind.TRANSIT), installedVersionCode = 101, includeApp = false)
+        val plan = UpdatePlan.of(m, setOf("nyc"), emptyMap(), wanted = setOf(PackKind.TRANSIT), installedVersionCode = 101, includeApp = false)
         assertEquals(listOf(PackKind.TRANSIT), plan.packs.map { it.kind })
+    }
+
+    @Test
+    fun `plan takes a basemap per chosen region and the statewide packs`() {
+        val one = { kind: String, region: String, ext: String ->
+            """{"kind":"$kind","region":"$region","file":"$kind-$region.$ext","size":5,"sha256":"$sha"}"""
+        }
+        val m = ReleaseManifest.parse(
+            doc(
+                packs = "[" + listOf(
+                    one("basemap", "nyc", "pmtiles"), one("basemap", "li", "pmtiles"), one("basemap", "western", "pmtiles"),
+                    one("routing", "nys", "tar"), one("search", "nys", "sqlite"), one("transit", "nyc", "sqlite"),
+                ).joinToString(",") + "]",
+            ),
+        )
+        val plan = UpdatePlan.of(m, setOf("li", "western"), emptyMap(), installedVersionCode = 101, includeApp = false)
+        assertEquals(
+            listOf("basemap-li.pmtiles", "basemap-western.pmtiles", "routing-nys.tar", "search-nys.sqlite", "transit-nyc.sqlite"),
+            plan.packs.map { it.file.name },
+        )
+        val installed = mapOf((PackKind.ROUTING to "nys") to sha, (PackKind.BASEMAP to "li") to sha)
+        assertEquals(
+            listOf("basemap-western.pmtiles", "search-nys.sqlite", "transit-nyc.sqlite"),
+            UpdatePlan.of(m, setOf("li", "western"), installed, installedVersionCode = 101, includeApp = false).packs.map { it.file.name },
+        )
     }
 }

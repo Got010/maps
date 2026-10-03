@@ -33,4 +33,26 @@ class OverlayGeoJsonTest {
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.pins(null, null))
     }
+
+    @Test
+    fun trafficSpeedsAndIncidents() {
+        val speeds = OverlayGeoJson.speeds(listOf(SpeedLine(listOf(MapPoint(40.74, -74.009), MapPoint(40.741, -74.008)), 52.19)))
+        assertEquals(
+            """{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"speed":52.2},""" +
+                """"geometry":{"type":"LineString","coordinates":[[-74.009000,40.740000],[-74.008000,40.741000]]}}]}""",
+            speeds,
+        )
+        val incidents = OverlayGeoJson.incidents(
+            listOf(
+                IncidentPin("a\"b", MapPoint(41.45, -74.05), "CLOSURE", closure = true),
+                IncidentPin("c", MapPoint(40.8, -73.97), "ROADWORK", closure = false),
+            ),
+        )
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"c","kind":"ROADWORK","closure":false},"geometry":{"type":"Point","coordinates":[-73.970000,40.800000]}},""" +
+                """{"type":"Feature","properties":{"id":"a\"b","kind":"CLOSURE","closure":true},"geometry":{"type":"Point","coordinates":[-74.050000,41.450000]}}]}""",
+            incidents,
+        )
+    }
 }
