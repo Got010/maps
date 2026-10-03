@@ -32,6 +32,9 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_traffic_hide">Hide live traffic</string>
+    <string name="explore_alert_speed_camera">Speed camera ahead.</string>
+    <string name="explore_alert_school_zone">School zone ahead.</string>
+    <string name="explore_alert_alpr_camera">License plate reader ahead.</string>
     <string name="explore_closure_spoken">Road closed ahead on %1$s. Finding another way.</string>
     <string name="explore_incident_severity">Severity: %1$s</string>
     <string name="explore_incident_updated">Updated %1$s</string>
