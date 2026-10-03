@@ -74,8 +74,8 @@ A build pipeline on your computer turns public datasets into six data packs, whi
 
 | Pack | Built from | Tool | Refresh | Est. size, statewide |
 | --- | --- | --- | --- | --- |
-| `basemap-<region>.pmtiles` | OSM New York extract (Geofabrik) | Planetiler, OpenMapTiles or Protomaps schema | Monthly | 300-800 MB |
-| `routing.tar` | Same OSM extract | Valhalla tile builder | Monthly | 300-600 MB |
+| `basemap-<region>.pmtiles` | OSM New York extract (Geofabrik); `basemap-njn` from the New Jersey extract | Planetiler, OpenMapTiles or Protomaps schema | Monthly | 300-800 MB |
+| `routing.tar` | Same OSM extracts, New York merged with northern New Jersey | Valhalla tile builder | Monthly | 300-600 MB |
 | `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | DuckDB script into FTS5 | Monthly | 200-400 MB |
 | `places.sqlite` | OSM POIs plus [Overture Places](https://docs.overturemaps.org/guides/places/) | DuckDB script into FTS5 | Monthly | 100-250 MB |
 | `transit-nyc.sqlite` | MTA GTFS: subway, 6 bus files, LIRR, Metro-North | Python compiler | Weekly | 50-150 MB |
@@ -84,7 +84,7 @@ A build pipeline on your computer turns public datasets into six data packs, whi
 
 The sizes are guesses to replace after the first real build. Expect 1 to 2.5 GB for the whole state.
 
-- **Regions.** Split the basemap into NYC, Long Island, Hudson Valley, Capital and North Country, and Central and Western NY, so you install only what you need. Keep routing as one statewide graph so cross-region trips work.
+- **Regions.** Split the basemap into NYC, Long Island, Hudson Valley, Capital and North Country, Central and Western NY, and Northern New Jersey (`njn`), so you install only what you need. Keep routing as one graph (New York plus northern New Jersey) so cross-region trips work.
 - **Addresses.** NYS Address Points is the state's 911-grade address file. It is CC0-licensed, refreshed twice a month, and fills OSM's upstate address gaps.
 - **Places.** Overture is CDLA Permissive 2.0, with Foursquare rows under Apache 2.0 and AllThePlaces rows under CC0. Keep it in its own table and dedupe against OSM at query time, because Overture notes that a database joined with OSM may inherit ODbL.
 - **Hours.** Opening hours come from OSM's `opening_hours` tag.
@@ -185,11 +185,17 @@ Build NYC end to end first, then scale the same pipeline to the state. Each phas
   - map, search, directions preview for drive, walk and bike, transit planning, departure boards, settings and in-app updates
   - Phase 0's GPS follow and Phase 1's drive with spoken turns need a trip inside NYC; the owner lives outside NYC. Route preview works from anywhere with **Start here** on a place card.
 - **Phase 3 is built, pending its first statewide release and a test on the phone:**
-  - `pipeline/regions.json` defines five basemap regions (nyc, li, hudson, capital, western) and `nys`, the whole state. `make -C pipeline state` builds what a release ships: five basemaps, `routing-nys.tar`, `search-nys.sqlite`, `transit-nyc.sqlite`. `core/packs Regions.kt` mirrors the file (unit-tested against it).
+  - `pipeline/regions.json` defines six basemap regions (nyc, li, hudson, capital, western, njn) and `nys`, the routing and search region (New York and northern New Jersey). `make -C pipeline state` builds what a release ships: six basemaps, `routing-nys.tar`, `search-nys.sqlite`, `transit-nyc.sqlite`. `core/packs Regions.kt` mirrors the file (unit-tested against it).
   - The release workflow creates a draft release first and every job uploads straight to it (one job per pack, since a private repo's Actions artifact storage can't hold 2 GB), then `publish` writes the manifest and publishes. **Watch the first run:** a statewide Valhalla build on a 2-core, 7 GB runner is untested; the data job has a 5-hour timeout. A full data rebuild costs roughly 300 Actions minutes of the 2000 a private repo gets per month.
   - The app shows a region picker (first run and Settings > Updates); the updater fetches a basemap per ticked region plus the statewide packs, and drops `routing-nyc`/`search-nyc` once the `nys` ones arrive. Several basemaps draw as one map (StyleTemplate duplicates the source and layers per pack).
   - 511NY incidents and NYC DOT speeds are a traffic layer behind their toggles (Settings > Live data), with the 511NY key stored encrypted. Closures near a trip become Valhalla `exclude_polygons` on route requests; a closure that appears on the route mid-trip is spoken and the trip is rerouted around it. 511NY's and NYC DOT's hosts were unreachable from the dev container, so both parsers are tested against hand-written fixtures only: **check the first real fetch** (Settings shows feed errors under the traffic button).
   - Not done: the optional TomTom flow layer (read its terms first), and NYS Address Points for upstate search.
+- **Northern New Jersey is in** (owner: "so central to getting in and out of NY"; pending the first release and a check on the phone):
+  - `basemap-njn.pmtiles` is a sixth region, "Northern New Jersey", box `-74.75,40.30,-73.88,41.36` (Bergen, Hudson, Essex, Passaic, Morris, Union, Middlesex and part of Monmouth, Somerset, Sussex and Mercer), built by Planetiler from Geofabrik's New Jersey extract. NJ Transit and PATH are out of scope: `transit-nyc` stays MTA only.
+  - `routing-nys.tar` and `search-nys.sqlite` keep their ids but are now built from New York whole plus New Jersey cut to the njn box, joined with `osmium merge` (`clip_extract` in `pipeline/lib/common.sh`; sources per region in `regions.json`). The `nys` box is now `-79.77,40.30,-71.75,45.02`. Renaming the packs to something like `nyn` is a migration (UpdatePlan, PackStore, old installs) left for later; until then only their display name says New Jersey.
+  - Boxes overlap: NYC's covers Newark and Jersey City, njn's covers Staten Island and the Bronx. njn therefore also has an `area` polygon, the New Jersey side of the state line (accurate to about a kilometre). `Regions.basemapsAt` gives a point inside it to njn alone, so a phone with only the NYC map is told the Newark map is missing (`RouteRegions.missing`); elsewhere overlaps behave as before. njn is last in the lists so the picker still opens on NYC.
+  - `pipeline/search/states.py` answers "NJ or NY" for a point from that polygon, for the address work to label addresses (OSM mostly lacks `addr:state`).
+  - Build cost: `basemap-njn` is about the size of a small region (guess 150-300 MB, one more matrix job of perhaps 30-60 min); `routing-nys` and `search-nys` grow by NJ's share (roughly 15-25 percent more input), so the statewide jobs run correspondingly longer plus a few minutes for the clip and merge. A full rebuild is about 15-25 percent more Actions minutes than before (about 300 per rebuild, now perhaps 350-375). The first release after this change rebuilds everything, since `basemap-njn.pmtiles` is new. Unmeasured: replace these with the first real numbers.
 - **Phase 4 is started** (same caveat: test on the phone):
   - Saved places, lists and recents live in `core/userdata`: one JSON document, AES-GCM under an Android Keystore key, in the no-backup directory. The place card has Save (checkbox per list, new lists), and the search panel shows the lists and recents while the box is empty.
   - Speed limits come from the route itself: Ferrostar already asks Valhalla for `shape_attributes.speed_limit`, so `SpeedLimits` reads the current one from the navigation state. The navigation screen shows a US-style sign, red when over, and the Speed limit warnings toggle speaks a warning after 8 s over the limit, at most once a minute. Only where OSM has `maxspeed`.

@@ -1,11 +1,12 @@
 # Southbound
 
-A privacy-first, offline Android maps app for New York State. It installs only
+A privacy-first, offline Android maps app for New York State and northern New
+Jersey, the way in and out of the city. It installs only
 from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 [CLAUDE.md](CLAUDE.md).
 
-**Status: Phase 3.** Offline maps for all of New York State in five regional
-packs, statewide place and address search, drive, walk and bike directions
+**Status: Phase 3.** Offline maps for all of New York State and northern New
+Jersey in six regional packs, place and address search across both, drive, walk and bike directions
 with spoken turn-by-turn guidance, and NYC subway, bus, LIRR and Metro-North
 trip planning, all on the phone, plus saved places and recents kept encrypted
 on the phone, speed limits while navigating and 3D buildings. Live transit
@@ -28,7 +29,8 @@ Southbound keeps itself current from its own releases (Settings > Updates):
 - **Map data** (on by default): pick your regions on the first screen (or in
   Settings > Updates). On first start, and then daily, Southbound reads the
   latest release's manifest and downloads a map for each ticked region plus
-  the statewide search and routing data and NYC transit, fetching only the
+  the search and routing data for New York and northern New Jersey and NYC
+  transit, fetching only the
   packs that changed, on Wi-Fi unless you allow mobile data. Each download is checked
   against its published SHA-256 before it replaces the old pack, and the map
   switches to it straight away. **Download now** on the first screen fetches
@@ -58,9 +60,9 @@ the APK:
 
 | File | What it adds |
 | --- | --- |
-| `basemap-<region>.pmtiles` | The map itself, one file per region: `nyc` (New York City), `li` (Long Island), `hudson` (Hudson Valley and Catskills), `capital` (Capital Region, Adirondacks and North Country), `western` (Central and Western NY). Install any number of them. |
-| `search-nys.sqlite` | Search for places, streets and addresses, whole state |
-| `routing-nys.tar` | Directions and turn-by-turn navigation, whole state |
+| `basemap-<region>.pmtiles` | The map itself, one file per region: `nyc` (New York City), `li` (Long Island), `hudson` (Hudson Valley and Catskills), `capital` (Capital Region, Adirondacks and North Country), `western` (Central and Western NY), `njn` (Northern New Jersey: Bergen, Hudson, Essex, Passaic, Morris, Union, Middlesex and nearby). Install any number of them. |
+| `search-nys.sqlite` | Search for places, streets and addresses, New York and northern New Jersey |
+| `routing-nys.tar` | Directions and turn-by-turn navigation, New York and northern New Jersey |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 | `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 
