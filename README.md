@@ -228,6 +228,9 @@ Don't edit the JSON by hand; CI fails if the JSON doesn't match the script.
 2. Turn the Network permission off (GrapheneOS) or use airplane mode.
 3. Search for a place, such as "Grand Central". Its card shows the address and
    distance. Long-press the map to drop a pin anywhere.
+   Directions start from your GPS position. Outside NYC, long-press a place
+   in NYC and tap **Start here** first: routes and transit plans then start
+   from there (preview only; navigation always starts where you are).
 4. Tap **Directions**. Drive, walk and bike each show up to three routes; tap
    one to pick it.
 5. Tap **Start** and drive. The next turn shows at the top, time and distance
@@ -254,6 +257,7 @@ simply shows the schedule.
 
 1. Load `transit-nyc.sqlite` from the latest release like the other packs.
 2. Long-press or search a destination, tap **Directions**, then **Transit**.
+   To plan from a station you're not at, search it first and tap **Start here**.
 3. For each trip below, set **Depart at** to a weekday morning time, then
    compare the first option with the MTA Trip Planner or the line's printed
    schedule. Departure and arrival should match the schedule to the minute.
