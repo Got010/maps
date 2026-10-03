@@ -11,6 +11,7 @@ import app.southbound.core.routing.FuelPrefs
 import app.southbound.core.routing.GasPrices
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
+import app.southbound.core.routing.TripBroadcast
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.traffic.TrafficFeed
 import app.southbound.core.transit.AndroidTransitDb
@@ -100,6 +101,8 @@ class ExploreServices private constructor(context: Context) {
             guidance.attach(it)
         }
         routing = Opened(file, router to navigator)
+        // The car (Android Auto) reads the trip from here, whether or not an Activity is up.
+        TripBroadcast.follow(scope, navigator.state) { navigator.stop() }
         return navigator
     }
 

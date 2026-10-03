@@ -13,6 +13,8 @@ valhallaMobile = "0.6.3"
 sherpaOnnx = "1.13.8"
 datastore = "1.1.7"
 work = "2.10.1"
+# AndroidX Car App Library: Android Auto templates. No Google Play Services dependency.
+carApp = "1.4.0"
 
 [libraries]
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" }
@@ -36,6 +38,7 @@ valhalla-models-config = { module = "io.github.rallista:valhalla-models-config",
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 sherpa-onnx = { module = "com.k2fsa:sherpa-onnx", version.ref = "sherpaOnnx" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-car-app = { module = "androidx.car.app:app", version.ref = "carApp" }
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "androidxSqlite" }
 
 # Used by build-logic only
