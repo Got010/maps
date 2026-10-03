@@ -125,6 +125,10 @@ class TripTrafficTest {
     @Test
     fun rankingKeepsValhallasOrderForSmallGainsOrNoTraffic() {
         assertEquals(listOf(0, 1, 2), TrafficRanking.order(listOf(1200.0, 1260.0, 1300.0), emptyList()))
+        // Valhalla put a 25 min route ahead of a 20 min one for its own reasons (turns, road classes): with no
+        // delay anywhere, or the same delay on both, that stands.
+        assertEquals(listOf(0, 1), TrafficRanking.order(listOf(1500.0, 1200.0), listOf(0.0, 0.0)))
+        assertEquals(listOf(0, 1), TrafficRanking.order(listOf(1500.0, 1200.0), listOf(300.0, 300.0)))
         // 90 s faster with traffic: under the 2 min needed to flip.
         assertEquals(listOf(0, 1), TrafficRanking.order(listOf(1200.0, 1290.0), listOf(180.0, 0.0)))
         assertEquals(listOf(0), TrafficRanking.order(listOf(1200.0), listOf(600.0)))

@@ -105,7 +105,8 @@ class TripTraffic private constructor(
  * Valhalla on the phone ranks routes without live speeds (see
  * docs/traffic-routing-spike.md). An alternative is moved to the front only
  * when it beats Valhalla's first choice by at least [MIN_GAIN_SECONDS] with
- * delay counted, so a minute of noise in the feed doesn't flip the order; the
+ * delay counted and has at least that much less delay, so a minute of noise
+ * in the feed doesn't flip the order and nothing changes without traffic; the
  * other options keep Valhalla's order behind it.
  */
 object TrafficRanking {
@@ -127,8 +128,13 @@ object TrafficRanking {
     ): List<Int> {
         val n = durationsSeconds.size
         if (n < 2) return List(n) { it }
-        fun total(i: Int) = durationsSeconds[i] + delaysSeconds.getOrElse(i) { 0.0 }
-        val best = (1 until n).filter(mayLead).minByOrNull(::total)
+        fun delay(i: Int) = delaysSeconds.getOrElse(i) { 0.0 }
+        fun total(i: Int) = durationsSeconds[i] + delay(i)
+        // Only traffic may overturn Valhalla: the leader must also have that much less delay, so without live
+        // speeds (or with the same delay everywhere) a route Valhalla ranked lower for its own reasons stays there.
+        val best = (1 until n)
+            .filter { mayLead(it) && delay(0) - delay(it) >= minGainSeconds }
+            .minByOrNull(::total)
         if (best == null || total(0) - total(best) < minGainSeconds) return List(n) { it }
         return listOf(best) + (0 until n).filter { it != best }
     }
