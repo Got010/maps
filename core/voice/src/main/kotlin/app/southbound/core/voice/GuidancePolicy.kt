@@ -47,7 +47,8 @@ object GuidancePolicy {
     /**
      * [landmark] ("after the next light") and [followUp] (the next turn's
      * sentence when it comes right after this one) only apply to route
-     * instructions; see [InstructionText].
+     * instructions; see [InstructionText]. So does [lanes], the lane advice
+     * ("use the left two lanes") for the turn this prompt announces.
      */
     fun decide(
         settings: VoiceSettings,
@@ -57,6 +58,7 @@ object GuidancePolicy {
         triggerDistanceMeters: Double = 0.0,
         landmark: String? = null,
         followUp: String? = null,
+        lanes: String? = null,
     ): GuidanceAction {
         if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text, chime = chimeFor(settings, kind))
         if (kind == UtteranceKind.SPEED_LIMIT) return speedLimitAction(settings, mode, text)
@@ -82,7 +84,7 @@ object GuidancePolicy {
             (mode == GuidanceMode.WALKING && !modeOn))
         return when {
             voiceOn && wanted -> GuidanceAction.Speak(
-                compose(settings, kind, text, atTurn, landmark, followUp),
+                compose(settings, kind, text, atTurn, landmark, followUp, lanes),
                 vibrate = buzz,
                 chime = chimeFor(settings, kind),
             )
@@ -108,7 +110,7 @@ object GuidancePolicy {
         }
     }
 
-    /** The sentence as spoken: street names and distance per the settings, then landmark and follow-up. */
+    /** The sentence as spoken: street names and distance per the settings, then landmark, lanes and follow-up. */
     private fun compose(
         settings: VoiceSettings,
         kind: UtteranceKind,
@@ -116,6 +118,7 @@ object GuidancePolicy {
         atTurn: Boolean,
         landmark: String?,
         followUp: String?,
+        lanes: String? = null,
     ): String {
         fun plain(sentence: String): String {
             var out = if (settings.streetNames) sentence else withoutStreetNames(sentence)
@@ -127,6 +130,7 @@ object GuidancePolicy {
         if (kind != UtteranceKind.INSTRUCTION) return if (settings.streetNames) text else withoutStreetNames(text)
         var out = plain(text)
         if (landmark != null) out = InstructionText.withLandmark(out, landmark)
+        if (lanes != null) out = InstructionText.withLanes(out, lanes)
         if (followUp != null) out = InstructionText.withFollowUp(out, plain(followUp))
         return out
     }

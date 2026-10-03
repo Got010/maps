@@ -47,6 +47,8 @@ android {
 dependencies {
     implementation(project(":feature:explore"))
     implementation(project(":feature:settings"))
+    // Android Auto: the car screen mirrors the trip. Inert without the Android Auto app.
+    implementation(project(":feature:car"))
     implementation(project(":core:voice"))
     implementation(project(":core:network"))
     implementation(project(":core:updates"))

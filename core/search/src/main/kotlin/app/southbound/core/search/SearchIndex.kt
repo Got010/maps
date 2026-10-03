@@ -36,14 +36,37 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     }
 
     /**
-     * The full row for a place, e.g. to reopen a saved result. Rows of the
-     * `feature` table only: an address result (id from [ADDRESS_ID_BASE] up)
-     * gives null.
+     * The full row for a place, e.g. to reopen a saved result: a `feature`
+     * row, or an Overture place (id from [OVERTURE_ID_BASE] up). An address
+     * result (id from [ADDRESS_ID_BASE] up) gives null.
      */
-    fun place(id: Long): Place? = if (id >= ADDRESS_ID_BASE) null else synchronized(connection) {
-        connection.prepare("SELECT $COLUMNS FROM feature f WHERE f.id = ?").use { stmt ->
-            stmt.bindLong(1, id)
-            if (stmt.step()) stmt.readCandidate().place else null
+    fun place(id: Long): Place? = when {
+        id >= OVERTURE_ID_BASE -> if (!hasOverture) null else synchronized(connection) {
+            connection.prepare("SELECT $OVERTURE_COLUMNS FROM overture_place o WHERE o.rowid = ?").use { stmt ->
+                stmt.bindLong(1, id - OVERTURE_ID_BASE)
+                if (stmt.step()) stmt.readOverture().place else null
+            }
+        }
+        id >= ADDRESS_ID_BASE -> null
+        else -> synchronized(connection) {
+            connection.prepare("SELECT $COLUMNS FROM feature f WHERE f.id = ?").use { stmt ->
+                stmt.bindLong(1, id)
+                if (stmt.step()) stmt.readCandidate().place else null
+            }
+        }
+    }
+
+    /**
+     * Packs built with Overture Places have them in their own tables
+     * (overture_place, overture_fts); older packs and those built without
+     * them search OSM alone.
+     */
+    private val hasOverture: Boolean by lazy {
+        synchronized(connection) {
+            connection.prepare(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'" +
+                    " AND name IN ('overture_place', 'overture_fts')",
+            ).use { it.step() && it.getLong(0) == 2L }
         }
     }
 
@@ -57,7 +80,8 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     /**
      * Signals, signs, roadside places and alert points inside [box], for
      * spoken landmarks and camera alerts along a route (see [Landmarks] and
-     * [RouteAlerts]). Empty for an older pack without the table.
+     * [RouteAlerts]). Empty for an older pack without the table. OSM only:
+     * Overture places never become landmarks.
      */
     fun landmarks(box: NearbyBox, limit: Int = LANDMARK_LIMIT): List<Landmark> {
         if (!hasLandmarks) return emptyList()
@@ -123,7 +147,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     /**
      * Places of one [category] (an OSM value such as "parking") within
      * [radiusMeters] of ([lat], [lon]), nearest first. For "Parking nearby" on
-     * the arrival card. Only named places are in the pack.
+     * the arrival card. Only named places are in the pack; OSM's only.
      */
     fun nearby(category: String, lat: Double, lon: Double, radiusMeters: Double, limit: Int = 5): List<SearchResult> {
         val center = LatLon(lat, lon)
@@ -149,12 +173,63 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * crowded out by famous ones far away. Distance ranking happens in Kotlin
      * ([SearchRanking]); the SQL uses no math functions, which not every
      * SQLite build has. [kind] limits the rows to one kind.
+     *
+     * Without a [kind], a pack with Overture Places adds their matching rows
+     * the same way, and [OverturePlaces.merge] drops those that repeat an
+     * OSM place.
      */
     private fun candidates(query: SearchQuery, near: LatLon?, kind: PlaceKind? = null): List<Candidate> {
-        val overall = select(query, box = null, kind)
-        if (near == null) return overall
-        val nearby = select(query, box = NearbyBox.around(near, NEARBY_KM), kind)
-        return (nearby + overall).distinctBy { it.place.id }
+        val box = near?.let { NearbyBox.around(it, NEARBY_KM) }
+        val osm = overallAndNearby(box) { select(query, it, kind) }
+        if (kind != null || !hasOverture) return osm
+        return OverturePlaces.merge(osm, overallAndNearby(box) { selectOverture(query, it) })
+    }
+
+    /** [read] near [box] (when given) and overall, each row once, nearby first. */
+    private fun overallAndNearby(box: NearbyBox?, read: (NearbyBox?) -> List<Candidate>): List<Candidate> {
+        val overall = read(null)
+        if (box == null) return overall
+        return (read(box) + overall).distinctBy { it.place.id }
+    }
+
+    /**
+     * Up to [PER_KIND_LIMIT] Overture places matching [query], as [select]
+     * finds `feature` rows: rows with the query's soft words first, then the
+     * likeliest by Overture's confidence.
+     */
+    private fun selectOverture(query: SearchQuery, box: NearbyBox?): List<Candidate> {
+        val where = StringBuilder()
+        val whereArgs = mutableListOf<Any>()
+        val from: String
+        val match = query.ftsMatch
+        if (match != null) {
+            from = "overture_fts JOIN overture_place o ON o.rowid = overture_fts.rowid"
+            where.append("overture_fts MATCH ?")
+            whereArgs += match
+            for (token in query.tokens) {
+                where.append(" AND instr(o.search_text, ?) > 0")
+                whereArgs += " $token"
+            }
+        } else {
+            from = "overture_place o"
+            where.append("o.name_key >= ? AND o.name_key < ?")
+            whereArgs += query.prefix
+            whereArgs += query.prefix + '\u007f'
+        }
+        if (box != null) {
+            where.append(" AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?")
+            whereArgs.addAll(listOf(box.south, box.north, box.west, box.east))
+        }
+        // Unlike select()'s window ORDER BY, this one comes after the WHERE in
+        // the SQL text, so its arguments bind last.
+        val order = query.soft.joinToString("") { "(instr(o.search_text, ?) > 0) + " }
+            .let { if (it.isEmpty()) "o.confidence DESC" else "${it.removeSuffix(" + ")} DESC, o.confidence DESC" }
+        val args = whereArgs + query.soft.map { " $it" }
+        val sql = "SELECT $OVERTURE_COLUMNS FROM $from WHERE $where ORDER BY $order LIMIT $PER_KIND_LIMIT"
+        return connection.prepare(sql).use { stmt ->
+            stmt.bindAll(args)
+            buildList { while (stmt.step()) add(stmt.readOverture()) }
+        }
     }
 
     /**
@@ -424,6 +499,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
          */
         const val ADDRESS_ID_BASE = 1L shl 40
         private const val APPROXIMATE_ID_BASE = 1L shl 41
+
+        /** Overture places: this plus their overture_place rowid, above every other id. */
+        const val OVERTURE_ID_BASE = 1L shl 42
         private const val NEARBY_ROW_LIMIT = 200
 
         /** Per box; a 2 km piece of route in Midtown has a few hundred. */
@@ -437,6 +515,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         private const val COLUMNS =
             "f.id, f.kind, f.name, f.category, f.address, f.lat, f.lon, f.importance, f.name_key, " +
                 "f.search_text, f.opening_hours, f.phone, f.website, f.cuisine, f.osm_ref"
+        private const val OVERTURE_COLUMNS =
+            "o.rowid, o.name, o.category, o.address, o.lat, o.lon, o.confidence, o.name_key, " +
+                "o.search_text, o.phone, o.website"
 
         /** Opens [file] read-only. Throws if it isn't a search pack. */
         fun open(file: File): SearchIndex {
@@ -490,5 +571,27 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
             nameKey = getText(8),
             searchText = getText(9),
         )
+
+        /** A row of "SELECT $OVERTURE_COLUMNS FROM overture_place o". */
+        private fun SQLiteStatement.readOverture(): Candidate {
+            val category = textOrNull(2)
+            return Candidate(
+                place = Place(
+                    id = OVERTURE_ID_BASE + getLong(0),
+                    kind = PlaceKind.PLACE,
+                    name = getText(1),
+                    category = category,
+                    address = textOrNull(3),
+                    lat = getDouble(4),
+                    lon = getDouble(5),
+                    phone = textOrNull(9),
+                    website = textOrNull(10),
+                    source = PlaceSource.OVERTURE,
+                ),
+                importance = OverturePlaces.importance(category, getDouble(6)),
+                nameKey = getText(7),
+                searchText = getText(8),
+            )
+        }
     }
 }

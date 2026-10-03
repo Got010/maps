@@ -35,6 +35,15 @@ data class IncidentPin(val id: String, val point: MapPoint, val kind: String, va
  */
 data class CameraPin(val id: String, val point: MapPoint, val name: String? = null)
 
+/**
+ * A 511NY traffic camera, drawn with the traffic layer. [id] comes back from
+ * a tap; [offline] cameras are drawn grey.
+ */
+data class TrafficCameraPin(val id: String, val point: MapPoint, val offline: Boolean = false)
+
+/** A 511NY variable message sign, drawn with the traffic layer. [id] comes back from a tap. */
+data class MessageSignPin(val id: String, val point: MapPoint)
+
 /** The live traffic layer: speeds under the routes, incidents over them. */
 data class TrafficOverlay(
     val speeds: List<SpeedLine> = emptyList(),
@@ -61,6 +70,10 @@ data class MapOverlays(
     val slowdowns: List<SpeedLine> = emptyList(),
     /** Plate readers, shown in every state (browsing, planning, driving) from zoom 11. */
     val cameras: List<CameraPin> = emptyList(),
+    /** 511NY traffic cameras (tap for the still), with the traffic layer, from zoom 12. */
+    val trafficCameras: List<TrafficCameraPin> = emptyList(),
+    /** 511NY message signs (tap for what they say), with the traffic layer, from zoom 11. */
+    val messageSigns: List<MessageSignPin> = emptyList(),
 )
 
 /**
@@ -130,6 +143,21 @@ internal object OverlayGeoJson {
         pins.map { pin ->
             val name = pin.name?.let { ""","name":${quote(it)}""" } ?: ""
             """{"type":"Feature","properties":{"id":${quote(pin.id)}$name},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun trafficCameras(pins: List<TrafficCameraPin>): String = featureCollection(
+        // Live cameras last, so they draw over offline ones.
+        pins.sortedBy { !it.offline }.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"camera","offline":${pin.offline}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun messageSigns(pins: List<MessageSignPin>): String = featureCollection(
+        pins.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"sign"},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )

@@ -11,6 +11,8 @@ enum class IncidentKind {
     /** A road or ramp is shut: routing steers around it. */
     CLOSURE,
     ACCIDENT,
+    /** Police activity, a traffic stop or enforcement; a police event that shuts the road is a CLOSURE instead. */
+    POLICE,
     ROADWORK,
     EVENT,
     OTHER,
@@ -59,10 +61,56 @@ data class SpeedLink(
     val isStale: Boolean get() = asOf == null
 }
 
+/**
+ * A 511NY traffic camera. [imageUrl] is its still (a JPEG 511NY refreshes
+ * every minute or two); it names the camera, never the viewer. A [disabled]
+ * camera is still listed, but its image is a placeholder or missing.
+ */
+data class TrafficCamera(
+    val id: String,
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val imageUrl: String?,
+    /** "I-87", "Broadway". */
+    val roadway: String?,
+    /** "Northbound", "Both Directions". */
+    val direction: String?,
+    /** Turned off or blocked by its operator; no live image. */
+    val disabled: Boolean,
+) {
+    val location: GeoPoint get() = GeoPoint(lat, lon)
+    val hasImage: Boolean get() = !disabled && !imageUrl.isNullOrBlank()
+}
+
+/**
+ * A 511NY variable message sign by the road. [lines] is what it shows right
+ * now, top to bottom; an empty string marks a page break between the pages
+ * a sign flips through. Blank when the sign shows nothing.
+ */
+data class MessageSign(
+    val id: String,
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val lines: List<String>,
+    val roadway: String?,
+    val direction: String?,
+    /** POSIX millis of the feed's last update to the message, or null. */
+    val updatedAt: Long? = null,
+) {
+    val location: GeoPoint get() = GeoPoint(lat, lon)
+    val isBlank: Boolean get() = lines.all { it.isBlank() }
+}
+
 /** Everything traffic knows right now, from the feeds the user turned on. */
 data class TrafficSnapshot(
     val incidents: List<Incident> = emptyList(),
     val speeds: List<SpeedLink> = emptyList(),
+    /** 511NY traffic cameras, statewide; fetched with the 511NY key, refreshed daily. */
+    val cameras: List<TrafficCamera> = emptyList(),
+    /** 511NY message signs and what they say; refreshed every few minutes. */
+    val signs: List<MessageSign> = emptyList(),
     /** POSIX millis. */
     val fetchedAt: Long = 0,
     /** Feeds that couldn't be fetched, in plain words. */

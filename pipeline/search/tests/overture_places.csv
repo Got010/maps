@@ -1,0 +1,13 @@
+id,name,category,basic_category,brand,freeform,locality,postcode,region,country,website,phone,confidence,dataset,operating_status,lon,lat
+08f2a100-0000-4000-8000-000000000001,Joe's Pizza,pizza_restaurant,restaurant,,7 Carmine St,New York,10014-4402,NY,US,www.joespizzanyc.com,+12123661182,0.95,meta,open,-74.002,40.7306
+08f2a100-0000-4000-8000-000000000002,Blue Bottle Coffee,coffee_shop,cafe,Blue Bottle Coffee,450 W 15th St,New York,10011,NY,US,https://bluebottlecoffee.com,,0.88,Foursquare,,-74.0064,40.7425
+08f2a100-0000-4000-8000-000000000003,Café Grumpy,coffee_shop,cafe,,224 W 20th St,New York,10011,NY,US,https://cafegrumpy.com,+12122555511,0.9,AllThePlaces,open,-73.99102,40.73512
+08f2a100-0000-4000-8000-000000000004,Shaky Listing,restaurant,restaurant,,1 Nowhere St,New York,10001,NY,US,,,0.3,BrightQuery,,-73.99,40.75
+08f2a100-0000-4000-8000-000000000005,,restaurant,restaurant,,2 Nameless St,New York,10001,NY,US,,,0.9,meta,,-73.99,40.75
+08f2a100-0000-4000-8000-000000000006,Gone Diner,diner,restaurant,,3 Past Ave,Brooklyn,11201,NY,US,,,0.9,meta,permanently_closed,-73.99,40.69
+08f2a100-0000-4000-8000-000000000007,Hoboken Terminal Deli,delicatessen,casual_eatery,,1 Hudson Pl,Hoboken,07030,NJ,US,,,0.8,Microsoft,,-74.0279,40.7357
+08f2a100-0000-4000-8000-000000000008,Phillipsburg Hardware,hardware_store,hardware_home_and_garden_store,,10 Main St,Phillipsburg,08865,NJ,US,,,0.9,meta,,-75.19,40.69
+08f2a100-0000-4000-8000-000000000009,Greenwich Bakery,bakery,food_and_beverage_store,,5 Greenwich Ave,Greenwich,06830,CT,US,,,0.9,meta,,-73.63,41.03
+08f2a100-0000-4000-8000-000000000010,Nyack Books,bookstore,,,15 Main St,Nyack,10960,New York,US,,,0.7,meta,,-73.918,41.0907
+08f2a100-0000-4000-8000-000000000011,Dunkin' Penn Station,coffee_shop,cafe,Dunkin',2 Penn Plz,New York,10121,NY,US,http://dunkindonuts.com,,0.99,AllThePlaces,,-73.9935,40.7505
+08f2a100-0000-4000-8000-000000000012,No State Shop,clothing_store,fashion_and_apparel_store,,9 Somewhere,,,,US,,,0.9,meta,,-73.99,40.72

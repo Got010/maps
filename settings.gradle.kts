@@ -47,6 +47,7 @@ include(
     ":feature:search",
     ":feature:directions",
     ":feature:navigation",
+    ":feature:car",
     ":feature:transit",
     ":feature:settings",
 )
