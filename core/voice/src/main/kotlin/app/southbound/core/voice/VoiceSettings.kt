@@ -51,6 +51,30 @@ enum class BuiltInVoice(val id: String, val bundled: Boolean) {
     NORMAN("norman", bundled = false),
 }
 
+/** What happens when you've been over the speed limit for a while (see SpeedWarningPolicy). */
+enum class SpeedAlertMode {
+    OFF,
+
+    /** "The speed limit is 55 miles per hour." */
+    VOICE,
+
+    /** A short double beep, no speech. */
+    BEEP,
+    ;
+
+    companion object {
+        /**
+         * The stored setting: [stored] is the mode's name, [legacyWarnings] the
+         * old on/off `speed_limit_warnings` setting from before there was a
+         * mode (on meant the spoken warning). A stored mode wins; unknown
+         * names count as unset.
+         */
+        fun fromStored(stored: String?, legacyWarnings: Boolean?): SpeedAlertMode =
+            SpeedAlertMode.entries.firstOrNull { it.name == stored }
+                ?: if (legacyWarnings == true) VOICE else OFF
+    }
+}
+
 enum class GuidanceVolume(val gain: Float, val boostMillibels: Int) {
     SOFTER(0.55f, 0),
     NORMAL(1.0f, 0),
@@ -83,7 +107,7 @@ data class VoiceSettings(
     val streetNames: Boolean = true,
     val detail: DetailLevel = DetailLevel.FULL,
     val trafficAlerts: Boolean = true,
-    val speedLimitWarnings: Boolean = false,
+    val speedAlerts: SpeedAlertMode = SpeedAlertMode.OFF,
     val rerouteAnnouncement: Boolean = true,
     val transitStopAlerts: Boolean = true,
     val volume: GuidanceVolume = GuidanceVolume.NORMAL,

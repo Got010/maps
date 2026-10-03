@@ -23,6 +23,27 @@ class ChimeTest {
     }
 
     @Test
+    fun speedBeepIsADoubleBeepThatStandsOnItsOwn() {
+        for (rate in listOf(16_000, 24_000)) {
+            val beep = Chime.render(ChimeKind.SPEED_BEEP, rate)
+            // Two 120 ms beeps with a 90 ms gap: 330 ms, ending on the second beep.
+            assertEquals(330 * rate / 1000, beep.size, 2)
+            assertNotEquals(Chime.render(ChimeKind.ALERT, rate).size, beep.size)
+            // Audible alone over road noise, but never clipping.
+            val peak = beep.maxOf { abs(it.toInt()) }
+            assertTrue(peak > Short.MAX_VALUE / 3 && peak < Short.MAX_VALUE * 0.8)
+            // Silent in the middle: the gap between the two beeps.
+            val gapStart = 130 * rate / 1000
+            assertTrue(beep.slice(gapStart until gapStart + 60 * rate / 1000).all { it.toInt() == 0 })
+            // Fades in and out: no click at either end.
+            assertTrue(abs(beep.first().toInt()) < 200 && abs(beep.last().toInt()) < 200)
+        }
+        val only = Chime.only(ChimeKind.SPEED_BEEP, 24_000)
+        assertEquals(24_000, only.sampleRate)
+        assertEquals(Chime.render(ChimeKind.SPEED_BEEP, 24_000).size, only.samples.size)
+    }
+
+    @Test
     fun chimeGoesBeforeTheSpeech() {
         val speech = Pcm(ShortArray(1000) { 7 }, 16_000)
         val out = Chime.before(ChimeKind.INSTRUCTION, speech)

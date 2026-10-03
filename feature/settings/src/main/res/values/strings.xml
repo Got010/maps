@@ -25,7 +25,11 @@
     <string name="voice_detail_full">Full</string>
     <string name="voice_detail_brief">Brief</string>
     <string name="voice_traffic">Traffic and incident alerts</string>
-    <string name="voice_speed_limits">Speed limit warnings</string>
+    <string name="voice_speed_limits">Speed limit alerts</string>
+    <string name="voice_speed_off">Off</string>
+    <string name="voice_speed_voice">Voice</string>
+    <string name="voice_speed_beep">Beep</string>
+    <string name="voice_speed_limits_note">Warns once per stretch when you\'re over the limit; again if the limit changes.</string>
     <string name="voice_reroute">Announce reroutes</string>
     <string name="voice_transit_stops">Transit stop alerts</string>
     <string name="voice_volume">Guidance volume</string>
