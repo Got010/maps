@@ -41,6 +41,14 @@ class VoiceSettingsStore(context: Context) {
         val otherAudio = stringPreferencesKey("other_audio")
         val output = stringPreferencesKey("output")
         val speechRate = floatPreferencesKey("speech_rate")
+        val distanceStyle = stringPreferencesKey("distance_style")
+        val builtInVoice = stringPreferencesKey("built_in_voice")
+        val instructionChime = booleanPreferencesKey("instruction_chime")
+        val alertChime = booleanPreferencesKey("alert_chime")
+        val hapticTurns = booleanPreferencesKey("haptic_turns")
+        val speedCameraAlerts = booleanPreferencesKey("speed_camera_alerts")
+        val alprCameraAlerts = booleanPreferencesKey("alpr_camera_alerts")
+        val schoolZoneAlerts = booleanPreferencesKey("school_zone_alerts")
     }
 
     private fun Preferences.toSettings(): VoiceSettings {
@@ -62,6 +70,14 @@ class VoiceSettingsStore(context: Context) {
             otherAudio = enumOr(Keys.otherAudio, d.otherAudio),
             output = enumOr(Keys.output, d.output),
             speechRate = this[Keys.speechRate] ?: d.speechRate,
+            distanceStyle = enumOr(Keys.distanceStyle, d.distanceStyle),
+            builtInVoice = enumOr(Keys.builtInVoice, d.builtInVoice),
+            instructionChime = this[Keys.instructionChime] ?: d.instructionChime,
+            alertChime = this[Keys.alertChime] ?: d.alertChime,
+            hapticTurns = this[Keys.hapticTurns] ?: d.hapticTurns,
+            speedCameraAlerts = this[Keys.speedCameraAlerts] ?: d.speedCameraAlerts,
+            alprCameraAlerts = this[Keys.alprCameraAlerts] ?: d.alprCameraAlerts,
+            schoolZoneAlerts = this[Keys.schoolZoneAlerts] ?: d.schoolZoneAlerts,
         )
     }
 
@@ -82,6 +98,14 @@ class VoiceSettingsStore(context: Context) {
         prefs[Keys.otherAudio] = otherAudio.name
         prefs[Keys.output] = output.name
         prefs[Keys.speechRate] = speechRate
+        prefs[Keys.distanceStyle] = distanceStyle.name
+        prefs[Keys.builtInVoice] = builtInVoice.name
+        prefs[Keys.instructionChime] = instructionChime
+        prefs[Keys.alertChime] = alertChime
+        prefs[Keys.hapticTurns] = hapticTurns
+        prefs[Keys.speedCameraAlerts] = speedCameraAlerts
+        prefs[Keys.alprCameraAlerts] = alprCameraAlerts
+        prefs[Keys.schoolZoneAlerts] = schoolZoneAlerts
     }
 
     private inline fun <reified E : Enum<E>> Preferences.enumOr(key: Preferences.Key<String>, default: E): E =

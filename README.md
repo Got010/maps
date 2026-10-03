@@ -62,6 +62,7 @@ the APK:
 | `search-nys.sqlite` | Search for places, streets and addresses, whole state |
 | `routing-nys.tar` | Directions and turn-by-turn navigation, whole state |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
+| `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 
 Load each one the same way:
 
@@ -92,3 +93,37 @@ the map. Both feeds are fetched whole for the state or city, so the requests
 say nothing about where you are. Directions steer around 511NY closures, and
 a closure that appears on your route while navigating is spoken and routed
 around.
+
+With the DOT feed on, route options show "X min of delay" from slow stretches
+(drawn green, yellow, orange or red on the route), the arrival time turns red
+with "+X min" when traffic adds more than two minutes, and "Typical: N min"
+gives the time without the delay. 511NY incidents within 60 m of the route are
+pinned on it; tap one to read it. Every few minutes during a trip, Southbound
+looks for a route that saves 5 minutes or more and offers it in a banner.
+
+## The map
+
+Rotate with two fingers, tilt by dragging two fingers up or down, and zoom
+with one finger by double-tapping and holding, then sliding. The compass
+appears when the map isn't facing north; tap it to turn back. Panning,
+rotating or tilting away from your position shows a Re-center pill; while
+navigating the map re-centers by itself after 10 seconds without a touch.
+Highway exits show a green sign, and the arrival card says which side of the
+street the destination is on and whether parking is listed nearby.
+
+## Voice guidance
+
+Settings > Voice holds every voice option. Turn prompts name a landmark when
+the map data has one at the turn ("Turn right after the next light", "at the
+stop sign", "past the Shell gas station"), say two quick turns together
+("..., then turn left"), and play a short chime first (a different one before
+alerts). Speed cameras, school zones and license plate readers (Flock and
+other ALPR cameras mapped in OpenStreetMap) on your route are announced about
+300 m ahead, each behind its own toggle. All of it comes from the search pack
+on the phone, so nothing about the drive is sent; a search pack built before
+October 2026 has no landmarks, and guidance simply goes without them until
+the next pack update. For phones without a text-to-speech engine the app
+has its own voice, Amy; a second one, Norman, is a download (about 58 MB)
+that the updater fetches only once you pick it, and Amy speaks until it
+arrives. Long-press the voice button while
+navigating to mute until the next turn.

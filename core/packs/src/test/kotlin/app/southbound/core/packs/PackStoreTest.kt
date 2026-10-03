@@ -140,6 +140,22 @@ class PackStoreTest {
     }
 
     @Test
+    fun voicePackIsRecognisedByZipMagic() {
+        val store = store()
+        val voice = store.importPack(zip().inputStream(), "voice-norman (1).zip")
+        assertEquals(ImportedPack(PackKind.VOICE, "norman", store.packsDir.resolve("voice-norman.zip")), voice)
+        assertEquals(PackKind.VOICE, PackKind.detect(voice.file))
+        assertEquals(PackStatus.Installed(voice.file), store.status(PackKind.VOICE, "norman"))
+        assertEquals("norman", PackKind.regionFromName(PackKind.VOICE, "voice-norman.zip"))
+        // One per voice, like basemaps: installing another never drops it.
+        store.importPack(zip().inputStream(), "voice-amy.zip")
+        assertEquals(emptyList<String>(), store.deleteOtherRegions(PackKind.VOICE, "amy"))
+        assertEquals(setOf("norman", "amy"), store.installed().filter { it.kind == PackKind.VOICE }.map { it.region }.toSet())
+        // A tar is still routing, not a voice.
+        assertEquals(PackKind.ROUTING, store.importPack(tar().inputStream(), "routing-nys.tar").kind)
+    }
+
+    @Test
     fun importPackRejectsOtherFilesAndLeavesNothingBehind() {
         val store = store()
         for (bytes in listOf("<html>".toByteArray(), sqlite(applicationId = 0), ByteArray(0))) {
@@ -160,6 +176,15 @@ class PackStoreTest {
         assertEquals(null, PackKind.regionFromName(PackKind.BASEMAP, "routing-nyc.tar"))
         assertEquals(null, PackKind.regionFromName(PackKind.SEARCH, null))
     }
+
+    /** A real (tiny) ZIP, as the voice pipeline writes. */
+    private fun zip(): ByteArray = java.io.ByteArrayOutputStream().also { out ->
+        java.util.zip.ZipOutputStream(out).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("tokens.txt"))
+            z.write("a 1\n".toByteArray())
+            z.closeEntry()
+        }
+    }.toByteArray()
 
     private fun tar(): ByteArray = ByteArray(1024).also {
         "ustar".toByteArray().copyInto(it, destinationOffset = 257)
