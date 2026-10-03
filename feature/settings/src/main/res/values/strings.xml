@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_voice">Navigation voice</string>
+    <string name="voice_guidance">Voice guidance</string>
+    <string name="voice_on">On</string>
+    <string name="voice_alerts_only">Alerts only</string>
+    <string name="voice_muted">Muted</string>
+    <string name="voice_per_mode">Speak directions when</string>
+    <string name="voice_driving">Driving</string>
+    <string name="voice_cycling">Cycling</string>
+    <string name="voice_walking">Walking</string>
+    <string name="voice_walking_note">When off, the phone vibrates at turns instead.</string>
+    <string name="voice_transit">Riding transit</string>
+    <string name="voice_engine">Voice engine</string>
+    <string name="voice_engine_auto">Automatic</string>
+    <string name="voice_engine_system">System</string>
+    <string name="voice_engine_built_in">Built-in</string>
+    <string name="voice_engine_checking">Checking for a system text-to-speech engine…</string>
+    <string name="voice_engine_system_found">Automatic uses the phone\'s text-to-speech engine.</string>
+    <string name="voice_engine_system_missing">No system text-to-speech engine is set, so Automatic uses the built-in voice. On GrapheneOS, pick Speech Services as the preferred engine to use it.</string>
+    <string name="voice_street_names">Street names</string>
+    <string name="voice_detail">Detail</string>
+    <string name="voice_detail_full">Full</string>
+    <string name="voice_detail_brief">Brief</string>
+    <string name="voice_traffic">Traffic and incident alerts</string>
+    <string name="voice_speed_limits">Speed limit warnings</string>
+    <string name="voice_reroute">Announce reroutes</string>
+    <string name="voice_transit_stops">Transit stop alerts</string>
+    <string name="voice_volume">Guidance volume</string>
+    <string name="voice_volume_softer">Softer</string>
+    <string name="voice_volume_normal">Normal</string>
+    <string name="voice_volume_louder">Louder</string>
+    <string name="voice_other_audio">Other audio while speaking</string>
+    <string name="voice_other_lower">Lower it</string>
+    <string name="voice_other_pause">Pause it</string>
+    <string name="voice_output">Play through</string>
+    <string name="voice_output_speaker">Speaker</string>
+    <string name="voice_output_bt_media">Bluetooth</string>
+    <string name="voice_output_bt_call">BT as call</string>
+    <string name="voice_rate">Speech rate</string>
+    <string name="voice_test">Test voice</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_body">Southbound keeps maps, search, routing and voice on your phone. Map data © OpenStreetMap contributors (ODbL), shown with the OpenMapTiles schema (© OpenMapTiles). Routing by Valhalla; navigation by Ferrostar (Stadia Maps); map rendering by MapLibre. Built-in voice: Piper \"Amy\" (Mycroft mimic3-voices) run by sherpa-onnx.</string>
+</resources>

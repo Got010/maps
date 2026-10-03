@@ -36,6 +36,8 @@ internal fun Project.configureKotlinAndroid(android: CommonExtension<*, *, *, *,
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_17
             targetCompatibility = JavaVersion.VERSION_17
+            // Ferrostar uses java.time APIs that need desugaring.
+            isCoreLibraryDesugaringEnabled = true
         }
         testOptions.unitTests.isReturnDefaultValues = true
     }
@@ -44,6 +46,7 @@ internal fun Project.configureKotlinAndroid(android: CommonExtension<*, *, *, *,
     }
     dependencies {
         add("testImplementation", libs.findLibrary("junit").get())
+        add("coreLibraryDesugaring", libs.findLibrary("desugar-jdk-libs").get())
     }
     banTrackingDependencies()
 }

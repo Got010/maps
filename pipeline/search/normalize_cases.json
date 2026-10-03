@@ -1,0 +1,19 @@
+[
+  ["East 14th Street", "e 14 st"],
+  ["E 14 St", "e 14 st"],
+  ["Café Grumpy", "cafe grumpy"],
+  ["Joe's Pizza", "joes pizza"],
+  ["Barnes & Noble", "barnes and noble"],
+  ["St. Mark's Place", "st marks pl"],
+  ["Saint Marks Place", "st marks pl"],
+  ["1st Avenue", "1 ave"],
+  ["First Avenue", "first ave"],
+  ["Av of the Americas", "ave of the americas"],
+  ["  Fort   Greene  Park ", "ft greene park"],
+  ["Brooklyn-Queens Expressway", "brooklyn queens expy"],
+  ["123 Main St, Brooklyn, NY 11201", "123 main st brooklyn ny 11201"],
+  ["ÅÉÎÕÜ", "aeiou"],
+  ["Empire State Building", "empire state bldg"],
+  ["Lincoln Center", "lincoln ctr"],
+  ["", ""]
+]

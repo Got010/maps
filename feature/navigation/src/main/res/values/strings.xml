@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="navigation_rerouting">Finding a new route…</string>
+    <string name="navigation_voice_on">Voice guidance on. Tap for alerts only.</string>
+    <string name="navigation_voice_alerts">Alerts only. Tap to mute.</string>
+    <string name="navigation_voice_muted">Voice muted. Tap to turn on.</string>
+    <string name="navigation_arrived">You\'ve arrived</string>
+    <string name="navigation_done">Done</string>
+</resources>

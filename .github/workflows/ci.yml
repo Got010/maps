@@ -22,8 +22,16 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      - name: Cache the offline voice downloads
+        uses: actions/cache@v4
+        with:
+          path: third-party
+          key: voice-${{ hashFiles('scripts/fetch-voice.sh') }}
+      - name: Fetch the offline voice (sherpa-onnx and Piper)
+        run: scripts/fetch-voice.sh
       - name: Unit tests, lint and debug APK
-        run: ./gradlew testDebugUnitTest lintDebug :app:assembleDebug
+        # --continue reports every module's failures in one run.
+        run: ./gradlew --continue testDebugUnitTest lintDebug :app:assembleDebug
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -63,4 +71,8 @@ jobs:
             npx --yes -p @maplibre/maplibre-gl-style-spec@26 gl-style-validate "$style"
           done
       - name: Shellcheck
-        run: shellcheck pipeline/*.sh pipeline/*/*.sh
+        run: shellcheck -x pipeline/*.sh pipeline/*/*.sh scripts/*.sh
+      - name: Pipeline unit tests
+        run: |
+          pip install osmium==4.3.1
+          make -C pipeline test

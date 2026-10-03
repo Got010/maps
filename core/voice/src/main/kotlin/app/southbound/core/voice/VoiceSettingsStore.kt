@@ -1,0 +1,89 @@
+package app.southbound.core.voice
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+private val Context.voiceDataStore: DataStore<Preferences> by preferencesDataStore(name = "voice")
+
+/** Voice settings in DataStore, on the device only. */
+class VoiceSettingsStore(context: Context) {
+
+    private val store = context.applicationContext.voiceDataStore
+
+    val settings: Flow<VoiceSettings> = store.data.map { it.toSettings() }
+
+    suspend fun update(transform: (VoiceSettings) -> VoiceSettings) {
+        store.edit { prefs -> transform(prefs.toSettings()).writeTo(prefs) }
+    }
+
+    private object Keys {
+        val mode = stringPreferencesKey("mode")
+        val driving = booleanPreferencesKey("driving")
+        val cycling = booleanPreferencesKey("cycling")
+        val walking = booleanPreferencesKey("walking")
+        val transit = booleanPreferencesKey("transit")
+        val engine = stringPreferencesKey("engine")
+        val streetNames = booleanPreferencesKey("street_names")
+        val detail = stringPreferencesKey("detail")
+        val trafficAlerts = booleanPreferencesKey("traffic_alerts")
+        val speedLimitWarnings = booleanPreferencesKey("speed_limit_warnings")
+        val rerouteAnnouncement = booleanPreferencesKey("reroute_announcement")
+        val transitStopAlerts = booleanPreferencesKey("transit_stop_alerts")
+        val volume = stringPreferencesKey("volume")
+        val otherAudio = stringPreferencesKey("other_audio")
+        val output = stringPreferencesKey("output")
+        val speechRate = floatPreferencesKey("speech_rate")
+    }
+
+    private fun Preferences.toSettings(): VoiceSettings {
+        val d = VoiceSettings()
+        return VoiceSettings(
+            mode = enumOr(Keys.mode, d.mode),
+            driving = this[Keys.driving] ?: d.driving,
+            cycling = this[Keys.cycling] ?: d.cycling,
+            walking = this[Keys.walking] ?: d.walking,
+            transit = this[Keys.transit] ?: d.transit,
+            engine = this[Keys.engine]?.let { name -> VoiceEngine.entries.firstOrNull { it.name == name } },
+            streetNames = this[Keys.streetNames] ?: d.streetNames,
+            detail = enumOr(Keys.detail, d.detail),
+            trafficAlerts = this[Keys.trafficAlerts] ?: d.trafficAlerts,
+            speedLimitWarnings = this[Keys.speedLimitWarnings] ?: d.speedLimitWarnings,
+            rerouteAnnouncement = this[Keys.rerouteAnnouncement] ?: d.rerouteAnnouncement,
+            transitStopAlerts = this[Keys.transitStopAlerts] ?: d.transitStopAlerts,
+            volume = enumOr(Keys.volume, d.volume),
+            otherAudio = enumOr(Keys.otherAudio, d.otherAudio),
+            output = enumOr(Keys.output, d.output),
+            speechRate = this[Keys.speechRate] ?: d.speechRate,
+        )
+    }
+
+    private fun VoiceSettings.writeTo(prefs: androidx.datastore.preferences.core.MutablePreferences) {
+        prefs[Keys.mode] = mode.name
+        prefs[Keys.driving] = driving
+        prefs[Keys.cycling] = cycling
+        prefs[Keys.walking] = walking
+        prefs[Keys.transit] = transit
+        if (engine == null) prefs.remove(Keys.engine) else prefs[Keys.engine] = engine.name
+        prefs[Keys.streetNames] = streetNames
+        prefs[Keys.detail] = detail.name
+        prefs[Keys.trafficAlerts] = trafficAlerts
+        prefs[Keys.speedLimitWarnings] = speedLimitWarnings
+        prefs[Keys.rerouteAnnouncement] = rerouteAnnouncement
+        prefs[Keys.transitStopAlerts] = transitStopAlerts
+        prefs[Keys.volume] = volume.name
+        prefs[Keys.otherAudio] = otherAudio.name
+        prefs[Keys.output] = output.name
+        prefs[Keys.speechRate] = speechRate
+    }
+
+    private inline fun <reified E : Enum<E>> Preferences.enumOr(key: Preferences.Key<String>, default: E): E =
+        this[key]?.let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
+}
