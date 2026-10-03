@@ -5,3 +5,7 @@ plugins {
 android {
     namespace = "app.southbound.core.network"
 }
+
+dependencies {
+    implementation(libs.kotlinx.coroutines.android)
+}

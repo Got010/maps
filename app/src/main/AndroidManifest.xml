@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Only for opt-in live data (Settings > Live data), all off by default.
+         Revoke Network and the app keeps working from its packs. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application

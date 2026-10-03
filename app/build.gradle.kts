@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":feature:explore"))
     implementation(project(":feature:settings"))
     implementation(project(":core:voice"))
+    implementation(project(":core:network"))
     implementation(libs.maplibre.android)
     implementation(libs.androidx.activity.compose)
 }
