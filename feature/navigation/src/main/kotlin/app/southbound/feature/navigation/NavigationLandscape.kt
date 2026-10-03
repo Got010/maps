@@ -72,6 +72,7 @@ fun rememberDrivingLandscape(): Boolean {
 fun rememberDrivingPanelWidth(): Dp = DrivingLandscape.panelWidthDp(LocalConfiguration.current.screenWidthDp).dp
 
 /** Bottom centre of the map area (right of the column), for a pill such as Re-center. */
+@Composable
 fun BoxScope.drivingMapBottomCenter(panelWidth: Dp, bottom: Dp = 16.dp): Modifier =
     Modifier
         .align(Alignment.BottomStart)
