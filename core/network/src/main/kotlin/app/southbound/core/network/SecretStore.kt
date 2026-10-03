@@ -10,9 +10,12 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** API keys the user types into Settings (MTA Bus Time, later 511NY and TomTom). */
+/** API keys the user types into Settings (MTA Bus Time, 511NY; later TomTom). */
 enum class ApiKey {
     MTA_BUS_TIME,
+
+    /** A free 511NY developer key, for incidents and closures. */
+    NY_511,
 
     /** A read-only GitHub token, needed for updates while the repository is private. */
     GITHUB_RELEASES,

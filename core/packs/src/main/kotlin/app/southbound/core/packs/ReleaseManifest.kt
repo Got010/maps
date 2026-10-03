@@ -90,19 +90,28 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
 
     companion object {
         /**
-         * Packs whose installed copy is missing or differs (by SHA-256) from the
-         * release's, among [wanted] kinds for [region]; and the APK when the
-         * release is newer than [installedVersionCode] and [includeApp] is set.
+         * The packs the phone should have: a basemap for each region in
+         * [basemapRegions], and every other kind of pack the release offers
+         * (routing and search are statewide, transit is NYC), restricted to
+         * [wanted] kinds.
+         */
+        fun wanted(manifest: ReleaseManifest, basemapRegions: Set<String>, wanted: Set<PackKind> = PackKind.entries.toSet()): List<ReleasePack> =
+            manifest.packs.filter { it.kind in wanted && (it.kind != PackKind.BASEMAP || it.region in basemapRegions) }
+
+        /**
+         * Packs among [wanted] whose installed copy (keyed by kind and region)
+         * is missing or differs by SHA-256 from the release's; and the APK when
+         * the release is newer than [installedVersionCode] and [includeApp] is set.
          */
         fun of(
             manifest: ReleaseManifest,
-            region: String,
-            installed: Map<PackKind, String?>,
+            basemapRegions: Set<String>,
+            installed: Map<Pair<PackKind, String>, String?>,
             wanted: Set<PackKind> = PackKind.entries.toSet(),
             installedVersionCode: Long,
             includeApp: Boolean,
         ): UpdatePlan = UpdatePlan(
-            packs = manifest.packs.filter { it.region == region && it.kind in wanted && installed[it.kind] != it.file.sha256 },
+            packs = wanted(manifest, basemapRegions, wanted).filter { installed[it.kind to it.region] != it.file.sha256 },
             app = manifest.app?.takeIf { includeApp && manifest.versionCode > installedVersionCode },
         )
     }

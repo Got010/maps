@@ -8,9 +8,26 @@ data class MapPoint(val lat: Double, val lon: Double)
 /** A route drawn on the map; the [selected] one is drawn on top, in colour. */
 data class MapLine(val points: List<MapPoint>, val selected: Boolean)
 
+/** A road segment coloured by its live speed. */
+data class SpeedLine(val points: List<MapPoint>, val speedMph: Double)
+
+/** An incident pin; [kind] is the IncidentKind name, [id] comes back from a tap. */
+data class IncidentPin(val id: String, val point: MapPoint, val kind: String, val closure: Boolean)
+
+/** The live traffic layer: speeds under the routes, incidents over them. */
+data class TrafficOverlay(
+    val speeds: List<SpeedLine> = emptyList(),
+    val incidents: List<IncidentPin> = emptyList(),
+) {
+    companion object {
+        val NONE = TrafficOverlay()
+    }
+}
+
 /**
- * What the app draws over the basemap: route lines and pins. Everything is
- * local GeoJSON; nothing is fetched.
+ * What the app draws over the basemap: route lines, pins and, when turned
+ * on, live traffic. Everything is local GeoJSON once fetched; the map itself
+ * requests nothing.
  */
 data class MapOverlays(
     val routes: List<MapLine> = emptyList(),
@@ -18,6 +35,7 @@ data class MapOverlays(
     val pin: MapPoint? = null,
     /** Where a route ends, drawn when it differs from [pin]. */
     val destination: MapPoint? = null,
+    val traffic: TrafficOverlay = TrafficOverlay.NONE,
 )
 
 /**
@@ -57,6 +75,24 @@ internal object OverlayGeoJson {
             pin?.let { point("pin", it) },
         ),
     )
+
+    fun speeds(lines: List<SpeedLine>): String = featureCollection(
+        lines.filter { it.points.size >= 2 }.map { line ->
+            val coordinates = line.points.joinToString(",") { coordinate(it) }
+            String.format(Locale.ROOT, """{"type":"Feature","properties":{"speed":%.1f},""", line.speedMph) +
+                """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
+        },
+    )
+
+    fun incidents(pins: List<IncidentPin>): String = featureCollection(
+        // Closures last, so they draw on top of lesser incidents.
+        pins.sortedBy { it.closure }.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":${quote(pin.kind)},"closure":${pin.closure}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    private fun quote(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""
 
     private fun point(role: String, p: MapPoint) =
         """{"type":"Feature","properties":{"role":"$role"},"geometry":{"type":"Point","coordinates":${coordinate(p)}}}"""

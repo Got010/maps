@@ -11,6 +11,65 @@ object MiniJson {
 
     class JsonException(message: String) : IllegalArgumentException(message)
 
+    /**
+     * The inverse of [parse]: writes maps, lists, strings, numbers, booleans
+     * and null as compact JSON, so a parsed document can be edited and
+     * written back (core/map does this to the bundled style).
+     */
+    fun stringify(value: Any?): String = StringBuilder().also { write(value, it) }.toString()
+
+    private fun write(value: Any?, out: StringBuilder) {
+        when (value) {
+            null -> out.append("null")
+            is String -> writeString(value, out)
+            is Boolean -> out.append(value)
+            is Int, is Long -> out.append(value)
+            is Double -> if (value.isFinite() && value == Math.floor(value) && Math.abs(value) < 1e15) {
+                out.append(value.toLong())
+            } else {
+                out.append(value)
+            }
+            is Number -> out.append(value)
+            is Map<*, *> -> {
+                out.append('{')
+                var first = true
+                for ((k, v) in value) {
+                    if (!first) out.append(',')
+                    first = false
+                    writeString(k.toString(), out)
+                    out.append(':')
+                    write(v, out)
+                }
+                out.append('}')
+            }
+            is List<*> -> {
+                out.append('[')
+                value.forEachIndexed { i, v ->
+                    if (i > 0) out.append(',')
+                    write(v, out)
+                }
+                out.append(']')
+            }
+            else -> throw JsonException("can't write a ${value::class.java.simpleName}")
+        }
+    }
+
+    private fun writeString(s: String, out: StringBuilder) {
+        out.append('"')
+        for (c in s) {
+            when {
+                c == '"' -> out.append("\\\"")
+                c == '\\' -> out.append("\\\\")
+                c == '\n' -> out.append("\\n")
+                c == '\r' -> out.append("\\r")
+                c == '\t' -> out.append("\\t")
+                c < ' ' -> out.append(String.format("\\u%04x", c.code))
+                else -> out.append(c)
+            }
+        }
+        out.append('"')
+    }
+
     fun parse(text: String): Any? {
         val p = Parser(text)
         p.skipWhitespace()
