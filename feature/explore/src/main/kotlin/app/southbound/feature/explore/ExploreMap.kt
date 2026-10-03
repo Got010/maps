@@ -701,6 +701,14 @@ internal fun ExploreMap(
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
             onIncidentTap = { id -> shownIncident = traffic.incidents.firstOrNull { it.id == id } },
+            // A tap on another route's line picks it, as tapping its card does.
+            onRouteTap = { rank ->
+                val ready = preview as? RoutePreviewState.Ready
+                val driving = (panel as? Panel.Directions)?.transit == false
+                if (!inTrip && driving && ready != null && rank in ready.summaries.indices) {
+                    preview = ready.copy(selected = rank)
+                }
+            },
             onTouchChanged = { down ->
                 touching = down
                 touchSerial++
