@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Build the search pack pipeline/data/out/search-<region>.sqlite
 #
-# Clips the Geofabrik New York extract to the region, then indexes its
-# places, streets and addresses with build_search.py, in Docker so the only
-# local requirement is Docker.
+# Clips the Geofabrik New York extract to the region (or takes the whole
+# extract for nys), then indexes its places, streets and addresses with
+# build_search.py, in Docker so the only local requirement is Docker.
+# Releases ship search-nys.sqlite, the whole state in one index.
 #
-# Usage: build.sh nyc
+# Usage: build.sh <region>      e.g. build.sh nys
 set -euo pipefail
 
 REGION="${1:?usage: build.sh <region>}"
@@ -26,7 +27,7 @@ docker run --rm \
     # pyosmium's wheel links against libexpat, which the slim image lacks.
     apt-get update -qq >/dev/null && apt-get install -y -qq libexpat1 >/dev/null
     pip install -q --root-user-action=ignore osmium==$PYOSMIUM_VERSION
-    python /search/build_search.py /data/tmp/$REGION.osm.pbf /data/out/$OUTPUT $REGION
+    python /search/build_search.py $CLIPPED_IN_DOCKER /data/out/$OUTPUT $REGION
     chown $(id -u):$(id -g) /data/out/$OUTPUT
   "
 

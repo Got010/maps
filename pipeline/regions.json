@@ -1,0 +1,35 @@
+{
+  "_comment": "The data pack regions. Bounds are minlon,minlat,maxlon,maxlat (WGS84). Basemaps are cut per region so a phone installs only what it needs; routing and search are built once for the whole state (nys) so cross-region trips work. core/packs Regions.kt mirrors this file and a unit test keeps the two in step.",
+  "regions": {
+    "nyc": {
+      "name": "New York City",
+      "bounds": [-74.2591, 40.4774, -73.7004, 40.9176],
+      "basemap": true
+    },
+    "li": {
+      "name": "Long Island",
+      "bounds": [-73.78, 40.53, -71.75, 41.25],
+      "basemap": true
+    },
+    "hudson": {
+      "name": "Hudson Valley and Catskills",
+      "bounds": [-75.5, 40.9, -73.24, 42.4],
+      "basemap": true
+    },
+    "capital": {
+      "name": "Capital Region, Adirondacks and North Country",
+      "bounds": [-75.5, 42.4, -73.24, 45.02],
+      "basemap": true
+    },
+    "western": {
+      "name": "Central and Western New York",
+      "bounds": [-79.77, 41.99, -75.5, 45.02],
+      "basemap": true
+    },
+    "nys": {
+      "name": "All of New York State",
+      "bounds": [-79.77, 40.47, -71.75, 45.02],
+      "basemap": false
+    }
+  }
+}
