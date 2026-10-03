@@ -42,4 +42,13 @@ class NetworkGateTest {
         toggles.set(NetworkFeature.PACK_DOWNLOADS, false)
         assertFalse(gate.isAllowed(NetworkFeature.PACK_DOWNLOADS))
     }
+
+    @Test
+    fun disabledFeatureNeverConnects() {
+        // Nothing listens on port 1; reaching it would fail with an IOException instead.
+        val error = runCatching {
+            NetworkGate(InMemoryNetworkToggles()).get(NetworkFeature.TRANSIT_REALTIME, "http://127.0.0.1:1/")
+        }.exceptionOrNull()
+        assertTrue(error is NetworkFeatureDisabledException)
+    }
 }

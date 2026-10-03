@@ -46,6 +46,8 @@ fun PlaceCard(
     onDirections: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** More rows under the actions, such as transit departures nearby. */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     Surface(
@@ -105,6 +107,7 @@ fun PlaceCard(
                     modifier = Modifier.padding(top = 8.dp, end = 12.dp),
                 )
             }
+            extra?.invoke()
         }
     }
 }

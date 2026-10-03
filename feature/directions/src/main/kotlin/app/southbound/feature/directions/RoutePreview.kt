@@ -2,16 +2,19 @@ package app.southbound.feature.directions
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.Button
@@ -58,6 +61,8 @@ fun RoutePreviewSheet(
     onStart: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Shows a Transit chip that switches to the transit planner. */
+    onTransit: (() -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -78,16 +83,7 @@ fun RoutePreviewSheet(
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.directions_close))
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(end = 8.dp)) {
-                TravelMode.entries.forEach { option ->
-                    FilterChip(
-                        selected = option == mode,
-                        onClick = { onModeChange(option) },
-                        label = { Text(stringResource(option.label())) },
-                        leadingIcon = { Icon(option.icon(), contentDescription = null, Modifier.size(18.dp)) },
-                    )
-                }
-            }
+            ModeChips(mode, onModeChange, transitSelected = false, onTransit = onTransit)
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 8.dp, end = 8.dp),
@@ -122,6 +118,41 @@ fun RoutePreviewSheet(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Drive, walk, bike and (with a transit pack) transit. Shared by route
+ * preview and the transit planner so switching feels like one sheet.
+ */
+@Composable
+fun ModeChips(
+    mode: TravelMode?,
+    onModeChange: (TravelMode) -> Unit,
+    transitSelected: Boolean,
+    onTransit: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.padding(end = 8.dp).horizontalScroll(rememberScrollState()),
+    ) {
+        TravelMode.entries.forEach { option ->
+            FilterChip(
+                selected = !transitSelected && option == mode,
+                onClick = { onModeChange(option) },
+                label = { Text(stringResource(option.label())) },
+                leadingIcon = { Icon(option.icon(), contentDescription = null, Modifier.size(18.dp)) },
+            )
+        }
+        if (onTransit != null) {
+            FilterChip(
+                selected = transitSelected,
+                onClick = onTransit,
+                label = { Text(stringResource(R.string.mode_transit)) },
+                leadingIcon = { Icon(Icons.Filled.DirectionsTransit, contentDescription = null, Modifier.size(18.dp)) },
+            )
         }
     }
 }

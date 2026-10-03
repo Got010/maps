@@ -4,8 +4,10 @@ A privacy-first, offline Android maps app for New York State. It installs only
 from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 [CLAUDE.md](CLAUDE.md).
 
-**Status: Phase 1.** Offline NYC map, place and address search, drive, walk
-and bike directions, and spoken turn-by-turn guidance, all on the phone.
+**Status: Phase 2.** Offline NYC map, place and address search, drive, walk
+and bike directions with spoken turn-by-turn guidance, and subway, bus, LIRR
+and Metro-North trip planning, all on the phone. Live transit times are an
+opt-in extra.
 
 ## Install
 
@@ -26,6 +28,7 @@ data release:
 | `basemap-nyc.pmtiles` | The map itself (needed first) |
 | `search-nyc.sqlite` | Search for places, streets and addresses |
 | `routing-nyc.tar` | Directions and turn-by-turn navigation |
+| `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 
 Load each one the same way:
 
@@ -76,7 +79,13 @@ with osmium:
   trigram index, built by `pipeline/search/build_search.py`. Its unit tests run
   with `make -C pipeline test`.
 
-`make -C pipeline tiles-nyc`, `routing-nyc` and `search-nyc` build one each.
+- `transit-nyc.sqlite`: MTA's static GTFS (subway with its service-change
+  supplement, the six bus files, LIRR and Metro-North) compiled by
+  `pipeline/transit/build_transit.py` into trip patterns with compact
+  timetables and walking transfers, for the RAPTOR planner in `core/transit`.
+
+`make -C pipeline tiles-nyc`, `routing-nyc`, `search-nyc` and `transit-nyc`
+build one each.
 
 ## Releasing
 
@@ -146,12 +155,13 @@ pull request, and checks the styles and pipeline scripts.
 | `app/` | Application module: `MainActivity`, theme, MapLibre init, release signing |
 | `core/map/` | `SouthboundMap` composable, style loading, GPS-only location flow |
 | `core/packs/` | `PackStore`: where packs live and whether one is valid |
-| `core/network/` | `NetworkGate` and per-feature toggles (nothing uses the network yet) |
+| `core/network/` | `NetworkGate`, the saved per-feature toggles and the encrypted API key store |
 | `core/search/` | Search over the search pack: query parsing, FTS5 lookup, ranking |
 | `core/routing/` | Valhalla on the phone (valhalla-mobile) and Ferrostar navigation, GPS only |
+| `core/transit/` | Transit pack reader, RAPTOR planner, departure boards, GTFS-realtime parser and MTA feeds |
 | `core/voice/` | Voice guidance: system TTS, the bundled Piper voice, audio routing, settings |
 | `feature/explore/` | The main screen: map, search, place card, directions, navigation |
-| `feature/search/`, `feature/directions/`, `feature/navigation/`, `feature/settings/` | Those screens and sheets |
+| `feature/search/`, `feature/directions/`, `feature/navigation/`, `feature/transit/`, `feature/settings/` | Those screens and sheets |
 | `core/*`, `feature/*` others | Empty modules, filled in by later phases |
 | `build-logic/` | Gradle convention plugins, including a ban on Play Services, Firebase and crash SDKs |
 | `styles/` | Generated `light.json` and `dark.json`, plus bundled Noto Sans glyphs |
@@ -187,6 +197,44 @@ Don't edit the JSON by hand; CI fails if the JSON doesn't match the script.
 6. In Settings, try the voice toggles and **Test voice**. With voice engine set
    to **Built-in**, it uses the bundled Piper voice.
 
+## Live transit (optional)
+
+Schedules work offline. In Settings > Live data you can turn on:
+
+- **Live subway, LIRR and Metro-North**: arrival predictions and service
+  alerts from MTA's public feeds. No key needed. The app always fetches every
+  line group, so the request doesn't reveal which line you ride.
+- **Live buses**: MTA Bus Time, which needs a free key from
+  [bustime.mta.info](https://bustime.mta.info/wiki/Developers/Index). Paste it
+  into Settings; it's stored encrypted with a key in the phone's keystore.
+
+Both are off by default, and with the Network permission revoked the app
+simply shows the schedule.
+
+## Phase 2 exit test
+
+1. Load `transit-nyc.sqlite` from the Map data release like the other packs.
+2. Long-press or search a destination, tap **Directions**, then **Transit**.
+3. For each trip below, set **Depart at** to a weekday morning time, then
+   compare the first option with the MTA Trip Planner or the line's printed
+   schedule. Departure and arrival should match the schedule to the minute.
+
+| # | From | To |
+| --- | --- | --- |
+| 1 | Times Sq-42 St | Coney Island-Stillwell Av |
+| 2 | Grand Central | Flushing-Main St |
+| 3 | Penn Station | Jamaica (LIRR) |
+| 4 | Grand Central | White Plains (Metro-North) |
+| 5 | Williamsburg (Bedford Av) | Astoria-Ditmars Blvd |
+| 6 | St George (Staten Island) | Tottenville |
+| 7 | Harlem-125 St | Howard Beach-JFK |
+| 8 | Bay Ridge Av | Borough Hall |
+| 9 | Fordham Rd (Bronx) | 116 St-Columbia University |
+| 10 | Jamaica Center | Wall St |
+
+Tap a place near a station to see its departure board. With Live data on,
+live times show in blue.
+
 ## Third-party data
 
 - Map data © OpenStreetMap contributors, ODbL. Tiles use the OpenMapTiles
@@ -200,5 +248,7 @@ Don't edit the JSON by hand; CI fails if the JSON doesn't match the script.
   [MycroftAI/mimic3-voices](https://github.com/MycroftAI/mimic3-voices); its
   MODEL_CARD ships with the voice) and espeak-ng data (GPL-3.0), downloaded at
   build time.
+- Transit schedules and realtime data: MTA, under the
+  [MTA data feeds terms](https://www.mta.info/developers).
 - Noto Sans glyphs in `styles/glyphs`, SIL Open Font License 1.1, taken from
   [protomaps/basemaps-assets](https://github.com/protomaps/basemaps-assets).
