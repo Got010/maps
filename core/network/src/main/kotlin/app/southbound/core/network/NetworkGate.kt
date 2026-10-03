@@ -1,5 +1,9 @@
 package app.southbound.core.network
 
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+
 /**
  * Every feature that may touch the network. Each has its own user toggle, and
  * only pack downloads are on by default. Add a feature here before adding any
@@ -36,7 +40,7 @@ class InMemoryNetworkToggles(
 class NetworkFeatureDisabledException(val feature: NetworkFeature) :
     IllegalStateException("Network feature $feature is turned off")
 
-/** The one door to the network. Every request runs inside [request]. */
+/** The one door to the network. Every request runs inside [request] or [get]. */
 class NetworkGate(private val toggles: NetworkToggles) {
 
     fun isAllowed(feature: NetworkFeature): Boolean = toggles.isEnabled(feature)
@@ -45,5 +49,30 @@ class NetworkGate(private val toggles: NetworkToggles) {
     inline fun <T> request(feature: NetworkFeature, block: () -> T): T {
         if (!isAllowed(feature)) throw NetworkFeatureDisabledException(feature)
         return block()
+    }
+
+    /**
+     * A plain HTTPS GET for [feature]. Sends no cookies, no referrer and a
+     * generic user agent; callers must not put location, search text or
+     * routes in [url]. Blocking: call off the main thread.
+     */
+    fun get(feature: NetworkFeature, url: String, timeoutMillis: Int = 15_000): ByteArray = request(feature) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = timeoutMillis
+            connection.readTimeout = timeoutMillis
+            connection.useCaches = false
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("User-Agent", USER_AGENT)
+            val code = connection.responseCode
+            if (code !in 200..299) throw IOException("HTTP $code from ${URL(url).host}")
+            connection.inputStream.use { it.readBytes() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    companion object {
+        const val USER_AGENT = "Southbound"
     }
 }
