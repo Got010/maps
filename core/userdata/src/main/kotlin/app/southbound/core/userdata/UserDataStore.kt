@@ -36,7 +36,7 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
 
     private val _refusedSaves = MutableStateFlow(0)
 
-    /** Counts saves refused because the file is unreadable, so the UI can say so again. */
+    /** Counts explicit user saves refused because the file is unreadable, so the UI can say so again. */
     val refusedSaves: StateFlow<Int> = _refusedSaves.asStateFlow()
 
     val now: Long get() = clock()
@@ -44,11 +44,13 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     /**
      * Applies [transform] and saves. A write failure keeps the old data and rethrows.
      * Throws [UserDataUnreadableException] without touching the file while it is unreadable.
+     * Only an [explicit] user action (the default) counts toward [refusedSaves]; automatic
+     * writes such as recents are refused quietly.
      */
     @Synchronized
-    fun update(transform: (UserData) -> UserData): UserData {
+    fun update(explicit: Boolean = true, transform: (UserData) -> UserData): UserData {
         (_loadState.value as? LoadState.Unreadable)?.let {
-            _refusedSaves.value++
+            if (explicit) _refusedSaves.value++
             throw UserDataUnreadableException(it.reason)
         }
         val next = transform(_data.value)
@@ -61,7 +63,7 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
 
     fun save(place: PlaceRef, listId: Long) = update { it.save(place, listId, clock()) }
     fun unsave(place: PlaceRef, listId: Long) = update { it.unsave(place, listId) }
-    fun recordRecent(place: PlaceRef) = update { it.recordRecent(place, clock()) }
+    fun recordRecent(place: PlaceRef) = update(explicit = false) { it.recordRecent(place, clock()) }
     fun setShortcut(kind: Shortcut, place: PlaceRef?) = update { it.withShortcut(kind, place) }
 
     /**

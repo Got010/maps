@@ -949,7 +949,9 @@ internal fun ExploreMap(
                     scope.launch(Dispatchers.IO) { attempt { services.userData.reload() } }
                 },
                 onStartFresh = {
-                    scope.launch(Dispatchers.IO) { startFreshFailed = attempt { services.userData.startFresh() } == null }
+                    scope.launch {
+                        startFreshFailed = withContext(Dispatchers.IO) { attempt { services.userData.startFresh() } } == null
+                    }
                 },
             )
         }

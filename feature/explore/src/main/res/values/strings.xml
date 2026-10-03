@@ -55,7 +55,7 @@
     <string name="explore_unreadable_title">Saved places</string>
     <string name="explore_unreadable_body">Your saved places could not be read. They have not been deleted. Nothing new can be saved until you choose. Start fresh keeps the old file aside under a new name and begins with an empty list.</string>
     <string name="explore_unreadable_note">Your saved places could not be read, so these lists may look empty. They have not been deleted.</string>
-    <string name="explore_unreadable_fresh_failed">The old file could not be set aside, so nothing was changed. Try again.</string>
+    <string name="explore_unreadable_fresh_failed">Start fresh could not be completed. Your old data is kept. Try again.</string>
     <string name="explore_unreadable_keep">Keep trying</string>
     <string name="explore_unreadable_fresh">Start fresh</string>
     <string name="explore_speeding_spoken">The speed limit is %1$d miles per hour.</string>
