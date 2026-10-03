@@ -108,6 +108,14 @@ class AddressPackTest(unittest.TestCase):
         # The municipality from the state file is searchable too.
         self.assertEqual(" main st nyack orangetown ny ", text)
 
+    def test_street_centre_is_the_mean_of_its_addresses(self):
+        lat, lon = self.db.execute(
+            "SELECT lat_e6, lon_e6 FROM address_street WHERE street_key = 'main st' AND city = 'Nyack'"
+        ).fetchone()
+        # 123 (41.0910), 125 (41.0912) and 131 (41.0916).
+        self.assertEqual(41091267, lat)
+        self.assertEqual(-73920267, lon)
+
     def test_lookup_uses_the_primary_key(self):
         plan = " ".join(
             str(r[-1])
