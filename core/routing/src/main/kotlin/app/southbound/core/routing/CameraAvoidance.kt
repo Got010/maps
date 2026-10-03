@@ -19,8 +19,19 @@ object CameraAvoidance {
     /** Half the side of the square around a camera, metres: its own road, not the next one over. */
     const val HALF_SIDE_METERS = 18.0
 
-    /** A camera this close to a route counts as on it, for avoiding. */
-    const val NEAR_ROUTE_METERS = 30.0
+    /**
+     * A camera this close to a route counts as on it, for avoiding: the same
+     * reach as the count on each route card (RouteAlerts.MAX_OFFSET_M in
+     * core:search), so what is counted is what the app tries to avoid.
+     */
+    const val NEAR_ROUTE_METERS = 40.0
+
+    /**
+     * A camera further off the route line than this gets its square on the
+     * road beside it instead (see [HALF_SIDE_METERS]); otherwise the square
+     * could miss the road it watches.
+     */
+    const val SNAP_TO_ROUTE_METERS = 12.0
 
     /** At most this many cameras are squared off for one trip (60 x 144 m = 8.6 km of perimeter). */
     const val MAX_CAMERAS = 60
