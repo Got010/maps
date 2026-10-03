@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -33,13 +35,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
-import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
+import app.southbound.feature.settings.RegionPicker
 import kotlinx.coroutines.launch
-
-private const val REGION = "nyc"
+import java.io.File
 
 /**
  * The first screen: the map, or the setup screen while no map is installed.
@@ -56,7 +58,8 @@ fun ExploreScreen(
     val context = LocalContext.current
     val services = remember { ExploreServices.get(context) }
     val packStore = services.packStore
-    var packStatus by remember { mutableStateOf(packStore.basemapStatus(REGION)) }
+    // The installed basemaps, one per region; the map draws all of them.
+    var basemaps by remember { mutableStateOf(packStore.installedBasemaps()) }
     var importState by remember { mutableStateOf<ImportState>(ImportState.Idle) }
     // Bumped when a new basemap replaces the old one at the same path, so the map reloads.
     var basemapGeneration by remember { mutableIntStateOf(0) }
@@ -68,7 +71,7 @@ fun ExploreScreen(
             packGeneration++
             if (result.pack.kind == PackKind.BASEMAP) basemapGeneration++
         }
-        packStatus = packStore.basemapStatus(REGION)
+        basemaps = packStore.installedBasemaps()
     }
 
     // Packs the updater installed while the app is open: switch to them.
@@ -76,13 +79,17 @@ fun ExploreScreen(
         PackEvents.installed.collect { pack ->
             packGeneration++
             if (pack.kind == PackKind.BASEMAP) basemapGeneration++
-            packStatus = packStore.basemapStatus(REGION)
+            basemaps = packStore.installedBasemaps()
         }
+    }
+    // A region unticked in Settings: its map goes away.
+    LaunchedEffect(packStore) {
+        PackEvents.removed.collect { basemaps = packStore.installedBasemaps() }
     }
 
     // Pick up a pack pushed with adb while the app was in the background.
     LifecycleResumeEffect(packStore) {
-        packStatus = packStore.basemapStatus(REGION)
+        basemaps = packStore.installedBasemaps()
         onPauseOrDispose { }
     }
 
@@ -94,17 +101,19 @@ fun ExploreScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        when (val status = packStatus) {
-            is PackStatus.Installed -> key(basemapGeneration) {
-                ExploreMap(status.file, services, packGeneration, onOpenSettings)
+        if (basemaps.isNotEmpty()) {
+            // A new set of regions is a new style; the key rebuilds the map for it.
+            key(basemapGeneration, basemaps.map { it.file.path }) {
+                ExploreMap(basemaps, services, packGeneration, onOpenSettings)
             }
-            else -> MissingPack(
-                status = status,
+        } else {
+            MissingPack(
+                importDir = packStore.importPacksDir ?: packStore.packsDir,
                 importing = importState is ImportState.Importing,
                 onPicked = { importState = ImportState.Importing },
                 onImported = ::onImportFinished,
                 packStore = packStore,
-                onRetry = { packStatus = packStore.basemapStatus(REGION) },
+                onRetry = { basemaps = packStore.installedBasemaps() },
                 onOpenSettings = onOpenSettings,
             )
         }
@@ -121,7 +130,7 @@ fun ExploreScreen(
 
 @Composable
 private fun MissingPack(
-    status: PackStatus,
+    importDir: File,
     importing: Boolean,
     onPicked: (Uri) -> Unit,
     onImported: (ImportState) -> Unit,
@@ -143,19 +152,12 @@ private fun MissingPack(
         Column(
             modifier = Modifier
                 .padding(WindowInsets.safeDrawing.asPaddingValues())
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                stringResource(
-                    if (status is PackStatus.Invalid) {
-                        R.string.explore_pack_invalid_title
-                    } else {
-                        R.string.explore_pack_missing_title
-                    },
-                ),
-                style = MaterialTheme.typography.headlineSmall,
-            )
+            Text(stringResource(R.string.explore_pack_missing_title), style = MaterialTheme.typography.headlineSmall)
+            RegionPicker(packStore, showNote = false)
             DownloadPacksCard(onOpenSettings)
             Text(stringResource(R.string.explore_pack_body), style = MaterialTheme.typography.bodyMedium)
             OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !importing) {
@@ -172,7 +174,7 @@ private fun MissingPack(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                status.file.absolutePath,
+                File(importDir, PackStore.basemapFileName("<region>")).absolutePath,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -10,6 +10,8 @@ android {
 }
 
 dependencies {
+    // MiniJson, to rewrite the bundled style for the installed basemaps.
+    implementation(project(":core:network"))
     implementation(libs.maplibre.android)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
