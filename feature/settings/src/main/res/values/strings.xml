@@ -44,6 +44,8 @@
     <string name="voice_built_in_voice">Built-in voice</string>
     <string name="voice_built_in_amy">Amy</string>
     <string name="voice_built_in_norman">Norman</string>
+    <string name="voice_pack_not_downloaded">Not downloaded yet (about 58 MB); downloads with the next update check. Amy speaks until then.</string>
+    <string name="voice_pack_installed">Installed.</string>
     <string name="voice_built_in_voice_note">Used when the engine is Built-in, or when no system engine is set.</string>
     <string name="voice_distance_style">Distances</string>
     <string name="voice_distance_full">Full</string>

@@ -215,6 +215,12 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
 
     suspend fun systemEngineAvailable(): Boolean = system.isAvailable()
 
+    /** True when [voice] can speak now: bundled, or its pack is downloaded. Reads a file header; call off the main thread. */
+    fun isVoiceInstalled(voice: BuiltInVoice): Boolean = builtIn.isInstalled(voice)
+
+    /** Frees the space of a downloaded voice that's no longer picked. */
+    fun deleteVoice(voice: BuiltInVoice) = builtIn.delete(voice)
+
     fun shutdown() {
         stopAndClearQueue()
         intake.cancel()
