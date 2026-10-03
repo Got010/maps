@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -185,7 +186,9 @@ fun SearchPanel(
                                 }
                             }
                         }
-                        items(group.places, key = { "${group.title}:${it.osmRef ?: "${it.lat},${it.lon}"}" }) { place ->
+                        // Keyed by position: several places can share a point (Overture puts a building's
+                        // businesses on one coordinate, and pins have no osmRef), and a repeated key crashes.
+                        itemsIndexed(group.places, key = { i, _ -> "${group.title}:$i" }) { _, place ->
                             ResultRow(
                                 SearchResult(place, near?.let { SearchRanking.distanceMeters(it, place.lat, place.lon) }),
                                 now = now,
