@@ -77,6 +77,8 @@ import app.southbound.core.map.NYC_CENTER
 import app.southbound.core.map.NightMode
 import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
+import app.southbound.core.map.HeadingFilter
+import app.southbound.core.map.withHeading
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.RegionSelection
@@ -195,12 +197,17 @@ internal fun ExploreMap(
     }
 
     var location by remember { mutableStateOf<Location?>(null) }
+    // Holds the last trustworthy travel direction so the fin never snaps north or spins when parked.
+    val headingFilter = remember { HeadingFilter() }
     var following by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(hasPermission) {
         if (!hasPermission) return@LaunchedEffect
         val locationManager = context.getSystemService(LocationManager::class.java)
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            locationManager.collectGps { location = it }
+            locationManager.collectGps {
+                headingFilter.update(it)
+                location = it
+            }
         }
     }
 
@@ -656,8 +663,10 @@ internal fun ExploreMap(
             else -> MapOverlays(traffic = trafficOverlay)
         }
     }
-    // While on route, the puck sits on the road rather than wandering with GPS noise.
-    val shownLocation = (trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location
+    // While on route, the puck sits on the road rather than wandering with GPS noise. Its bearing
+    // always comes from the gated raw fix, not from the snapped location's course.
+    val shownLocation = ((trip as? TripState.Navigating)?.snappedUserLocation?.toAndroidLocation() ?: location)
+        ?.withHeading(headingFilter.heading)
     // Phase 6: night mode by sunset, from the last fix and the clock.
     val systemDark = isSystemInDarkTheme()
     val darkTheme = NightMode.useDark(systemDark, inTrip, nightBySunset, location?.latitude, location?.longitude, clockMs)
