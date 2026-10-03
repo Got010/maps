@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -120,6 +121,10 @@ fun SouthboundMap(
 
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
+    // The map view's height in pixels, for the navigation camera padding; 0 until laid out.
+    var mapHeightPx by remember { mutableStateOf(0) }
+    // True while the camera carries the navigation padding, so it is cleared when navigation ends.
+    val navigationPadded = remember { mutableStateOf(false) }
     val currentOnFollowingDismissed by rememberUpdatedState(onFollowingDismissed)
 
     LaunchedEffect(mapView) {
@@ -285,6 +290,11 @@ fun SouthboundMap(
         if (loadedMap.locationComponent.isLocationComponentActivated) {
             loadedMap.locationComponent.cameraMode = CameraMode.NONE
         }
+        // The navigation padding would add to the request's own padding; re-entering follow restores it.
+        if (navigationPadded.value) {
+            loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+            navigationPadded.value = false
+        }
         val insets = with(density) {
             val ld = layoutDirection
             listOf(
@@ -326,12 +336,24 @@ fun SouthboundMap(
         showFix(loadedMap.locationComponent, location)
     }
 
-    LaunchedEffect(style, following, navigating, location != null) {
+    LaunchedEffect(style, following, navigating, location != null, mapHeightPx) {
         val loadedMap = map ?: return@LaunchedEffect
         val puck = loadedMap.locationComponent
         if (style == null || !puck.isLocationComponentEnabled) return@LaunchedEffect
-        // Padding from a place or route view would otherwise stay and shift the puck.
-        if (following) loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+        // MapLibre tracks the puck at the middle of the padded viewport. Following while navigating
+        // pads the top so the fin rides in the lower third and more road shows ahead; otherwise
+        // padding from a place or route view would stay and shift the puck, so it is cleared. This
+        // is camera padding only: the compass and attribution margins below come from contentPadding.
+        if (following && navigating) {
+            // Wait for the first layout; this runs again once the height is known.
+            if (mapHeightPx <= 0) return@LaunchedEffect
+            val top = navigationTopPadding(mapHeightPx)
+            loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, top, 0.0, 0.0))
+            navigationPadded.value = true
+        } else if (following || (navigationPadded.value && !navigating)) {
+            loadedMap.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+            navigationPadded.value = false
+        }
         when {
             following && navigating ->
                 puck.setCameraMode(CameraMode.TRACKING_GPS, 750L, NAVIGATION_ZOOM, null, NAVIGATION_TILT, null)
@@ -358,7 +380,7 @@ fun SouthboundMap(
         }
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    AndroidView(factory = { mapView }, modifier = modifier.onSizeChanged { mapHeightPx = it.height })
 }
 
 private fun activateLocationPuck(
