@@ -14,8 +14,9 @@ Addresses (schema 2) live outside the big trigram index, because there are
 millions of them and their text is mostly repeats ("123", "Main St"):
 
   address_street  one row per street name per town ("Main Street", "Nyack",
-                  "NY") with its own small trigram index, address_street_fts,
-                  over "main st nyack orangetown ny"
+                  "NY", the mean of its addresses' positions) with its own
+                  small trigram index, address_street_fts, over
+                  "main st nyack orangetown ny"
   address         the house numbers on those streets, keyed (street_id,
                   number_key), so the app finds "123 Main St" or the nearest
                   number to it with a B-tree lookup; lat/lon are stored as
@@ -166,7 +167,9 @@ CREATE TABLE address_street (
   city TEXT,
   state TEXT NOT NULL,
   street_key TEXT NOT NULL,
-  search_text TEXT NOT NULL
+  search_text TEXT NOT NULL,
+  lat_e6 INTEGER NOT NULL,
+  lon_e6 INTEGER NOT NULL
 );
 CREATE TABLE address (
   street_id INTEGER NOT NULL,
@@ -543,7 +546,8 @@ def finish_addresses(db, finder, state_of):
     the other's town and ZIP if it lacked them. An address without a town
     gets the nearest locality, and one without a state state_of's. Returns (addresses, streets, duplicates).
     """
-    streets = {}  # (street_key, city_key, state) -> [id, street, city, source, other town names]
+    # (street_key, city_key, state) -> [id, street, city, source, other town names, sum lat, sum lon, count]
+    streets = {}
     batch = []
     written = 0
     duplicates = 0
@@ -564,11 +568,14 @@ def finish_addresses(db, finder, state_of):
             group = (street_key, normalize(city or ""), state)
             entry = streets.get(group)
             if entry is None:
-                entry = streets[group] = [len(streets) + 1, street, city, source, set()]
+                entry = streets[group] = [len(streets) + 1, street, city, source, set(), 0.0, 0.0, 0]
             elif source < entry[3]:
                 entry[1], entry[3] = street, source  # OSM's spelling over the state file's capitals
             if alt_city and len(entry[4]) < 3:
                 entry[4].add(alt_city)
+            entry[5] += lat
+            entry[6] += lon
+            entry[7] += 1
             written += 1
             batch.append((entry[0], key, written, number, postcode, round(lat * 1e6), round(lon * 1e6)))
         if len(batch) >= 50_000:
@@ -594,10 +601,12 @@ def finish_addresses(db, finder, state_of):
     flush()
 
     db.executemany(
-        "INSERT INTO address_street (id, street, city, state, street_key, search_text) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO address_street (id, street, city, state, street_key, search_text, lat_e6, lon_e6)"
+        " VALUES (?,?,?,?,?,?,?,?)",
         [
-            (sid, street, city, state, key, search_text(street, city, *sorted(alts - {city}), state))
-            for (key, _, state), (sid, street, city, _, alts) in streets.items()
+            (sid, street, city, state, key, search_text(street, city, *sorted(alts - {city}), state),
+             round(lat / n * 1e6), round(lon / n * 1e6))
+            for (key, _, state), (sid, street, city, _, alts, lat, lon, n) in streets.items()
         ],
     )
     db.execute("DROP TABLE address_raw")
