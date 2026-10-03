@@ -118,7 +118,10 @@ class BuildTest(unittest.TestCase):
                 # Brand beats the name: "past the Shell".
                 ("fuel", "Shell", 40.742, -73.991),
                 ("speed_camera", None, 40.743, -73.99),
-                ("alpr_camera", None, 40.744, -73.99),
+                # Plate readers keep who makes them, for the map's camera card.
+                ("alpr_camera", "Flock Safety", 40.744, -73.99),
+                ("alpr_camera", "Motorola Solutions", 40.7445, -73.99),
+                ("alpr_camera", None, 40.7448, -73.99),
                 # Node 35 is a plain camera: not an alert.
                 ("school_zone", None, 40.746, -73.99),
                 # The start of a road with a school speed limit.
@@ -136,6 +139,33 @@ class BuildTest(unittest.TestCase):
             )
         )
         self.assertIn("landmark_lat_lon", plan)
+
+    def test_category_box_query_uses_the_category_index(self):
+        # The app loads every plate reader, and the ones near each route, by category.
+        plan = " ".join(
+            str(r[-1])
+            for r in self.db.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM landmark WHERE category = 'alpr_camera'"
+                " AND lat BETWEEN 40.73 AND 40.75 AND lon BETWEEN -74.0 AND -73.98"
+            )
+        )
+        self.assertIn("landmark_category_lat_lon", plan)
+        whole = " ".join(
+            str(r[-1])
+            for r in self.db.execute("EXPLAIN QUERY PLAN SELECT id FROM landmark WHERE category = 'alpr_camera'")
+        )
+        self.assertIn("landmark_category_lat_lon", whole)
+
+    def test_alpr_name(self):
+        name = build_search.alpr_name
+        self.assertEqual("Flock Safety", name({"manufacturer": "Flock Safety"}))
+        self.assertEqual("Flock Safety", name({"brand": "Flock", "operator": "Town Police"}))
+        self.assertEqual("Flock Safety", name({"operator": "flock safety"}))
+        self.assertEqual("Motorola Solutions", name({"manufacturer": "Motorola Solutions", "operator": "NYPD"}))
+        self.assertEqual("NYPD", name({"operator": " NYPD "}))
+        self.assertIsNone(name({"surveillance:type": "ALPR"}))
+        # Guidance never names signals or other alerts.
+        self.assertIsNone(build_search.landmark_name({"highway": "speed_camera", "operator": "NYC DOT"}, "speed_camera"))
 
     def test_landmark_category(self):
         cat = build_search.landmark_category
