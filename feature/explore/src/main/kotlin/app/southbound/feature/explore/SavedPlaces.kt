@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -108,5 +109,31 @@ fun SaveDialog(
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.explore_save_done)) } },
+    )
+}
+
+/**
+ * Shown when the saved places file exists but could not be read. "Keep trying" leaves the file
+ * alone and reads it again; "Start fresh" sets it aside under a new name (never deleting it) and begins empty.
+ */
+@Composable
+fun UnreadableDataDialog(startFreshFailed: Boolean, onKeepTrying: () -> Unit, onStartFresh: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onKeepTrying,
+        title = { Text(stringResource(R.string.explore_unreadable_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.explore_unreadable_body))
+                if (startFreshFailed) {
+                    Text(
+                        stringResource(R.string.explore_unreadable_fresh_failed),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onKeepTrying) { Text(stringResource(R.string.explore_unreadable_keep)) } },
+        dismissButton = { TextButton(onClick = onStartFresh) { Text(stringResource(R.string.explore_unreadable_fresh)) } },
     )
 }

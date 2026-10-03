@@ -102,6 +102,7 @@ import app.southbound.core.routing.SpeedWarningPolicy
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.updates.UpdateScheduler
+import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
@@ -229,6 +230,10 @@ internal fun ExploreMap(
     LifecycleResumeEffect(Unit) {
         hasPermission = context.hasFineLocation()
         resumes++
+        // The saved places file may have been unreadable only briefly (a Keystore error): look again.
+        if (services.userData.loadState.value is LoadState.Unreadable) {
+            scope.launch(Dispatchers.IO) { attempt { services.userData.reload() } }
+        }
         onPauseOrDispose { }
     }
 
@@ -292,6 +297,13 @@ internal fun ExploreMap(
     // Saved places and recents, kept encrypted on the phone.
     val userData by services.userData.data.collectAsState()
     var saveDialogFor by remember { mutableStateOf<Place?>(null) }
+    // An unreadable saved-places file is never overwritten; the user decides what happens to it.
+    val userDataState by services.userData.loadState.collectAsState()
+    var unreadableAcknowledged by remember { mutableStateOf(false) }
+    var startFreshFailed by remember { mutableStateOf(false) }
+    // A save refused while unreadable brings the dialog back, so it never fails silently.
+    val refusedSaves by services.userData.refusedSaves.collectAsState()
+    LaunchedEffect(refusedSaves) { if (refusedSaves > 0) unreadableAcknowledged = false }
 
     // Phase 6: route options, stops being picked, night mode.
     val routeOptions = remember { RouteOptionsStore.get(context) }
@@ -929,6 +941,21 @@ internal fun ExploreMap(
             onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
         )
 
+        if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
+            UnreadableDataDialog(
+                startFreshFailed = startFreshFailed,
+                onKeepTrying = {
+                    unreadableAcknowledged = true
+                    scope.launch(Dispatchers.IO) { attempt { services.userData.reload() } }
+                },
+                onStartFresh = {
+                    scope.launch {
+                        startFreshFailed = withContext(Dispatchers.IO) { attempt { services.userData.startFresh() } } == null
+                    }
+                },
+            )
+        }
+
         saveDialogFor?.let { place ->
             SaveDialog(
                 place = place,
@@ -1073,6 +1100,7 @@ internal fun ExploreMap(
                         scope.launch(Dispatchers.IO) { attempt { services.userData.setShortcut(kind, place.toRef()) } }
                     },
                     groups = userData.placeGroups(),
+                    unreadableNote = if (userDataState is LoadState.Unreadable) stringResource(R.string.explore_unreadable_note) else null,
                     onClearRecents = { scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.clearRecents() } } } },
                 )
                 is Panel.PlaceShown -> PlaceCard(
