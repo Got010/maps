@@ -7,6 +7,8 @@ import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
+import app.southbound.core.routing.FuelPrefs
+import app.southbound.core.routing.GasPrices
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
 import app.southbound.core.search.SearchIndex
@@ -59,6 +61,12 @@ class ExploreServices private constructor(context: Context) {
 
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
     val traffic = TrafficFeed(networkGate, key511 = { secrets.get(ApiKey.NY_511) })
+
+    /** Fuel economy, gas price and the state to look it up for (a Settings choice, never GPS). */
+    val fuelPrefs = FuelPrefs.get(appContext)
+
+    /** The state's weekly average gas price from EIA, behind its own toggle and the user's key. */
+    val gasPrices = GasPrices(networkGate, apiKey = { secrets.get(ApiKey.EIA) }, store = fuelPrefs)
 
     private var search: Opened<SearchIndex>? = null
     private var transit: Opened<TransitPack>? = null

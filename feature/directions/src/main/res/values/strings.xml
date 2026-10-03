@@ -38,4 +38,7 @@
     <string name="stop_add">Add stop</string>
     <string name="region_missing">Map for %1$s isn\'t installed; roads still route but the map will be blank there.</string>
     <string name="region_download">Download</string>
+    <string name="directions_gas_cost">\u2248 %1$s gas</string>
+    <string name="directions_least_gas">Most fuel-efficient</string>
+    <string name="directions_fastest_least_gas">Fastest and least gas</string>
 </resources>
