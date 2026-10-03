@@ -62,6 +62,7 @@ the APK:
 | `search-nys.sqlite` | Search for places, streets and addresses, whole state |
 | `routing-nys.tar` | Directions and turn-by-turn navigation, whole state |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
+| `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 
 Load each one the same way:
 
@@ -121,6 +122,8 @@ other ALPR cameras mapped in OpenStreetMap) on your route are announced about
 300 m ahead, each behind its own toggle. All of it comes from the search pack
 on the phone, so nothing about the drive is sent; a search pack built before
 October 2026 has no landmarks, and guidance simply goes without them until
-the next pack update. Two built-in voices ship in the app (Amy and Norman),
-for phones without a text-to-speech engine. Long-press the voice button while
+the next pack update. For phones without a text-to-speech engine the app
+has its own voice, Amy; a second one, Norman, is a download (about 58 MB)
+that the updater fetches only once you pick it, and Amy speaks until it
+arrives. Long-press the voice button while
 navigating to mute until the next turn.
