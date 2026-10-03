@@ -29,7 +29,11 @@
 #   OVERTURE_RELEASE    an Overture release id (e.g. 2026-09-23.1) or "latest";
 #                       default: overture.py's DEFAULT_RELEASE while published,
 #                       else the newest
-#   OVERTURE_MAX_MB     fail if the Overture tables alone are bigger (default 900)
+#   OVERTURE_MIN_CONFIDENCE  keep places Overture is at least this sure of
+#                       (0 to 1, default 0.5); higher makes a smaller pack
+#   OVERTURE_MAX_MB     fail if the Overture tables alone are bigger (default
+#                       700; New York plus northern New Jersey measured 483 MB
+#                       with release 2026-09-23.1)
 #
 # Usage: build.sh <region>      e.g. build.sh nys
 set -euo pipefail
@@ -42,7 +46,8 @@ GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.9.2}"
 PYOSMIUM_VERSION="4.3.1"
 SEARCH_MAX_MB="${SEARCH_MAX_MB:-1900}"
 DUCKDB_VERSION="1.5.6"
-OVERTURE_MAX_MB="${OVERTURE_MAX_MB:-900}"
+OVERTURE_MAX_MB="${OVERTURE_MAX_MB:-700}"
+OVERTURE_MIN_CONFIDENCE="${OVERTURE_MIN_CONFIDENCE:-0.5}"
 
 clip_extract "$REGION"
 region_bounds "$REGION"
@@ -157,7 +162,7 @@ OVERTURE_STEP=""
 if [[ "${OVERTURE:-0}" == 1 ]]; then
   OVERTURE_CSV="/data/tmp/overture-$REGION.csv"
   OVERTURE_STEP="pip install -q --root-user-action=ignore duckdb==$DUCKDB_VERSION
-    python /search/overture.py fetch --bounds=$BOUNDS --out=$OVERTURE_CSV
+    python /search/overture.py fetch --bounds=$BOUNDS --out=$OVERTURE_CSV --min-confidence=$OVERTURE_MIN_CONFIDENCE
     chown $(id -u):$(id -g) $OVERTURE_CSV $OVERTURE_CSV.json"
   ARGS="$ARGS --overture=$OVERTURE_CSV --overture-max-mb=$OVERTURE_MAX_MB"
   echo "==> Adding Overture Places (release: ${OVERTURE_RELEASE:-default})"
