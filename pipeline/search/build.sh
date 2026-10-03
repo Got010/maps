@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Build the search pack pipeline/data/out/search-<region>.sqlite
 #
-# Clips the Geofabrik New York extract to the region (or takes the whole
-# extract for nys), then indexes its places, streets and addresses with
-# build_search.py, in Docker so the only local requirement is Docker.
-# Releases ship search-nys.sqlite, the whole state in one index.
+# Builds the region's extract (New York cut to the region, or for nys the whole
+# New York extract merged with northern New Jersey), then indexes its places,
+# streets and addresses with build_search.py, in Docker so the only local
+# requirement is Docker. Releases ship search-nys.sqlite: New York and northern
+# New Jersey in one index. search/states.py tells which state a point is in
+# (the merged extract doesn't say); regions.json is mounted at /regions.json,
+# next to /search, for it.
 #
 # Usage: build.sh <region>      e.g. build.sh nys
 set -euo pipefail
@@ -22,6 +25,7 @@ echo "==> Indexing places, streets and addresses -> $OUTPUT"
 docker run --rm \
   -v "$DATA_DIR:/data" \
   -v "$PIPELINE_DIR/search:/search:ro" \
+  -v "$PIPELINE_DIR/regions.json:/regions.json:ro" \
   "$PYTHON_IMAGE" bash -c "
     set -e
     # pyosmium's wheel links against libexpat, which the slim image lacks.
