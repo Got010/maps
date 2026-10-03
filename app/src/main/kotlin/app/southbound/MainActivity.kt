@@ -42,7 +42,14 @@ class MainActivity : ComponentActivity() {
                         val services = ExploreServices.get(this@MainActivity)
                         val settings by services.voiceSettings.collectAsState()
                         BackHandler { showSettings = false }
-                        SettingsScreen(services.voiceStore, settings, services.voice, onBack = { showSettings = false })
+                        SettingsScreen(
+                            services.voiceStore,
+                            settings,
+                            services.voice,
+                            onBack = { showSettings = false },
+                            network = services.networkToggles,
+                            secrets = services.secrets,
+                        )
                     }
                 }
             }

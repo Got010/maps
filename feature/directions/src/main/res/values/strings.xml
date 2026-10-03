@@ -10,4 +10,5 @@
     <string name="mode_drive">Drive</string>
     <string name="mode_walk">Walk</string>
     <string name="mode_bike">Bike</string>
+    <string name="mode_transit">Transit</string>
 </resources>

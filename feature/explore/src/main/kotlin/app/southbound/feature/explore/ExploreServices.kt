@@ -1,12 +1,19 @@
 package app.southbound.feature.explore
 
 import android.content.Context
+import app.southbound.core.network.ApiKey
+import app.southbound.core.network.NetworkGate
+import app.southbound.core.network.PreferenceNetworkToggles
+import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
 import app.southbound.core.search.SearchIndex
+import app.southbound.core.transit.AndroidTransitDb
+import app.southbound.core.transit.TransitPack
+import app.southbound.core.transit.TransitRealtime
 import app.southbound.core.voice.GuidanceVoice
 import app.southbound.core.voice.VoiceSettings
 import app.southbound.core.voice.VoiceSettingsStore
@@ -36,7 +43,14 @@ class ExploreServices private constructor(context: Context) {
         voiceStore.settings.stateIn(scope, SharingStarted.Eagerly, VoiceSettings())
     val voice = GuidanceVoice(appContext, voiceSettings)
 
+    /** Network toggles (all off but pack downloads until the user turns one on) and API keys. */
+    val networkToggles = PreferenceNetworkToggles(appContext)
+    val networkGate = NetworkGate(networkToggles)
+    val secrets = SecretStore(appContext)
+    val realtime = TransitRealtime(networkGate, busKey = { secrets.get(ApiKey.MTA_BUS_TIME) })
+
     private var search: Opened<SearchIndex>? = null
+    private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
 
     /** The search index, reopened if a newer search pack was imported. Null without one. */
@@ -65,6 +79,17 @@ class ExploreServices private constructor(context: Context) {
         val navigator = Navigator(appContext, router).also { it.spokenInstructionObserver = voice }
         routing = Opened(file, router to navigator)
         return navigator
+    }
+
+    /** The transit pack with its network loaded, reopened after a newer import. Null without one. */
+    @Synchronized
+    fun openTransit(region: String = PackStore.DEFAULT_REGION): TransitPack? {
+        val file = installed(PackKind.TRANSIT, region) ?: return null
+        transit?.takeIf { it.matches(file) }?.let { return it.value }
+        transit?.value?.close()
+        transit = null
+        return runCatching { AndroidTransitDb.open(file).also { it.network } }.getOrNull()
+            ?.also { transit = Opened(file, it) }
     }
 
     fun hasPack(kind: PackKind, region: String = PackStore.DEFAULT_REGION): Boolean = installed(kind, region) != null
