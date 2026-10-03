@@ -93,6 +93,7 @@ import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.SpeedLimits
+import app.southbound.core.routing.SpeedWarningPolicy
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
 import app.southbound.core.updates.UpdateScheduler
@@ -113,6 +114,7 @@ import app.southbound.core.traffic.SpeedBand
 import app.southbound.core.traffic.TrafficSnapshot
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
+import app.southbound.core.voice.SpeedAlertMode
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.feature.directions.MissingRegionWarning
 import app.southbound.feature.directions.RouteOptionsChip
@@ -627,23 +629,22 @@ internal fun ExploreMap(
     }
     // --- end Phase 5 (map) effects ---
 
-    // Over the limit for a while: one warning, then quiet for a minute (Settings > Speed limit warnings).
+    // Over the limit for a while: one alert per stretch of road, not a reminder every minute. SpeedWarningPolicy
+    // decides when; GuidancePolicy turns it into speech, a beep or nothing (Settings > Speed limit alerts).
     val speedMph = location?.takeIf { inTrip && it.hasSpeed() }?.let { SpeedLimits.mph(it.speed) }
     val speedLimit = remember(navState) { if (inTrip) SpeedLimits.currentMph(navState) else null }
     val speedingSpoken = stringResource(R.string.explore_speeding_spoken)
-    var speedingSince by remember { mutableStateOf(0L) }
-    var lastSpeedWarning by remember { mutableStateOf(0L) }
-    LaunchedEffect(speedMph, speedLimit) {
-        val now = SystemClock.elapsedRealtime()
-        if (speedMph == null || speedLimit == null || speedMph <= speedLimit + SpeedLimits.TOLERANCE_MPH) {
-            speedingSince = 0L
+    val speedPolicy = remember { SpeedWarningPolicy() }
+    val speedAlertsOn = voiceSettings.speedAlerts != SpeedAlertMode.OFF
+    // Keyed on the fix too: the policy times its grace period by fixes, and a steady speed doesn't change speedMph.
+    LaunchedEffect(location, speedMph, speedLimit, inTrip, speedAlertsOn) {
+        if (!inTrip || !speedAlertsOn) {
+            // A new trip, or alerts turned on mid-drive, starts fresh.
+            speedPolicy.reset()
             return@LaunchedEffect
         }
-        if (speedingSince == 0L) speedingSince = now
-        if (now - speedingSince >= SPEEDING_GRACE_MS && now - lastSpeedWarning >= SPEEDING_REPEAT_MS) {
-            lastSpeedWarning = now
-            services.voice.announce(UtteranceKind.SPEED_LIMIT, speedingSpoken.format(speedLimit))
-        }
+        val warning = speedPolicy.update(SystemClock.elapsedRealtime(), speedMph, speedLimit) ?: return@LaunchedEffect
+        services.voice.announce(UtteranceKind.SPEED_LIMIT, speedingSpoken.format(warning.limitMph))
     }
 
     val reroutingSpoken = stringResource(R.string.explore_rerouting_spoken)
@@ -664,7 +665,16 @@ internal fun ExploreMap(
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         services.voice.guidanceMode = target.mode.guidanceMode()
-        nav.start(route, target.mode)
+        // Says "Starting. You'll arrive at about 1:11 PM, 12 miles." before the first turn.
+        val summary = ready.summaries.getOrNull(ready.selected) ?: RouteSummary.of(route)
+        services.guidance.startTrip(
+            navigator = nav,
+            route = route,
+            mode = target.mode,
+            places = (target.stops + target.place).map { it.name },
+            durationSeconds = summary.durationSeconds + ready.delaySeconds.getOrElse(ready.selected) { 0.0 },
+            distanceMeters = summary.distanceMeters,
+        )
     }
 
     BackHandler(enabled = !inTrip && panel != Panel.Browse) {
@@ -1135,8 +1145,6 @@ private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
 
 private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.lon), kind.name, isClosure)
-private const val SPEEDING_GRACE_MS = 8_000L
-private const val SPEEDING_REPEAT_MS = 60_000L
 
 @Composable
 private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {

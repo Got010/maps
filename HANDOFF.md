@@ -106,7 +106,7 @@ All toggles live in Settings > Navigation > Voice. The first one also sits on th
 | Street names | On, Off | On |
 | Detail level | Full, Brief | Full |
 | Traffic and incident alerts | On, Off | On |
-| Speed limit warnings | On, Off | Off |
+| Speed limit alerts | Off, Voice, Beep | Off |
 | Reroute announcement | On, Off | On |
 | Transit stop alerts | On, Off | On |
 | Guidance volume | Softer, Normal, Louder | Normal |
@@ -198,7 +198,7 @@ Build NYC end to end first, then scale the same pipeline to the state. Each phas
   - Build cost: `basemap-njn` is about the size of a small region (guess 150-300 MB, one more matrix job of perhaps 30-60 min); `routing-nys` and `search-nys` grow by NJ's share (roughly 15-25 percent more input), so the statewide jobs run correspondingly longer plus a few minutes for the clip and merge. A full rebuild is about 15-25 percent more Actions minutes than before (about 300 per rebuild, now perhaps 350-375). The first release after this change rebuilds everything, since `basemap-njn.pmtiles` is new. Unmeasured: replace these with the first real numbers.
 - **Phase 4 is started** (same caveat: test on the phone):
   - Saved places, lists and recents live in `core/userdata`: one JSON document, AES-GCM under an Android Keystore key, in the no-backup directory. The place card has Save (checkbox per list, new lists), and the search panel shows the lists and recents while the box is empty.
-  - Speed limits come from the route itself: Ferrostar already asks Valhalla for `shape_attributes.speed_limit`, so `SpeedLimits` reads the current one from the navigation state. The navigation screen shows a US-style sign, red when over, and the Speed limit warnings toggle speaks a warning after 8 s over the limit, at most once a minute. Only where OSM has `maxspeed`.
+  - Speed limits come from the route itself: Ferrostar already asks Valhalla for `shape_attributes.speed_limit`, so `SpeedLimits` reads the current one from the navigation state. The navigation screen shows a US-style sign, red when over, and Speed limit alerts (Off, Voice or Beep) warn once per stretch: after 8 s over the limit plus 5 mph, then again only if the limit changes and you are still over, you were under it for a minute and go over again, or you are far more over (15 mph or 20%) than at the last warning (`SpeedWarningPolicy`). Only where OSM has `maxspeed`.
   - Buildings stand up from zoom 15 (`building-3d` fill-extrusion layer in build_styles.py).
   - Left: lane guidance, traffic-aware routing, upstate transit (see the Phase 4 list).
 - **Releases are automatic.** Every merge to `main` publishes the next `vX.Y.Z` with the signed APK, the packs and `southbound.json`. Packs are rebuilt only when `pipeline/` changes, on the 2nd of each month, or on request; otherwise they're carried over. See `.github/workflows/release.yml`.
