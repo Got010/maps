@@ -67,6 +67,8 @@ data class TrafficSnapshot(
     val fetchedAt: Long = 0,
     /** Feeds that couldn't be fetched, in plain words. */
     val errors: List<String> = emptyList(),
+    /** NYC DOT answered, but every reading was older than [NycDotSpeeds.DEFAULT_MAX_AGE_MILLIS]. */
+    val speedsStale: Boolean = false,
 ) {
     val isEmpty: Boolean get() = incidents.isEmpty() && speeds.isEmpty()
     val closures: List<Incident> get() = incidents.filter { it.isClosure }

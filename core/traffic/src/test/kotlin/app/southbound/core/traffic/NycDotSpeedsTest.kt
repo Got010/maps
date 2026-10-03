@@ -1,6 +1,7 @@
 package app.southbound.core.traffic
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -33,6 +34,35 @@ class NycDotSpeedsTest {
     fun `everything is kept when age doesn't matter`() {
         val links = NycDotSpeeds.parse(fixture, now, maxAgeMillis = Long.MAX_VALUE)
         assertEquals(listOf("4616337", "4456479", "4329500"), links.map { it.id })
+    }
+
+    @Test
+    fun `reports how many rows were dropped as too old`() {
+        val report = NycDotSpeeds.parseReport(fixture, now)
+        assertEquals(2, report.links.size)
+        assertEquals(1, report.staleDropped) // the September sensor
+        assertFalse(report.allStale)
+        assertEquals(report.links[0].asOf, report.newestAsOf)
+    }
+
+    @Test
+    fun `a feed with only old readings is stale rather than just empty`() {
+        val threeDaysLater = now + 3 * 24 * 60 * 60_000L
+        val report = NycDotSpeeds.parseReport(fixture, threeDaysLater)
+        assertTrue(report.links.isEmpty())
+        assertEquals(4, report.staleDropped) // the four rows with a speed and a shape
+        assertTrue(report.allStale)
+        assertEquals(now - 4 * 60_000L + 4_000L, report.newestAsOf)
+        assertTrue(NycDotSpeeds.parse(fixture, threeDaysLater).isEmpty())
+    }
+
+    @Test
+    fun `an empty feed is not stale`() {
+        val report = NycDotSpeeds.parseReport("[]", now)
+        assertTrue(report.links.isEmpty())
+        assertEquals(0, report.staleDropped)
+        assertFalse(report.allStale)
+        assertEquals(null, report.newestAsOf)
     }
 
     @Test

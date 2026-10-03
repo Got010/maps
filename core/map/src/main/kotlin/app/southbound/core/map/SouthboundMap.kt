@@ -159,6 +159,8 @@ fun SouthboundMap(
             isQuickZoomGesturesEnabled = true
             isCompassEnabled = true
             setCompassFadeFacingNorth(true)
+            // Logo off; the attribution (i) button stays for the OpenStreetMap/OpenMapTiles credit.
+            isLogoEnabled = false
         }
         // A user gesture (not an animation or API move) that turns or tilts the map ends following:
         // heading-up and tilted navigation would otherwise fight the user's hands.
@@ -307,8 +309,8 @@ fun SouthboundMap(
             val end = (contentPadding.calculateEndPadding(layoutDirection) + 8.dp).roundToPx()
             val top = (contentPadding.calculateTopPadding() + 8.dp).roundToPx()
             val bottom = (contentPadding.calculateBottomPadding() + 8.dp).roundToPx()
-            ui.setLogoMargins(start, 0, 0, bottom)
-            ui.setAttributionMargins(start + 88.dp.roundToPx(), 0, 0, bottom)
+            // The MapLibre logo is off; the (i) button keeps the OpenStreetMap credit and takes its place.
+            ui.setAttributionMargins(start, 0, 0, bottom)
             // The turn banner sits across the top while navigating; the compass goes below it.
             ui.setCompassMargins(0, top + if (navigating) NAVIGATION_COMPASS_OFFSET.roundToPx() else 0, end, 0)
         }
@@ -332,11 +334,11 @@ private fun activateLocationPuck(
             .locationComponentOptions(finPuckOptions(context))
             .build(),
     )
-    // The fin is drawn side-on, so it never turns with the travel direction: NORMAL keeps it
-    // upright on screen in every camera mode, navigation included.
-    puck.renderMode = RenderMode.NORMAL
+    // GPS mode rotates the fin by the fix bearing, so its nose points the way we travel. The
+    // bearing comes from HeadingFilter, which holds the last good heading while parked.
+    puck.renderMode = RenderMode.GPS
     // MapLibre lays the puck flat on the map; on the tilted navigation camera that would squash
-    // the fin onto the road. Stand it up facing the screen instead.
+    // the fin onto the road. Keep it facing the screen instead (it still turns with the bearing).
     style.getLayer(LocationComponentConstants.FOREGROUND_LAYER)
         ?.setProperties(iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT))
     if (firstActivation) {
@@ -350,9 +352,10 @@ private fun activateLocationPuck(
 /** The user's position as a tiger shark fin in the water instead of MapLibre's blue dot. */
 private fun finPuckOptions(context: Context): LocationComponentOptions =
     LocationComponentOptions.builder(context)
-        .foregroundDrawable(R.drawable.location_fin)
-        .gpsDrawable(R.drawable.location_fin)
-        .foregroundDrawableStale(R.drawable.location_fin_stale)
+        // Nose-up art in every mode, so the bearing rotation always points the fin forward.
+        .foregroundDrawable(R.drawable.location_fin_gps)
+        .gpsDrawable(R.drawable.location_fin_gps)
+        .foregroundDrawableStale(R.drawable.location_fin_gps_stale)
         // No white ring behind the fin, and no shadow cast from one.
         .backgroundDrawable(R.drawable.location_none)
         .backgroundDrawableStale(R.drawable.location_none)
