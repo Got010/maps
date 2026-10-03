@@ -38,6 +38,7 @@ include(
     ":core:transit",
     ":core:traffic",
     ":core:packs",
+    ":core:updates",
     ":core:userdata",
 )
 

@@ -10,7 +10,11 @@ import java.net.URL
  * code that makes a request.
  */
 enum class NetworkFeature(val enabledByDefault: Boolean) {
+    /** Map data packs from Southbound's GitHub releases. */
     PACK_DOWNLOADS(enabledByDefault = true),
+
+    /** New versions of the app itself, from the same releases. */
+    APP_UPDATES(enabledByDefault = false),
     TRAFFIC_511NY(enabledByDefault = false),
     TRAFFIC_NYC_DOT(enabledByDefault = false),
     TRAFFIC_TOMTOM(enabledByDefault = false),

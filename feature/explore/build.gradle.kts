@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":core:search"))
     implementation(project(":core:transit"))
     implementation(project(":core:network"))
+    implementation(project(":core:updates"))
     implementation(project(":core:voice"))
     implementation(project(":feature:directions"))
     implementation(project(":feature:navigation"))

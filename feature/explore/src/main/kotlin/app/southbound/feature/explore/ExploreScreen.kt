@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStatus
 import app.southbound.core.packs.PackStore
@@ -70,6 +71,15 @@ fun ExploreScreen(
         packStatus = packStore.basemapStatus(REGION)
     }
 
+    // Packs the updater installed while the app is open: switch to them.
+    LaunchedEffect(packStore) {
+        PackEvents.installed.collect { pack ->
+            packGeneration++
+            if (pack.kind == PackKind.BASEMAP) basemapGeneration++
+            packStatus = packStore.basemapStatus(REGION)
+        }
+    }
+
     // Pick up a pack pushed with adb while the app was in the background.
     LifecycleResumeEffect(packStore) {
         packStatus = packStore.basemapStatus(REGION)
@@ -95,6 +105,7 @@ fun ExploreScreen(
                 onImported = ::onImportFinished,
                 packStore = packStore,
                 onRetry = { packStatus = packStore.basemapStatus(REGION) },
+                onOpenSettings = onOpenSettings,
             )
         }
         ImportBanner(
@@ -116,6 +127,7 @@ private fun MissingPack(
     onImported: (ImportState) -> Unit,
     packStore: PackStore,
     onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -144,8 +156,9 @@ private fun MissingPack(
                 ),
                 style = MaterialTheme.typography.headlineSmall,
             )
-            Text(stringResource(R.string.explore_pack_body), style = MaterialTheme.typography.bodyLarge)
-            Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !importing) {
+            DownloadPacksCard(onOpenSettings)
+            Text(stringResource(R.string.explore_pack_body), style = MaterialTheme.typography.bodyMedium)
+            OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !importing) {
                 Text(stringResource(R.string.explore_import))
             }
             Text(
