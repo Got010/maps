@@ -9,7 +9,10 @@
     <string name="place_close">Close</string>
     <string name="place_directions">Directions</string>
     <string name="place_start_here">Start here</string>
+    <string name="place_save">Save</string>
+    <string name="place_saved">Saved</string>
     <string name="place_call">Call</string>
+    <string name="search_clear_recents">Clear</string>
     <string name="place_website">Website</string>
     <string name="place_no_routing">Directions need the routing data, which downloads with the map (Settings &gt; Updates). Or share routing-nys.tar from the latest Southbound release to Southbound.</string>
 </resources>
