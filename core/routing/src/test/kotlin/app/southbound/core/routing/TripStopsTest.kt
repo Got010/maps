@@ -45,3 +45,11 @@ class TripStopsTest {
         assertFalse(TripStops.canSkip(0))
     }
 }
+
+class TripClockTest {
+    @Test
+    fun `arrival is now plus the time left, never in the past`() {
+        assertEquals(1_000_000L + 90_500L, TripClock.arrivalMillis(1_000_000L, 90.5))
+        assertEquals(1_000_000L, TripClock.arrivalMillis(1_000_000L, -5.0))
+    }
+}

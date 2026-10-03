@@ -91,4 +91,7 @@
     <string name="updates_packs_installed">Installed data</string>
     <string name="updates_packs_none">No data packs installed yet.</string>
     <string name="updates_pack_line">%1$s · %2$d MB · %3$s</string>
+    <string name="settings_driving">Driving</string>
+    <string name="driving_night">Night mode by sunset while navigating</string>
+    <string name="driving_night_note">After sunset at your location the map and navigation screen turn dark, even if the phone is in light theme. Worked out on the phone from your GPS fix.</string>
 </resources>

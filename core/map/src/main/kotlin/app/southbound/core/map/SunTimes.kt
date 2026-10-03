@@ -112,3 +112,20 @@ object SunTimes {
     private fun rad(d: Double) = d * PI / 180
     private fun deg(r: Double) = r * 180 / PI
 }
+
+/** Phase 6: when the map and navigation overlay go dark. */
+object NightMode {
+    /**
+     * True when the UI should be dark: the phone is in dark theme, or the user
+     * is navigating with night mode on and the sun has set at the last fix.
+     * Without a fix there's no way to tell, so only the system theme counts.
+     */
+    fun useDark(
+        system: Boolean,
+        navigating: Boolean,
+        bySunset: Boolean,
+        lat: Double?,
+        lon: Double?,
+        nowMs: Long,
+    ): Boolean = system || (navigating && bySunset && lat != null && lon != null && SunTimes.isNight(nowMs, lat, lon))
+}

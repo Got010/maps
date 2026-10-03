@@ -73,4 +73,16 @@ class SunTimesTest {
         val sunset = SunTimes.of(2026, 4, 10, nycLat, nycLon).sunsetUtcMs!!
         assertEquals(-0.833, SunTimes.elevationDegrees(sunset, nycLat, nycLon), 0.15)
     }
+
+    @Test
+    fun `night mode needs navigation, the setting and a fix, or the system theme`() {
+        val noon = ZonedDateTime.of(2026, 10, 3, 13, 0, 0, 0, ny).toInstant().toEpochMilli()
+        val night = ZonedDateTime.of(2026, 10, 3, 22, 0, 0, 0, ny).toInstant().toEpochMilli()
+        assertTrue(NightMode.useDark(true, false, false, null, null, noon))
+        assertFalse(NightMode.useDark(false, true, true, nycLat, nycLon, noon))
+        assertTrue(NightMode.useDark(false, true, true, nycLat, nycLon, night))
+        assertFalse(NightMode.useDark(false, false, true, nycLat, nycLon, night)) // not navigating
+        assertFalse(NightMode.useDark(false, true, false, nycLat, nycLon, night)) // setting off
+        assertFalse(NightMode.useDark(false, true, true, null, null, night)) // no fix yet
+    }
 }
