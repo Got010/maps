@@ -29,4 +29,5 @@
     <string name="transit_departures">Departures</string>
     <string name="transit_no_departures">No departures in the next two hours.</string>
     <string name="transit_board_minutes">%1$d min</string>
+    <string name="transit_from">From %1$s</string>
 </resources>

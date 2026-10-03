@@ -63,6 +63,8 @@ fun RoutePreviewSheet(
     modifier: Modifier = Modifier,
     /** Shows a Transit chip that switches to the transit planner. */
     onTransit: (() -> Unit)? = null,
+    /** A chosen start point instead of GPS; routes can be previewed but not navigated from it. */
+    startName: String? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -84,6 +86,14 @@ fun RoutePreviewSheet(
                 }
             }
             ModeChips(mode, onModeChange, transitSelected = false, onTransit = onTransit)
+            startName?.let {
+                Text(
+                    stringResource(R.string.directions_from, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 8.dp, end = 8.dp),
@@ -111,7 +121,7 @@ fun RoutePreviewSheet(
                         state.summaries.forEachIndexed { i, summary ->
                             RouteOption(summary, selected = i == state.selected, fastest = i == 0, onClick = { onSelect(i) })
                         }
-                        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
                             Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))
                         }
