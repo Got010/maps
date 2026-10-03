@@ -4,7 +4,9 @@
 # first; it's a no-op once the pinned files are in place.
 #
 #   third-party/m2/...          sherpa-onnx AAR, as a local Maven repo
-#   core/voice/build/voice-assets/voice/   the Piper voice, bundled as assets
+#   core/voice/build/voice-assets/piper/   the Piper voices, bundled as assets:
+#     espeak-ng-data/   pronunciation data, shared by every voice
+#     <voice>/          one voice's model.onnx, tokens.txt and voice.sha256
 #
 # Every download is checked against a pinned SHA-256.
 set -euo pipefail
@@ -13,14 +15,19 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SHERPA_VERSION="1.13.8"
 SHERPA_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v$SHERPA_VERSION/sherpa-onnx-$SHERPA_VERSION.aar"
 SHERPA_SHA256="633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
-VOICE="vits-piper-en_US-amy-low"
-VOICE_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$VOICE.tar.bz2"
-VOICE_SHA256="c70f5284a09a7fd4ed203b39b2ff51cac1432b422b852eb647b481dade3cf639"
+# The bundled Piper voices: <asset dir>|<sherpa-onnx tts-models name>|<SHA-256>.
+# Each adds about 58 MB to the APK (the .onnx barely compresses). Licences:
+# amy: see the Piper model card; norman: public domain (LibriVox recordings).
+VOICES=(
+  "amy|vits-piper-en_US-amy-low|c70f5284a09a7fd4ed203b39b2ff51cac1432b422b852eb647b481dade3cf639"
+  "norman|vits-piper-en_US-norman-medium|1f32065d480abe9abc7c7f91442125d0b34c1cc065d1e600466cac408eabf3b8"
+)
+VOICE_BASE_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models"
 
 M2_DIR="$ROOT/third-party/m2/com/k2fsa/sherpa-onnx/$SHERPA_VERSION"
 AAR="$M2_DIR/sherpa-onnx-$SHERPA_VERSION.aar"
 CACHE="$ROOT/third-party/cache"
-ASSETS="$ROOT/core/voice/build/voice-assets/voice"
+ASSETS="$ROOT/core/voice/build/voice-assets/piper"
 
 sha256_of() {
   if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
@@ -54,19 +61,38 @@ cat > "$M2_DIR/sherpa-onnx-$SHERPA_VERSION.pom" <<POM
 </project>
 POM
 
-TARBALL="$CACHE/$VOICE.tar.bz2"
-fetch "$VOICE_URL" "$TARBALL" "$VOICE_SHA256"
-STAMP="$ASSETS/voice.sha256"
-if [[ -f "$STAMP" && "$(cat "$STAMP")" == "$VOICE_SHA256" ]]; then
+# One stamp for the whole set, so changing the list re-unpacks everything.
+WANTED="$(printf '%s\n' "${VOICES[@]}" | sha256sum | cut -d' ' -f1)"
+STAMP="$ASSETS/set.sha256"
+for entry in "${VOICES[@]}"; do
+  IFS='|' read -r _ name sha <<<"$entry"
+  fetch "$VOICE_BASE_URL/$name.tar.bz2" "$CACHE/$name.tar.bz2" "$sha"
+done
+if [[ -f "$STAMP" && "$(cat "$STAMP")" == "$WANTED" ]]; then
   echo "==> Voice assets up to date"
   exit 0
 fi
-echo "==> Unpacking $VOICE"
+# The single-voice layout of earlier builds.
+rm -rf "$ROOT/core/voice/build/voice-assets/voice"
 mkdir -p "$ASSETS"
 find "$ASSETS" -mindepth 1 -delete
-tar -xjf "$TARBALL" -C "$ASSETS" --strip-components=1
-# espeak-ng ships pronunciation dictionaries for ~100 languages; the voice
-# speaks English only, so keep en_dict and drop the rest (about 17 MB).
-find "$ASSETS/espeak-ng-data" -maxdepth 1 -name '*_dict' ! -name 'en_dict' -delete
-echo "$VOICE_SHA256" > "$STAMP"
-du -sh "$ASSETS"
+for entry in "${VOICES[@]}"; do
+  IFS='|' read -r dir name sha <<<"$entry"
+  echo "==> Unpacking $name"
+  work="$(mktemp -d)"
+  tar -xjf "$CACHE/$name.tar.bz2" -C "$work" --strip-components=1
+  mkdir -p "$ASSETS/$dir"
+  mv "$work"/*.onnx "$ASSETS/$dir/model.onnx"
+  mv "$work/tokens.txt" "$ASSETS/$dir/"
+  echo "$sha" > "$ASSETS/$dir/voice.sha256"
+  if [[ ! -d "$ASSETS/espeak-ng-data" ]]; then
+    # espeak-ng ships pronunciation dictionaries for ~100 languages; the
+    # voices speak English only, so keep en_dict and drop the rest (~17 MB).
+    mv "$work/espeak-ng-data" "$ASSETS/"
+    find "$ASSETS/espeak-ng-data" -maxdepth 1 -name '*_dict' ! -name 'en_dict' -delete
+    echo "$sha" > "$ASSETS/espeak.sha256"
+  fi
+  rm -rf "$work"
+done
+echo "$WANTED" > "$STAMP"
+du -sh "$ASSETS"/*

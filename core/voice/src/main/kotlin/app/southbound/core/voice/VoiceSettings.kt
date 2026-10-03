@@ -43,11 +43,11 @@ enum class DistanceStyle {
  * is the voice's folder under the APK's `piper` assets.
  */
 enum class BuiltInVoice(val assetDir: String) {
-    /** US English, female (Piper "amy", low). */
+    /** US English, female (Piper "amy", low). The default, bundled since Phase 1. */
     AMY("amy"),
 
-    /** US English, male (Piper "ryan", low). */
-    RYAN("ryan"),
+    /** US English, male (Piper "norman", medium; public domain LibriVox recordings). */
+    NORMAN("norman"),
 }
 
 enum class GuidanceVolume(val gain: Float, val boostMillibels: Int) {
