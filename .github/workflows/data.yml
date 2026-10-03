@@ -1,6 +1,6 @@
 # Proves the data pipeline still builds, on pull requests that touch it.
-# Publishing happens in release.yml, which puts the packs and the APK in one
-# release after the PR is merged.
+# NYC only, since it finishes in under an hour; the statewide packs build the
+# same scripts with other regions in release.yml after the PR is merged.
 name: Map data
 
 on:
@@ -11,6 +11,7 @@ on:
       - 'pipeline/search/**'
       - 'pipeline/transit/**'
       - 'pipeline/lib/**'
+      - 'pipeline/regions.json'
       - 'pipeline/Makefile'
       - '.github/workflows/data.yml'
 
@@ -29,8 +30,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build basemap-nyc.pmtiles
-        env:
-          PLANETILER_HEAP: 8g
         run: make -C pipeline tiles-nyc
 
       - name: Build routing-nyc.tar

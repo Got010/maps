@@ -35,6 +35,66 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
     fun basemapStatus(region: String): PackStatus = status(PackKind.BASEMAP, region)
 
     /**
+     * Every valid pack on the phone, in private storage or the import folder,
+     * whatever its region: `basemap-hudson.pmtiles` is the hudson basemap.
+     * For a pack present in both places, the private copy counts.
+     */
+    fun installed(): List<ImportedPack> {
+        val found = LinkedHashMap<Pair<PackKind, String>, ImportedPack>()
+        for (dir in listOfNotNull(packsDir, importPacksDir)) {
+            val files = dir.listFiles() ?: continue
+            for (file in files.sortedBy { it.name }) {
+                val kind = PackKind.entries.firstOrNull { file.extension == it.extension && file.name.startsWith("${it.prefix}-") }
+                    ?: continue
+                val region = PackKind.regionFromName(kind, file.name) ?: continue
+                if (found.containsKey(kind to region) || !kind.matches(file)) continue
+                found[kind to region] = ImportedPack(kind, region, file)
+            }
+        }
+        return found.values.toList()
+    }
+
+    /** The installed basemaps, one per region, in the order of [Regions.basemaps] then any others. */
+    fun installedBasemaps(): List<ImportedPack> {
+        val order = Regions.basemaps.map { it.id }
+        return installed().filter { it.kind == PackKind.BASEMAP }
+            .sortedBy { order.indexOf(it.region).let { i -> if (i < 0) order.size else i } }
+    }
+
+    /**
+     * The one pack of [kind] the app should open: the statewide pack when
+     * installed, else NYC's, else whichever is there. Routing, search and
+     * transit each use a single pack.
+     */
+    fun installedAny(kind: PackKind): ImportedPack? {
+        val candidates = installed().filter { it.kind == kind }
+        return candidates.firstOrNull { it.region == Regions.STATEWIDE }
+            ?: candidates.firstOrNull { it.region == DEFAULT_REGION }
+            ?: candidates.firstOrNull()
+    }
+
+    /** Deletes the pack (and its checksum) from private storage and the import folder. */
+    fun delete(kind: PackKind, region: String) {
+        val name = kind.fileName(region)
+        for (dir in listOfNotNull(packsDir, importPacksDir)) {
+            File(dir, name).delete()
+            File(dir, "$name.sha256").delete()
+        }
+    }
+
+    /**
+     * After installing a pack of a kind the app uses one of (routing, search,
+     * transit), drops the other regions' copies: a phone that moved from
+     * routing-nyc to routing-nys shouldn't keep both.
+     */
+    fun deleteOtherRegions(kind: PackKind, keep: String): List<String> {
+        if (kind == PackKind.BASEMAP) return emptyList()
+        val others = installed().filter { it.kind == kind && it.region != keep }.map { it.region }
+        others.forEach { delete(kind, it) }
+        return others
+    }
+
+    /**
      * Copies any data pack from [source] into private storage. The kind comes
      * from the file's contents; the region from [displayName] when it follows
      * the `<kind>-<region>.<ext>` pattern, else [fallbackRegion].

@@ -1,39 +1,47 @@
 # Data pipeline. Run from the repo root as: make -C pipeline <target>
 # Outputs land in pipeline/data/out (git-ignored).
+#
+# Regions are listed in regions.json. Any pack builds as <kind>-<region>:
+#   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 
-.PHONY: nyc state release tiles-nyc routing-nyc search-nyc transit-nyc push-nyc styles glyphs test clean
+REGIONS := nyc li hudson capital western nys
+BASEMAP_REGIONS := nyc li hudson capital western
+STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc
+ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS)))
 
-## nyc: every NYC pack: basemap, routing, search and transit
+.PHONY: nyc state release $(ALL_PACKS) push-nyc styles glyphs test clean
+
+## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-tiles-nyc:
-	tiles/build.sh nyc
+## state: what a release ships: five regional basemaps, statewide routing and search, NYC transit
+state: $(STATE_PACKS)
 
-routing-nyc:
-	routing/build.sh nyc
+$(addprefix tiles-,$(REGIONS)): tiles-%:
+	tiles/build.sh $*
 
-search-nyc:
-	search/build.sh nyc
+$(addprefix routing-,$(REGIONS)): routing-%:
+	routing/build.sh $*
 
-transit-nyc:
-	transit/build.sh nyc
+$(addprefix search-,$(REGIONS)): search-%:
+	search/build.sh $*
+
+$(addprefix transit-,$(REGIONS)): transit-%:
+	transit/build.sh $*
 
 ## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium)
 test:
 	python3 -m unittest discover -s search/tests
 	python3 -m unittest discover -s transit/tests
+	python3 -m unittest discover -s tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
 	./push-pack.sh data/out/basemap-nyc.pmtiles
 
-## state: statewide regional packs (Phase 3)
-state:
-	@echo "Statewide packs arrive in Phase 3." >&2; exit 1
-
-## release: manifest and GitHub release upload (Phase 3)
+## release: packs are published by .github/workflows/release.yml on every merge to main
 release:
-	@echo "Release packaging arrives in Phase 3." >&2; exit 1
+	@echo "Releases are built by GitHub Actions: merge to main, or run the Release workflow with 'Rebuild data'." >&2; exit 1
 
 ## styles: regenerate styles/light.json and styles/dark.json
 styles:

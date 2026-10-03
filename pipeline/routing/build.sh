@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Build the routing pack pipeline/data/out/routing-<region>.tar
 #
-# Clips the Geofabrik New York extract to the region, then builds Valhalla
-# routing tiles in Docker and packs them into one tar. The app opens the tar
-# with valhalla-mobile, so the Valhalla version here must match the one that
-# library is built on (valhalla-mobile 0.6.3 pins Valhalla 3.6.3).
+# Clips the Geofabrik New York extract to the region (or takes the whole
+# extract for nys), then builds Valhalla routing tiles in Docker and packs
+# them into one tar. The app opens the tar with valhalla-mobile, so the
+# Valhalla version here must match the one that library is built on
+# (valhalla-mobile 0.6.3 pins Valhalla 3.6.3).
 #
-# Usage: build.sh nyc
+# Releases ship routing-nys.tar, one graph for the whole state, so a trip
+# from Buffalo to Montauk routes offline. routing-nyc.tar still builds for
+# quick tests.
+#
+# Usage: build.sh <region>      e.g. build.sh nys
 set -euo pipefail
 
 REGION="${1:?usage: build.sh <region>}"
@@ -39,9 +44,11 @@ docker run --rm \
       > valhalla.json
     # Admin areas give each road its country and state rules (driving side,
     # default speeds). Time zones aren't needed for offline routing.
-    valhalla_build_admins -c valhalla.json /data/tmp/$REGION.osm.pbf
-    valhalla_build_tiles -c valhalla.json /data/tmp/$REGION.osm.pbf
+    valhalla_build_admins -c valhalla.json $CLIPPED_IN_DOCKER
+    valhalla_build_tiles -c valhalla.json $CLIPPED_IN_DOCKER
     valhalla_build_extract -c valhalla.json --overwrite
   "
+# The loose tiles are in the tar now; free the disk for the next pack.
+rm -rf "${DATA_DIR:?}/${WORK:?}/tiles"
 
 report_pack "$DATA_DIR/out/$OUTPUT"

@@ -10,9 +10,10 @@ internal object BasemapStyle {
     fun loadingColor(darkTheme: Boolean): Int =
         if (darkTheme) 0xFF1C1F24.toInt() else 0xFFF5F3EF.toInt()
 
-    fun load(context: Context, darkTheme: Boolean, basemap: File): String {
+    /** The style for the installed basemaps, as (region, file) pairs. */
+    fun load(context: Context, darkTheme: Boolean, basemaps: List<Pair<String, File>>): String {
         val asset = if (darkTheme) "dark.json" else "light.json"
         val template = context.assets.open(asset).bufferedReader().use { it.readText() }
-        return StyleTemplate.resolve(template, basemap)
+        return StyleTemplate.resolve(template, basemaps)
     }
 }

@@ -42,17 +42,20 @@ import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-private val NYC_CENTER = LatLng(40.7128, -74.0060)
+/** Where the map opens without a better idea: Manhattan. */
+val NYC_CENTER = MapPoint(40.7128, -74.0060)
 private const val START_ZOOM = 11.0
-private const val MIN_ZOOM = 8.0
+private const val MIN_ZOOM = 6.0
 private const val FOLLOW_ZOOM = 16.0
 private const val NAVIGATION_ZOOM = 17.0
 private const val NAVIGATION_TILT = 45.0
 private const val CAMERA_ANIMATION_MS = 800
+private const val TAP_SLOP_PX = 24f
 private val FIT_PADDING = 64.dp
 
 /**
- * The basemap, drawn from a local PMTiles pack, with the user's position.
+ * The basemap, drawn from local PMTiles packs (one per installed region),
+ * with the user's position.
  *
  * Location is pushed in from [location] rather than read by MapLibre, so the
  * app controls exactly which provider is used. While [following] is true the
@@ -61,11 +64,12 @@ private val FIT_PADDING = 64.dp
  * [overlays] draws routes and pins; [cameraRequest] moves the camera once per
  * new request. While [navigating], the camera follows the puck heading-up and
  * tilted, as turn-by-turn apps do. A long press reports the spot to
- * [onLongPress], e.g. to drop a pin.
+ * [onLongPress], e.g. to drop a pin; a tap on an incident pin reports its id
+ * to [onIncidentTap].
  */
 @Composable
 fun SouthboundMap(
-    basemap: File,
+    basemaps: List<Pair<String, File>>,
     darkTheme: Boolean,
     location: Location?,
     following: Boolean,
@@ -78,12 +82,16 @@ fun SouthboundMap(
     onLongPress: ((MapPoint) -> Unit)? = null,
     /** Screen edges covered by panels; camera moves keep their subject clear of them. */
     obscured: PaddingValues = PaddingValues(),
+    onIncidentTap: ((String) -> Unit)? = null,
+    /** Where the map opens before the first fix, e.g. the middle of the installed regions. */
+    initialCenter: MapPoint = NYC_CENTER,
+    initialZoom: Double = START_ZOOM,
 ) {
     val context = LocalContext.current
     val mapView = remember {
         val options = MapLibreMapOptions.createFromAttributes(context)
             .foregroundLoadColor(BasemapStyle.loadingColor(darkTheme))
-            .camera(CameraPosition.Builder().target(NYC_CENTER).zoom(START_ZOOM).build())
+            .camera(CameraPosition.Builder().target(LatLng(initialCenter.lat, initialCenter.lon)).zoom(initialZoom).build())
             .minZoomPreference(MIN_ZOOM)
         MapView(context, options)
     }
@@ -97,10 +105,11 @@ fun SouthboundMap(
         map = mapView.awaitMap()
     }
 
-    LaunchedEffect(map, darkTheme, basemap) {
+    LaunchedEffect(map, darkTheme, basemaps) {
         val loadedMap = map ?: return@LaunchedEffect
+        if (basemaps.isEmpty()) return@LaunchedEffect
         style = null
-        val json = withContext(Dispatchers.IO) { BasemapStyle.load(context, darkTheme, basemap) }
+        val json = withContext(Dispatchers.IO) { BasemapStyle.load(context, darkTheme, basemaps) }
         loadedMap.setStyle(Style.Builder().fromJson(json)) { loaded ->
             activateLocationPuck(context, loadedMap, loaded) { currentOnFollowingDismissed() }
             OverlayLayers.install(loaded)
@@ -123,6 +132,24 @@ fun SouthboundMap(
         }
         loadedMap.addOnMapLongClickListener(listener)
         onDispose { loadedMap.removeOnMapLongClickListener(listener) }
+    }
+
+    val currentOnIncidentTap by rememberUpdatedState(onIncidentTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val handler = currentOnIncidentTap ?: return@OnMapClickListener false
+            if (loadedMap.style?.getLayer(OverlayLayers.INCIDENTS) == null) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            // A finger is wider than a pin: search a small box around the tap.
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.INCIDENTS).firstOrNull() ?: return@OnMapClickListener false
+            val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
+            handler(id)
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
     }
 
     val density = LocalDensity.current

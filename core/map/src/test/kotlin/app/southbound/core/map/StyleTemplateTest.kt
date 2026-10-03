@@ -24,6 +24,40 @@ class StyleTemplateTest {
         assertEquals("""{"url":"${StyleTemplate.pmtilesUrl(basemap)}"}""", resolved)
     }
 
+    @Test
+    fun severalBasemapsGetASourceAndLayersEach() {
+        val template = """{"version":8,"sources":{"openmaptiles":{"type":"vector","url":"{{PMTILES_URL}}"}},
+            "layers":[{"id":"background","type":"background"},{"id":"water","type":"fill","source":"openmaptiles","source-layer":"water"},
+            {"id":"road","type":"line","source":"openmaptiles","source-layer":"transportation"}]}"""
+        val li = File("/packs/basemap-li.pmtiles")
+        val resolved = StyleTemplate.resolve(template, listOf("nyc" to basemap, "li" to li))
+        assertEquals(
+            """{"version":8,"sources":{"openmaptiles@nyc":{"type":"vector","url":"${StyleTemplate.pmtilesUrl(basemap)}"},""" +
+                """"openmaptiles@li":{"type":"vector","url":"${StyleTemplate.pmtilesUrl(li)}"}},""" +
+                """"layers":[{"id":"background","type":"background"},""" +
+                """{"id":"water@nyc","type":"fill","source":"openmaptiles@nyc","source-layer":"water"},""" +
+                """{"id":"water@li","type":"fill","source":"openmaptiles@li","source-layer":"water"},""" +
+                """{"id":"road@nyc","type":"line","source":"openmaptiles@nyc","source-layer":"transportation"},""" +
+                """{"id":"road@li","type":"line","source":"openmaptiles@li","source-layer":"transportation"}]}""",
+            resolved,
+        )
+        // One pack: the style is left as it is.
+        assertEquals(StyleTemplate.resolve(template, basemap), StyleTemplate.resolve(template, listOf("nyc" to basemap)))
+    }
+
+    @Test
+    fun bundledStylesSurviveTheRewrite() {
+        for (name in listOf("light.json", "dark.json")) {
+            val style = stylesDir().resolve(name).readText()
+            val two = StyleTemplate.resolve(style, listOf("nyc" to basemap, "western" to File("/packs/basemap-western.pmtiles")))
+            assertFalse(StyleTemplate.PMTILES_URL_PLACEHOLDER in two)
+            assertTrue("@western" in two && "@nyc" in two)
+            val layers = (app.southbound.core.network.MiniJson.parse(two) as Map<*, *>)["layers"] as List<*>
+            val ids = layers.map { (it as Map<*, *>)["id"] }
+            assertEquals(ids.size, ids.toSet().size)
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun resolveRejectsStyleWithoutPlaceholder() {
         StyleTemplate.resolve("""{"url":"https://tiles.example.com"}""", basemap)
