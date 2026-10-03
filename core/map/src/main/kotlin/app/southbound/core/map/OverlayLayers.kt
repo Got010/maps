@@ -1,11 +1,13 @@
 package app.southbound.core.map
 
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression.eq
 import org.maplibre.android.style.expressions.Expression.get
 import org.maplibre.android.style.expressions.Expression.literal
 import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.expressions.Expression.stop
+import org.maplibre.android.style.expressions.Expression.switchCase
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -115,7 +117,8 @@ internal object OverlayLayers {
         )
         style.addLayer(
             CircleLayer(INCIDENTS, INCIDENTS).withProperties(
-                circleRadius(match(get("closure"), literal(6f), stop(true, literal(8f)))),
+                // match() only takes string or number labels; a boolean one invalidates the expression.
+                circleRadius(switchCase(eq(get("closure"), literal(true)), literal(8f), literal(6f))),
                 circleColor(
                     match(
                         get("kind"), literal(INCIDENT_OTHER),
