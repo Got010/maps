@@ -88,6 +88,8 @@ fun SearchPanel(
     modifier: Modifier = Modifier,
     groups: List<PlaceGroup> = emptyList(),
     onClearRecents: (() -> Unit)? = null,
+    // Shown under the box while it is empty, e.g. when the saved lists could not be read.
+    unreadableNote: String? = null,
     // Phase 6: Home and Work chips. Null [onOpenShortcut] hides them (e.g. while picking a stop).
     home: Place? = null,
     work: Place? = null,
@@ -173,6 +175,14 @@ fun SearchPanel(
                             focus.requestFocus()
                         }
                     },
+                )
+            }
+            if (query.isBlank() && unreadableNote != null) {
+                Text(
+                    unreadableNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
             when {
