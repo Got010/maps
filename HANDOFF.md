@@ -76,7 +76,7 @@ A build pipeline on your computer turns public datasets into six data packs, whi
 | --- | --- | --- | --- | --- |
 | `basemap-<region>.pmtiles` | OSM New York extract (Geofabrik); `basemap-njn` from the New Jersey extract | Planetiler, OpenMapTiles or Protomaps schema | Monthly | 300-800 MB |
 | `routing.tar` | Same OSM extracts, New York merged with northern New Jersey | Valhalla tile builder | Monthly | 300-600 MB |
-| `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | DuckDB script into FTS5 | Monthly | 200-400 MB |
+| `addresses.sqlite` | [NYS Address Points](https://gis.ny.gov/streets-addresses) plus OSM addresses | Built into `search-nys.sqlite` (address tables, see Phase 7) by `pipeline/search/addresses.py` | Monthly | ~40 MB per million addresses |
 | `places.sqlite` | OSM POIs plus [Overture Places](https://docs.overturemaps.org/guides/places/) | DuckDB script into FTS5 | Monthly | 100-250 MB |
 | `transit-nyc.sqlite` | MTA GTFS: subway, 6 bus files, LIRR, Metro-North | Python compiler | Weekly | 50-150 MB |
 | Voice model | Piper voice for sherpa-onnx (Amy) | Bundled in the APK | Rarely | about 55 MB with libs |
@@ -293,6 +293,9 @@ Exit test: set Home, plan Home, a stop in Albany, then Buffalo avoiding tolls, s
 **Phase 7: data and routing quality**
 
 - [ ] NYS Address Points in the search pack (CC0, twice-monthly) and a smaller `search-nys.sqlite`: index addresses from the state file instead of OSM, cap trigram text, measure before and after
+  - Built (search pack schema 2, not yet run on a phone or with the real state file): addresses left the trigram index for `address_street` (one row per street per town, own small trigram index) and `address` (house numbers keyed by street and number, B-tree only). Synthetic measure, 1M addresses: 214 MB as schema 1 `feature` rows, 42 MB in the new tables; a lookup takes under 1 ms. Streets and addresses carry their town (tags, else the nearest locality) and state (`states.py`).
+  - The app parses "123 Main St, Nyack NY 10960" (`AddressQuery`): exact number, else "Approximate: nearest number on this street" interpolated from the neighbours, then the street; a typed town or ZIP ranks first but never filters. Older packs still work.
+  - To turn the state file on: set the repository variable `ADDRESS_POINTS_URL` (Settings > Secrets and variables > Actions > Variables) to the statewide NYS Address Points zip from https://gis.ny.gov/streets-addresses, then run the Release workflow with "Rebuild data". Check the search job's log for the column mapping and per-table sizes; `pipeline/search/addresses.py --check <file>` shows how a file will be read.
 - [ ] Traffic-aware ETAs, then routing: adjust the ETA from NYC DOT speeds on the route's links; then the spike on live speeds in on-device Valhalla before committing to traffic-aware routing
 - [ ] Lane guidance: carry Valhalla's lane data through Ferrostar's banner parsing (patch or upstream, see Risks) and draw lanes under the instruction
 - [ ] Walking and cycling detail: step-free and stairs preferences for walking (pedestrian costing options), elevation profile for cycling (needs an elevation source in the pack)
