@@ -21,14 +21,16 @@ class RegionsTest {
             assertEquals(region.id, expected["basemap"], region.basemap)
             val bounds = (expected["bounds"] as List<*>).map { (it as Number).toDouble() }
             assertEquals(region.id, bounds, listOf(region.bounds.minLon, region.bounds.minLat, region.bounds.maxLon, region.bounds.maxLat))
+            val area = (expected["area"] as List<*>?).orEmpty().map { p -> (p as List<*>).map { (it as Number).toDouble() } }
+            assertEquals(region.id, area, region.area.map { listOf(it.lon, it.lat) })
         }
     }
 
     @Test
     fun `statewide is not a basemap region`() {
         assertTrue(Regions.basemaps.none { it.id == Regions.STATEWIDE })
-        assertEquals(5, Regions.basemaps.size)
-        assertEquals("All of New York State", Regions.nameOf("nys"))
+        assertEquals(6, Regions.basemaps.size)
+        assertEquals("New York and Northern New Jersey", Regions.nameOf("nys"))
         assertEquals("custom", Regions.nameOf("custom"))
     }
 
@@ -38,6 +40,34 @@ class RegionsTest {
         assertEquals("western", Regions.basemapAt(42.8864, -78.8784)?.id)
         assertEquals("capital", Regions.basemapAt(42.6526, -73.7562)?.id)
         assertNull(Regions.basemapAt(39.0, -77.0))
+    }
+
+    /** New York City's box covers the New Jersey side of the Hudson; the njn area takes those points back. */
+    @Test
+    fun `new jersey points go to njn, not to the box that overlaps them`() {
+        assertEquals("njn", Regions.basemapAt(40.7357, -74.1724)?.id) // Newark
+        assertEquals("njn", Regions.basemapAt(40.7178, -74.0431)?.id) // Jersey City
+        assertEquals("njn", Regions.basemapAt(40.7439, -74.0324)?.id) // Hoboken
+        assertEquals("njn", Regions.basemapAt(40.8859, -74.0435)?.id) // Hackensack
+        assertEquals("njn", Regions.basemapAt(40.9168, -74.1718)?.id) // Paterson
+        assertEquals("njn", Regions.basemapAt(40.7968, -74.4815)?.id) // Morristown
+        assertEquals("njn", Regions.basemapAt(40.6640, -74.2107)?.id) // Elizabeth
+        assertEquals("njn", Regions.basemapAt(40.5068, -74.2654)?.id) // Perth Amboy
+        assertEquals("njn", Regions.basemapAt(40.9793, -74.1165)?.id) // Ridgewood, inside Hudson Valley's box
+        assertEquals(listOf("njn"), Regions.basemapsAt(40.7357, -74.1724).map { it.id })
+    }
+
+    @Test
+    fun `new york points near the state line stay in their own regions`() {
+        assertEquals("nyc", Regions.basemapAt(40.6437, -74.0765)?.id) // Staten Island, St. George
+        assertEquals("nyc", Regions.basemapAt(40.5057, -74.2444)?.id) // Staten Island, Tottenville
+        assertEquals("nyc", Regions.basemapAt(40.5540, -74.1510)?.id) // Staten Island, Great Kills
+        assertEquals("nyc", Regions.basemapAt(40.7470, -74.0080)?.id) // Manhattan's Hudson shore
+        assertEquals("nyc", Regions.basemapAt(40.8500, -73.9390)?.id) // Washington Heights
+        assertEquals("hudson", Regions.basemapAt(40.9312, -73.8988)?.id) // Yonkers
+        assertEquals("hudson", Regions.basemapAt(41.0906, -73.9179)?.id) // Nyack
+        assertEquals("hudson", Regions.basemapAt(41.4459, -74.4229)?.id) // Middletown, NY
+        assertEquals("hudson", Regions.basemapAt(41.375, -74.69)?.id) // Port Jervis, NY
     }
 
     @Test
