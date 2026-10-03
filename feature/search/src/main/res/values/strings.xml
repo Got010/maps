@@ -20,4 +20,5 @@
     <string name="search_set_home_hint">Search for your home, then pick it to set Home.</string>
     <string name="search_set_work_hint">Search for your work place, then pick it to set Work.</string>
     <string name="place_add_stop">Add stop</string>
+    <string name="search_approximate">Approximate: nearest number on this street</string>
 </resources>

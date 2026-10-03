@@ -41,6 +41,9 @@ ABBREVIATIONS = {
 
 ORDINAL = re.compile(r"\b(\d+)(st|nd|rd|th)\b")
 NOT_WORD = re.compile(r"[^0-9a-z]+")
+# "123", "123A", "12-34" (Queens), "123 1/2": the leading number, and the
+# second half of a hyphenated one.
+HOUSE_NUMBER = re.compile(r"^\s*(\d+)(?:\s*-\s*(\d+))?")
 
 
 def normalize(text: str) -> str:
@@ -54,3 +57,20 @@ def normalize(text: str) -> str:
     text = NOT_WORD.sub(" ", text)
     text = ORDINAL.sub(r"\1", text)
     return " ".join(ABBREVIATIONS.get(token, token) for token in text.split())
+
+
+def house_number_key(number: str):
+    """A sortable integer for a house number, or None if it has no leading digits.
+
+    "123" and "123A" -> 123; Queens' "12-34" -> 120034, so numbers on one
+    block sort together and "nearest number" stays on the block; "123 1/2"
+    -> 123. The Kotlin twin is AddressQuery.numberKey; both pass
+    house_number_cases.json.
+    """
+    match = HOUSE_NUMBER.match(number or "")
+    if not match:
+        return None
+    first = int(match.group(1))
+    if match.group(2) is not None:
+        return first * 10_000 + int(match.group(2)) % 10_000
+    return first
