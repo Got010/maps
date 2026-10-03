@@ -11,6 +11,8 @@ enum class IncidentKind {
     /** A road or ramp is shut: routing steers around it. */
     CLOSURE,
     ACCIDENT,
+    /** Police activity, a traffic stop or enforcement; a police event that shuts the road is a CLOSURE instead. */
+    POLICE,
     ROADWORK,
     EVENT,
     OTHER,

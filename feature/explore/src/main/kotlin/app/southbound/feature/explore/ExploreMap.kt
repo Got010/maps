@@ -108,6 +108,8 @@ import app.southbound.core.traffic.FasterRoute
 import app.southbound.core.traffic.Geo
 import app.southbound.core.traffic.GeoPoint
 import app.southbound.core.traffic.Incident
+import app.southbound.core.traffic.IncidentKind
+import app.southbound.core.traffic.PoliceAlerts
 import app.southbound.core.traffic.RouteSlowdowns
 import app.southbound.core.traffic.RouteTraffic
 import app.southbound.core.traffic.SpeedBand
@@ -548,6 +550,29 @@ internal fun ExploreMap(
         }
     }
     LaunchedEffect(directions, inTrip) { if (directions == null && !inTrip) routeIncidents = emptyList() }
+
+    // Police activity ahead (511NY events), said once each when it is within about a mile on what is left of
+    // the route and on our side of the road. Needs the 511NY feed on; the poll above runs during any trip,
+    // so this works with the traffic layer hidden. The voice policy applies the traffic-alert toggle and chime.
+    val policeSpoken = stringResource(R.string.explore_police_spoken)
+    val policeSpokenNoRoad = stringResource(R.string.explore_police_spoken_no_road)
+    val announcedPolice = remember { mutableSetOf<String>() }
+    LaunchedEffect(inTrip) { if (!inTrip) announcedPolice.clear() }
+    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+        val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
+        if (!services.traffic.hasIncidents) return@LaunchedEffect
+        val police = traffic.incidents.filter { it.kind == IncidentKind.POLICE && it.id !in announcedPolice }
+        if (police.isEmpty()) return@LaunchedEffect
+        val here = navigating.snappedUserLocation.coordinates
+        val geometry = navState.routeGeometry
+        val next = withContext(Dispatchers.Default) {
+            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
+            PoliceAlerts.ahead(ahead, police).firstOrNull()
+        } ?: return@LaunchedEffect
+        announcedPolice += next.incident.id
+        val road = next.incident.roadway
+        services.voice.announce(UtteranceKind.TRAFFIC_ALERT, if (road != null) policeSpoken.format(road) else policeSpokenNoRoad)
+    }
 
     // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?
     val latestNav by rememberUpdatedState(navState)
@@ -1165,7 +1190,14 @@ private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modi
     Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(incident.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                val heading = if (incident.kind == IncidentKind.POLICE) {
+                    // "Police activity", then the road when the feed names one (title falls back to the description).
+                    if (incident.roadway.isNullOrBlank()) stringResource(R.string.explore_incident_police)
+                    else stringResource(R.string.explore_incident_police_on, incident.title)
+                } else {
+                    incident.title
+                }
+                Text(heading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_import_ok))
                 }
