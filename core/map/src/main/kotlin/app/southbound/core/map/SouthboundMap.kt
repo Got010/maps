@@ -196,9 +196,9 @@ fun SouthboundMap(
         }
     }
 
-    LaunchedEffect(style, overlays) {
+    LaunchedEffect(style, overlays, darkTheme) {
         val loaded = style ?: return@LaunchedEffect
-        OverlayLayers.update(loaded, overlays)
+        OverlayLayers.update(loaded, overlays, darkTheme)
     }
 
     val currentOnLongPress by rememberUpdatedState(onLongPress)

@@ -625,7 +625,7 @@ internal fun ExploreMap(
     )
     val overlays = when {
         inTrip -> MapOverlays(
-            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, selected = true)),
+            routes = listOf(MapLine(navState.routeGeometry.map { MapPoint(it.lat, it.lng) }, MapLine.Role.LEADER)),
             destination = (trip as? TripState.Navigating)?.remainingWaypoints?.lastOrNull()
                 ?.let { MapPoint(it.coordinate.lat, it.coordinate.lng) },
             traffic = trafficOverlay,
@@ -646,7 +646,8 @@ internal fun ExploreMap(
                 val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
-                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, selected = i == selected)
+                        val role = if (i == selected) MapLine.Role.LEADER else MapLine.Role.THREAD
+                        MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, role, rank = i)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
                     traffic = trafficOverlay,

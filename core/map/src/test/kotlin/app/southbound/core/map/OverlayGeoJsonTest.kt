@@ -6,21 +6,52 @@ import org.junit.Test
 class OverlayGeoJsonTest {
 
     @Test
-    fun selectedRouteIsDrawnLast() {
-        val selected = MapLine(listOf(MapPoint(40.7, -74.0), MapPoint(40.71, -74.01)), selected = true)
-        val alternative = MapLine(listOf(MapPoint(40.7, -74.0), MapPoint(40.72, -73.99)), selected = false)
-        val json = OverlayGeoJson.routes(listOf(selected, alternative))
+    fun routesCarryRankRoleAndColour() {
+        val a = listOf(MapPoint(40.7, -74.0), MapPoint(40.71, -74.01))
+        val b = listOf(MapPoint(40.7, -74.0), MapPoint(40.72, -73.99))
+        val c = listOf(MapPoint(40.7, -74.0), MapPoint(40.73, -73.98))
+        // The second route is chosen; the fastest and the third become threads.
+        val json = OverlayGeoJson.routes(
+            listOf(
+                MapLine(a, MapLine.Role.THREAD, rank = 0),
+                MapLine(b, MapLine.Role.LEADER, rank = 1),
+                MapLine(c, MapLine.Role.THREAD, rank = 2),
+            ),
+            darkTheme = true,
+        )
+        // Leader first; threads after it, the faster one last so it draws on top.
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
-                """{"type":"Feature","properties":{"selected":false},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.990000,40.720000]]}},""" +
-                """{"type":"Feature","properties":{"selected":true},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}}]}""",
+                """{"type":"Feature","properties":{"rank":1,"role":"leader","color":"#F472B6","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.990000,40.720000]]}},""" +
+                """{"type":"Feature","properties":{"rank":2,"role":"thread","color":"#A78BFA","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-73.980000,40.730000]]}},""" +
+                """{"type":"Feature","properties":{"rank":0,"role":"thread","color":"#22D3EE","casing":"#0E1013"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}}]}""",
             json,
         )
     }
 
     @Test
+    fun lightMapUsesDeeperColoursAndWalksStayGrey() {
+        val ride = MapLine(listOf(MapPoint(40.7, -74.0), MapPoint(40.71, -74.01)), MapLine.Role.LEADER)
+        val walk = MapLine(listOf(MapPoint(40.71, -74.01), MapPoint(40.72, -74.02)), MapLine.Role.WALK)
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"rank":0,"role":"leader","color":"#0891B2","casing":"#FFFFFF"},"geometry":{"type":"LineString","coordinates":[[-74.000000,40.700000],[-74.010000,40.710000]]}},""" +
+                """{"type":"Feature","properties":{"rank":0,"role":"walk","color":"#9AA0A6","casing":"#FFFFFF"},"geometry":{"type":"LineString","coordinates":[[-74.010000,40.710000],[-74.020000,40.720000]]}}]}""",
+            OverlayGeoJson.routes(listOf(walk, ride), darkTheme = false),
+        )
+    }
+
+    @Test
+    fun routeColoursRepeatPastTheThirdRoute() {
+        assertEquals("#22D3EE", RouteColors.hex(0, darkTheme = true))
+        assertEquals("#DB2777", RouteColors.hex(1, darkTheme = false))
+        assertEquals(RouteColors.hex(0, darkTheme = true), RouteColors.hex(3, darkTheme = true))
+        assertEquals(0xFF7C3AED.toInt(), RouteColors.argb(2, darkTheme = false))
+    }
+
+    @Test
     fun linesNeedTwoPoints() {
-        val json = OverlayGeoJson.routes(listOf(MapLine(listOf(MapPoint(1.0, 2.0)), selected = true)))
+        val json = OverlayGeoJson.routes(listOf(MapLine(listOf(MapPoint(1.0, 2.0)), MapLine.Role.LEADER)), darkTheme = true)
         assertEquals("""{"type":"FeatureCollection","features":[]}""", json)
     }
 
