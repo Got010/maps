@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import java.nio.file.StandardCopyOption
 
 /**
@@ -32,6 +34,11 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     private val _data = MutableStateFlow(load())
     val data: StateFlow<UserData> = _data.asStateFlow()
 
+    private val _refusedSaves = MutableStateFlow(0)
+
+    /** Counts saves refused because the file is unreadable, so the UI can say so again. */
+    val refusedSaves: StateFlow<Int> = _refusedSaves.asStateFlow()
+
     val now: Long get() = clock()
 
     /**
@@ -40,7 +47,10 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
      */
     @Synchronized
     fun update(transform: (UserData) -> UserData): UserData {
-        (_loadState.value as? LoadState.Unreadable)?.let { throw UserDataUnreadableException(it.reason) }
+        (_loadState.value as? LoadState.Unreadable)?.let {
+            _refusedSaves.value++
+            throw UserDataUnreadableException(it.reason)
+        }
         val next = transform(_data.value)
         if (next != _data.value) {
             write(next)
@@ -55,6 +65,23 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     fun setShortcut(kind: Shortcut, place: PlaceRef?) = update { it.withShortcut(kind, place) }
 
     /**
+     * Reads the file again while it is unreadable, since the failure may have been temporary
+     * (a Keystore error). On success the store is loaded and saves work; otherwise it stays
+     * unreadable and the file is untouched. Does nothing when the store is readable.
+     */
+    @Synchronized
+    fun reload() {
+        if (_loadState.value !is LoadState.Unreadable) return
+        when (val result = read()) {
+            is Read.Ok -> {
+                _data.value = result.data
+                _loadState.value = LoadState.Loaded
+            }
+            is Read.Failed -> _loadState.value = LoadState.Unreadable(result.reason)
+        }
+    }
+
+    /**
      * The user's choice after an unreadable file: renames it to `<name>.unreadable-<timestamp>`
      * (never deletes it), then creates an empty store. Throws and stays unreadable if the rename
      * fails. Does nothing when the store is readable.
@@ -67,6 +94,7 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
             var n = 1
             while (target.exists()) target = File(file.parentFile, "${file.name}.unreadable-${clock()}-${n++}")
             Files.move(file.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            syncDirectory(file.parentFile)
         }
         val fresh = UserData()
         write(fresh)
@@ -76,11 +104,27 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
 
     private fun load(): UserData {
         if (!file.exists()) return UserData() // first run
+        return when (val result = read()) {
+            is Read.Ok -> result.data
+            is Read.Failed -> {
+                _loadState.value = LoadState.Unreadable(result.reason)
+                UserData()
+            }
+        }
+    }
+
+    private sealed interface Read {
+        class Ok(val data: UserData) : Read
+        class Failed(val reason: String) : Read
+    }
+
+    /** A file that has gone missing since the failed read counts as empty (nothing to protect). */
+    private fun read(): Read {
+        if (!file.exists()) return Read.Ok(UserData())
         return try {
-            UserDataCodec.decode(sealer.open(file.readBytes()).decodeToString())
+            Read.Ok(UserDataCodec.decode(sealer.open(file.readBytes()).decodeToString()))
         } catch (e: Exception) {
-            _loadState.value = LoadState.Unreadable(e.javaClass.simpleName)
-            UserData()
+            Read.Failed(e.javaClass.simpleName)
         }
     }
 
@@ -94,9 +138,20 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
                 out.fd.sync()
             }
             Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            syncDirectory(file.parentFile)
         } catch (e: Exception) {
             temp.delete()
             throw if (e is IOException) e else IOException("Couldn't save ${file.name}", e)
+        }
+    }
+
+    /** Flushes a rename to disk so power loss cannot undo it. Best effort: some systems refuse to open a directory. */
+    private fun syncDirectory(dir: File?) {
+        if (dir == null) return
+        try {
+            FileChannel.open(dir.toPath(), StandardOpenOption.READ).use { it.force(true) }
+        } catch (e: Exception) {
+            // Opening a directory for reading can fail (e.g. on Windows or a restrictive filesystem); the rename itself has already happened.
         }
     }
 

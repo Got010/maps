@@ -230,6 +230,10 @@ internal fun ExploreMap(
     LifecycleResumeEffect(Unit) {
         hasPermission = context.hasFineLocation()
         resumes++
+        // The saved places file may have been unreadable only briefly (a Keystore error): look again.
+        if (services.userData.loadState.value is LoadState.Unreadable) {
+            scope.launch(Dispatchers.IO) { attempt { services.userData.reload() } }
+        }
         onPauseOrDispose { }
     }
 
@@ -296,6 +300,10 @@ internal fun ExploreMap(
     // An unreadable saved-places file is never overwritten; the user decides what happens to it.
     val userDataState by services.userData.loadState.collectAsState()
     var unreadableAcknowledged by remember { mutableStateOf(false) }
+    var startFreshFailed by remember { mutableStateOf(false) }
+    // A save refused while unreadable brings the dialog back, so it never fails silently.
+    val refusedSaves by services.userData.refusedSaves.collectAsState()
+    LaunchedEffect(refusedSaves) { if (refusedSaves > 0) unreadableAcknowledged = false }
 
     // Phase 6: route options, stops being picked, night mode.
     val routeOptions = remember { RouteOptionsStore.get(context) }
@@ -935,8 +943,14 @@ internal fun ExploreMap(
 
         if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
             UnreadableDataDialog(
-                onKeepTrying = { unreadableAcknowledged = true },
-                onStartFresh = { scope.launch(Dispatchers.IO) { attempt { services.userData.startFresh() } } },
+                startFreshFailed = startFreshFailed,
+                onKeepTrying = {
+                    unreadableAcknowledged = true
+                    scope.launch(Dispatchers.IO) { attempt { services.userData.reload() } }
+                },
+                onStartFresh = {
+                    scope.launch(Dispatchers.IO) { startFreshFailed = attempt { services.userData.startFresh() } == null }
+                },
             )
         }
 
@@ -1084,6 +1098,7 @@ internal fun ExploreMap(
                         scope.launch(Dispatchers.IO) { attempt { services.userData.setShortcut(kind, place.toRef()) } }
                     },
                     groups = userData.placeGroups(),
+                    unreadableNote = if (userDataState is LoadState.Unreadable) stringResource(R.string.explore_unreadable_note) else null,
                     onClearRecents = { scope.launch(Dispatchers.IO) { attempt { services.userData.update { it.clearRecents() } } } },
                 )
                 is Panel.PlaceShown -> PlaceCard(
