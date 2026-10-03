@@ -13,5 +13,7 @@ dependencies {
     // Valhalla on the device.
     implementation(libs.valhalla.mobile)
     implementation(libs.valhalla.models.config)
+    // NetworkGate and MiniJson: the gas price feed is fetched through the gate.
+    api(project(":core:network"))
     implementation(libs.kotlinx.coroutines.android)
 }
