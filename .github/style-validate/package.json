@@ -1,0 +1,8 @@
+{
+  "name": "southbound-style-validate",
+  "private": true,
+  "description": "Pinned gl-style-validate for .github/workflows/ci.yml; the lock file holds every package's integrity hash.",
+  "dependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.4.4"
+  }
+}

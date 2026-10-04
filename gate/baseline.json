@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "app": "southbound",
+  "variant": "release",
+  "dependencies": {"project": ":app", "configuration": "releaseRuntimeClasspath"},
+  "hosts": [],
+  "network_api": [],
+  "signing": {"cert_sha256": ["805837cece68269778e0948de3f28abb11e72201c13be6581c05d4d64e6b6309"]},
+  "scan": {"extra_text_paths": ["assets/*.json", "com/valhalla/valhalla/default.json"]},
+  "notes": []
+}

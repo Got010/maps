@@ -140,3 +140,13 @@ has its own voice, Amy; a second one, Norman, is a download (about 58 MB)
 that the updater fetches only once you pick it, and Amy speaks until it
 arrives. Long-press the voice button while
 navigating to mute until the next turn.
+
+## Release checks
+
+Each release APK is compared with `gate/baseline.json`, a list of what the app
+can do: permissions, exported components, native libraries, network types and
+hosts, dependencies and the signing certificate. A pull request that changes any
+of it has to change that file too, so it shows up before a merge. The signing
+certificate is checked again before a release is published, and Gradle checks
+every dependency against `gradle/verification-metadata.xml`. Details are in
+`gate/README.md`.
