@@ -31,7 +31,8 @@
 # scripts/release-manifest.py next to its token because a draft release's files are only reachable with
 # one; both run only on a commit that is on main.
 #
-# Only GitHub's own actions are used, pinned to commit SHAs.
+# The release is created, uploaded to and published with the gh CLI only: no third-party release action
+# runs next to the write token. Only GitHub's own actions are used, pinned to commit SHAs.
 name: Release
 
 on:
