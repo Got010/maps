@@ -30,6 +30,7 @@
       "android.permission.FOREGROUND_SERVICE_LOCATION",
       "android.permission.INTERNET",
       "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.NFC",
       "android.permission.POST_NOTIFICATIONS",
       "android.permission.RECEIVE_BOOT_COMPLETED",
       "android.permission.REQUEST_INSTALL_PACKAGES",
