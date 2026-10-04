@@ -18,6 +18,8 @@
          Revoke Network and the app keeps working from its packs. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="android.permission.NFC" />
+
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application
