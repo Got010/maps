@@ -1,50 +1,205 @@
+# Builds and tests every pull request and every push to main.
+#
+# The android job runs the unit tests and lint, builds the debug APK, and builds the release APK
+# (unsigned: pull requests never see the signing key) so the release gate can compare it with
+# gate/baseline.json. A new permission, exported component, native library, network API, host literal,
+# runtime dependency, SDK level or backup flag fails the build unless the same pull request updates the
+# baseline (gate/README.md). The signing certificate is checked in release.yml, where the key is.
+#
+# Dependencies are checked against gradle/verification-metadata.xml. If that file is missing (delete it to
+# regenerate after a dependency change), the build writes a new one from the real build tasks, attaches
+# it to the run, and fails so it gets committed (gate/README.md).
+#
+# Only GitHub's own actions are used, pinned to commit SHAs. No job here holds a token that can write.
+
 name: CI
 
+# Docs and the other workflows' own files don't change the APK, so they don't start this one. The
+# pipeline is not ignored: the JVM tests read pipeline/search/*_cases.json and fetch-voice.sh sources
+# pipeline/lib/voices.sh, so a pipeline change can change the APK or its tests.
 on:
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/data.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/workflow-lint.yml'
+      - '.github/zizmor.yml'
+      - '.github/zizmor-requirements.txt'
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/data.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/workflow-lint.yml'
+      - '.github/zizmor.yml'
+      - '.github/zizmor-requirements.txt'
 
+permissions: {}
+
+# A pull request's older run is cancelled when a newer commit arrives; a run on main never is.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
-      actions: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      # The base branch's gate files, so the gate can list what this pull request changes in the baseline.
+      # Checked out before any build code runs, so no later step needs a token.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .gate-base
+          persist-credentials: false
+          sparse-checkout: gate
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+
+      - name: Check the Gradle wrapper against Gradle's published checksums
+        run: |
+          props=gradle/wrapper/gradle-wrapper.properties
+          version=$(sed -n 's#^distributionUrl=.*/gradle-\(.*\)-bin\.zip$#\1#p' "$props")
+          published=$(curl -fsSL "https://services.gradle.org/distributions/gradle-$version-bin.zip.sha256")
+          pinned=$(sed -n 's/^distributionSha256Sum=//p' "$props")
+          if [ "$published" != "$pinned" ]; then
+            echo "::error::distributionSha256Sum ($pinned) is not Gradle's published checksum ($published)"
+            exit 1
+          fi
+          published=$(curl -fsSL "https://services.gradle.org/distributions/gradle-$version-wrapper.jar.sha256")
+          actual=$(sha256sum gradle/wrapper/gradle-wrapper.jar | cut -d' ' -f1)
+          if [ "$published" != "$actual" ]; then
+            echo "::error::gradle-wrapper.jar ($actual) is not Gradle's published $version wrapper ($published)"
+            exit 1
+          fi
+          echo "Gradle $version wrapper and distribution checksums match gradle.org"
+
       - name: Cache the offline voice downloads
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: third-party
           key: voice-${{ hashFiles('scripts/fetch-voice.sh', 'pipeline/lib/voices.sh') }}
+
+      # Both downloads are checked against pinned SHA-256 values, whatever the cache held.
       - name: Fetch the offline voice (sherpa-onnx and Piper)
         run: scripts/fetch-voice.sh
-      - name: Unit tests, lint and debug APK
-        # --continue reports every module's failures in one run.
-        run: ./gradlew --continue testDebugUnitTest lintDebug :app:assembleDebug
-      - uses: actions/upload-artifact@v4
+
+      - name: Unit tests, lint, debug and release APKs
+        id: gradle
+        run: |
+          set -o pipefail
+          # Verification is forced on the command line, so a gradle.properties change can't relax it.
+          verify=(--dependency-verification=strict)
+          # What release.yml builds and resolves beyond this job's tasks.
+          extra=()
+          if [ ! -f gradle/verification-metadata.xml ]; then
+            echo "::warning::gradle/verification-metadata.xml is missing: writing it from this build instead of verifying dependencies. The job fails at the end until it is committed."
+            verify=(--write-verification-metadata sha256 --no-build-cache)
+            extra=(testReleaseUnitTest)
+            echo "metadata=written" >> "$GITHUB_OUTPUT"
+          fi
+          # --continue reports every module's failures in one run.
+          ./gradlew --continue --stacktrace "${verify[@]}" \
+            --init-script gate/file-dependencies.init.gradle -Pgate.configuration=releaseRuntimeClasspath \
+            testDebugUnitTest "${extra[@]}" lintDebug :app:assembleDebug :app:assembleRelease \
+            :app:dependencies --configuration releaseRuntimeClasspath gateFileDependencies | tee "$RUNNER_TEMP/gradle.log"
+
+      # In a pull request the release APK is unsigned; the gate checks everything but the certificate,
+      # and lists every baseline field the pull request changes (the certificate pin included).
+      - name: Release gate (compare the release APK with gate/baseline.json)
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          compare=()
+          if [ "$EVENT" = pull_request ]; then
+            compare=(--compare-to .gate-base/gate/baseline.json)  # absent if the base branch has none yet
+          fi
+          apk=$(find app/build/outputs/apk/release -name 'app-release*.apk' | head -n 1)
+          python3 gate/gate.py check --require-tools --require-pin --apk "$apk" --deps "$RUNNER_TEMP/gradle.log" \
+            --generated build/gate/baseline.generated.json "${compare[@]}"
+          python3 -m unittest discover -s gate
+
+      # So a session that can't download artifacts can copy the baseline this APK would need.
+      - name: Print the baseline this APK would need
+        if: failure() && steps.gate.outcome == 'failure' && hashFiles('build/gate/baseline.generated.json') != ''
+        run: |
+          echo "::group::build/gate/baseline.generated.json"
+          cat build/gate/baseline.generated.json
+          echo "::endgroup::"
+          gate/annotate-file.sh build/gate/baseline.generated.json baseline-generated 0
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: reports
-          path: '**/build/reports/'
+          path: |
+            **/build/reports/
+            build/gate/
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+          retention-days: 14
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: southbound-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          # Pull request builds are only for checking; the cleanup job runs on pushes only.
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
-      # GitHub Free's 500 MB Actions storage fills up with saved build files, so delete the ones from
-      # earlier runs (an hour's grace for runs still going). This run's files are kept.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && steps.gradle.outputs.metadata == 'written'
+        with:
+          name: verification-metadata-android
+          path: gradle/verification-metadata.xml
+          retention-days: 14
+
+      - name: Print the written metadata as annotations, part 1 (for sessions that cannot download artifacts)
+        if: always() && steps.gradle.outputs.metadata == 'written'
+        run: gate/annotate-file.sh gradle/verification-metadata.xml verification-metadata-android 0
+
+      - name: Print the written metadata as annotations, part 2
+        if: always() && steps.gradle.outputs.metadata == 'written'
+        run: gate/annotate-file.sh gradle/verification-metadata.xml verification-metadata-android 10
+
+      - name: Print the written metadata as annotations, part 3
+        if: always() && steps.gradle.outputs.metadata == 'written'
+        run: gate/annotate-file.sh gradle/verification-metadata.xml verification-metadata-android 20
+
+      - name: Fail until the dependency verification metadata is committed
+        if: steps.gradle.outputs.metadata == 'written'
+        run: |
+          echo "::error::Dependencies were not verified: commit the gradle/verification-metadata.xml this run wrote (artifact verification-metadata-android; see gate/README.md)."
+          exit 1
+
+  # GitHub Free's 500 MB Actions storage fills up with saved build files, so delete the ones from
+  # earlier runs (an hour's grace for runs still going); this run's files are kept. A job of its own:
+  # its token can delete artifacts, so it must not run any build code. Pushes only, so pull request
+  # runs hold no write token at all (their build files expire after 3 days).
+  cleanup:
+    if: github.event_name == 'push'
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write # deletes earlier runs' build files
+    steps:
       - name: Delete build files from earlier runs
         continue-on-error: true
         env:
@@ -58,22 +213,29 @@ jobs:
           done
 
   pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - name: Styles are regenerated from build_styles.py
         run: |
           python3 pipeline/styles/build_styles.py
           git diff --exit-code styles/
+      # The validator and everything it needs are locked by integrity hash in .github/style-validate.
       - name: Styles pass the MapLibre style spec
         run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix .github/style-validate
           for style in styles/light.json styles/dark.json; do
-            npx --yes -p @maplibre/maplibre-gl-style-spec@26 gl-style-validate "$style"
+            .github/style-validate/node_modules/.bin/gl-style-validate "$style"
           done
       - name: Shellcheck
         run: shellcheck -x pipeline/*.sh pipeline/*/*.sh scripts/*.sh
       - name: Pipeline unit tests
         run: |
           # duckdb runs the Overture fetch query against a local test GeoParquet.
-          pip install osmium==4.3.1 duckdb==1.5.6
+          pip install --quiet --require-hashes --only-binary :all: -r .github/pipeline-requirements.txt
           make -C pipeline test
