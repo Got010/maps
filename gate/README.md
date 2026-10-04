@@ -36,8 +36,8 @@ them goes to Prikey first. This README and `baseline.json` are Southbound's own.
   AndroidX SQLite and graphics path. A new one is a gate change.
 - **Map styles.** `assets/*.json` (the light and dark style) and the Valhalla default configuration are
   scanned for URLs too (`scan.extra_text_paths`).
-- **Pin.** `signing.cert_sha256` is the certificate of every release published so far (v0.1.0 to
-  v0.1.12), read from the APKs' signing blocks with `gate.py fingerprint`.
+- **Pin.** `signing.cert_sha256` is the certificate of the first and the latest release at the time
+  (v0.1.0 and v0.1.12, identical), read from the APKs' signing blocks with `gate.py fingerprint`.
 
 ## When the gate fails
 
