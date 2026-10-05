@@ -24,7 +24,7 @@ This is a privacy-first Android maps app for all of New York State. Maps, search
 2. No request ever carries your location, search text or route. The one exception is opt-in TomTom traffic, which is off by default.
 3. Live data is fetched as whole-region feeds, and all filtering happens on the phone.
 4. Every network feature has its own toggle. Once packs are installed, the app works with Android's Network permission revoked.
-5. History and saved places stay on-device, encrypted at rest. The one way a copy leaves is Settings > Backup > Export, started by hand, sealed with a passphrase and written only to the file the person picks (`docs/EXPORT.md`).
+5. History and saved places stay on-device, encrypted at rest. The one way a copy leaves is Settings > Backup > Export, started by hand, sealed with a passphrase and written only to the file the person picks (`docs/EXPORT.md`). Android's cloud backup and device transfer carry nothing: `allowBackup="false"` plus `res/xml/data_extraction_rules.xml` (all domains excluded from both).
 
 ## Tech stack and architecture
 
