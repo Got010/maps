@@ -1,16 +1,23 @@
 package app.southbound.feature.explore
 
 import android.content.Context
+import app.southbound.core.export.AndroidBackupStores
+import app.southbound.core.export.BackupService
+import app.southbound.core.export.ImportJournal
 import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
+import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
 import app.southbound.core.routing.GasPrices
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
+import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.TripBroadcast
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.traffic.TrafficFeed
@@ -28,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -68,6 +76,25 @@ class ExploreServices private constructor(context: Context) {
 
     /** The state's weekly average gas price from EIA, behind its own toggle and the user's key. */
     val gasPrices = GasPrices(networkGate, apiKey = { secrets.get(ApiKey.EIA) }, store = fuelPrefs)
+
+    /** Encrypted export and import of the places, API keys and preferences above (Settings > Backup). */
+    val backup: BackupService by lazy {
+        val version = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull()
+        BackupService(
+            AndroidBackupStores(
+                appContext, userData, secrets, networkToggles, RouteOptionsStore.get(appContext), DrivingPrefs.get(appContext),
+                fuelPrefs, voiceStore, RegionSelection.get(appContext), VoiceSelection.get(appContext),
+            ),
+            ImportJournal.at(appContext.noBackupFilesDir, KeystoreSealer()),
+            appVersion = version ?: "unknown",
+        )
+    }
+
+    /** Finishes an import that was verified and kept but stopped before it was applied. Does nothing otherwise. */
+    fun finishPendingImport() {
+        if (!ImportJournal.pendingIn(appContext.noBackupFilesDir)) return
+        scope.launch(Dispatchers.IO) { backup.resume() }
+    }
 
     private var search: Opened<SearchIndex>? = null
     private var transit: Opened<TransitPack>? = null

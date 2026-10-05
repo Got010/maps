@@ -10,7 +10,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -35,9 +38,13 @@ class MainActivity : ComponentActivity() {
         // After process death Android re-delivers the original intent; it was already imported.
         if (savedInstanceState == null) sharedPack = intent.sharedPackUri()
         showInstallPrompts()
+        // An import that was checked and kept but stopped before it was applied finishes now.
+        ExploreServices.get(this).finishPendingImport()
         setContent {
             SouthboundTheme {
                 var showSettings by rememberSaveable { mutableStateOf(false) }
+                // Bumped after an import, so Settings is built again and shows what was imported.
+                var settingsEpoch by remember { mutableIntStateOf(0) }
                 // Settings opens over the map, so the map (and any trip) stays as it was.
                 Box {
                     ExploreScreen(
@@ -49,14 +56,18 @@ class MainActivity : ComponentActivity() {
                         val services = ExploreServices.get(this@MainActivity)
                         val settings by services.voiceSettings.collectAsState()
                         BackHandler { showSettings = false }
-                        SettingsScreen(
-                            services.voiceStore,
-                            settings,
-                            services.voice,
-                            onBack = { showSettings = false },
-                            network = services.networkToggles,
-                            secrets = services.secrets,
-                        )
+                        key(settingsEpoch) {
+                            SettingsScreen(
+                                services.voiceStore,
+                                settings,
+                                services.voice,
+                                onBack = { showSettings = false },
+                                network = services.networkToggles,
+                                secrets = services.secrets,
+                                backup = services.backup,
+                                onImported = { settingsEpoch++ },
+                            )
+                        }
                     }
                 }
             }
