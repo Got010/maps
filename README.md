@@ -95,6 +95,10 @@ the system file picker; Southbound asks for no storage permission. A file from a
 a damaged file is refused and changes nothing. Keep the file safe: anyone with the file and the passphrase has your
 places and API keys. The format is in [docs/EXPORT.md](docs/EXPORT.md).
 
+Android's own backup and phone-to-phone transfer carry nothing of Southbound's: `allowBackup` is off and
+`res/xml/data_extraction_rules.xml` excludes every domain from both cloud backup and device transfer, so Export is
+the only way a copy leaves.
+
 ## Driving
 
 Save a place as Home or Work from its card and both appear as one-tap chips in
