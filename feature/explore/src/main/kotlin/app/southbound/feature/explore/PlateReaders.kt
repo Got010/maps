@@ -9,6 +9,7 @@ import app.southbound.core.search.AlertKind
 import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.RouteAlerts
+import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchIndex
 import kotlinx.coroutines.CancellationException
@@ -29,10 +30,18 @@ internal object PlateReaders {
     fun pins(index: SearchIndex): List<CameraPin> =
         index.alprCameras().map { CameraPin("$ID_PREFIX${it.id}", MapPoint(it.lat, it.lon), it.name) }
 
-    /** How many plate readers each route passes, in the routes' order. Blocking: call off the main thread. */
-    fun counts(index: SearchIndex, routes: List<Route>): List<Int> = routes.map { route ->
+    /**
+     * The plate readers and speed cameras each route passes, in the routes' order (a camera facing across
+     * the road is left out when the pack says which way it faces). Only counted: the "Avoid plate readers"
+     * option steers around plate readers alone, and every one met on the route whichever way it faces.
+     * Blocking: call off the main thread.
+     */
+    fun exposure(index: SearchIndex, routes: List<Route>): List<RouteExposure> = routes.map { route ->
         val line = route.line()
-        RouteAlerts.count(line, near(index, line, RouteAlerts.MAX_OFFSET_M), AlertKind.ALPR_CAMERA)
+        RouteAlerts.exposure(
+            line,
+            near(index, line, RouteAlerts.MAX_OFFSET_M) + near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.SPEED_CAMERA),
+        )
     }
 
     /** Routes found around plate readers, and the camera squares they were found with. */
@@ -97,10 +106,10 @@ internal object PlateReaders {
         return onRoad?.let { CameraAvoidance.Spot(it.lat, it.lon) } ?: CameraAvoidance.Spot(camera.lat, camera.lon)
     }
 
-    /** Plate readers in small boxes along [line], grown to reach [withinMeters] off it. */
-    private fun near(index: SearchIndex, line: RouteLine, withinMeters: Double): List<Landmark> =
+    /** Landmarks of [category] (plate readers by default) in small boxes along [line], grown to reach [withinMeters] off it. */
+    private fun near(index: SearchIndex, line: RouteLine, withinMeters: Double, category: String = Landmark.ALPR_CAMERA): List<Landmark> =
         line.boxes(padMeters = withinMeters + 20.0)
-            .flatMap { box -> index.landmarks(box, Landmark.ALPR_CAMERA) }
+            .flatMap { box -> index.landmarks(box, category) }
             .distinctBy { it.id }
 
     private fun Route.line() = RouteLine(geometry.map { LatLon(it.lat, it.lng) })

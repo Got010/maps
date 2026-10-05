@@ -107,6 +107,7 @@ import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.AlertKind
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
+import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.traffic.ClosureAvoidance
@@ -447,7 +448,7 @@ internal fun ExploreMap(
         } else {
             plainRoutes
         }
-        val valhallaCameraCounts = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.counts(cameraIndex, found) } }.orEmpty() else emptyList()
+        val valhallaExposure = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.exposure(cameraIndex, found) } }.orEmpty() else emptyList()
         // Live speeds laid over each option: coloured stretches and the delay they add (car traffic: driving only).
         val speeds = if (driving) snapshot?.speeds.orEmpty() else emptyList()
         val valhallaSlow = withContext(Dispatchers.Default) {
@@ -462,12 +463,12 @@ internal fun ExploreMap(
             TrafficRanking.order(
                 durationsSeconds = found.map { RouteSummary.of(it).durationSeconds },
                 delaysSeconds = valhallaSlow.map { it.delaySeconds },
-                mayLead = { i -> !routePrefs.avoidAlpr || valhallaCameraCounts.getOrElse(i) { 0 } <= valhallaCameraCounts.getOrElse(0) { 0 } },
+                mayLead = { i -> !routePrefs.avoidAlpr || valhallaExposure.getOrNull(i).readers() <= valhallaExposure.getOrNull(0).readers() },
             )
         }
         val ranked = TrafficRanking.reorder(found, order)
         val slow = TrafficRanking.reorder(valhallaSlow, order)
-        val cameraCounts = TrafficRanking.reorder(valhallaCameraCounts, order)
+        val exposure = TrafficRanking.reorder(valhallaExposure, order)
         routes = ranked
         previewTraffic = slow
         if (ranked.isEmpty()) {
@@ -479,8 +480,8 @@ internal fun ExploreMap(
                 selected = 0,
                 delaySeconds = delays,
                 fuelGallons = fuelGallonsFor(ranked, delays, services.fuelPrefs.settings.value.mpg),
-                cameraCounts = cameraCounts,
-                cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && (cameraCounts.firstOrNull() ?: 0) > 0,
+                exposure = exposure,
+                cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && exposure.firstOrNull().readers() > 0,
             )
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
@@ -1302,6 +1303,9 @@ private const val SEARCH_WAIT_MS = 5_000L
 
 /** A faster route found mid-trip, with its points for telling it apart later. */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
+
+/** Plate readers on a route option; none when its exposure is unknown (no search pack). */
+private fun RouteExposure?.readers(): Int = this?.plateReaders ?: 0
 
 private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }

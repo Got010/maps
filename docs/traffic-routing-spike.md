@@ -173,9 +173,10 @@ needs a link-to-edge table:
    mid-trip only: the faster-route check squares off slow links when the route
    ahead has 2+ minutes of delay. Exclusions are hard. A jam on the only way
    in makes the route fail or go far around, and the squares share Valhalla's
-   10 km perimeter limit with closures and plate-reader squares. Valhalla has
-   no soft "avoid this area" penalty, so the traffic tar is the only soft
-   option.
+   10 km perimeter limit with closures and plate-reader squares. Valhalla 3.6.3
+   (the version valhalla-mobile 0.6.3 ships) does have a soft per-edge penalty,
+   `linear_cost_factors` on matched lines (see the reader-aware routing item in
+   HANDOFF.md), but it is untried here; the traffic tar is the other soft option.
 3. **The ETA from live speeds on the route ahead.** Done in this change.
    `TripTraffic` matches once per route or snapshot and trims to the remaining
    route every 250 m. It is the same delay the "faster route" check compares.

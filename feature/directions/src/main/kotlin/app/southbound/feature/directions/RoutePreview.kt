@@ -47,6 +47,7 @@ import app.southbound.core.routing.FuelModel
 import app.southbound.core.routing.FuelSettings
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
+import app.southbound.core.search.RouteExposure
 
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
@@ -55,8 +56,8 @@ sealed interface RoutePreviewState {
      * [delaySeconds] is what live traffic adds to each route's duration, in the same order; empty when unknown.
      * [fuelGallons] is the estimated gas each route burns, in the same order (traffic idling included);
      * empty when unknown, which hides the fuel line.
-     * [cameraCounts] is how many plate readers each route passes, same order; empty when unknown (no
-     * search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
+     * [exposure] is how many plate readers and speed cameras each route passes, same order; empty when
+     * unknown (no search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
      * route still passes some.
      */
     data class Ready(
@@ -64,7 +65,7 @@ sealed interface RoutePreviewState {
         val selected: Int,
         val delaySeconds: List<Double> = emptyList(),
         val fuelGallons: List<Double> = emptyList(),
-        val cameraCounts: List<Int> = emptyList(),
+        val exposure: List<RouteExposure> = emptyList(),
         val cameraAvoidIncomplete: Boolean = false,
     ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
@@ -165,7 +166,7 @@ fun RoutePreviewSheet(
                                 fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
                                 leastGas = i == thriftiest,
                                 onClick = { onSelect(i) },
-                                cameras = state.cameraCounts.getOrNull(i),
+                                exposure = state.exposure.getOrNull(i),
                             )
                         }
                         if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
@@ -226,8 +227,8 @@ private fun RouteOption(
     fuelCost: Double?,
     leastGas: Boolean,
     onClick: () -> Unit,
-    /** Plate readers on this route; null hides the line. */
-    cameras: Int? = null,
+    /** Plate readers and speed cameras on this route; null (or none of either) hides the line. */
+    exposure: RouteExposure? = null,
 ) {
     // The route's line colour on the map. Outside a trip the map follows the system theme.
     val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
@@ -286,7 +287,7 @@ private fun RouteOption(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                cameras?.let { PlateReaderCount(it) }
+                exposure?.let { RouteExposureLine(it) }
                 if (leastGas) LeastGasBadge(fastest)
             }
             Column(horizontalAlignment = Alignment.End) {

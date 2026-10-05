@@ -1,5 +1,6 @@
 package app.southbound.core.search
 
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sqrt
 
@@ -70,6 +71,35 @@ class RouteLine(val points: List<LatLon>) {
         val segment = cumulative[i] - cumulative[i - 1]
         val t = if (segment > 0) (along - cumulative[i - 1]) / segment else 0.0
         return LatLon(a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon))
+    }
+
+    /**
+     * The directions of travel, in degrees clockwise from north (0 up to, not including,
+     * 360), of every segment of the line that passes within [withinMeters] of [p]. At a corner
+     * that is both legs, so something beside it can be matched against the one it faces.
+     * Segments with no length are skipped; empty when none is that close.
+     */
+    fun bearingsNear(p: LatLon, withinMeters: Double): List<Double> {
+        val k = cos(Math.toRadians(p.lat)) * METERS_PER_DEGREE
+        val found = mutableListOf<Double>()
+        for (i in 0 until points.size - 1) {
+            val a = points[i]
+            val b = points[i + 1]
+            // Metres east and north of p.
+            val ax = (a.lon - p.lon) * k
+            val ay = (a.lat - p.lat) * METERS_PER_DEGREE
+            val dx = (b.lon - a.lon) * k
+            val dy = (b.lat - a.lat) * METERS_PER_DEGREE
+            val len2 = dx * dx + dy * dy
+            if (len2 == 0.0) continue
+            val t = (-(ax * dx + ay * dy) / len2).coerceIn(0.0, 1.0)
+            val cx = ax + t * dx
+            val cy = ay + t * dy
+            if (sqrt(cx * cx + cy * cy) <= withinMeters) {
+                found += (Math.toDegrees(atan2(dx, dy)) + 360.0) % 360.0
+            }
+        }
+        return found
     }
 
     /**
