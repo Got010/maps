@@ -12,7 +12,7 @@
   "backup": {
     "allow_backup": false,
     "full_backup_content": "absent",
-    "data_extraction_rules": false,
+    "data_extraction_rules": true,
     "backup_agent": null
   },
   "network": {
