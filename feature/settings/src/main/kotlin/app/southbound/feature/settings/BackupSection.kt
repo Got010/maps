@@ -2,6 +2,7 @@ package app.southbound.feature.settings
 
 import android.net.Uri
 import android.text.format.Formatter
+import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +53,7 @@ private sealed interface Step {
     data class ExportPassphrase(val uri: Uri) : Step
     data object ImportNotice : Step
     data class ImportPassphrase(val uri: Uri, val header: FwxHeader) : Step
-    data class Working(val message: Int) : Step
+    data class Working(@StringRes val message: Int) : Step
 
     /** A result to read; [applied] means an import changed the stores, so the settings screen is rebuilt on OK. */
     data class Message(val text: String, val applied: Boolean = false) : Step
@@ -290,7 +291,7 @@ private fun ImportDialog(header: FwxHeader, onCancel: () -> Unit, onStart: (Char
 }
 
 @Composable
-private fun PassphraseField(value: String, label: Int, onChange: (String) -> Unit) {
+private fun PassphraseField(value: String, @StringRes label: Int, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,

@@ -79,7 +79,7 @@ class CodecCopyTest {
         while (!File(root, "settings.gradle.kts").isFile) root = root.parentFile ?: error("repository root not found")
         val hook = Regex("""fixedWriter|withFixedRandom|pbkdf2Runs|getDeclaredConstructor|Seeds\(|isAccessible""")
         val offenders = root.walkTopDown()
-            .onEnter { it.name != "build" && it.name != ".git" && it.name != "third-party" && it.name != "node_modules" }
+            .onEnter { it == root || (it.name != "build" && it.name != "third-party" && !it.name.startsWith(".")) }
             .filter { it.isFile && it.extension == "kt" }
             .filter { "/src/test/" !in it.path && "/src/androidTest/" !in it.path && !it.path.endsWith("/fwx/FwxWriter.kt") }
             .filter { hook.containsMatchIn(it.readText()) }

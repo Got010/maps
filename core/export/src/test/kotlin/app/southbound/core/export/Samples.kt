@@ -36,7 +36,7 @@ object Samples {
     const val PASSPHRASE = "correct horse battery staple"
     const val CAFE_NAME = "Joe's Distinctive Cafe"
     const val BUS_KEY = "mta-bus-key-0123456789"
-    const val GH_TOKEN = "github_pat_SECRETSECRETSECRET"
+    const val GH_TOKEN = "fake-token-for-tests-0001"
 
     val cafe = PlaceRef(CAFE_NAME, 40.7, -74.0, "1 Main St", "cafe", "n1")
     val pin = PlaceRef("Dropped pin", 40.75, -73.98)
