@@ -108,7 +108,11 @@ Add stop builds a trip with several stops, which you can reorder, remove or
 skip while driving. The navigation screen shows the road you're on and your
 arrival time, and after sunset the map and screen go dark (Settings > Driving).
 If a route crosses a region whose map isn't installed, the preview says so and
-offers to download it.
+offers to download it. Options can also steer around license plate readers
+(Avoid plate readers; routes may be longer), and each driving route shows how
+many plate readers and speed cameras it passes ("3 plate readers · 1 speed
+camera"). Both come from the search pack on the phone, so nothing about the
+trip is sent. A route that still passes a reader says so.
 
 ## Live traffic
 
