@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- License plate readers (Flock and others, as mapped in OpenStreetMap) on route options. -->
+<!-- License plate readers (Flock and others, as mapped in OpenStreetMap) and speed cameras on route options (one line: "3 plate readers · 1 speed camera"). -->
 <resources>
-    <string name="directions_plate_readers_none">No plate readers</string>
     <plurals name="directions_plate_readers">
         <item quantity="one">%1$d plate reader</item>
         <item quantity="other">%1$d plate readers</item>
+    </plurals>
+    <plurals name="directions_speed_cameras">
+        <item quantity="one">%1$d speed camera</item>
+        <item quantity="other">%1$d speed cameras</item>
     </plurals>
     <string name="directions_plate_readers_not_avoided">Couldn\'t avoid every plate reader on this route.</string>
     <string name="options_avoid_alpr">Avoid plate readers</string>
