@@ -1,16 +1,23 @@
 # Builds and tests every pull request and every push to main.
 #
-# The android job runs the unit tests and lint, builds the debug APK, and builds the release APK
-# (unsigned: pull requests never see the signing key) so the release gate can compare it with
-# gate/baseline.json. A new permission, exported component, native library, network API, host literal,
-# runtime dependency, SDK level or backup flag fails the build unless the same pull request updates the
-# baseline (gate/README.md). The signing certificate is checked in release.yml, where the key is.
+# The android job builds the release variant only (the one that ships): its unit tests, lint and the
+# unsigned release APK (R8), which the release gate compares with gate/baseline.json. There is no debug
+# build: nothing consumes one, and it doubled the compile work. A new permission, exported component, native
+# library, network API, host literal, runtime dependency, SDK level or backup flag fails the build unless the
+# same pull request updates the baseline (gate/README.md). The job also rehearses signing the APK with
+# throwaway keys. No job here has a signing key (the key is only in release.yml's sign job); the signing
+# certificate is checked in release.yml, once the APK is signed.
 #
 # Dependencies are checked against gradle/verification-metadata.xml. If that file is missing (delete it to
-# regenerate after a dependency change), the build writes a new one from the real build tasks, attaches
-# it to the run, and fails so it gets committed (gate/README.md).
+# regenerate after a dependency change), the build writes a new one from the real build tasks (the debug
+# variant as well, so the file also serves a local debug build), attaches it to the run, and fails so it
+# gets committed (gate/README.md).
 #
-# Only GitHub's own actions are used, pinned to commit SHAs. No job here holds a token that can write.
+# The push to main runs the same job: besides checking main, it saves the Gradle cache that pull requests
+# restore (release.yml's job builds without a cache, because it builds what gets signed).
+#
+# Only GitHub's own actions are used, pinned to commit SHAs. No job here holds a token that can write,
+# except cleanup, which can delete artifacts and runs no build code.
 
 name: CI
 
@@ -39,6 +46,12 @@ on:
       - '.github/zizmor-requirements.txt'
 
 permissions: {}
+
+env:
+  # The Android SDK build-tools of release.yml's sign job, rehearsed below with throwaway keys.
+  BUILD_TOOLS_VERSION: "36.0.0"
+  # The signature schemes of the releases so far: v2 only (see release.yml).
+  SIGNING_SCHEMES: "--v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled false --v4-signing-enabled false"
 
 # A pull request's older run is cancelled when a newer commit arrives; a run on main never is.
 concurrency:
@@ -101,28 +114,34 @@ jobs:
       - name: Fetch the offline voice (sherpa-onnx and Piper)
         run: scripts/fetch-voice.sh
 
-      - name: Unit tests, lint, debug and release APKs
+      - name: Unit tests, lint and the unsigned release APK
         id: gradle
         run: |
           set -o pipefail
           # Verification is forced on the command line, so a gradle.properties change can't relax it.
           verify=(--dependency-verification=strict)
-          # What release.yml builds and resolves beyond this job's tasks.
+          # Only the release variant ships, so only it is built and tested.
           extra=()
           if [ ! -f gradle/verification-metadata.xml ]; then
             echo "::warning::gradle/verification-metadata.xml is missing: writing it from this build instead of verifying dependencies. The job fails at the end until it is committed."
             verify=(--write-verification-metadata sha256 --no-build-cache)
-            extra=(testReleaseUnitTest)
+            # The debug variant too, so the written file also serves a local debug build.
+            extra=(testDebugUnitTest lintDebug :app:assembleDebug)
             echo "metadata=written" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${SOUTHBOUND_KEYSTORE_FILE:-}" ]; then
+            echo "::error::SOUTHBOUND_KEYSTORE_FILE is set: Gradle would sign the release APK. Signing happens in release.yml's sign job."
+            exit 1
           fi
           # --continue reports every module's failures in one run.
           ./gradlew --continue --stacktrace "${verify[@]}" \
             --init-script gate/file-dependencies.init.gradle -Pgate.configuration=releaseRuntimeClasspath \
-            testDebugUnitTest "${extra[@]}" lintDebug :app:assembleDebug :app:assembleRelease \
+            testReleaseUnitTest lintRelease :app:assembleRelease "${extra[@]}" \
             :app:dependencies --configuration releaseRuntimeClasspath gateFileDependencies | tee "$RUNNER_TEMP/gradle.log"
 
-      # In a pull request the release APK is unsigned; the gate checks everything but the certificate,
-      # and lists every baseline field the pull request changes (the certificate pin included).
+      # In a pull request the release APK is unsigned (as everywhere: the sign job of release.yml signs it);
+      # the gate checks everything but the certificate, and lists every baseline field the pull request
+      # changes (the certificate pin included).
       - name: Release gate (compare the release APK with gate/baseline.json)
         id: gate
         env:
@@ -132,10 +151,60 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             compare=(--compare-to .gate-base/gate/baseline.json)  # absent if the base branch has none yet
           fi
-          apk=$(find app/build/outputs/apk/release -name 'app-release*.apk' | head -n 1)
+          apk=app/build/outputs/apk/release/app-release-unsigned.apk
+          if [ ! -f "$apk" ]; then
+            echo "::error::$apk is missing: the release APK must be built unsigned (release.yml's sign job signs it)."
+            exit 1
+          fi
           python3 gate/gate.py check --require-tools --require-pin --apk "$apk" --deps "$RUNNER_TEMP/gradle.log" \
             --generated build/gate/baseline.generated.json "${compare[@]}"
           python3 -m unittest discover -s gate
+
+      # The same zipalign and apksigner commands release.yml's sign job runs, with throwaway keys made here
+      # (no secret), so a pull request shows that the pinned build-tools exist on the runner, that apksigner
+      # finds a JKS and a PKCS12 keystore without being told the type, and that the result carries exactly
+      # the release's signature schemes. Release.yml's first run is after a merge, so this is the earlier proof.
+      - name: Rehearse release signing with throwaway keys
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+          if [ ! -x "$tools/apksigner" ] || [ ! -x "$tools/zipalign" ]; then
+            echo "::error::build-tools $BUILD_TOOLS_VERSION is not on this runner (has: $(ls "$ANDROID_HOME/build-tools" | tr '\n' ' ')). Update BUILD_TOOLS_VERSION."
+            exit 1
+          fi
+          check_schemes() {
+            local flags i name
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            for ((i = 0; i < ${#flags[@]}; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
+                --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
+                --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
+                --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
+              if [ "${flags[i]}" = --v3-signing-enabled ]; then
+                grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): ${flags[i+1]}" "$1" || { echo "::error::Expected v3.1 to match v3"; return 1; }
+              fi
+            done
+          }
+          work="$RUNNER_TEMP/rehearsal"
+          mkdir -p "$work"
+          read -ra schemes <<< "$SIGNING_SCHEMES"
+          "$tools/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$work/aligned.apk"
+          for type in JKS PKCS12; do
+            keytool -genkeypair -keystore "$work/throwaway.$type" -storetype "$type" -storepass throwaway \
+              -keypass throwaway -alias throwaway -keyalg RSA -keysize 2048 -validity 1 -dname CN=throwaway
+            "$tools/apksigner" sign --ks "$work/throwaway.$type" --ks-key-alias throwaway \
+              --ks-pass pass:throwaway --key-pass pass:throwaway "${schemes[@]}" --out "$work/signed.apk" "$work/aligned.apk"
+            "$tools/zipalign" -c -P 16 4 "$work/signed.apk"
+            "$tools/apksigner" verify --print-certs -v "$work/signed.apk" | tee "$work/verify.txt"
+            check_schemes "$work/verify.txt"
+            echo "Rehearsal with a $type keystore: OK"
+            rm -f "$work/signed.apk" "$work/verify.txt"
+          done
+          rm -rf "$work"
 
       # So a session that can't download artifacts can copy the baseline this APK would need.
       - name: Print the baseline this APK would need
@@ -154,12 +223,6 @@ jobs:
             **/build/reports/
             build/gate/
           if-no-files-found: ignore
-          retention-days: 14
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: southbound-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
           # Pull request builds are only for checking; the cleanup job runs on pushes only.
           retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
@@ -189,9 +252,11 @@ jobs:
           exit 1
 
   # GitHub Free's 500 MB Actions storage fills up with saved build files, so delete the ones from
-  # earlier runs (an hour's grace for runs still going); this run's files are kept. A job of its own:
-  # its token can delete artifacts, so it must not run any build code. Pushes only, so pull request
-  # runs hold no write token at all (their build files expire after 3 days).
+  # earlier runs (an hour's grace for runs still going); this run's files are kept. A run that has not
+  # finished is skipped whatever its age: the Release workflow keeps its APKs (126 MB each) as artifacts
+  # for the whole of a run that can take hours (map data), and they must stay until it has published.
+  # A job of its own: its token can delete artifacts, so it must not run any build code. Pushes only, so
+  # pull request runs hold no write token at all (their build files expire after 3 days).
   cleanup:
     if: github.event_name == 'push'
     needs: android
@@ -200,17 +265,26 @@ jobs:
     permissions:
       actions: write # deletes earlier runs' build files
     steps:
-      - name: Delete build files from earlier runs
+      - name: Delete build files from earlier, finished runs
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cutoff=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
-          ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq ".artifacts[] | select(.workflow_run.id != $GITHUB_RUN_ID and .created_at < \"$cutoff\") | .id")
-          for id in $ids; do
+          old=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.workflow_run.id != $GITHUB_RUN_ID and .created_at < \"$cutoff\") | \"\(.workflow_run.id) \(.id)\"")
+          declare -A run_status
+          while read -r run id; do
+            [ -n "$id" ] || continue
+            if [ -z "${run_status[$run]:-}" ]; then
+              run_status[$run]=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq .status 2> /dev/null || echo unknown)
+            fi
+            if [ "${run_status[$run]}" != completed ]; then
+              echo "Keeping build file $id: run $run is ${run_status[$run]}"
+              continue
+            fi
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "Deleted build file $id"
-          done
+          done <<< "$old"
 
   pipeline:
     runs-on: ubuntu-24.04

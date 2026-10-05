@@ -380,91 +380,91 @@
   "network_api": [
     {
       "value": "Landroid/net/ConnectivityManager$NetworkCallback;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/ConnectivityManager;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/Network;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/NetworkCapabilities;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/NetworkInfo;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/NetworkRequest$Builder;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/NetworkRequest;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/http/X509TrustManagerExtensions;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Landroid/net/ssl/SSLSockets;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljava/net/ConnectException;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/HttpURLConnection;",
-      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off)."
+      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off). It is not the only HTTP client in the APK: MapLibre Native carries its own (OkHttp), unused because the style is bundled and tiles are pmtiles://file://, and valhalla-mobile's com/valhalla/valhalla/http/ValhallaHttpClient is a second client outside NetworkGate, inert because Valhalla's default.json has no mjolnir.tile_url and core/routing OfflineRouter sets only tile_extract. The baseline cannot prove either from the APK."
     },
     {
       "value": "Ljava/net/IDN;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/Inet6Address;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/InetAddress;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/InetSocketAddress;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/NoRouteToHostException;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/ProtocolException;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/Proxy$Type;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/Proxy;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/ProxySelector;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/Socket;",
-      "note": "No app code opens a socket (checked in the sources, 2026-10-04). Referenced by the platform HTTP stack behind HttpURLConnection and by the OkHttp dependency of MapLibre or Ferrostar; an HTTP request still has to come through core/network NetworkGate."
+      "note": "No app code opens a socket (checked in the sources, 2026-10-04). Referenced by the platform HTTP stack behind HttpURLConnection and by the OkHttp dependency of MapLibre; an HTTP request still has to come through core/network NetworkGate. Ferrostar's own HTTP classes (com/stadiamaps/ferrostar/core/http) are not in the dex: R8 removes them."
     },
     {
       "value": "Ljava/net/SocketAddress;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/SocketException;",
@@ -476,27 +476,27 @@
     },
     {
       "value": "Ljava/net/URI;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/URISyntaxException;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/URL;",
-      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off)."
+      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off). It is not the only HTTP client in the APK: MapLibre Native carries its own (OkHttp), unused because the style is bundled and tiles are pmtiles://file://, and valhalla-mobile's com/valhalla/valhalla/http/ValhallaHttpClient is a second client outside NetworkGate, inert because Valhalla's default.json has no mjolnir.tile_url and core/routing OfflineRouter sets only tile_extract. The baseline cannot prove either from the APK."
     },
     {
       "value": "Ljava/net/URLClassLoader;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/URLConnection;",
-      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off)."
+      "note": "The app's own HTTP client: core/network NetworkGate.get and GitHubReleases, the only app code that opens a connection. Every request in app code goes through :core:network NetworkGate (CLAUDE.md), one NetworkFeature toggle per feature (pack downloads on by default, all others off). It is not the only HTTP client in the APK: MapLibre Native carries its own (OkHttp), unused because the style is bundled and tiles are pmtiles://file://, and valhalla-mobile's com/valhalla/valhalla/http/ValhallaHttpClient is a second client outside NetworkGate, inert because Valhalla's default.json has no mjolnir.tile_url and core/routing OfflineRouter sets only tile_extract. The baseline cannot prove either from the APK."
     },
     {
       "value": "Ljava/net/URLEncoder;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljava/net/UnknownHostException;",
@@ -504,59 +504,59 @@
     },
     {
       "value": "Ljava/net/UnknownServiceException;",
-      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre or Ferrostar depend on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
+      "note": "Referenced by the HttpURLConnection path (core/network, gated by NetworkGate and the NetworkFeature toggles) and by libraries (OkHttp, which MapLibre depends on, Guava, JNA's URLClassLoader). App code itself imports only HttpURLConnection, URL, URLEncoder (query encoding in core/routing GasPrices, core/transit TransitRealtime, core/traffic FiveElevenNy) and three exception types (checked in the sources, 2026-10-04)."
     },
     {
       "value": "Ljavax/net/SocketFactory;",
-      "note": "No app code opens a socket (checked in the sources, 2026-10-04). Referenced by the platform HTTP stack behind HttpURLConnection and by the OkHttp dependency of MapLibre or Ferrostar; an HTTP request still has to come through core/network NetworkGate."
+      "note": "No app code opens a socket (checked in the sources, 2026-10-04). Referenced by the platform HTTP stack behind HttpURLConnection and by the OkHttp dependency of MapLibre; an HTTP request still has to come through core/network NetworkGate. Ferrostar's own HTTP classes (com/stadiamaps/ferrostar/core/http) are not in the dex: R8 removes them."
     },
     {
       "value": "Ljavax/net/ssl/HostnameVerifier;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLContext;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLException;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLHandshakeException;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLParameters;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLPeerUnverifiedException;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLSession;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLSocket;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/SSLSocketFactory;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/TrustManagerFactory;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Ljavax/net/ssl/X509TrustManager;",
-      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre or Ferrostar). No app code uses them directly."
+      "note": "TLS types used by the HTTPS stack: HttpsURLConnection behind core/network NetworkGate, and the OkHttp platform layer (OkHttp comes with MapLibre). No app code uses them directly."
     },
     {
       "value": "Lokhttp3/internal/platform/PlatformInitializer;",
-      "note": "OkHttp's androidx.startup initializer, from the OkHttp dependency of MapLibre or Ferrostar (OkHttp's other classes are renamed by R8, so this is all the baseline can see of it). App code makes no OkHttp call; its own requests go through core/network NetworkGate."
+      "note": "OkHttp's androidx.startup initializer, from the OkHttp dependency of MapLibre (OkHttp's other classes are renamed by R8, so this is all the baseline can see of it). App code makes no OkHttp call; its own requests go through core/network NetworkGate. Ferrostar's own HTTP classes (com/stadiamaps/ferrostar/core/http) are not in the dex: R8 removes them."
     }
   ],
   "dependencies": {
@@ -763,11 +763,11 @@
   "hosts": [
     {
       "value": "511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key)."
+      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
     },
     {
       "value": "api.github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is only accepted as a redirect host for the release asset download."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, which the gate cannot record (a leading-dot suffix is not a host literal; a gate 2.1 item), so those hosts are contacted but are not in this list."
     },
     {
       "value": "bustime.mta.info",
@@ -779,7 +779,7 @@
     },
     {
       "value": "github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is only accepted as a redirect host for the release asset download."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, which the gate cannot record (a leading-dot suffix is not a host literal; a gate 2.1 item), so those hosts are contacted but are not in this list."
     },
     {
       "value": "http://",
@@ -787,7 +787,7 @@
     },
     {
       "value": "http://511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key)."
+      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
     },
     {
       "value": "http://valhalla.invalid",
@@ -795,7 +795,7 @@
     },
     {
       "value": "http://www.511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key)."
+      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
     },
     {
       "value": "https://",
@@ -803,7 +803,7 @@
     },
     {
       "value": "https://511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key)."
+      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
     },
     {
       "value": "https://api-endpoint.mta.info",
@@ -815,7 +815,7 @@
     },
     {
       "value": "https://api.github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is only accepted as a redirect host for the release asset download."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, which the gate cannot record (a leading-dot suffix is not a host literal; a gate 2.1 item), so those hosts are contacted but are not in this list."
     },
     {
       "value": "https://apps.mapbox.com",
