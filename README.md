@@ -157,8 +157,9 @@ navigating to mute until the next turn.
 ## Release checks
 
 Each release APK is compared with `gate/baseline.json`, a list of what the app
-can do: permissions, exported components, native libraries, network types and
-hosts, dependencies and the signing certificate. A pull request that changes any
+can do: permissions, hardware feature declarations, exported components, native
+libraries, network types and hosts, dependencies, the bundled voice files'
+digests and the signing certificate. A pull request that changes any
 of it has to change that file too, so it shows up before a merge. The build
 makes the APK unsigned; a separate `sign` job, which runs none of the
 repository's code and is the only one that can read the signing key, signs it
