@@ -13,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -32,6 +31,12 @@ class MainActivity : ComponentActivity() {
     /** A pack file shared to the app, waiting to be imported. */
     private var sharedPack by mutableStateOf<Uri?>(null)
 
+    /**
+     * Bumped when an import has replaced the settings (by the person, or finished in the background at start), so
+     * Settings is built again and shows what is now stored. Snapshot state, so any thread may bump it.
+     */
+    private var settingsEpoch by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -39,12 +44,10 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) sharedPack = intent.sharedPackUri()
         showInstallPrompts()
         // An import that was checked and kept but stopped before it was applied finishes now.
-        ExploreServices.get(this).finishPendingImport()
+        ExploreServices.get(this).finishPendingImport { settingsEpoch++ }
         setContent {
             SouthboundTheme {
                 var showSettings by rememberSaveable { mutableStateOf(false) }
-                // Bumped after an import, so Settings is built again and shows what was imported.
-                var settingsEpoch by remember { mutableIntStateOf(0) }
                 // Settings opens over the map, so the map (and any trip) stays as it was.
                 Box {
                     ExploreScreen(

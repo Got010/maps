@@ -14,6 +14,7 @@ import app.southbound.core.export.SouthboundBundle
 import app.southbound.core.export.fwx.FwxError
 import app.southbound.core.export.fwx.FwxException
 import app.southbound.core.export.fwx.FwxHeader
+import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.SecretUnreadableException
 import kotlinx.coroutines.CancellationException
 import java.io.FileNotFoundException
@@ -23,13 +24,25 @@ import java.text.Normalizer
 /** What an export came to, for the dialog. */
 internal sealed interface ExportResult {
     data class Done(val counts: BackupCounts, val size: Long?) : ExportResult
-    data class Failed(val reason: String, val deleted: Boolean) : ExportResult
+    data class Failed(val reason: String, val cleanup: Cleanup) : ExportResult
+}
+
+/** What became of the document the picker made, so the message says only what is true. */
+internal enum class Cleanup {
+    /** It was deleted (a partial or empty file). */
+    DELETED,
+
+    /** Nothing was written to it and it already held something (an earlier export): left as it was. */
+    UNTOUCHED,
+
+    /** It should have been deleted and could not be. */
+    NOT_DELETED,
 }
 
 /** What an import came to, for the dialog. */
 internal sealed interface ImportResult {
-    data class Applied(val counts: BackupCounts) : ImportResult
-    data class Pending(val counts: BackupCounts, val reason: String) : ImportResult
+    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ImportResult
+    data class Pending(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val reason: String) : ImportResult
 
     /** Stopped before anything changed; [message] is the string to show. */
     data class Refused(val message: String) : ImportResult
@@ -61,8 +74,12 @@ internal class BackupTransfer(private val context: Context, private val service:
             // Once the document has been opened for writing it holds a partial file. Before that it is the empty
             // document the picker made, or, if the picker handed back an earlier export, that export: leave a
             // non-empty one alone.
-            val deleted = if (opened || sizeOf(uri) == 0L) delete(uri) else true
-            ExportResult.Failed(exportReason(e), deleted)
+            val cleanup = when {
+                !opened && sizeOf(uri) != 0L -> Cleanup.UNTOUCHED
+                delete(uri) -> Cleanup.DELETED
+                else -> Cleanup.NOT_DELETED
+            }
+            ExportResult.Failed(exportReason(e), cleanup)
         }
     }
 
@@ -80,8 +97,8 @@ internal class BackupTransfer(private val context: Context, private val service:
 
     suspend fun import(uri: Uri, passphrase: CharArray): ImportResult = try {
         when (val outcome = service.import({ resolver.openInputStream(uri) ?: throw FileNotFoundException() }, passphrase)) {
-            is ImportOutcome.Done -> ImportResult.Applied(outcome.counts)
-            is ImportOutcome.Pending -> ImportResult.Pending(outcome.counts, outcome.reason)
+            is ImportOutcome.Done -> ImportResult.Applied(outcome.counts, outcome.turnedOn)
+            is ImportOutcome.Pending -> ImportResult.Pending(outcome.counts, outcome.turnedOn, outcome.reason)
         }
     } catch (e: CancellationException) {
         throw e

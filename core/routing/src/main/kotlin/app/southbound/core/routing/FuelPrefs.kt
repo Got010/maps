@@ -76,9 +76,12 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
 
     fun setRegion(region: GasRegion) = update(_settings.value.copy(region = region))
 
-    /** The four things the driver chose, all in one write (an import). The fetched price stays as it is. */
+    /**
+     * The four things the driver chose, all in one synchronous commit (an import). The fetched price stays as it is.
+     * Throws [java.io.IOException] if the write fails.
+     */
     fun setChoices(mpg: Double, pricePerGallon: Double, source: PriceSource, region: GasRegion) =
-        update(_settings.value.copy(mpg = mpg, pricePerGallon = pricePerGallon, priceSource = source, region = region))
+        update(_settings.value.copy(mpg = mpg, pricePerGallon = pricePerGallon, priceSource = source, region = region), durable = true)
 
     override val region: GasRegion get() = _settings.value.region
     override val fetchedRegion: GasRegion? get() = _settings.value.fetchedRegion
@@ -105,9 +108,10 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
     ).sanitized()
 
     @Synchronized
-    private fun update(next: FuelSettings) {
+    private fun update(next: FuelSettings, durable: Boolean = false) {
         val clean = next.sanitized()
-        prefs.edit()
+        val edit = prefs.edit()
+        edit
             .putFloat(KEY_MPG, clean.mpg.toFloat())
             .putFloat(KEY_PRICE, clean.pricePerGallon.toFloat())
             .putString(KEY_SOURCE, clean.priceSource.name)
@@ -116,7 +120,11 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
             .putString(KEY_FETCHED_PERIOD, clean.fetchedPeriod)
             .putString(KEY_FETCHED_REGION, clean.fetchedRegion?.name)
             .putLong(KEY_FETCHED_AT, clean.fetchedAtMillis)
-            .apply()
+        if (durable) {
+            if (!edit.commit()) throw java.io.IOException("Couldn't save the fuel options")
+        } else {
+            edit.apply()
+        }
         _settings.value = clean
     }
 

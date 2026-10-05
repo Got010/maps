@@ -1,6 +1,7 @@
 package app.southbound.core.export
 
 import app.southbound.core.export.fwx.FwxHeader
+import app.southbound.core.network.NetworkFeature
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,10 +25,17 @@ interface BackupStores {
      */
     suspend fun ensureReadable() {}
 
+    /** Which network features are on now, so an import can say which ones it turns on. */
+    fun networkToggles(): Map<NetworkFeature, Boolean>
+
     /** Everything an export carries. Throws if a part can't be read; never returns a part as empty to hide that. */
     suspend fun read(): BackupData
 
-    /** Makes the stores exactly [data]. Repeatable: applying the same data twice leaves the same state. */
+    /**
+     * Makes the stores exactly [data]. Repeatable: applying the same data twice leaves the same state. Every write
+     * must be durable when this returns (a synchronous commit, not a queued one), and a write that fails throws:
+     * the caller deletes the kept import only after this returns.
+     */
     suspend fun apply(data: BackupData)
 }
 
@@ -40,19 +48,19 @@ class ReadBackFailedException : IOException("The file written did not read back 
 /** What an import came to. */
 sealed interface ImportOutcome {
     /** Applied: the stores now hold the bundle. */
-    data class Done(val counts: BackupCounts) : ImportOutcome
+    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ImportOutcome
 
     /**
      * The bundle verified and was kept to apply, but applying stopped ([reason]). It is finished at the next
      * start, or with [BackupService.resume]; nothing is lost.
      */
-    data class Pending(val counts: BackupCounts, val reason: String) : ImportOutcome
+    data class Pending(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val reason: String) : ImportOutcome
 }
 
 /** What [BackupService.resume] found. */
 sealed interface ResumeOutcome {
     data object NothingPending : ResumeOutcome
-    data class Applied(val counts: BackupCounts) : ResumeOutcome
+    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ResumeOutcome
 
     /** [unreadable]: the kept import itself can't be opened (so it can only be discarded). */
     data class Failed(val reason: String, val unreadable: Boolean) : ResumeOutcome
@@ -126,16 +134,17 @@ class BackupService(
         try {
             val data = SouthboundBundle.decode(entries)
             val counts = data.counts()
+            val turnedOn = turnedOn(data)
             // The commit point. If this throws, nothing has changed.
             journal.write(entries)
             try {
                 stores.apply(data)
                 journal.clear()
-                ImportOutcome.Done(counts)
+                ImportOutcome.Done(counts, turnedOn)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ImportOutcome.Pending(counts, reasonOf(e))
+                ImportOutcome.Pending(counts, turnedOn, reasonOf(e))
             }
         } finally {
             SouthboundBundle.wipe(entries)
@@ -152,9 +161,12 @@ class BackupService(
         }
         try {
             val data = SouthboundBundle.decode(entries)
+            // The same refusal as a fresh import: never overwrite what can't be read.
+            stores.ensureReadable()
+            val turnedOn = turnedOn(data)
             stores.apply(data)
             journal.clear()
-            ResumeOutcome.Applied(data.counts())
+            ResumeOutcome.Applied(data.counts(), turnedOn)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -166,6 +178,12 @@ class BackupService(
 
     /** Gives up on a kept import (the person's choice; the bundle file they picked is untouched). */
     suspend fun discardPending() = lock.withLock { journal.clear() }
+
+    /** The network features the bundle switches from off to on, in declaration order. */
+    private fun turnedOn(data: BackupData): List<NetworkFeature> {
+        val now = stores.networkToggles()
+        return NetworkFeature.entries.filter { data.settings.network[it] == true && now[it] != true }
+    }
 
     /** A short reason that holds no contents: the exception's own message, or its kind. */
     private fun reasonOf(e: Throwable): String = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName

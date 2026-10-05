@@ -33,6 +33,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.southbound.core.network.NetworkFeature
+import kotlinx.coroutines.CoroutineScope
 import app.southbound.core.export.BackupCounts
 import app.southbound.core.export.BackupService
 import app.southbound.core.export.ResumeOutcome
@@ -110,7 +112,7 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                         val outcome = withContext(Dispatchers.IO) { service.resume() }
                         pending = service.hasPending()
                         step = when (outcome) {
-                            is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts)), applied = true)
+                            is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts), networkSentence(resources, outcome.turnedOn, done = true)), applied = true)
                             is ResumeOutcome.Failed -> Step.Message(resources.getString(R.string.backup_finish_failed, outcome.reason))
                             ResumeOutcome.NothingPending -> Step.Idle
                         }
@@ -149,9 +151,8 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
             },
             onStart = { passphrase ->
                 step = Step.Working(R.string.backup_exporting)
-                scope.launch {
+                scope.launchWiping(passphrase) {
                     val result = withContext(Dispatchers.IO) { transfer.export(current.uri, passphrase) }
-                    passphrase.fill('\u0000')
                     step = Step.Message(
                         when (result) {
                             is ExportResult.Done -> resources.getString(
@@ -160,7 +161,11 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                                 result.size?.let { Formatter.formatShortFileSize(context, it) } ?: "?",
                             )
                             is ExportResult.Failed -> resources.getString(
-                                if (result.deleted) R.string.backup_export_failed else R.string.backup_export_failed_kept,
+                                when (result.cleanup) {
+                                    Cleanup.DELETED -> R.string.backup_export_failed
+                                    Cleanup.UNTOUCHED -> R.string.backup_export_failed_untouched
+                                    Cleanup.NOT_DELETED -> R.string.backup_export_failed_kept
+                                },
                                 result.reason,
                             )
                         },
@@ -185,17 +190,24 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
             onCancel = { step = Step.Idle },
             onStart = { passphrase ->
                 step = Step.Working(R.string.backup_importing)
-                scope.launch {
+                scope.launchWiping(passphrase) {
                     val result = withContext(Dispatchers.IO) { transfer.import(current.uri, passphrase) }
-                    passphrase.fill('\u0000')
                     pending = service.hasPending()
                     step = when (result) {
                         is ImportResult.Applied -> Step.Message(
-                            resources.getString(R.string.backup_imported, summary(resources, result.counts)),
+                            resources.getString(
+                                R.string.backup_imported,
+                                summary(resources, result.counts),
+                                networkSentence(resources, result.turnedOn, done = true),
+                            ),
                             applied = true,
                         )
                         is ImportResult.Pending -> Step.Message(
-                            resources.getString(R.string.backup_import_pending, result.reason),
+                            resources.getString(
+                                R.string.backup_import_pending,
+                                result.reason,
+                                networkSentence(resources, result.turnedOn, done = false),
+                            ),
                             applied = false,
                         )
                         is ImportResult.Refused -> Step.Message(result.message)
@@ -303,6 +315,44 @@ private fun PassphraseField(value: String, @StringRes label: Int, onChange: (Str
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Runs [block] and zeroes [passphrase] when it ends, however it ends: finished, failed, or cancelled with the
+ * composition's scope (also when it was cancelled before it started, which a finally inside would miss).
+ */
+private fun CoroutineScope.launchWiping(passphrase: CharArray, block: suspend () -> Unit) {
+    val job = launch {
+        try {
+            block()
+        } finally {
+            passphrase.fill('\u0000')
+        }
+    }
+    job.invokeOnCompletion { passphrase.fill('\u0000') }
+}
+
+/** Which network features an import switched on (or will, when [done] is false), by name; "none" when it changed no toggle to on. */
+private fun networkSentence(resources: android.content.res.Resources, turnedOn: List<NetworkFeature>, done: Boolean): String =
+    if (turnedOn.isEmpty()) {
+        resources.getString(if (done) R.string.backup_network_none else R.string.backup_network_will_none)
+    } else {
+        resources.getString(
+            if (done) R.string.backup_network_on else R.string.backup_network_will_on,
+            turnedOn.joinToString(", ") { resources.getString(networkLabel(it)) },
+        )
+    }
+
+@StringRes
+private fun networkLabel(feature: NetworkFeature): Int = when (feature) {
+    NetworkFeature.PACK_DOWNLOADS -> R.string.backup_net_pack_downloads
+    NetworkFeature.APP_UPDATES -> R.string.backup_net_app_updates
+    NetworkFeature.TRAFFIC_511NY -> R.string.backup_net_511
+    NetworkFeature.TRAFFIC_NYC_DOT -> R.string.backup_net_dot
+    NetworkFeature.TRAFFIC_TOMTOM -> R.string.backup_net_tomtom
+    NetworkFeature.TRANSIT_REALTIME -> R.string.backup_net_transit
+    NetworkFeature.TRANSIT_BUS_TIME -> R.string.backup_net_bus
+    NetworkFeature.GAS_PRICES -> R.string.backup_net_gas
 }
 
 /** Counts only: no place, list or key name, and never a key. */

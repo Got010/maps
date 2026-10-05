@@ -252,6 +252,48 @@ class SouthboundBundleTest {
     }
 
     @Test
+    fun `places are read strictly, never defaulted or silently dropped`() {
+        // An unknown field, anywhere.
+        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6,\"extra\":1"))
+        refuses(mutated("places.json", "\"osmRef\":\"n1\"", "\"osmRef\":\"n1\",\"x\":1"))
+        refuses(mutated("places.json", "\"builtIn\":true", "\"builtIn\":true,\"x\":1"))
+        refuses(mutated("places.json", "\"savedAt\":100", "\"savedAt\":100,\"x\":1"))
+        // A value of the wrong type is not nulled, zeroed or coerced.
+        refuses(mutated("places.json", "\"address\":\"1 Main St\"", "\"address\":42"))
+        refuses(mutated("places.json", "\"category\":\"cafe\"", "\"category\":[]"))
+        refuses(mutated("places.json", "\"builtIn\":true", "\"builtIn\":1"))
+        refuses(mutated("places.json", "\"name\":\"Favorites\"", "\"name\":null"))
+        refuses(mutated("places.json", "\"home\":{", "\"home\":null,\"x\":{"))
+        // Versions and numbers.
+        refuses(mutated("places.json", "\"version\":1", "\"version\":-7"))
+        refuses(mutated("places.json", "\"version\":1", "\"version\":0"))
+        refuses(mutated("places.json", "\"version\":1", "\"version\":1.0"))
+        refuses(mutated("places.json", "\"version\":1", "\"version\":\"1\""))
+        refuses(mutated("places.json", "\"savedAt\":100", "\"savedAt\":100.5"))
+        refuses(mutated("places.json", "\"id\":3,", "\"id\":3.5,"))
+        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6.5"))
+        // A missing field is not defaulted.
+        refuses(mutated("places.json", "\"lastId\":6,", ""))
+        refuses(mutated("places.json", "\"lists\":[", "\"xlists\":["))
+        refuses(mutated("places.json", "\"recents\":[", "\"xrecents\":["))
+        refuses(mutated("places.json", "\"address\":\"1 Main St\",", ""))
+        refuses(mutated("places.json", "\"list\":1,", ""))
+        // The same key twice.
+        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6,\"lastId\":6"))
+        refuses(mutated("places.json", "\"name\":\"Pizza\"", "\"name\":\"Pizza\",\"name\":\"Other\""))
+        // The unmodified text still reads.
+        SouthboundBundle.decode(SouthboundBundle.encode(Samples.data(), "x"))
+    }
+
+    @Test
+    fun `a key named twice is refused in every entry`() {
+        refuses(mutated("settings.json", "\"driving\":{\"night_by_sunset\":false}", "\"driving\":{\"night_by_sunset\":false},\"driving\":{\"night_by_sunset\":true}"))
+        refuses(mutated("settings.json", "\"night_by_sunset\":false", "\"night_by_sunset\":false,\"night_by_sunset\":true"))
+        refuses(mutated("api-keys.json", "\"NY_511\":\"511-key-abcdef\"", "\"NY_511\":\"511-key-abcdef\",\"NY_511\":\"other\""))
+        refuses(mutated("manifest.json", "\"home\":1", "\"home\":1,\"home\":1"))
+    }
+
+    @Test
     fun `api keys are checked strictly`() {
         refuses(mutated("api-keys.json", "\"NY_511\"", "\"NY_5111\""))
         refuses(mutated("api-keys.json", "\"511-key-abcdef\"", "\"\""))

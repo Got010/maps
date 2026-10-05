@@ -31,8 +31,11 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
   refused by name), and the dialog shows the file's date as "not yet verified".
 - Import is **replace**, not merge: saved places, lists, recents, Home, Work, API keys and preferences become exactly
   what the file holds. The dialog says so before the file and the passphrase are asked for.
-- The whole file is verified first (header MAC, every chunk, the end record) and its contents are checked in memory:
-  exact fields and types, enums by name, numbers finite and inside the range the app's own setting enforces,
+- The whole file is verified first (header MAC, every chunk, the end record) and its contents are checked in memory.
+  Every entry is read strictly: exactly the fields schema 1 lists (an unknown or missing field, a value of the wrong
+  type, a fractional or negative number where a whole one belongs, `version` other than 1 are all refused, never
+  defaulted or dropped), and a key named twice in one object is refused (the JSON reader is asked to reject
+  duplicates for these entries only; the app's own readers keep their behaviour). Then: enums by name, numbers finite and inside the range the app's own setting enforces,
   strings within their bounds (place name 2,048 characters, address 4,096, category 256, OSM reference 64, list
   name 1,024, API key 1,024; at most 500 lists, 40,000 saved places, 50 recents), unique ids, every saved place in
   a list that exists, `lastId` past every id, both built-in lists present, regions only ones Southbound knows,
@@ -45,9 +48,15 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 - **The commit point.** The checked entries are written to `noBackupFilesDir/import.pending`, sealed under this
   phone's Keystore like the saved places file (temp file, fsync, atomic rename). Before that rename nothing has
   changed. After it the import is decided, and applying it is repeatable: saved places (one atomic file replace),
-  API keys (one commit), then each preference store. If applying stops for any reason (a full disk, the process
+  API keys (one commit), then each preference store, every one written with a synchronous commit (never a queued
+  write) that throws if it fails. The kept import is deleted only after the last of them has returned, so a process
+  that dies in the middle leaves the journal to finish the job. If applying stops for any reason (a full disk, the process
   ending), the file stays and the import is finished at the next start, or with Finish import in Settings >
-  Backup; Discard drops it. Nothing is half-forgotten, and no plaintext is written to disk at any point.
+  Backup; Discard drops it. Nothing is half-forgotten, and no plaintext is written to disk at any point. Finishing it re-checks that
+  nothing unreadable would be overwritten, as a fresh import does.
+- **The summary** after an import (and the "will turn on" line of a kept one) names every network feature the import
+  switched from off to on, or says "none". Features already on are not listed. If a kept import is finished after a
+  partial apply, the list can omit ones that had already been switched on.
 - Passphrases: the writer requires at least 12 characters, typed twice; readers accept any. The passphrase is never
   stored, logged or put in saved state, and the key buffers are zeroed after use (the Compose text field's own String
   cannot be).

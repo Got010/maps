@@ -23,7 +23,7 @@ internal fun utf8(bytes: ByteArray): String = try {
 
 /** Parses one entry's JSON; any parser failure is a payload problem. */
 internal fun parseJson(bytes: ByteArray, what: String): Any? = try {
-    MiniJson.parse(utf8(bytes))
+    MiniJson.parse(utf8(bytes), rejectDuplicateKeys = true)
 } catch (e: MiniJson.JsonException) {
     invalid("$what is not valid JSON")
 }
@@ -78,6 +78,10 @@ internal class Obj private constructor(private val map: Map<*, *>, private val w
 
     fun obj(key: String, keys: Set<String>): Obj = of(map[key], "$what.$key", keys)
 
+    /** The array [key] of objects, each with exactly [keys], at most [maxSize] of them. */
+    fun objects(key: String, maxSize: Int, keys: Set<String>): List<Obj> =
+        list(key, maxSize).map { of(it, "$what.$key", keys) }
+
     fun list(key: String, maxSize: Int): List<*> {
         val l = map[key] as? List<*> ?: bad(key)
         if (l.size > maxSize) bad(key)
@@ -104,9 +108,12 @@ internal class Obj private constructor(private val map: Map<*, *>, private val w
     fun bad(key: String): Nothing = invalid("$what: field $key is missing or not allowed")
 
     companion object {
-        fun of(value: Any?, what: String, keys: Set<String>): Obj {
+        /** [keys] are required; [optional] ones may be absent. Any other field is refused. */
+        fun of(value: Any?, what: String, keys: Set<String>, optional: Set<String> = emptySet()): Obj {
             val m = value as? Map<*, *> ?: invalid("$what is not an object")
-            if (m.keys != keys) invalid("$what does not have exactly the fields schema 1 lists")
+            if (!m.keys.containsAll(keys) || !(keys + optional).containsAll(m.keys)) {
+                invalid("$what does not have exactly the fields schema 1 lists")
+            }
             return Obj(m, what)
         }
 

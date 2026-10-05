@@ -14,8 +14,18 @@ class RouteOptionsStore private constructor(context: Context) {
     val options: StateFlow<RoutePrefs> = _options.asStateFlow()
 
     fun set(value: RoutePrefs) {
+        write(value, durable = false)
+    }
+
+    /** [set] with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replace(value: RoutePrefs) {
+        write(value, durable = true)
+    }
+
+    private fun write(value: RoutePrefs, durable: Boolean) {
         val next = value.sanitized()
-        prefs.edit()
+        val edit = prefs.edit()
+        edit
             .putBoolean("avoid_tolls", next.avoidTolls)
             .putBoolean("avoid_highways", next.avoidHighways)
             .putBoolean("avoid_ferries", next.avoidFerries)
@@ -31,7 +41,11 @@ class RouteOptionsStore private constructor(context: Context) {
             .putString("bike_type", next.bike.type.name)
             .putBoolean("bike_avoid_hills", next.bike.avoidHills)
             .putBoolean("bike_avoid_busy_roads", next.bike.avoidBusyRoads)
-            .apply()
+        if (durable) {
+            if (!edit.commit()) throw java.io.IOException("Couldn't save the route options")
+        } else {
+            edit.apply()
+        }
         _options.value = next
     }
 
