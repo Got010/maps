@@ -19,7 +19,7 @@ set -euo pipefail
 REGION="${1:?usage: build.sh <region>}"
 # shellcheck source=pipeline/lib/common.sh
 source "$(dirname "$0")/../lib/common.sh"
-VALHALLA_IMAGE="${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla:3.6.3}"
+VALHALLA_IMAGE="${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla:3.6.3@sha256:2b19ea46551a9687b245022551183829d817fdee9b58c5e7b2adb6e422749c43}"
 
 clip_extract "$REGION"
 
