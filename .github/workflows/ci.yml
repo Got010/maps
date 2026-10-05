@@ -16,8 +16,9 @@
 # The push to main runs the same job: besides checking main, it saves the Gradle cache that pull requests
 # restore (release.yml's job builds without a cache, because it builds what gets signed).
 #
-# Only GitHub's own actions are used, pinned to commit SHAs. No job here holds a token that can write,
-# except cleanup, which can delete artifacts and runs no build code.
+# Only GitHub's own actions and gradle/actions/setup-gradle are used, pinned to commit SHAs (setup-gradle runs
+# in a job with no secret and a read-only token). No job here holds a token that can write, except cleanup,
+# which can delete artifacts and runs no build code.
 
 name: CI
 
@@ -78,6 +79,32 @@ jobs:
           path: .gate-base
           persist-credentials: false
           sparse-checkout: gate
+
+      # The pipeline checks come first (a few seconds, and they fail fast); they used to be a job of their own,
+      # which billed a whole minute for twelve seconds.
+      - name: Styles are regenerated from build_styles.py
+        run: |
+          python3 pipeline/styles/build_styles.py
+          git diff --exit-code styles/
+      # The validator and everything it needs are locked by integrity hash in .github/style-validate.
+      - name: Styles pass the MapLibre style spec
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix .github/style-validate
+          for style in styles/light.json styles/dark.json; do
+            .github/style-validate/node_modules/.bin/gl-style-validate "$style"
+          done
+      - name: Shellcheck
+        run: shellcheck -x pipeline/*.sh pipeline/*/*.sh scripts/*.sh
+      - name: Pipeline unit tests
+        run: |
+          # duckdb runs the Overture fetch query against a local test GeoParquet.
+          pip install --quiet --require-hashes --only-binary :all: -r .github/pipeline-requirements.txt
+          make -C pipeline test
+
+      # The runner's own JDK 17, noted before setup-java replaces JAVA_HOME_17_X64: the signing rehearsal uses it,
+      # as the sign job does, so both run apksigner on the same JDK.
+      - name: Note the runner's JDK
+        run: echo "RUNNER_JDK=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
@@ -167,28 +194,51 @@ jobs:
       - name: Rehearse release signing with throwaway keys
         run: |
           set -euo pipefail
+          # The runner's own JDK, as the sign job uses (setup-java replaced JAVA_HOME_17_X64 by now).
+          export JAVA_HOME="$RUNNER_JDK" PATH="$RUNNER_JDK/bin:$PATH"
           tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
           if [ ! -x "$tools/apksigner" ] || [ ! -x "$tools/zipalign" ]; then
             echo "::error::build-tools $BUILD_TOOLS_VERSION is not on this runner (has: $(ls "$ANDROID_HOME/build-tools" | tr '\n' ' ')). Update BUILD_TOOLS_VERSION."
             exit 1
           fi
+          validate_schemes() {
+            local flags i seen=" "
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            if [ "${#flags[@]}" -ne 8 ]; then
+              echo "::error::SIGNING_SCHEMES must hold the v1, v2, v3 and v4 flags once each, each followed by true or false"
+              return 1
+            fi
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled | --v2-signing-enabled | --v3-signing-enabled | --v4-signing-enabled) ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              case "$seen" in
+                *" ${flags[i]} "*) echo "::error::${flags[i]} appears twice in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              seen+="${flags[i]} "
+              case "${flags[i+1]}" in
+                true | false) ;;
+                *) echo "::error::${flags[i]} must be followed by true or false in SIGNING_SCHEMES"; return 1 ;;
+              esac
+            done
+          }
+          # What apksigner must report for an APK signed with those flags; v3.1 is never signed, so always false.
           check_schemes() {
             local flags i name
             read -ra flags <<< "$SIGNING_SCHEMES"
-            for ((i = 0; i < ${#flags[@]}; i += 2)); do
+            for ((i = 0; i < 8; i += 2)); do
               case "${flags[i]}" in
                 --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
                 --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
                 --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
                 --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
-                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
               esac
               grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
-              if [ "${flags[i]}" = --v3-signing-enabled ]; then
-                grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): ${flags[i+1]}" "$1" || { echo "::error::Expected v3.1 to match v3"; return 1; }
-              fi
             done
+            grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): false" "$1" || { echo "::error::Expected 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false'"; return 1; }
           }
+          validate_schemes
           work="$RUNNER_TEMP/rehearsal"
           mkdir -p "$work"
           read -ra schemes <<< "$SIGNING_SCHEMES"
@@ -285,31 +335,3 @@ jobs:
             fi
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "Deleted build file $id"
           done <<< "$old"
-
-  pipeline:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Styles are regenerated from build_styles.py
-        run: |
-          python3 pipeline/styles/build_styles.py
-          git diff --exit-code styles/
-      # The validator and everything it needs are locked by integrity hash in .github/style-validate.
-      - name: Styles pass the MapLibre style spec
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund --prefix .github/style-validate
-          for style in styles/light.json styles/dark.json; do
-            .github/style-validate/node_modules/.bin/gl-style-validate "$style"
-          done
-      - name: Shellcheck
-        run: shellcheck -x pipeline/*.sh pipeline/*/*.sh scripts/*.sh
-      - name: Pipeline unit tests
-        run: |
-          # duckdb runs the Overture fetch query against a local test GeoParquet.
-          pip install --quiet --require-hashes --only-binary :all: -r .github/pipeline-requirements.txt
-          make -C pipeline test
