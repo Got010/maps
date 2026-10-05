@@ -8,6 +8,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:export"))
     implementation(project(":core:map"))
     implementation(project(":core:packs"))
     implementation(project(":core:routing"))

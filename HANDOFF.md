@@ -24,7 +24,7 @@ This is a privacy-first Android maps app for all of New York State. Maps, search
 2. No request ever carries your location, search text or route. The one exception is opt-in TomTom traffic, which is off by default.
 3. Live data is fetched as whole-region feeds, and all filtering happens on the phone.
 4. Every network feature has its own toggle. Once packs are installed, the app works with Android's Network permission revoked.
-5. History and saved places stay on-device, encrypted at rest.
+5. History and saved places stay on-device, encrypted at rest. The one way a copy leaves is Settings > Backup > Export, started by hand, sealed with a passphrase and written only to the file the person picks (`docs/EXPORT.md`).
 
 ## Tech stack and architecture
 
@@ -254,6 +254,7 @@ Exit test: a Buffalo to Montauk route computes offline, and a new 511NY incident
 
 - [x] Lane guidance (built October 2026, see Phase 7), [x] speed limits, [x] 3D buildings
 - [x] Saved places, lists and recents, encrypted
+- [x] Export and import (Settings > Backup, FWX v1, app ID `southbound`): saved places, lists, recents, Home and Work, API keys, preferences. `core/export`, `docs/EXPORT.md`.
 - [ ] Traffic-aware routing (spike written: `docs/traffic-routing-spike.md`; ETAs and the route order already use live speeds, see Phase 7)
 - [ ] Upstate transit systems (verify CDTA, NFTA, RTS and Centro GTFS feeds in the Mobility Database; the pipeline's transit builder is MTA-specific today)
 - [x] GitHub Actions: APK on each tag, monthly data rebuild
@@ -333,6 +334,7 @@ nys-maps/
     traffic/              511NY, NYC DOT, TomTom clients
     packs/                download, verify, import, update
     userdata/             encrypted saved places and history
+    export/               encrypted export and import (FWX v1 bundle, docs/EXPORT.md)
   feature/
     explore/ search/ directions/ navigation/ transit/ settings/
   pipeline/

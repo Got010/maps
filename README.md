@@ -86,6 +86,15 @@ and on the 2nd of every month, from fresh OpenStreetMap and MTA data; other
 releases carry the previous packs over. To swap in newer data, share the new
 file to Southbound the same way; it replaces the old one.
 
+## Back up and restore
+
+Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, API keys and
+preferences to one file, sealed with a passphrase you choose (at least 12 characters, typed twice, never
+stored). **Import** puts such a file back, on this phone or a new one, replacing what is there. Pick the file with
+the system file picker; Southbound asks for no storage permission. A file from another app, a wrong passphrase or
+a damaged file is refused and changes nothing. Keep the file safe: anyone with the file and the passphrase has your
+places and API keys. The format is in [docs/EXPORT.md](docs/EXPORT.md).
+
 ## Driving
 
 Save a place as Home or Work from its card and both appear as one-tap chips in

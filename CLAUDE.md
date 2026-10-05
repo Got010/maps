@@ -35,3 +35,7 @@ The app is named Southbound. Application ID and Kotlin package: `app.southbound`
 - Pipeline is reproducible: make -C pipeline nyc | state | release.
 - Commit small, with clear messages.
 - Always open a pull request on GitHub for your work; never leave it only on a branch.
+- Export and import live in `core/export` (format and rules: `docs/EXPORT.md`). The FWX codec in its `fwx/`
+  package is a verbatim copy of the program's codec; never edit it here (`CodecCopyTest` fails). A new entry, API
+  key, network toggle or setting bumps the bundle schema. The export is read back with the import reader, and
+  neither side may log, show or persist a passphrase or an API key.
