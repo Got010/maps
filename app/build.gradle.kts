@@ -6,8 +6,9 @@ plugins {
 // The release workflow passes -Psouthbound.version=<tag without the v>.
 val appVersion = providers.gradleProperty("southbound.version").getOrElse("0.1.0")
 
-// Release signing comes from CI secrets (see README). Without them, a local
-// release build is unsigned and can't be installed.
+// CI builds the release APK unsigned and signs it afterwards (the sign job of release.yml). A local
+// release build is unsigned too and can't be installed. Gradle signs only when SOUTHBOUND_KEYSTORE_FILE
+// is set, which CI never does (both workflows fail if it is).
 val keystoreFile = providers.environmentVariable("SOUTHBOUND_KEYSTORE_FILE")
 
 android {

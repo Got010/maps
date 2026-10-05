@@ -1,0 +1,13 @@
+# zizmor configuration (.github/workflows/workflow-lint.yml). Every action must be pinned to a commit SHA.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin
+    ignore:
+      # Not yet pinned: editing data.yml starts its own run (it lists itself in its paths), a 60 to 90
+      # minute NYC data build, so the pin waits for the next change that builds the data anyway.
+      - data.yml
+  artipacked:
+    ignore:
+      - data.yml # same reason: persist-credentials: false goes in with the pin

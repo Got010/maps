@@ -17,6 +17,34 @@
 # release. A failed run deletes its draft.
 #
 # Pushing a tag like v1.0.0 by hand still works and sets the version.
+#
+# Only a commit on main is signed and published: a push to main, the monthly schedule and a manual run on
+# main all run main's own code, and a tag push is compared with main first. A manual run from any other
+# branch, a manual run on a tag, or a tag on a commit that is not on main builds and tests the app unsigned
+# and publishes nothing (the plan job's `publish` output).
+#
+# Signing is a separate job. The app job builds the release APK unsigned (Gradle is never given a key) and
+# runs the tests and the release gate (gate/gate.py) on it; it references no secret. The sign job is the only
+# place the four SOUTHBOUND_* signing secrets appear: it checks out nothing and runs no repository code
+# (GitHub's own actions, gh and the Android SDK's zipalign and apksigner only), so a job that runs
+# repository code never holds the key. GitHub sends a job every secret it references, whether or not a step
+# is skipped, so an `if:` on a step would not be a guard. release-check then checks the signed APK's
+# certificate against the one pinned in gate/baseline.json, before anything is published.
+#
+# The data jobs keep a write token because the packs are too large for artifact storage, and the publish
+# job runs scripts/release-manifest.py next to its token because a draft release's files are only
+# reachable with one; both run only on a commit that is on main. Nothing else with a write token runs
+# repository code.
+#
+# Recovering from a failed run: when a run fails after the draft exists (the data jobs, publish), the cleanup
+# job deletes the draft and the run's two APK artifacts, so only "Re-run all jobs" recovers; "Re-run failed
+# jobs" would find neither. The release queue holds one waiting run, and a newer one replaces it: a scheduled
+# run (the monthly data refresh) that is still waiting can be replaced by a push, and that month's refresh is
+# then skipped. Start it again with Run workflow on main and "Rebuild data" ticked.
+#
+# The release is created, uploaded to and published with the gh CLI only: no third-party release action
+# runs next to the write token. Only GitHub's own actions and gradle/actions/setup-gradle are used, pinned to
+# commit SHAs; setup-gradle runs only in the jobs that have no secret and a read-only token.
 name: Release
 
 on:
@@ -35,31 +63,71 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write
+permissions: {}
 
-# One release at a time, in order; never cancel one halfway through.
+# One release at a time, in order, and never cancel one halfway through. Runs that can publish (main, and
+# pushes of v* tags) share one queue; every other run (a manual run on a branch or a tag) has its own, so it
+# can't take the place of a release that is waiting for main's turn. A queue holds one waiting run: a newer
+# one replaces it.
 concurrency:
-  group: release
+  group: ${{ (github.ref == 'refs/heads/main' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && 'release' || format('release-{0}', github.ref) }}
   cancel-in-progress: false
 
 env:
   # What a release ships; `make -C pipeline state` builds the same list.
   PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles basemap-njn.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite voice-norman.zip
+  # The Android SDK build-tools that align, sign and verify the release APK, by version, so the signing tools
+  # only change in a pull request. The app job's signing rehearsal fails if the runner lacks them.
+  BUILD_TOOLS_VERSION: "36.0.0"
+  # The signature schemes of the releases so far: v2 only (southbound-0.1.12.apk's signing block holds v2 and
+  # nothing else: no JAR signature, no v3, no v4). The checks after signing read these flags, so the flags and
+  # the checks cannot disagree.
+  SIGNING_SCHEMES: "--v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled false --v4-signing-enabled false"
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read # this job only reads: the draft release is created later, by the draft job
     outputs:
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
       previous: ${{ steps.plan.outputs.previous }}
       data: ${{ steps.plan.outputs.data }}
       packs: ${{ steps.plan.outputs.packs }}
+      publish: ${{ steps.mode.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      # A run from main (push, schedule, manual) runs main's own code. A tag push can name any commit, so it
+      # is compared with main (identical or behind) first; the branch is resolved to its SHA, so a tag
+      # called "main" can't stand in for it. A manual run on a tag is not a tag push: it would re-sign and
+      # replace a release that is already out, so it publishes nothing. Anything else builds unsigned and
+      # publishes nothing.
+      - name: Decide whether this run may sign and publish
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          publish=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            publish=true
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF_TYPE" == tag ]]; then
+            main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+            status="$(gh api "repos/$GITHUB_REPOSITORY/compare/$main...$GITHUB_SHA" --jq .status)"
+            if [[ "$status" == identical || "$status" == behind ]]; then
+              publish=true
+            else
+              echo "::warning::Tag $GITHUB_REF_NAME is not on main ($status): building unsigned, nothing is published."
+            fi
+          else
+            echo "::warning::$GITHUB_REF_NAME ($GITHUB_EVENT_NAME, $GITHUB_REF_TYPE) is not main or a tag push: building unsigned, nothing is published."
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
       - name: Pick the version and whether to rebuild data
         id: plan
@@ -115,82 +183,412 @@ jobs:
             echo "packs=$packs"
           } >> "$GITHUB_OUTPUT"
 
-      # Everything uploads here; publish turns it into the release at the end.
-      # A tag released from the website already has one: upload to that.
-      - name: Create the draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.plan.outputs.tag }}
-        run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "Release $TAG exists; its files will be replaced."
-          else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "Southbound ${TAG#v}" --notes "Building…"
-          fi
-
+  # Builds, tests and gates the release APK, unsigned, and rehearses signing it with a throwaway key. This job
+  # runs Gradle, plugins and the repository's scripts, so it has a read-only token and references no secret:
+  # the APK goes to the sign job as an artifact.
   app:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      TAG: ${{ needs.plan.outputs.tag }}
+      PUBLISH: ${{ needs.plan.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runner's own JDK 17, noted before setup-java replaces JAVA_HOME_17_X64: the signing rehearsal uses it,
+      # as the sign job does, so both run apksigner on the same JDK.
+      - name: Note the runner's JDK
+        run: echo "RUNNER_JDK=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Cache the offline voice downloads
-        uses: actions/cache@v4
+      # No Gradle or build cache here: this job builds what gets signed and published, so it starts from
+      # what Gradle's dependency verification and the pinned downloads allow, never from a saved cache.
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
         with:
-          path: third-party
-          key: voice-${{ hashFiles('scripts/fetch-voice.sh', 'pipeline/lib/voices.sh') }}
+          cache-disabled: true
+
+      - name: Check the Gradle wrapper against Gradle's published checksums
+        run: |
+          props=gradle/wrapper/gradle-wrapper.properties
+          version=$(sed -n 's#^distributionUrl=.*/gradle-\(.*\)-bin\.zip$#\1#p' "$props")
+          published=$(curl -fsSL "https://services.gradle.org/distributions/gradle-$version-bin.zip.sha256")
+          pinned=$(sed -n 's/^distributionSha256Sum=//p' "$props")
+          if [ "$published" != "$pinned" ]; then
+            echo "::error::distributionSha256Sum ($pinned) is not Gradle's published checksum ($published)"
+            exit 1
+          fi
+          published=$(curl -fsSL "https://services.gradle.org/distributions/gradle-$version-wrapper.jar.sha256")
+          actual=$(sha256sum gradle/wrapper/gradle-wrapper.jar | cut -d' ' -f1)
+          if [ "$published" != "$actual" ]; then
+            echo "::error::gradle-wrapper.jar ($actual) is not Gradle's published $version wrapper ($published)"
+            exit 1
+          fi
+          echo "Gradle $version wrapper and distribution checksums match gradle.org"
+
+      # Both downloads are checked against pinned SHA-256 values.
       - name: Fetch the offline voice (sherpa-onnx and Piper)
         run: scripts/fetch-voice.sh
 
-      - name: Decode signing key
-        env:
-          KEYSTORE_BASE64: ${{ secrets.SOUTHBOUND_KEYSTORE_BASE64 }}
+      # The release APK is built unsigned (app-release-unsigned.apk) on every event; the sign job signs it.
+      - name: Test and build the release APK (unsigned)
         run: |
-          if [[ -z "$KEYSTORE_BASE64" ]]; then
-            echo "::error::The SOUTHBOUND_KEYSTORE_BASE64 secret is not set. See README."
+          set -o pipefail
+          if [ -n "${SOUTHBOUND_KEYSTORE_FILE:-}" ]; then
+            echo "::error::SOUTHBOUND_KEYSTORE_FILE is set: Gradle would sign the release APK. Signing happens in the sign job."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "SOUTHBOUND_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          # Dependency verification is forced on the command line, so a gradle.properties change can't
+          # relax it. gradle/verification-metadata.xml is written by ci.yml (gate/README.md).
+          if [ ! -f gradle/verification-metadata.xml ]; then
+            echo "::error::gradle/verification-metadata.xml is missing: run CI on a pull request that deletes it to regenerate it (gate/README.md)."
+            exit 1
+          fi
+          ./gradlew --dependency-verification=strict \
+            --init-script gate/file-dependencies.init.gradle -Pgate.configuration=releaseRuntimeClasspath \
+            testReleaseUnitTest :app:assembleRelease -Psouthbound.version="$VERSION" \
+            :app:dependencies --configuration releaseRuntimeClasspath gateFileDependencies | tee "$RUNNER_TEMP/gradle.log"
 
-      - name: Test and build signed APK
-        env:
-          SOUTHBOUND_KEYSTORE_PASSWORD: ${{ secrets.SOUTHBOUND_KEYSTORE_PASSWORD }}
-          SOUTHBOUND_KEY_ALIAS: ${{ secrets.SOUTHBOUND_KEY_ALIAS }}
-          SOUTHBOUND_KEY_PASSWORD: ${{ secrets.SOUTHBOUND_KEY_PASSWORD }}
-        run: ./gradlew testReleaseUnitTest :app:assembleRelease -Psouthbound.version="$VERSION"
-
-      - name: Verify signature and checksum
+      - name: Release gate (compare the unsigned release APK with gate/baseline.json)
+        id: gate
         run: |
-          mkdir -p out
-          APK="out/southbound-$VERSION.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$APK"
-          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
-          "$APKSIGNER" verify --print-certs "$APK"
-          (cd out && sha256sum "$(basename "$APK")" > "$(basename "$APK").sha256")
+          apk=app/build/outputs/apk/release/app-release-unsigned.apk
+          if [ ! -f "$apk" ]; then
+            echo "::error::$apk is missing: the release APK must be built unsigned (the sign job signs it)."
+            exit 1
+          fi
+          python3 gate/gate.py check --require-tools --require-pin --apk "$apk" --deps "$RUNNER_TEMP/gradle.log" \
+            --generated build/gate/baseline.generated.json
+          python3 -m unittest discover -s gate
 
-      - name: Remove signing key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
+      # So a session that can't download artifacts can copy the baseline this APK would need.
+      - name: Print the baseline this APK would need
+        if: failure() && steps.gate.outcome == 'failure' && hashFiles('build/gate/baseline.generated.json') != ''
+        run: |
+          echo "::group::build/gate/baseline.generated.json"
+          cat build/gate/baseline.generated.json
+          echo "::endgroup::"
+          gate/annotate-file.sh build/gate/baseline.generated.json baseline-generated 0
 
-      - name: Upload the APK to the draft release
+      # The same zipalign and apksigner commands the sign job runs, with throwaway keys made here (no secret),
+      # so every run shows that the pinned build-tools exist, that apksigner finds a JKS and a PKCS12 keystore
+      # without being told the type, and that the result carries exactly the release's signature schemes.
+      - name: Rehearse release signing with throwaway keys
+        run: |
+          set -euo pipefail
+          # The runner's own JDK, as the sign job uses (setup-java replaced JAVA_HOME_17_X64 by now).
+          export JAVA_HOME="$RUNNER_JDK" PATH="$RUNNER_JDK/bin:$PATH"
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+          if [ ! -x "$tools/apksigner" ] || [ ! -x "$tools/zipalign" ]; then
+            echo "::error::build-tools $BUILD_TOOLS_VERSION is not on this runner (has: $(ls "$ANDROID_HOME/build-tools" | tr '\n' ' ')). Update BUILD_TOOLS_VERSION."
+            exit 1
+          fi
+          validate_schemes() {
+            local flags i seen=" "
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            if [ "${#flags[@]}" -ne 8 ]; then
+              echo "::error::SIGNING_SCHEMES must hold the v1, v2, v3 and v4 flags once each, each followed by true or false"
+              return 1
+            fi
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled | --v2-signing-enabled | --v3-signing-enabled | --v4-signing-enabled) ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              case "$seen" in
+                *" ${flags[i]} "*) echo "::error::${flags[i]} appears twice in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              seen+="${flags[i]} "
+              case "${flags[i+1]}" in
+                true | false) ;;
+                *) echo "::error::${flags[i]} must be followed by true or false in SIGNING_SCHEMES"; return 1 ;;
+              esac
+            done
+          }
+          # What apksigner must report for an APK signed with those flags; v3.1 is never signed, so always false.
+          check_schemes() {
+            local flags i name
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
+                --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
+                --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
+                --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
+              esac
+              grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
+            done
+            grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): false" "$1" || { echo "::error::Expected 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false'"; return 1; }
+          }
+          validate_schemes
+          work="$RUNNER_TEMP/rehearsal"
+          mkdir -p "$work"
+          read -ra schemes <<< "$SIGNING_SCHEMES"
+          "$tools/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$work/aligned.apk"
+          for type in JKS PKCS12; do
+            keytool -genkeypair -keystore "$work/throwaway.$type" -storetype "$type" -storepass throwaway \
+              -keypass throwaway -alias throwaway -keyalg RSA -keysize 2048 -validity 1 -dname CN=throwaway
+            "$tools/apksigner" sign --ks "$work/throwaway.$type" --ks-key-alias throwaway \
+              --ks-pass pass:throwaway --key-pass pass:throwaway "${schemes[@]}" --out "$work/signed.apk" "$work/aligned.apk"
+            "$tools/zipalign" -c -P 16 4 "$work/signed.apk"
+            "$tools/apksigner" verify --print-certs -v "$work/signed.apk" | tee "$work/verify.txt"
+            check_schemes "$work/verify.txt"
+            echo "Rehearsal with a $type keystore: OK"
+            rm -f "$work/signed.apk" "$work/verify.txt"
+          done
+          rm -rf "$work"
+
+      # Handed to the sign job. One day is enough: it runs right after this job.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: env.PUBLISH == 'true'
+        with:
+          name: unsigned-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: reports
+          path: |
+            **/build/reports/
+            build/gate/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Signs the APK the app job built, for a commit that is on main. The only job that references the signing
+  # secrets, so it checks out nothing and runs no repository code: GitHub's own actions, gh and the Android
+  # SDK's zipalign and apksigner. zizmor's auditor persona asks for these secrets to live in a deployment
+  # environment; private repositories on GitHub Free can't have environment secrets, so the guard is this
+  # job's if: (the plan's decision) and the on-main check before the key is decoded.
+  sign:
+    if: >-
+      needs.plan.outputs.publish == 'true' &&
+      (github.ref == 'refs/heads/main' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+    needs: [plan, app]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      # The runner's own JDK 17, which is also the one the app job's rehearsal uses. Nothing is downloaded.
+      - name: Use the runner's JDK
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+
+      # The branch is resolved to its SHA first, so a tag called "main" can't stand in for it.
+      - name: Check the commit is on main
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber
+        run: |
+          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$main...$GITHUB_SHA" --jq .status)
+          if [ "$status" != "identical" ] && [ "$status" != "behind" ]; then
+            echo "::error::$GITHUB_SHA is not on main (compare status: $status), so it is not signed."
+            exit 1
+          fi
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned-apk
+          path: unsigned
+
+      # The keystore's type is not given to apksigner: it uses the JDK default, which reads both JKS and
+      # PKCS12 files (as AGP did), and the secret decodes to a .jks.
+      - name: Sign the release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SOUTHBOUND_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SOUTHBOUND_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SOUTHBOUND_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SOUTHBOUND_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+          validate_schemes() {
+            local flags i seen=" "
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            if [ "${#flags[@]}" -ne 8 ]; then
+              echo "::error::SIGNING_SCHEMES must hold the v1, v2, v3 and v4 flags once each, each followed by true or false"
+              return 1
+            fi
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled | --v2-signing-enabled | --v3-signing-enabled | --v4-signing-enabled) ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              case "$seen" in
+                *" ${flags[i]} "*) echo "::error::${flags[i]} appears twice in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              seen+="${flags[i]} "
+              case "${flags[i+1]}" in
+                true | false) ;;
+                *) echo "::error::${flags[i]} must be followed by true or false in SIGNING_SCHEMES"; return 1 ;;
+              esac
+            done
+          }
+          # What apksigner must report for an APK signed with those flags; v3.1 is never signed, so always false.
+          check_schemes() {
+            local flags i name
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
+                --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
+                --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
+                --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
+              esac
+              grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
+            done
+            grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): false" "$1" || { echo "::error::Expected 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false'"; return 1; }
+          }
+          validate_schemes
+          unsigned=unsigned/app-release-unsigned.apk
+          if [ ! -f "$unsigned" ]; then
+            echo "::error::$unsigned is missing from the app job's unsigned-apk artifact."
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::A SOUTHBOUND_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS or _KEY_PASSWORD secret is not set. Nothing is published without them."
+            exit 1
+          fi
+          umask 077
+          keystore="$RUNNER_TEMP/release.jks"
+          trap 'rm -f "$keystore" "$RUNNER_TEMP/aligned.apk"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          unset KEYSTORE_BASE64
+          read -ra schemes <<< "$SIGNING_SCHEMES"
+          mkdir -p signed
+          out="signed/southbound-$VERSION.apk"
+          "$tools/zipalign" -P 16 -f 4 "$unsigned" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD "${schemes[@]}" \
+            --out "$out" "$RUNNER_TEMP/aligned.apk"
+          rm -f "$keystore" "$RUNNER_TEMP/aligned.apk"
+          "$tools/zipalign" -c -P 16 4 "$out"
+          "$tools/apksigner" verify --print-certs -v "$out" | tee "$RUNNER_TEMP/verify.txt"
+          check_schemes "$RUNNER_TEMP/verify.txt"
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP/aligned.apk"
+
+      # Handed to release-check and publish. One day is enough: they run right after this job.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-apk
+          path: signed/southbound-${{ needs.plan.outputs.version }}.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  # Read-only checks before anything is published: the commit is on main, and the signed APK carries the
+  # certificate pinned in gate/baseline.json. They run the repository's gate/ script, so they live in a job
+  # without a writing token; the publish job runs no gate code.
+  release-check:
+    needs: [plan, app, sign]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      apk_sha256: ${{ steps.cert.outputs.apk_sha256 }}
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      # Only the gate files: the baseline of the commit the APK was built from, and the script.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: gate
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-apk
+          path: apks
+
+      # The branch is resolved to its SHA first, so a tag called "main" can't stand in for it.
+      - name: Check the commit is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$main...$GITHUB_SHA" --jq .status)
+          if [ "$status" != "identical" ] && [ "$status" != "behind" ]; then
+            echo "::error::$GITHUB_SHA is not on main (compare status: $status), so it is not published."
+            exit 1
+          fi
+
+      # Fails on an unsigned APK or a certificate other than the one pinned in gate/baseline.json, so a
+      # build signed with a different key is never offered as an update.
+      - name: Check the signing certificate against gate/baseline.json
+        id: cert
+        run: |
+          apk="apks/southbound-$VERSION.apk"
+          if [ ! -f "$apk" ]; then
+            echo "::error::No signed release APK ($apk)."
+            exit 1
+          fi
+          python3 gate/gate.py cert --require-pin --apk "$apk"
+          echo "apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+  # Everything uploads to a draft release; publish turns it into the release at the end. Created only once
+  # the APK has passed the gate and the certificate check. This job runs no repository code (it has no
+  # checkout), so its write token never sits next to any.
+  draft:
+    needs: [plan, release-check]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # creates the draft release; this job runs no repository code
+    steps:
+      # A release that is already out is replaced only when it was made from this very commit (a re-run),
+      # never by a different build. A release made on the website has targetCommitish "main", a branch
+      # name and not this commit, so it is refused; a draft (from an earlier run, or made on the website) is
+      # taken over and pointed at this commit.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          TARGET: ${{ github.sha }}
+        run: |
+          if view=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish --jq '"\(.isDraft) \(.targetCommitish)"' 2> /dev/null); then
+            read -r is_draft existing <<< "$view"
+            if [[ "$is_draft" == true ]]; then
+              echo "Draft $TAG exists; its files will be replaced."
+              [[ "$existing" == "$TARGET" ]] || gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET"
+            elif [[ "$existing" == "$TARGET" ]]; then
+              echo "Release $TAG exists and was made from this commit; its files will be replaced."
+            else
+              echo "::error::$TAG is already released from $existing, not from this commit ($TARGET). Its files are not replaced."
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --target "$TARGET" \
+              --title "Southbound ${TAG#v}" --notes "Building…"
+          fi
+
+  # This job runs the pipeline's scripts and third-party tools with a write token, because each pack goes
+  # straight to the draft release (they are too large for artifact storage); nothing else can run here, and
+  # it starts only for a commit that is on main and whose APK passed release-check.
   data:
-    needs: plan
-    if: needs.plan.outputs.data == 'true'
-    runs-on: ubuntu-latest
+    needs: [plan, release-check, draft]
+    if: needs.plan.outputs.data == 'true' && needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 300
+    permissions:
+      contents: write # uploads each pack to the draft release
     strategy:
       fail-fast: false
       matrix:
@@ -201,7 +599,9 @@ jobs:
       # routing-nys and search-nys merge two extracts; drop the inputs afterwards to spare the runner's disk.
       FREE_SOURCES: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build ${{ matrix.pack }}
         env:
@@ -225,35 +625,82 @@ jobs:
           [[ "$kind" == basemap ]] && kind=tiles
           make -C pipeline "$kind-$region"
 
+      # --clobber replaces a file of the draft, or of a release made from this very commit; the draft job
+      # refused anything else, and this checks the release again right before writing to it.
       - name: Checksum and upload to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.sha }}
         run: |
+          read -r is_draft existing <<< "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish --jq '"\(.isDraft) \(.targetCommitish)"')"
+          if [[ "$is_draft" != true && "$existing" != "$TARGET" ]]; then
+            echo "::error::$TAG is released from $existing, not from this commit ($TARGET). Its files are not replaced."
+            exit 1
+          fi
           cd pipeline/data/out
           sha256sum "$PACK" | tee "$PACK.sha256"
           ls -lh "$PACK"
           gh release upload "$TAG" "$PACK" "$PACK.sha256" --repo "$GITHUB_REPOSITORY" --clobber
 
   publish:
-    needs: [plan, app, data]
-    # Runs when the data jobs ran and passed, or were skipped because the
-    # previous release's packs are reused.
-    if: always() && needs.app.result == 'success' && (needs.data.result == 'success' || needs.data.result == 'skipped')
-    runs-on: ubuntu-latest
+    needs: [plan, release-check, draft, data]
+    # Runs when the data jobs ran and passed, or were skipped because the previous release's packs are
+    # reused; never after a cancel.
+    if: ${{ !cancelled() && needs.release-check.result == 'success' && needs.draft.result == 'success' && (needs.data.result == 'success' || needs.data.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write # uploads to the draft release and publishes it
     env:
-      GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.plan.outputs.tag }}
       VERSION: ${{ needs.plan.outputs.version }}
       PREVIOUS: ${{ needs.plan.outputs.previous }}
       DATA: ${{ needs.plan.outputs.data }}
     steps:
-      - uses: actions/checkout@v4
+      # Only scripts/release-manifest.py (standard library only) is used from this checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: src
           sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-apk
+          path: apk
+
+      # --clobber below replaces a file of the draft, or of a release made from this very commit (a
+      # re-run); anything else is a different build trying to overwrite a published release.
+      - name: Check the release may be written
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.sha }}
+        run: |
+          read -r is_draft existing <<< "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish --jq '"\(.isDraft) \(.targetCommitish)"')"
+          if [[ "$is_draft" != true && "$existing" != "$TARGET" ]]; then
+            echo "::error::$TAG is released from $existing, not from this commit ($TARGET). Its files are not replaced."
+            exit 1
+          fi
+
+      # Publishes exactly the APK release-check checked.
+      - name: Upload the APK that release-check checked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKED: ${{ needs.release-check.outputs.apk_sha256 }}
+        run: |
+          apk="apk/southbound-$VERSION.apk"
+          actual=$(sha256sum "$apk" | cut -d' ' -f1)
+          if [ -z "$CHECKED" ] || [ "$actual" != "$CHECKED" ]; then
+            echo "::error::$apk ($actual) is not the APK release-check checked ($CHECKED)"
+            exit 1
+          fi
+          (cd apk && sha256sum "southbound-$VERSION.apk" > "southbound-$VERSION.apk.sha256")
+          gh release upload "$TAG" "$apk" "$apk.sha256" --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Carry packs over from the previous release
         if: env.DATA != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p out
           for pack in $PACKS; do
@@ -266,19 +713,30 @@ jobs:
 
       # The manifest needs every file's size and SHA-256, so fetch what the
       # jobs uploaded (a draft's files are only reachable with the token).
-      - name: Write the release manifest
+      - name: Download the release files
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p out
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir out
+
+      - name: Write the release manifest
+        run: |
           (cd out && sha256sum -c ./*.sha256)
           for pack in $PACKS; do
             [[ -f "out/$pack" ]] || { echo "::error::The release is missing $pack"; exit 1; }
           done
-          python3 src/scripts/release-manifest.py out "$VERSION" > out/southbound.json
-          cat out/southbound.json
-          gh release upload "$TAG" out/southbound.json --repo "$GITHUB_REPOSITORY" --clobber
+          python3 src/scripts/release-manifest.py out "$VERSION" > southbound.json
+          cat southbound.json
+
+      - name: Upload the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" southbound.json --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$DATA" == true ]]; then
             data_note="Map data rebuilt for this release."
@@ -292,19 +750,42 @@ jobs:
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest \
             --title "Southbound $VERSION" --notes "$notes"
 
-  # A run that failed leaves no half-built draft behind. A release that was
-  # already published (a tag made on the website) is left as it is.
+  # A run that failed leaves no half-built draft behind (a release that was already published is left as it
+  # is), and no APK artifacts (126 MB each: the Free plan's artifact storage is 500 MB). Because both are
+  # gone, only "Re-run all jobs" recovers a failed run. Runs no repository code.
   cleanup:
-    needs: [plan, app, data, publish]
-    if: always() && needs.plan.result == 'success' && needs.publish.result != 'success'
-    runs-on: ubuntu-latest
+    needs: [plan, sign, draft, publish]
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # deletes the draft
+      actions: write # deletes this run's APK artifacts
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.plan.outputs.tag }}
+      PUBLISHED: ${{ needs.publish.result }}
     steps:
       - name: Delete the draft
+        if: env.PUBLISHED != 'success'
         run: |
-          if [[ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" == true ]]; then
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
-            echo "Deleted the draft $TAG"
+          if out=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>&1); then
+            if [[ "$out" == true ]]; then
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+              echo "Deleted the draft $TAG"
+            fi
+          elif [[ "$out" == *"release not found"* ]]; then
+            echo "There is no release $TAG, so no draft to delete."
+          else
+            echo "::warning::Could not look up release $TAG ($out). If a draft was left, delete it by hand."
           fi
+
+      - name: Delete this run's APK artifacts
+        if: always()
+        continue-on-error: true
+        run: |
+          ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "unsigned-apk" or .name == "signed-apk") | .id')
+          for id in $ids; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "Deleted artifact $id"
+          done
