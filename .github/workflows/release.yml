@@ -5,7 +5,7 @@
 # version (v0.2.0 -> v0.2.1 ...), so a phone or Obtainium only ever has to
 # look at the latest release.
 #
-# Packs are rebuilt only when needed (pipeline changed, the monthly run, or
+# Packs are rebuilt only when needed (pipeline or its pip lock changed, the monthly run, or
 # Run workflow with "Rebuild data"); otherwise the new release carries the
 # packs from the previous one, so the app and its data always ship together.
 #
@@ -166,8 +166,10 @@ jobs:
             for pack in $PACKS; do
               grep -qx "$pack" assets.txt || { data=true; reason="$previous lacks $pack"; }
             done
-            if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles'; then :; else
-              data=true; reason="pipeline changed since $previous"
+            # The pip lock lives under .github/ (ci.yml installs it too) but is a pipeline input: the search
+            # container installs from it, so a lock change rebuilds the packs like a change under pipeline/.
+            if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles' .github/pipeline-requirements.txt; then :; else
+              data=true; reason="pipeline or its pip lock changed since $previous"
             fi
           fi
 

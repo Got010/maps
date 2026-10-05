@@ -1,4 +1,5 @@
-# Proves the data pipeline still builds, on pull requests that touch it.
+# Proves the data pipeline still builds, on pull requests that touch it. The pip lock the search container
+# installs from (.github/pipeline-requirements.txt) counts as part of the pipeline.
 # NYC only, since it finishes in under an hour; the statewide packs build the
 # same scripts with other regions in release.yml after the PR is merged.
 name: Map data
@@ -13,6 +14,7 @@ on:
       - 'pipeline/lib/**'
       - 'pipeline/regions.json'
       - 'pipeline/Makefile'
+      - '.github/pipeline-requirements.txt'
       - '.github/workflows/data.yml'
 
 permissions:
