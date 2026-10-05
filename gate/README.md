@@ -22,8 +22,14 @@ Two accepted exceptions to "no job with a write token runs repository code", bot
 `main`: the `data` jobs run the pipeline's scripts and third-party tools with a write token (each pack is
 uploaded straight to the draft release, too large for artifact storage), and `publish` runs
 `scripts/release-manifest.py` (standard library only) next to its token. The signature schemes are the ones
-the shipped releases carry: v2 only (`SIGNING_SCHEMES` in the workflows; v0.1.12's signing block holds v2
-and nothing else).
+the shipped releases carry: v2 only (`SIGNING_SCHEMES` in the workflows; v0.1.12 carries no signature
+scheme other than v2, its signing block also holds AGP's dependency-info and padding blocks, which are not
+signatures).
+
+When a run fails after the draft exists, `cleanup` deletes the draft and the run's APK artifacts, so only
+"Re-run all jobs" recovers it. The release queue holds one waiting run and a newer one replaces it, so a
+scheduled data refresh that is still waiting can be replaced by a push (that month's refresh is skipped;
+start it by hand with Run workflow on `main`, "Rebuild data" ticked).
 
 The full contract (fields, normalisation, exit codes) is `specs/gate-baseline.md` in the program repo.
 `gate.py` uses only the Python standard library; in CI it cross-checks its manifest reading against
@@ -53,8 +59,9 @@ them goes to Prikey first. This README and `baseline.json` are Southbound's own.
     is a second client outside `NetworkGate`, inert because Valhalla's `default.json` has no
     `mjolnir.tile_url` and `OfflineRouter` sets only `tile_extract`. Ferrostar's HTTP classes are removed by
     R8. None of this can be proved from the APK.
-  - **Connectivity.** MapLibre's `ConnectivityReceiver` and WorkManager read `ConnectivityManager` and
-    `Network*` state (getters only, no sockets).
+  - **Connectivity.** WorkManager reads `ConnectivityManager`/`Network*` state for its network constraints,
+    and MapLibre's `ConnectivityReceiver` reads `ConnectivityManager` and `NetworkInfo` (getters only, no
+    sockets).
 - **Native libraries.** MapLibre, valhalla-mobile, Ferrostar, sherpa-onnx (with ONNX Runtime), JNA,
   AndroidX SQLite, graphics path and DataStore's shared counter (`libdatastore_shared_counter.so`). The
   release is zipaligned with `-P 16`, so they are 16 KB page-aligned. A new one is a gate change.

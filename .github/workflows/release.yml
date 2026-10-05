@@ -36,8 +36,15 @@
 # reachable with one; both run only on a commit that is on main. Nothing else with a write token runs
 # repository code.
 #
+# Recovering from a failed run: when a run fails after the draft exists (the data jobs, publish), the cleanup
+# job deletes the draft and the run's two APK artifacts, so only "Re-run all jobs" recovers; "Re-run failed
+# jobs" would find neither. The release queue holds one waiting run, and a newer one replaces it: a scheduled
+# run (the monthly data refresh) that is still waiting can be replaced by a push, and that month's refresh is
+# then skipped. Start it again with Run workflow on main and "Rebuild data" ticked.
+#
 # The release is created, uploaded to and published with the gh CLI only: no third-party release action
-# runs next to the write token. Only GitHub's own actions are used, pinned to commit SHAs.
+# runs next to the write token. Only GitHub's own actions and gradle/actions/setup-gradle are used, pinned to
+# commit SHAs; setup-gradle runs only in the jobs that have no secret and a read-only token.
 name: Release
 
 on:
@@ -58,11 +65,12 @@ on:
 
 permissions: {}
 
-# One release at a time, in order, and never cancel one halfway through. Runs for main and for tags share
-# one queue; a manual run on any other branch has its own, so it can't take the place of a release that is
-# waiting for main's turn.
+# One release at a time, in order, and never cancel one halfway through. Runs that can publish (main, and
+# pushes of v* tags) share one queue; every other run (a manual run on a branch or a tag) has its own, so it
+# can't take the place of a release that is waiting for main's turn. A queue holds one waiting run: a newer
+# one replaces it.
 concurrency:
-  group: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && 'release' || format('release-{0}', github.ref) }}
+  group: ${{ (github.ref == 'refs/heads/main' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && 'release' || format('release-{0}', github.ref) }}
   cancel-in-progress: false
 
 env:
@@ -191,6 +199,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The runner's own JDK 17, noted before setup-java replaces JAVA_HOME_17_X64: the signing rehearsal uses it,
+      # as the sign job does, so both run apksigner on the same JDK.
+      - name: Note the runner's JDK
+        run: echo "RUNNER_JDK=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
@@ -269,28 +282,51 @@ jobs:
       - name: Rehearse release signing with throwaway keys
         run: |
           set -euo pipefail
+          # The runner's own JDK, as the sign job uses (setup-java replaced JAVA_HOME_17_X64 by now).
+          export JAVA_HOME="$RUNNER_JDK" PATH="$RUNNER_JDK/bin:$PATH"
           tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
           if [ ! -x "$tools/apksigner" ] || [ ! -x "$tools/zipalign" ]; then
             echo "::error::build-tools $BUILD_TOOLS_VERSION is not on this runner (has: $(ls "$ANDROID_HOME/build-tools" | tr '\n' ' ')). Update BUILD_TOOLS_VERSION."
             exit 1
           fi
+          validate_schemes() {
+            local flags i seen=" "
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            if [ "${#flags[@]}" -ne 8 ]; then
+              echo "::error::SIGNING_SCHEMES must hold the v1, v2, v3 and v4 flags once each, each followed by true or false"
+              return 1
+            fi
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled | --v2-signing-enabled | --v3-signing-enabled | --v4-signing-enabled) ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              case "$seen" in
+                *" ${flags[i]} "*) echo "::error::${flags[i]} appears twice in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              seen+="${flags[i]} "
+              case "${flags[i+1]}" in
+                true | false) ;;
+                *) echo "::error::${flags[i]} must be followed by true or false in SIGNING_SCHEMES"; return 1 ;;
+              esac
+            done
+          }
+          # What apksigner must report for an APK signed with those flags; v3.1 is never signed, so always false.
           check_schemes() {
             local flags i name
             read -ra flags <<< "$SIGNING_SCHEMES"
-            for ((i = 0; i < ${#flags[@]}; i += 2)); do
+            for ((i = 0; i < 8; i += 2)); do
               case "${flags[i]}" in
                 --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
                 --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
                 --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
                 --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
-                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
               esac
               grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
-              if [ "${flags[i]}" = --v3-signing-enabled ]; then
-                grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): ${flags[i+1]}" "$1" || { echo "::error::Expected v3.1 to match v3"; return 1; }
-              fi
             done
+            grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): false" "$1" || { echo "::error::Expected 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false'"; return 1; }
           }
+          validate_schemes
           work="$RUNNER_TEMP/rehearsal"
           mkdir -p "$work"
           read -ra schemes <<< "$SIGNING_SCHEMES"
@@ -334,7 +370,9 @@ jobs:
   # environment; private repositories on GitHub Free can't have environment secrets, so the guard is this
   # job's if: (the plan's decision) and the on-main check before the key is decoded.
   sign:
-    if: needs.plan.outputs.publish == 'true'
+    if: >-
+      needs.plan.outputs.publish == 'true' &&
+      (github.ref == 'refs/heads/main' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
     needs: [plan, app]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -343,11 +381,11 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      # Same JDK as the app job's signing rehearsal (setup-java runs no repository code).
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        with:
-          distribution: temurin
-          java-version: 17
+      # The runner's own JDK 17, which is also the one the app job's rehearsal uses. Nothing is downloaded.
+      - name: Use the runner's JDK
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
 
       # The branch is resolved to its SHA first, so a tag called "main" can't stand in for it.
       - name: Check the commit is on main
@@ -377,6 +415,44 @@ jobs:
         run: |
           set -euo pipefail
           tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION"
+          validate_schemes() {
+            local flags i seen=" "
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            if [ "${#flags[@]}" -ne 8 ]; then
+              echo "::error::SIGNING_SCHEMES must hold the v1, v2, v3 and v4 flags once each, each followed by true or false"
+              return 1
+            fi
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled | --v2-signing-enabled | --v3-signing-enabled | --v4-signing-enabled) ;;
+                *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              case "$seen" in
+                *" ${flags[i]} "*) echo "::error::${flags[i]} appears twice in SIGNING_SCHEMES"; return 1 ;;
+              esac
+              seen+="${flags[i]} "
+              case "${flags[i+1]}" in
+                true | false) ;;
+                *) echo "::error::${flags[i]} must be followed by true or false in SIGNING_SCHEMES"; return 1 ;;
+              esac
+            done
+          }
+          # What apksigner must report for an APK signed with those flags; v3.1 is never signed, so always false.
+          check_schemes() {
+            local flags i name
+            read -ra flags <<< "$SIGNING_SCHEMES"
+            for ((i = 0; i < 8; i += 2)); do
+              case "${flags[i]}" in
+                --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
+                --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
+                --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
+                --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
+              esac
+              grep -qF "Verified using $name: ${flags[i+1]}" "$1" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; return 1; }
+            done
+            grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): false" "$1" || { echo "::error::Expected 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false'"; return 1; }
+          }
+          validate_schemes
           unsigned=unsigned/app-release-unsigned.apk
           if [ ! -f "$unsigned" ]; then
             echo "::error::$unsigned is missing from the app job's unsigned-apk artifact."
@@ -401,21 +477,7 @@ jobs:
           rm -f "$keystore" "$RUNNER_TEMP/aligned.apk"
           "$tools/zipalign" -c -P 16 4 "$out"
           "$tools/apksigner" verify --print-certs -v "$out" | tee "$RUNNER_TEMP/verify.txt"
-          # The lines apksigner must report, from the flags the APK was signed with.
-          read -ra flags <<< "$SIGNING_SCHEMES"
-          for ((i = 0; i < ${#flags[@]}; i += 2)); do
-            case "${flags[i]}" in
-              --v1-signing-enabled) name="v1 scheme (JAR signing)" ;;
-              --v2-signing-enabled) name="v2 scheme (APK Signature Scheme v2)" ;;
-              --v3-signing-enabled) name="v3 scheme (APK Signature Scheme v3)" ;;
-              --v4-signing-enabled) name="v4 scheme (APK Signature Scheme v4)" ;;
-              *) echo "::error::Unknown flag ${flags[i]} in SIGNING_SCHEMES"; exit 1 ;;
-            esac
-            grep -qF "Verified using $name: ${flags[i+1]}" "$RUNNER_TEMP/verify.txt" || { echo "::error::Expected 'Verified using $name: ${flags[i+1]}'"; exit 1; }
-            if [ "${flags[i]}" = --v3-signing-enabled ]; then
-              grep -qF "Verified using v3.1 scheme (APK Signature Scheme v3.1): ${flags[i+1]}" "$RUNNER_TEMP/verify.txt" || { echo "::error::Expected v3.1 to match v3"; exit 1; }
-            fi
-          done
+          check_schemes "$RUNNER_TEMP/verify.txt"
 
       - name: Remove the keystore
         if: always()
@@ -491,9 +553,10 @@ jobs:
     permissions:
       contents: write # creates the draft release; this job runs no repository code
     steps:
-      # A tag released from the website already has a release: upload to that. A release that is already
-      # out is replaced only when it was made from this very commit (a re-run), never by a different
-      # build; a draft left by an earlier run is taken over and pointed at this commit.
+      # A release that is already out is replaced only when it was made from this very commit (a re-run),
+      # never by a different build. A release made on the website has targetCommitish "main", a branch
+      # name and not this commit, so it is refused; a draft (from an earlier run, or made on the website) is
+      # taken over and pointed at this commit.
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -687,9 +750,9 @@ jobs:
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest \
             --title "Southbound $VERSION" --notes "$notes"
 
-  # A run that failed leaves no half-built draft behind (a release that was already published, a tag made
-  # on the website, is left as it is), and a run that published drops its two APK artifacts (126 MB each:
-  # the Free plan's artifact storage is 500 MB). Runs no repository code.
+  # A run that failed leaves no half-built draft behind (a release that was already published is left as it
+  # is), and no APK artifacts (126 MB each: the Free plan's artifact storage is 500 MB). Because both are
+  # gone, only "Re-run all jobs" recovers a failed run. Runs no repository code.
   cleanup:
     needs: [plan, sign, draft, publish]
     if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publish == 'true' }}
@@ -706,13 +769,19 @@ jobs:
       - name: Delete the draft
         if: env.PUBLISHED != 'success'
         run: |
-          if [[ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" == true ]]; then
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
-            echo "Deleted the draft $TAG"
+          if out=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>&1); then
+            if [[ "$out" == true ]]; then
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+              echo "Deleted the draft $TAG"
+            fi
+          elif [[ "$out" == *"release not found"* ]]; then
+            echo "There is no release $TAG, so no draft to delete."
+          else
+            echo "::warning::Could not look up release $TAG ($out). If a draft was left, delete it by hand."
           fi
 
       - name: Delete this run's APK artifacts
-        if: env.PUBLISHED == 'success'
+        if: always()
         continue-on-error: true
         run: |
           ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \

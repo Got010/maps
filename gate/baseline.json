@@ -380,31 +380,31 @@
   "network_api": [
     {
       "value": "Landroid/net/ConnectivityManager$NetworkCallback;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
     },
     {
       "value": "Landroid/net/ConnectivityManager;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads this type: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/Network;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
     },
     {
       "value": "Landroid/net/NetworkCapabilities;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
     },
     {
       "value": "Landroid/net/NetworkInfo;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads this type: state getters only, no sockets, no egress, so no toggle."
     },
     {
       "value": "Landroid/net/NetworkRequest$Builder;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
     },
     {
       "value": "Landroid/net/NetworkRequest;",
-      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager. MapLibre's ConnectivityReceiver (a broadcast receiver that reads connectivity state and tells MapLibre's core whether the device is online) also reads these types: state getters only, no sockets, no egress, so no toggle."
+      "note": "WorkManager's network-constraint tracking (androidx.work, used by core/updates UpdateScheduler for the scheduled update check, which runs only with NetworkFeature.PACK_DOWNLOADS or APP_UPDATES on). Also the source of ACCESS_NETWORK_STATE. No app code calls ConnectivityManager."
     },
     {
       "value": "Landroid/net/http/X509TrustManagerExtensions;",
