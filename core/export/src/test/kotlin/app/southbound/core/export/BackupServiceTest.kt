@@ -305,6 +305,68 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a preference write that fails keeps the journal until it lands`() {
+        val file = export(filled())
+        val b = device("b")
+        b.stores.failSettings = true
+
+        val outcome = import(b, file)
+
+        assertTrue(outcome is ImportOutcome.Pending)
+        assertEquals("commit failed", (outcome as ImportOutcome.Pending).reason)
+        // The places and keys landed but the preferences did not: the journal is still there, not forgotten.
+        assertTrue(b.journal.exists())
+        assertEquals(Samples.userData(), b.stores.places.data.value)
+        assertEquals(Samples.defaultSettings(), b.stores.settings)
+        // A resume that fails again keeps it too.
+        assertTrue(runBlocking { b.service.resume() } is ResumeOutcome.Failed)
+        assertTrue(b.journal.exists())
+        b.stores.failSettings = false
+        assertTrue(runBlocking { b.service.resume() } is ResumeOutcome.Applied)
+        assertFalse(b.journal.exists())
+        assertEquals(Samples.settings(), b.stores.settings)
+    }
+
+    @Test
+    fun `the summary names every network feature the import turns on`() {
+        val a = filled() // every toggle away from its default
+        val file = export(a)
+        val b = device("b") // defaults: only PACK_DOWNLOADS on
+        val outcome = import(b, file) as ImportOutcome.Done
+        assertEquals(
+            listOf("APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME", "TRANSIT_BUS_TIME", "GAS_PRICES"),
+            outcome.turnedOn.map { it.name },
+        )
+        // Into a phone that already has them on, or from a bundle that turns none on: none.
+        assertEquals(emptyList<Any>(), (import(b, file) as ImportOutcome.Done).turnedOn)
+        val plain = export(device("plain"))
+        assertEquals(emptyList<Any>(), (import(device("d"), plain) as ImportOutcome.Done).turnedOn)
+        // Only what goes from off to on is named: this bundle turns PACK_DOWNLOADS back on.
+        assertEquals(listOf("PACK_DOWNLOADS"), (import(b, plain) as ImportOutcome.Done).turnedOn.map { it.name })
+        // A kept import says the same before it lands.
+        val c = device("c")
+        c.stores.failApply = true
+        assertEquals(7, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
+        c.stores.failApply = false
+        assertEquals(7, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
+    }
+
+    @Test
+    fun `resume checks again that nothing unreadable would be overwritten`() {
+        val file = export(filled())
+        val b = device("b")
+        b.stores.failApply = true
+        import(b, file)
+        b.stores.failApply = false
+        b.stores.keysUnreadable = true
+        val applied = b.stores.applyCalls
+        val outcome = runBlocking { b.service.resume() }
+        assertTrue(outcome is ResumeOutcome.Failed && !outcome.unreadable)
+        assertEquals(applied, b.stores.applyCalls)
+        assertTrue(b.journal.exists())
+    }
+
+    @Test
     fun `a stopped process finishes the import at the next start`() {
         val file = export(filled())
         val dir = tmp.newFolder("phone")

@@ -4,6 +4,7 @@ import android.content.Context
 import app.southbound.core.export.AndroidBackupStores
 import app.southbound.core.export.BackupService
 import app.southbound.core.export.ImportJournal
+import app.southbound.core.export.ResumeOutcome
 import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.network.PreferenceNetworkToggles
@@ -90,10 +91,15 @@ class ExploreServices private constructor(context: Context) {
         )
     }
 
-    /** Finishes an import that was verified and kept but stopped before it was applied. Does nothing otherwise. */
-    fun finishPendingImport() {
+    /**
+     * Finishes an import that was verified and kept but stopped before it was applied. Does nothing otherwise.
+     * [onApplied] is called (on a background thread) once it has landed.
+     */
+    fun finishPendingImport(onApplied: () -> Unit = {}) {
         if (!ImportJournal.pendingIn(appContext.noBackupFilesDir)) return
-        scope.launch(Dispatchers.IO) { backup.resume() }
+        scope.launch(Dispatchers.IO) {
+            if (backup.resume() is ResumeOutcome.Applied) onApplied()
+        }
     }
 
     private var search: Opened<SearchIndex>? = null

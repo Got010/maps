@@ -19,6 +19,12 @@ class DrivingPrefs private constructor(context: Context) {
         _nightBySunset.value = on
     }
 
+    /** [setNightBySunset] with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replaceNightBySunset(on: Boolean) {
+        if (!prefs.edit().putBoolean(KEY_NIGHT, on).commit()) throw java.io.IOException("Couldn't save the driving options")
+        _nightBySunset.value = on
+    }
+
     companion object {
         private const val KEY_NIGHT = "night_by_sunset"
 

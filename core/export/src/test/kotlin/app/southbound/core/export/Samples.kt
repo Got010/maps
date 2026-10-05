@@ -129,6 +129,9 @@ class FakeStores(dir: File, clock: () -> Long = { 1_000L }) : BackupStores {
 
     /** Throws an IOException after the places are replaced and before the keys and settings are. */
     var failApply = false
+
+    /** Throws an IOException after the places and keys are replaced and before the preferences are: a failed preference commit. */
+    var failSettings = false
     var applyCalls = 0
 
     /** A saved API key that the Keystore will not decrypt. */
@@ -153,8 +156,11 @@ class FakeStores(dir: File, clock: () -> Long = { 1_000L }) : BackupStores {
         places.update(explicit = false) { data.userData }
         if (failApply) throw IOException("disk full")
         keys = data.apiKeys
+        if (failSettings) throw IOException("commit failed")
         settings = data.settings
     }
+
+    override fun networkToggles(): Map<NetworkFeature, Boolean> = settings.network
 
     /** Everything the stores hold, compared by value. */
     fun snapshot(): List<Any> = listOf(places.data.value, keys, settings)

@@ -25,6 +25,18 @@ class PreferenceNetworkToggles private constructor(context: Context) : NetworkTo
         _state.value = read()
     }
 
+    /**
+     * Sets every toggle in one synchronous commit (an import: the caller must know the write reached the disk before
+     * it forgets the import). Throws [java.io.IOException] if the commit fails, leaving the toggles as they were.
+     */
+    @Synchronized
+    fun replaceAll(values: Map<NetworkFeature, Boolean>) {
+        val edit = prefs.edit()
+        for (feature in NetworkFeature.entries) edit.putBoolean(feature.name, values[feature] ?: feature.enabledByDefault)
+        if (!edit.commit()) throw java.io.IOException("Couldn't save the network toggles")
+        _state.value = read()
+    }
+
     private fun read(): Map<NetworkFeature, Boolean> =
         NetworkFeature.entries.associateWith { prefs.getBoolean(it.name, it.enabledByDefault) }
 

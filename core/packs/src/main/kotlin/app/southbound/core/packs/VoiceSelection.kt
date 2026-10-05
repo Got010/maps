@@ -26,6 +26,13 @@ class VoiceSelection private constructor(context: Context) {
         _voices.value = next
     }
 
+    /** [choose] with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replace(voice: String?) {
+        val next = setOfNotNull(voice)
+        if (!prefs.edit().putStringSet(KEY, next).commit()) throw java.io.IOException("Couldn't save the voice choice")
+        _voices.value = next
+    }
+
     companion object {
         private const val KEY = "voices"
 

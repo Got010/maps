@@ -6,7 +6,6 @@ import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.network.SecretUnreadableException
 import app.southbound.core.packs.RegionSelection
-import app.southbound.core.packs.Regions
 import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
@@ -62,20 +61,27 @@ class AndroidBackupStores(
         return BackupData(userData.data.value, secrets.readAll(), settings)
     }
 
+    override fun networkToggles(): Map<NetworkFeature, Boolean> = NetworkFeature.entries.associateWith { network.isEnabled(it) }
+
+    /**
+     * Every write here is durable when it returns (a synchronous commit, a fsynced file replace, or DataStore's
+     * completed edit) and throws if it fails, so [BackupService] deletes the kept import only after all of them
+     * have landed. A queued write would let the process die with the import forgotten and the data half applied.
+     */
     override suspend fun apply(data: BackupData) {
         // Throws, changing nothing, if the saved places file is unreadable (the store refuses to overwrite it).
         userData.update(explicit = false) { data.userData }
         secrets.replaceAll(data.apiKeys)
         val s = data.settings
-        for ((feature, on) in s.network) network.set(feature, on)
-        route.set(s.route)
-        driving.setNightBySunset(s.nightBySunset)
+        network.replaceAll(s.network)
+        route.replace(s.route)
+        driving.replaceNightBySunset(s.nightBySunset)
         fuel.setChoices(s.fuel.mpg, s.fuel.pricePerGallon, s.fuel.source, s.fuel.region)
         voice.update { s.voice }
         // The updater downloads a voice pack only for the voice in this list; Settings keeps it in step when open.
-        voiceSelection.choose(s.voice.builtInVoice.takeUnless { it.bundled }?.id)
-        for (region in Regions.basemaps) regions.set(region.id, region.id in s.regions)
-        UpdateScheduler.setAllowMobileData(context, s.allowMobileData)
+        voiceSelection.replace(s.voice.builtInVoice.takeUnless { it.bundled }?.id)
+        regions.replaceBasemaps(s.regions)
+        UpdateScheduler.replaceAllowMobileData(context, s.allowMobileData)
     }
 
     companion object {

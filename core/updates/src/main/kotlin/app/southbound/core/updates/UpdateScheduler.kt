@@ -37,6 +37,12 @@ object UpdateScheduler {
         schedule(context)
     }
 
+    /** [setAllowMobileData] with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replaceAllowMobileData(context: Context, allowed: Boolean) {
+        if (!prefs(context).edit().putBoolean(KEY_MOBILE, allowed).commit()) throw java.io.IOException("Couldn't save the update options")
+        schedule(context)
+    }
+
     /** POSIX millis of the last successful check, or 0. */
     fun lastCheck(context: Context): Long = prefs(context).getLong(KEY_LAST_CHECK, 0)
 

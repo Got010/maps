@@ -1,13 +1,16 @@
 package app.southbound.core.export
 
+import app.southbound.core.userdata.PlaceList
 import app.southbound.core.userdata.PlaceRef
+import app.southbound.core.userdata.RecentPlace
+import app.southbound.core.userdata.SavedPlace
 import app.southbound.core.userdata.UserData
 import app.southbound.core.userdata.UserDataCodec
 
 /**
- * `places.json`: the saved places file's own JSON ([UserDataCodec], version 1), checked far more strictly than
- * the app's own reader is, because here the text comes from outside. Export runs the same check before a byte is
- * written, so it refuses what import would.
+ * `places.json`: the saved places file's own JSON ([UserDataCodec] writes it, version 1), read back strictly (see
+ * [decode]) and checked far more tightly than the app's own reader does, because here the text comes from outside.
+ * Export runs the same check before a byte is written, so it refuses what import would.
  */
 internal object PlacesEntry {
     const val MAX_LISTS = 500
@@ -23,17 +26,50 @@ internal object PlacesEntry {
         return UserDataCodec.encode(data).toByteArray(Charsets.UTF_8)
     }
 
+    private val ROOT = setOf("version", "lastId", "lists", "saved", "recents")
+    private val ROOT_OPTIONAL = setOf("home", "work")
+    private val LIST = setOf("id", "name", "builtIn")
+    private val SAVED = setOf("id", "list", "savedAt", "place")
+    private val RECENT = setOf("seenAt", "place")
+    private val PLACE = setOf("name", "lat", "lon", "address", "category", "osmRef")
+
+    /**
+     * Read strictly, not with the app's own lenient reader: exactly the fields and types [UserDataCodec] writes
+     * (an unknown or missing field, a value of the wrong type or a fractional id is refused, never defaulted), and
+     * `version` must be 1. Duplicate keys were already refused by the JSON reader.
+     */
     fun decode(bytes: ByteArray): UserData {
-        val text = utf8(bytes)
-        val data = try {
-            UserDataCodec.decode(text)
-        } catch (e: Exception) {
-            // IllegalArgumentException from the codec, or a wrong type inside the document.
-            invalid("places.json can't be read")
-        }
+        val root = Obj.of(parseJson(bytes, "places.json"), "places", ROOT, ROOT_OPTIONAL)
+        if (root.long("version", 1, 1) != 1L) invalid("places.json is not version 1")
+        val data = UserData(
+            lists = root.objects("lists", MAX_LISTS, LIST).map {
+                PlaceList(it.long("id", 1, Long.MAX_VALUE), it.string("name", MAX_LIST_NAME), it.bool("builtIn"))
+            },
+            saved = root.objects("saved", MAX_SAVED, SAVED).map {
+                SavedPlace(
+                    it.long("id", 1, Long.MAX_VALUE), it.long("list", 1, Long.MAX_VALUE),
+                    place(it.obj("place", PLACE)), it.long("savedAt", 0, Long.MAX_VALUE),
+                )
+            },
+            recents = root.objects("recents", UserData.MAX_RECENTS, RECENT).map {
+                RecentPlace(place(it.obj("place", PLACE)), it.long("seenAt", 0, Long.MAX_VALUE))
+            },
+            lastId = root.long("lastId", 1, Long.MAX_VALUE),
+            home = if (root.has("home")) place(root.obj("home", PLACE)) else null,
+            work = if (root.has("work")) place(root.obj("work", PLACE)) else null,
+        )
         check(data)
         return data
     }
+
+    private fun place(o: Obj) = PlaceRef(
+        name = o.string("name", MAX_NAME),
+        lat = o.double("lat", -90.0, 90.0),
+        lon = o.double("lon", -180.0, 180.0),
+        address = o.stringOrNull("address", MAX_ADDRESS),
+        category = o.stringOrNull("category", MAX_CATEGORY),
+        osmRef = o.stringOrNull("osmRef", MAX_OSM_REF),
+    )
 
     /** The rules of schema 1. Notes name the field, never its contents. */
     fun check(data: UserData) {
