@@ -80,11 +80,15 @@ object RouteAlerts {
         return if (d > 180.0) 360.0 - d else d
     }
 
-    /** Whether [mark] counts for [route] by its direction: [faces] at the point of the route nearest it. */
-    private fun facesRoute(route: RouteLine, mark: Landmark): Boolean {
+    /**
+     * Whether [mark] counts for [route] by its direction: it faces ([faces]) any leg of the route
+     * within [withinMeters] of it, so at a corner both legs are tried, not only the one arriving.
+     * No direction, or no leg that close, counts.
+     */
+    private fun facesRoute(route: RouteLine, mark: Landmark, withinMeters: Double): Boolean {
         if (mark.direction == null) return true
-        val along = route.locate(mark.point)?.along ?: return true
-        return faces(mark.direction, route.bearingAt(along))
+        val bearings = route.bearingsNear(mark.point, withinMeters)
+        return bearings.isEmpty() || bearings.any { faces(mark.direction, it) }
     }
 
     /**
@@ -104,7 +108,7 @@ object RouteAlerts {
     ): Int {
         val spots = mutableListOf<LatLon>()
         for (mark in alongRoute(route, landmarks, kind, withinMeters)) {
-            if (!facesRoute(route, mark)) continue
+            if (!facesRoute(route, mark, withinMeters)) continue
             if (spots.none { RouteLine.distanceMeters(it, mark.point) <= sameSpotMeters }) spots += mark.point
         }
         return spots.size

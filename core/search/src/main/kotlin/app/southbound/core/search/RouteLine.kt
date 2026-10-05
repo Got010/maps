@@ -74,24 +74,32 @@ class RouteLine(val points: List<LatLon>) {
     }
 
     /**
-     * The direction of travel [along] metres from the start, in degrees clockwise from
-     * north (0 up to, not including, 360): the bearing of the segment that point is on.
-     * Null for a line without a segment of length. At a corner it is the leg arriving there.
+     * The directions of travel, in degrees clockwise from north (0 up to, not including,
+     * 360), of every segment of the line that passes within [withinMeters] of [p]. At a corner
+     * that is both legs, so something beside it can be matched against the one it faces.
+     * Segments with no length are skipped; empty when none is that close.
      */
-    fun bearingAt(along: Double): Double? {
-        // The first segment with length that ends at or past [along]; past the end, the last one with length.
-        var seg = -1
-        for (i in 1 until points.size) {
-            if (cumulative[i] == cumulative[i - 1]) continue
-            seg = i
-            if (cumulative[i] >= along) break
+    fun bearingsNear(p: LatLon, withinMeters: Double): List<Double> {
+        val k = cos(Math.toRadians(p.lat)) * METERS_PER_DEGREE
+        val found = mutableListOf<Double>()
+        for (i in 0 until points.size - 1) {
+            val a = points[i]
+            val b = points[i + 1]
+            // Metres east and north of p.
+            val ax = (a.lon - p.lon) * k
+            val ay = (a.lat - p.lat) * METERS_PER_DEGREE
+            val dx = (b.lon - a.lon) * k
+            val dy = (b.lat - a.lat) * METERS_PER_DEGREE
+            val len2 = dx * dx + dy * dy
+            if (len2 == 0.0) continue
+            val t = (-(ax * dx + ay * dy) / len2).coerceIn(0.0, 1.0)
+            val cx = ax + t * dx
+            val cy = ay + t * dy
+            if (sqrt(cx * cx + cy * cy) <= withinMeters) {
+                found += (Math.toDegrees(atan2(dx, dy)) + 360.0) % 360.0
+            }
         }
-        if (seg < 0) return null
-        val a = points[seg - 1]
-        val b = points[seg]
-        val east = (b.lon - a.lon) * cos(Math.toRadians((a.lat + b.lat) / 2))
-        val north = b.lat - a.lat
-        return (Math.toDegrees(atan2(east, north)) + 360.0) % 360.0
+        return found
     }
 
     /**
