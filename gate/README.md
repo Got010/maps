@@ -6,15 +6,24 @@ ones, plus every service, receiver and provider) with their intent-filter action
 package queries, native libraries and any code outside the main dex files, network API types, host and
 URL literals, runtime and file dependencies, SDK levels, `debuggable`, backup and cleartext-traffic
 flags, the network security config's trust anchors, cleartext rules and pins, and the signing
-certificate. The CI workflow builds the release APK (unsigned, in pull requests), runs `gate.py check`
-against this file, and fails on any difference. So a change to what Southbound can do only gets in if the
-same pull request changes `baseline.json`, where the owner sees it before merging. In a pull request the
-gate also lists, as warnings, every field the pull request changes in `baseline.json` itself.
+certificate. The CI workflow builds the release APK (unsigned: no job that runs repository code has the
+signing key), runs `gate.py check` against this file, and fails on any difference. So a change to what
+Southbound can do only gets in if the same pull request changes `baseline.json`, where the owner sees it
+before merging. In a pull request the gate also lists, as warnings, every field the pull request changes in
+`baseline.json` itself.
 
-The Release workflow runs the same check on the APK it signs, then its `release-check` job runs
-`gate.py cert --require-pin`: it refuses to publish an APK that is unsigned or signed with a certificate
-other than `signing.cert_sha256`. That job runs before the data packs are built and before anything is
-published, and the job that publishes runs none of the repository's code.
+The Release workflow (`release.yml`) builds and gates the same unsigned APK, then signs it in a `sign` job
+that checks out nothing and runs no repository code (only GitHub's own actions, `gh` and the Android SDK's
+`zipalign` and `apksigner`): it is the only job that references the four `SOUTHBOUND_*` signing secrets, and it
+runs only for a commit that is on `main`. The `release-check` job then runs `gate.py cert --require-pin` on
+the signed APK: it refuses to publish an APK that is unsigned or signed with a certificate other than
+`signing.cert_sha256`. That check runs before the data packs are built and before anything is published.
+Two accepted exceptions to "no job with a write token runs repository code", both only for a commit on
+`main`: the `data` jobs run the pipeline's scripts and third-party tools with a write token (each pack is
+uploaded straight to the draft release, too large for artifact storage), and `publish` runs
+`scripts/release-manifest.py` (standard library only) next to its token. The signature schemes are the ones
+the shipped releases carry: v2 only (`SIGNING_SCHEMES` in the workflows; v0.1.12's signing block holds v2
+and nothing else).
 
 The full contract (fields, normalisation, exit codes) is `specs/gate-baseline.md` in the program repo.
 `gate.py` uses only the Python standard library; in CI it cross-checks its manifest reading against
@@ -31,9 +40,24 @@ them goes to Prikey first. This README and `baseline.json` are Southbound's own.
   saying which part of the app it belongs to. Every request in the app's own code goes through
   `:core:network` `NetworkGate`, which has one toggle per feature (`NetworkFeature`), off by default except
   pack downloads. Hosts and types that come from a library (MapLibre's Mapbox-era strings, Kotlin and
-  Android tooling messages) say so, and are never contacted by app code.
+  Android tooling messages) say so, and are never contacted by app code. What the baseline cannot show:
+  - **GitHub.** `GitHubReleases.isAllowed` accepts `api.github.com`, `github.com` and any
+    `*.githubusercontent.com` over HTTPS (checked on every redirect hop). The release asset bytes come from
+    `*.githubusercontent.com`, which the gate cannot record (a leading-dot suffix is not a host literal; a
+    gate 2.1 item), so only `api.github.com` and `github.com` are in the list.
+  - **511NY.** `FiveElevenNy.absoluteUrl` passes any absolute camera-image URL in the feed through to
+    `NetworkGate.get` (redirects followed), so the hosts the feed names are contacted under `TRAFFIC_511NY`
+    and are not in the baseline.
+  - **Other HTTP clients.** MapLibre Native has its own HTTP stack (OkHttp), unused because the style is
+    bundled and tiles are `pmtiles://file://`. valhalla-mobile's `com/valhalla/valhalla/http/ValhallaHttpClient`
+    is a second client outside `NetworkGate`, inert because Valhalla's `default.json` has no
+    `mjolnir.tile_url` and `OfflineRouter` sets only `tile_extract`. Ferrostar's HTTP classes are removed by
+    R8. None of this can be proved from the APK.
+  - **Connectivity.** MapLibre's `ConnectivityReceiver` and WorkManager read `ConnectivityManager` and
+    `Network*` state (getters only, no sockets).
 - **Native libraries.** MapLibre, valhalla-mobile, Ferrostar, sherpa-onnx (with ONNX Runtime), JNA,
-  AndroidX SQLite and graphics path. A new one is a gate change.
+  AndroidX SQLite, graphics path and DataStore's shared counter (`libdatastore_shared_counter.so`). The
+  release is zipaligned with `-P 16`, so they are 16 KB page-aligned. A new one is a gate change.
 - **Map styles.** `assets/*.json` (the light and dark style) and the Valhalla default configuration are
   scanned for URLs too (`scan.extra_text_paths`).
 - **Pin.** `signing.cert_sha256` is the certificate of the first and the latest release at the time
