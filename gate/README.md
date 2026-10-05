@@ -7,7 +7,9 @@ provider) with their intent-filter actions, categories and data, package queries
 any code outside the main dex files, network API types (arrays of them too), host and URL literals
 (suffix literals such as `.githubusercontent.com` too), digests of the bundled voice files, runtime and
 file dependencies, SDK levels, `debuggable`, backup and cleartext-traffic flags, the network security
-config's trust anchors, cleartext rules and pins, and the signing certificate. The CI workflow builds the release APK (unsigned: no job that runs repository code has the
+config's trust anchors, cleartext rules and pins, and the signing certificate.
+
+The CI workflow builds the release APK (unsigned: no job that runs repository code has the
 signing key), runs `gate.py check` against this file, and fails on any difference. So a change to what
 Southbound can do only gets in if the same pull request changes `baseline.json`, where the owner sees it
 before merging. In a pull request the gate also lists, as warnings, every field the pull request changes in
@@ -51,8 +53,8 @@ and `baseline.json` are Southbound's own: the 2.1 section below is Prikey's, ada
   Android tooling messages) say so, and are never contacted by app code. What the baseline cannot show:
   - **GitHub.** `GitHubReleases.isAllowed` accepts `api.github.com`, `github.com` and any
     `*.githubusercontent.com` over HTTPS (checked on every redirect hop). The release asset bytes come from
-    `*.githubusercontent.com`, which the gate cannot record (a leading-dot suffix is not a host literal; a
-    gate 2.1 item), so only `api.github.com` and `github.com` are in the list.
+    `*.githubusercontent.com`, which gate 2.1 records as the suffix `.githubusercontent.com` (see "Hosts the
+    gate now records" below); the individual hosts GitHub redirects to are not named in the list.
   - **511NY.** `FiveElevenNy.absoluteUrl` passes any absolute camera-image URL in the feed through to
     `NetworkGate.get` (redirects followed), so the hosts the feed names are contacted under `TRAFFIC_511NY`
     and are not in the baseline.
@@ -151,6 +153,41 @@ baseline: CI is red until then.
 - `gate.py` has no guard against replacing a published APK (`gh release upload --clobber`): that check
   lives in the publishing job of release.yml ("A release that is already out is replaced only when it was
   made from this very commit").
+
+### Canonical form of a compiled XML resource (frozen from 2.1)
+
+Quoted from `specs/gate-baseline.md`, section 1.1 (Prikey pull request 16). It decides the digests in
+`provider_resources` and in `meta_data` entries that point at a file (`resource=sha256:...`), so it does not
+change; Southbound has no provider resources, but its two `meta_data` references use it.
+
+`elements`/canonical form (frozen). The compiled XML resource is written as one line per element and per
+non-blank text node. Each line is one compact JSON array (`json.dumps(..., ensure_ascii=True,
+separators=(",", ":"))`): `[DEPTH,"tag",[["key","value"],...]]` for an element, with attributes sorted by
+key, and `[DEPTH,"#text",[["#text","stripped text"]]]` for a text node. DEPTH is the number of parent
+elements.
+
+**Key.** An attribute whose resource ID is one the gate knows (`ATTR_IDS`) is `android:NAME` whatever its
+namespace (an attribute whose name disagrees with its known ID is exit 2); an attribute in the Android
+namespace with no known ID is also `android:NAME`, but exit 2 if its name is a known one with a missing or
+different ID. Any other attribute is its plain `NAME` when it has no namespace, and `{namespace URI}NAME` in
+any other namespace, so a decoy in a foreign namespace can't stand in for the plain attribute.
+
+**Value.** The attribute's raw string when it has one, for any type. With no raw string: a boolean is `true`
+or `false`; an integer, decimal or hex typed, is its unsigned decimal value; a resource reference is JSON
+`null`; anything else is `(type 0xTT)0xDDDDDDDD` (type and data, lower-case hex, two and eight digits). JSON
+escaping keeps quotes and newlines inside the value, so no value can spell out another attribute or element.
+
+**Refused (exit 2)** in every compiled XML the gate decodes (manifest, network security config, provider
+resources): an element with two attributes that read as the same key; a string attribute with no raw copy,
+or whose raw and typed copies differ; a resource reference that also carries a raw string (FileProvider and
+the network security config read the raw string through getAttributeValue, PackageParser the typed value).
+The string pool's order, the compiler's version and attribute order do not matter.
+
+`sha256` is the SHA-256 of the lines joined by `\n` (UTF-8). If a resource has several configuration
+variants, identical ones count once, the lines of each variant follow one another sorted by (kind, lines),
+and variants are separated by a line `---`. A file that is not compiled XML contributes one line `raw sha256
+<hex>`. The file's name is not recorded. In `meta_data`, a reference that resolves to a file is
+`NAME;resource=sha256:<that digest>`.
 
 ## Dependency verification metadata
 
