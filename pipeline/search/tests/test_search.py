@@ -125,7 +125,7 @@ class BuildTest(unittest.TestCase):
         rows = self.db.execute("SELECT category, name, lat, lon, direction FROM landmark ORDER BY lat").fetchall()
         self.assertEqual(
             [
-                # The fixture tags a direction on the stop sign and the gas station too: only cameras keep one.
+                # The fixture tags a direction on the stop sign and a camera:direction on the gas station: only cameras keep one.
                 ("traffic_signals", None, 40.74, -73.99, None),
                 ("stop", None, 40.741, -73.99, None),
                 # Brand beats the name: "past the Shell".
@@ -134,7 +134,8 @@ class BuildTest(unittest.TestCase):
                 # Plate readers keep who makes them, for the map's camera card.
                 ("alpr_camera", "Flock Safety", 40.744, -73.99, 22),  # direction=NNE
                 ("alpr_camera", "Motorola Solutions", 40.7445, -73.99, 270),  # direction=-90
-                ("alpr_camera", None, 40.7448, -73.99, None),  # direction=90-180, a range
+                ("alpr_camera", None, 40.7448, -73.99, None),  # direction=90-180, a range; its camera:direction=45 doesn't overrule it
+                ("alpr_camera", None, 40.7449, -73.99, 225),  # camera:direction=SW alone
                 # Node 35 is a plain camera: not an alert.
                 ("school_zone", None, 40.746, -73.99, None),
                 # The start of a road with a school speed limit.
@@ -190,6 +191,22 @@ class BuildTest(unittest.TestCase):
         self.assertIsNone(direction({"direction": "both"}, "speed_camera"))
         for category in ["fuel", "stop", "traffic_signals", "school_zone", "church", "bank", "supermarket"]:
             self.assertIsNone(direction({"direction": "90"}, category), category)
+            self.assertIsNone(direction({"camera:direction": "90"}, category), category)
+
+    def test_camera_direction_is_the_fallback(self):
+        direction = build_search.landmark_direction
+        for category in ["alpr_camera", "speed_camera"]:
+            # camera:direction alone, in any form the direction tag takes.
+            self.assertEqual(135, direction({"camera:direction": "135"}, category))
+            self.assertEqual(315, direction({"camera:direction": "NW"}, category))
+            self.assertEqual(270, direction({"camera:direction": "-90"}, category))
+            self.assertIsNone(direction({"camera:direction": "90;270"}, category))
+            self.assertIsNone(direction({"camera:direction": "forward"}, category))
+            # Both present: direction wins, even when camera:direction would parse.
+            self.assertEqual(90, direction({"direction": "90", "camera:direction": "180"}, category))
+            # A direction that isn't one bearing is not overruled by camera:direction.
+            self.assertIsNone(direction({"direction": "both", "camera:direction": "180"}, category))
+            self.assertIsNone(direction({"direction": "90-180", "camera:direction": "180"}, category))
 
     def test_landmark_box_query_uses_the_index(self):
         plan = " ".join(
