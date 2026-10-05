@@ -220,18 +220,47 @@ class RouteAlertsTest {
     }
 
     @Test
-    fun bearingFollowsTheLegTheDriverIsOn() {
-        assertEquals(0.0, route.bearingAt(500.0)!!, 0.5)
-        assertEquals(90.0, route.bearingAt(1500.0)!!, 0.5)
-        // At the corner it is the leg arriving; past the ends it clamps to the first and last legs.
-        assertEquals(0.0, route.bearingAt(1000.0)!!, 0.5)
-        assertEquals(0.0, route.bearingAt(-20.0)!!, 0.5)
-        assertEquals(90.0, route.bearingAt(5000.0)!!, 0.5)
+    fun aCameraAtACornerCountsWhenItFacesEitherLeg() {
+        // North 1 km, then east 1 km (the corner is at (0, 1000)); each spot is within 10 m of both legs.
+        val spots = listOf(5.0 to 995.0, -5.0 to 1005.0, 5.0 to 1005.0)
+        for ((east, north) in spots) {
+            assertEquals("arriving leg, $east,$north", 1, alprCount(0, route, east, north))
+            assertEquals("departing leg, $east,$north", 1, alprCount(90, route, east, north))
+            assertEquals("against the departing leg, $east,$north", 1, alprCount(270, route, east, north))
+        }
+    }
+
+    @Test
+    fun aCameraAtACornerFacingNeitherLegIsNotCounted() {
+        // North 1 km, then bearing 30 for 1 km: a direction of 105 is 75 degrees off both legs' axes.
+        val bend = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 1000.0), Hand.at(500.0, 1866.0)))
+        assertEquals(0, alprCount(105, bend, east = 5.0, north = 995.0))
+        // A direction along only the departing leg (60 is 30 off bearing 30, 60 off bearing 0) still counts there...
+        assertEquals(1, alprCount(60, bend, east = 5.0, north = 995.0))
+        // ...but not away from the corner, where only the first leg is near.
+        assertEquals(0, alprCount(60, bend, east = 5.0, north = 500.0))
+    }
+
+    @Test
+    fun aMissingDirectionOrBearingAlwaysFaces() {
+        assertTrue(RouteAlerts.faces(null, 123.0))
+        assertTrue(RouteAlerts.faces(null, null))
+        assertTrue(RouteAlerts.faces(90, null))
+    }
+
+    @Test
+    fun bearingsNearListsEveryLegThatClose() {
+        assertEquals(listOf(0.0), route.bearingsNear(Hand.at(5.0, 500.0), 40.0).map { Math.round(it).toDouble() })
+        assertEquals(listOf(90.0), route.bearingsNear(Hand.at(500.0, 1010.0), 40.0).map { Math.round(it).toDouble() })
+        // At the corner both legs, in route order.
+        assertEquals(listOf(0.0, 90.0), route.bearingsNear(Hand.at(5.0, 995.0), 40.0).map { Math.round(it).toDouble() })
+        assertTrue(route.bearingsNear(Hand.at(300.0, 300.0), 40.0).isEmpty())
         val southwest = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(-100.0, -100.0)))
-        assertEquals(225.0, southwest.bearingAt(10.0)!!, 0.5)
+        assertEquals(225.0, southwest.bearingsNear(Hand.at(-50.0, -50.0), 10.0).single(), 0.5)
+        // A repeated point has no direction of its own.
         val west = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 0.0), Hand.at(-100.0, 0.0)))
-        assertEquals(270.0, west.bearingAt(0.0)!!, 0.5)
-        assertNull(RouteLine(listOf(Hand.at(0.0, 0.0))).bearingAt(0.0))
-        assertNull(RouteLine(emptyList()).bearingAt(0.0))
+        assertEquals(270.0, west.bearingsNear(Hand.at(-50.0, 3.0), 10.0).single(), 0.5)
+        assertTrue(RouteLine(listOf(Hand.at(0.0, 0.0))).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
+        assertTrue(RouteLine(emptyList()).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
     }
 }
