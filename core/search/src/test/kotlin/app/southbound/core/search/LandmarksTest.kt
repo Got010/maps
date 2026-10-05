@@ -13,9 +13,9 @@ internal object Hand {
         origin.lon + east / (RouteLine.METERS_PER_DEGREE * cos(Math.toRadians(origin.lat))),
     )
     private var nextId = 1L
-    fun mark(category: String, east: Double, north: Double, name: String? = null): Landmark {
+    fun mark(category: String, east: Double, north: Double, name: String? = null, direction: Int? = null): Landmark {
         val p = at(east, north)
-        return Landmark(nextId++, category, name, p.lat, p.lon)
+        return Landmark(nextId++, category, name, p.lat, p.lon, direction)
     }
 }
 

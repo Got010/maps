@@ -78,6 +78,23 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     }
 
     /**
+     * What to select for a landmark's direction: the `direction` column when the pack has it (packs
+     * built from late 2026), else NULL, so an older pack reads as every direction unknown.
+     */
+    private val directionColumn: String by lazy {
+        val columns = try {
+            synchronized(connection) {
+                connection.prepare("PRAGMA table_info(landmark)").use { stmt ->
+                    buildSet { while (stmt.step()) add(stmt.getText(1)) }
+                }
+            }
+        } catch (e: Exception) {
+            emptySet()
+        }
+        LandmarkColumns.directionSelect(columns)
+    }
+
+    /**
      * Signals, signs, roadside places and alert points inside [box], for
      * spoken landmarks and camera alerts along a route (see [Landmarks] and
      * [RouteAlerts]). Empty for an older pack without the table. OSM only:
@@ -102,14 +119,15 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     /**
      * Landmarks of one [category] (e.g. [Landmark.ALPR_CAMERA]) inside [box],
      * e.g. the plate readers along a route option. Uses the pack's
-     * landmark_category_lat_lon index when it has one. Empty for an older
-     * pack without the table.
+     * landmark_category_lat_lon index when it has one, each with its
+     * direction when the pack has one (else null). Empty for an older pack
+     * without the table.
      */
     fun landmarks(box: NearbyBox, category: String, limit: Int = LANDMARK_LIMIT): List<Landmark> {
         if (!hasLandmarks) return emptyList()
         return synchronized(connection) {
             connection.prepare(
-                "SELECT id, category, name, lat, lon FROM landmark" +
+                "SELECT id, category, name, lat, lon, $directionColumn FROM landmark" +
                     " WHERE category = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT $limit",
             ).use { stmt ->
                 stmt.bindText(1, category)
@@ -117,7 +135,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
                 stmt.bindDouble(3, box.north)
                 stmt.bindDouble(4, box.west)
                 stmt.bindDouble(5, box.east)
-                buildList { while (stmt.step()) add(stmt.readLandmark()) }
+                buildList { while (stmt.step()) add(stmt.readLandmark(withDirection = true)) }
             }
         }
     }
@@ -537,9 +555,12 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
 
         private fun SQLiteStatement.textOrNull(index: Int): String? = if (isNull(index)) null else getText(index)
 
-        /** A row of "SELECT id, category, name, lat, lon FROM landmark". */
-        private fun SQLiteStatement.readLandmark(): Landmark =
-            Landmark(getLong(0), getText(1), textOrNull(2), getDouble(3), getDouble(4))
+        /** A row of "SELECT id, category, name, lat, lon FROM landmark", with `, direction` after it when [withDirection]. */
+        private fun SQLiteStatement.readLandmark(withDirection: Boolean = false): Landmark =
+            Landmark(
+                getLong(0), getText(1), textOrNull(2), getDouble(3), getDouble(4),
+                direction = if (withDirection && !isNull(5)) LandmarkColumns.normalDirection(getLong(5)) else null,
+            )
 
         private fun SQLiteStatement.bindAll(args: List<Any>) {
             args.forEachIndexed { i, arg ->
