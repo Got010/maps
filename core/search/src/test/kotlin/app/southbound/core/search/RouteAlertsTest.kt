@@ -116,4 +116,151 @@ class RouteAlertsTest {
         assertEquals(700.0, progress.update(Hand.at(300.0, 8.0))!!, 5.0)
         assertNull(progress.update(Hand.at(300.0, 200.0)))
     }
+
+    // Direction-aware counting. Driving north along x = 0 (the route's first leg is bearing 0).
+    private val northbound = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 1000.0)))
+
+    private fun alprCount(direction: Int?, line: RouteLine = northbound, east: Double = 5.0, north: Double = 500.0) =
+        RouteAlerts.count(line, listOf(Hand.mark(Landmark.ALPR_CAMERA, east, north, direction = direction)), AlertKind.ALPR_CAMERA)
+
+    @Test
+    fun cameraFacingAlongOrAgainstTheRoadCounts() {
+        assertEquals(1, alprCount(0)) // the way we drive
+        assertEquals(1, alprCount(180)) // watching the other way (the rear plates)
+        assertEquals(1, alprCount(10))
+        assertEquals(1, alprCount(350))
+    }
+
+    @Test
+    fun cameraFacingAcrossTheRoadIsNotCounted() {
+        assertEquals(0, alprCount(90))
+        assertEquals(0, alprCount(270))
+        assertEquals(0, alprCount(60))
+        assertEquals(0, alprCount(120))
+    }
+
+    @Test
+    fun aCameraWithNoDirectionAlwaysCounts() {
+        assertEquals(1, alprCount(null))
+        // Same for a speed camera, and for a road with no length to point along.
+        val speed = Hand.mark(Landmark.SPEED_CAMERA, 5.0, 500.0)
+        assertEquals(1, RouteAlerts.count(northbound, listOf(speed), AlertKind.SPEED_CAMERA))
+        assertTrue(RouteAlerts.faces(90, null))
+    }
+
+    @Test
+    fun toleranceIsFortyFiveDegreesEitherSideOfTheRoadAxisAndTheBoundaryCounts() {
+        assertEquals(45, RouteAlerts.DIRECTION_TOLERANCE_DEG)
+        // Difference between the camera's direction and the bearing of travel, in degrees.
+        val expected = mapOf(0 to true, 45 to true, 46 to false, 90 to false, 134 to false, 135 to true, 180 to true, 225 to true, 314 to false, 315 to true)
+        for ((diff, counts) in expected) {
+            assertEquals("$diff degrees off the bearing", counts, RouteAlerts.faces(diff, 0.0))
+            // The rule holds whatever way the road runs.
+            assertEquals("$diff degrees off a bearing of 200", counts, RouteAlerts.faces((200 + diff) % 360, 200.0))
+            assertEquals("$diff degrees off a bearing of 359", counts, RouteAlerts.faces((359 + diff) % 360, 359.0))
+        }
+    }
+
+    @Test
+    fun theRoutesBearingAtTheCameraIsUsedNotTheStartOfTheRoute() {
+        // North 1 km, then east 1 km: the second leg is bearing 90.
+        assertEquals(0, alprCount(0, route, east = 500.0, north = 1010.0)) // facing north, on the eastbound leg: across
+        assertEquals(1, alprCount(90, route, east = 500.0, north = 1010.0))
+        assertEquals(1, alprCount(270, route, east = 500.0, north = 1010.0))
+        assertEquals(1, alprCount(0, route, east = 5.0, north = 500.0))
+        assertEquals(0, alprCount(90, route, east = 5.0, north = 500.0))
+    }
+
+    @Test
+    fun avoidanceStillSeesCamerasThatFaceAcrossTheRoad() {
+        val across = Hand.mark(Landmark.ALPR_CAMERA, 5.0, 500.0, direction = 90)
+        assertEquals(0, RouteAlerts.count(northbound, listOf(across), AlertKind.ALPR_CAMERA))
+        assertEquals(listOf(across.id), RouteAlerts.alongRoute(northbound, listOf(across), AlertKind.ALPR_CAMERA).map { it.id })
+    }
+
+    @Test
+    fun exposureCountsReadersAndSpeedCamerasSeparately() {
+        val marks = listOf(
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 200.0),
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 400.0, direction = 90), // across
+            Hand.mark(Landmark.SPEED_CAMERA, 5.0, 600.0, direction = 180),
+            Hand.mark(Landmark.SPEED_CAMERA, -5.0, 800.0),
+            Hand.mark(Landmark.SCHOOL_ZONE, 0.0, 700.0),
+        )
+        val e = RouteAlerts.exposure(northbound, marks)
+        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 2), e)
+        assertTrue(!e.isEmpty)
+        assertTrue(RouteAlerts.exposure(northbound, emptyList()).isEmpty)
+        assertTrue(RouteExposure(0, 0).isEmpty)
+        assertTrue(!RouteExposure(0, 1).isEmpty)
+    }
+
+    @Test
+    fun anOldPackWithoutTheColumnCountsEveryCamera() {
+        // A pack without the column reads every direction as NULL, so the count is the one it always was.
+        assertEquals("NULL", LandmarkColumns.directionSelect(setOf("id", "category", "name", "lat", "lon")))
+        assertEquals("NULL", LandmarkColumns.directionSelect(emptySet()))
+        assertEquals("direction", LandmarkColumns.directionSelect(setOf("id", "category", "name", "lat", "lon", "direction")))
+        val cams = listOf(
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 300.0),
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 600.0),
+            Hand.mark(Landmark.ALPR_CAMERA, -5.0, 900.0),
+        )
+        assertEquals(cams.size, RouteAlerts.count(northbound, cams, AlertKind.ALPR_CAMERA))
+        assertEquals(null, cams.first().direction)
+    }
+
+    @Test
+    fun aStoredDirectionIsReducedToZeroTo359() {
+        assertEquals(0, LandmarkColumns.normalDirection(0))
+        assertEquals(359, LandmarkColumns.normalDirection(359))
+        assertEquals(0, LandmarkColumns.normalDirection(360))
+        assertEquals(10, LandmarkColumns.normalDirection(370))
+        assertEquals(350, LandmarkColumns.normalDirection(-10))
+    }
+
+    @Test
+    fun aCameraAtACornerCountsWhenItFacesEitherLeg() {
+        // North 1 km, then east 1 km (the corner is at (0, 1000)); each spot is within 10 m of both legs.
+        val spots = listOf(5.0 to 995.0, -5.0 to 1005.0, 5.0 to 1005.0)
+        for ((east, north) in spots) {
+            assertEquals("arriving leg, $east,$north", 1, alprCount(0, route, east, north))
+            assertEquals("departing leg, $east,$north", 1, alprCount(90, route, east, north))
+            assertEquals("against the departing leg, $east,$north", 1, alprCount(270, route, east, north))
+        }
+    }
+
+    @Test
+    fun aCameraAtACornerFacingNeitherLegIsNotCounted() {
+        // North 1 km, then bearing 30 for 1 km: a direction of 105 is 75 degrees off both legs' axes.
+        val bend = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 1000.0), Hand.at(500.0, 1866.0)))
+        assertEquals(0, alprCount(105, bend, east = 5.0, north = 995.0))
+        // A direction along only the departing leg (60 is 30 off bearing 30, 60 off bearing 0) still counts there...
+        assertEquals(1, alprCount(60, bend, east = 5.0, north = 995.0))
+        // ...but not away from the corner, where only the first leg is near.
+        assertEquals(0, alprCount(60, bend, east = 5.0, north = 500.0))
+    }
+
+    @Test
+    fun aMissingDirectionOrBearingAlwaysFaces() {
+        assertTrue(RouteAlerts.faces(null, 123.0))
+        assertTrue(RouteAlerts.faces(null, null))
+        assertTrue(RouteAlerts.faces(90, null))
+    }
+
+    @Test
+    fun bearingsNearListsEveryLegThatClose() {
+        assertEquals(listOf(0.0), route.bearingsNear(Hand.at(5.0, 500.0), 40.0).map { Math.round(it).toDouble() })
+        assertEquals(listOf(90.0), route.bearingsNear(Hand.at(500.0, 1010.0), 40.0).map { Math.round(it).toDouble() })
+        // At the corner both legs, in route order.
+        assertEquals(listOf(0.0, 90.0), route.bearingsNear(Hand.at(5.0, 995.0), 40.0).map { Math.round(it).toDouble() })
+        assertTrue(route.bearingsNear(Hand.at(300.0, 300.0), 40.0).isEmpty())
+        val southwest = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(-100.0, -100.0)))
+        assertEquals(225.0, southwest.bearingsNear(Hand.at(-50.0, -50.0), 10.0).single(), 0.5)
+        // A repeated point has no direction of its own.
+        val west = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 0.0), Hand.at(-100.0, 0.0)))
+        assertEquals(270.0, west.bearingsNear(Hand.at(-50.0, 3.0), 10.0).single(), 0.5)
+        assertTrue(RouteLine(listOf(Hand.at(0.0, 0.0))).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
+        assertTrue(RouteLine(emptyList()).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
+    }
 }
