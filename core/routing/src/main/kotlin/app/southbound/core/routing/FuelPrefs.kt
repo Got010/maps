@@ -76,6 +76,10 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
 
     fun setRegion(region: GasRegion) = update(_settings.value.copy(region = region))
 
+    /** The four things the driver chose, all in one write (an import). The fetched price stays as it is. */
+    fun setChoices(mpg: Double, pricePerGallon: Double, source: PriceSource, region: GasRegion) =
+        update(_settings.value.copy(mpg = mpg, pricePerGallon = pricePerGallon, priceSource = source, region = region))
+
     override val region: GasRegion get() = _settings.value.region
     override val fetchedRegion: GasRegion? get() = _settings.value.fetchedRegion
     override val fetchedAtMillis: Long get() = _settings.value.fetchedAtMillis

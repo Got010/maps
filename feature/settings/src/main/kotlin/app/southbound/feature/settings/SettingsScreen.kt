@@ -6,6 +6,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import app.southbound.core.export.BackupService
 import app.southbound.core.network.ApiKey
 import app.southbound.core.routing.FuelPrefs
 import app.southbound.core.routing.GasRegion
@@ -74,7 +75,9 @@ import java.util.Locale
 
 /**
  * Settings > Navigation > Voice, every toggle from HANDOFF.md, plus About.
- * Changes save immediately to [store]; [voice] speaks the Test sentence.
+ * Changes save immediately to [store]; [voice] speaks the Test sentence. [backup] adds the
+ * Backup section; [onImported] is called once an import has replaced the settings shown here,
+ * so the caller can rebuild this screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +88,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     network: PreferenceNetworkToggles? = null,
     secrets: SecretStore? = null,
+    backup: BackupService? = null,
+    onImported: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     fun update(transform: (VoiceSettings) -> VoiceSettings) {
@@ -246,6 +251,11 @@ fun SettingsScreen(
                 UpdatesSection(network, secrets)
                 HorizontalDivider(Modifier.padding(top = 24.dp))
                 LiveDataSection(network, secrets)
+            }
+
+            if (backup != null) {
+                HorizontalDivider(Modifier.padding(top = 24.dp))
+                BackupSection(backup, onImported)
             }
 
             HorizontalDivider(Modifier.padding(top = 24.dp))

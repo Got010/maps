@@ -40,6 +40,7 @@ include(
     ":core:packs",
     ":core:updates",
     ":core:userdata",
+    ":core:export",
 )
 
 include(
