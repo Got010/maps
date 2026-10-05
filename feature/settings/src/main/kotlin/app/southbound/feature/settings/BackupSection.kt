@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -68,6 +69,7 @@ private sealed interface Step {
 @Composable
 internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val transfer = remember(service) { BackupTransfer(context, service) }
     var step by remember { mutableStateOf<Step>(Step.Idle) }
@@ -108,8 +110,8 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                         val outcome = withContext(Dispatchers.IO) { service.resume() }
                         pending = service.hasPending()
                         step = when (outcome) {
-                            is ResumeOutcome.Applied -> Step.Message(context.getString(R.string.backup_finished, summary(context, outcome.counts)), applied = true)
-                            is ResumeOutcome.Failed -> Step.Message(context.getString(R.string.backup_finish_failed, outcome.reason))
+                            is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts)), applied = true)
+                            is ResumeOutcome.Failed -> Step.Message(resources.getString(R.string.backup_finish_failed, outcome.reason))
                             ResumeOutcome.NothingPending -> Step.Idle
                         }
                     }
@@ -126,14 +128,14 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
             Button(onClick = {
                 val reason = service.blocker()
                 if (reason != null) {
-                    step = Step.Message(context.getString(R.string.backup_refused, reason))
+                    step = Step.Message(resources.getString(R.string.backup_refused, reason))
                 } else {
                     createDocument.launch(SouthboundBundle.fileName(System.currentTimeMillis()))
                 }
             }) { Text(stringResource(R.string.backup_export)) }
             OutlinedButton(onClick = {
                 val reason = service.blocker()
-                step = if (reason != null) Step.Message(context.getString(R.string.backup_refused, reason)) else Step.ImportNotice
+                step = if (reason != null) Step.Message(resources.getString(R.string.backup_refused, reason)) else Step.ImportNotice
             }) { Text(stringResource(R.string.backup_import)) }
         }
     }
@@ -152,12 +154,12 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                     passphrase.fill('\u0000')
                     step = Step.Message(
                         when (result) {
-                            is ExportResult.Done -> context.getString(
+                            is ExportResult.Done -> resources.getString(
                                 R.string.backup_exported,
-                                summary(context, result.counts),
+                                summary(resources, result.counts),
                                 result.size?.let { Formatter.formatShortFileSize(context, it) } ?: "?",
                             )
-                            is ExportResult.Failed -> context.getString(
+                            is ExportResult.Failed -> resources.getString(
                                 if (result.deleted) R.string.backup_export_failed else R.string.backup_export_failed_kept,
                                 result.reason,
                             )
@@ -189,11 +191,11 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                     pending = service.hasPending()
                     step = when (result) {
                         is ImportResult.Applied -> Step.Message(
-                            context.getString(R.string.backup_imported, summary(context, result.counts)),
+                            resources.getString(R.string.backup_imported, summary(resources, result.counts)),
                             applied = true,
                         )
                         is ImportResult.Pending -> Step.Message(
-                            context.getString(R.string.backup_import_pending, result.reason),
+                            resources.getString(R.string.backup_import_pending, result.reason),
                             applied = false,
                         )
                         is ImportResult.Refused -> Step.Message(result.message)
@@ -304,6 +306,6 @@ private fun PassphraseField(value: String, @StringRes label: Int, onChange: (Str
 }
 
 /** Counts only: no place, list or key name, and never a key. */
-private fun summary(context: android.content.Context, c: BackupCounts): String = context.getString(
+private fun summary(resources: android.content.res.Resources, c: BackupCounts): String = resources.getString(
     R.string.backup_summary, c.savedPlaces, c.lists, c.recents, c.home + c.work, c.apiKeys, c.settings,
 )
