@@ -27,6 +27,18 @@ class RegionSelection private constructor(context: Context) {
         _regions.value = next
     }
 
+    /**
+     * Makes [selected] the wanted basemap regions among the ones Southbound knows, in one synchronous commit (an
+     * import); ids it does not know are left as they are. Throws [java.io.IOException] if the write fails.
+     */
+    @Synchronized
+    fun replaceBasemaps(selected: Set<String>) {
+        val known = Regions.basemaps.map { it.id }.toSet()
+        val next = (_regions.value - known) + (selected intersect known)
+        if (!prefs.edit().putStringSet(KEY, next).commit()) throw java.io.IOException("Couldn't save the map regions")
+        _regions.value = next
+    }
+
     private fun read(): Set<String> = prefs.getStringSet(KEY, null)?.toSet() ?: DEFAULT
 
     companion object {

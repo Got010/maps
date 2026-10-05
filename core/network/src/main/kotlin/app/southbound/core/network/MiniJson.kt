@@ -70,8 +70,13 @@ object MiniJson {
         out.append('"')
     }
 
-    fun parse(text: String): Any? {
-        val p = Parser(text)
+    /**
+     * @param rejectDuplicateKeys refuse an object that names a key twice (otherwise the last one wins, as in most
+     * readers). Imported documents are read this way, since two readers could otherwise see different values;
+     * the feeds the app reads keep the default.
+     */
+    fun parse(text: String, rejectDuplicateKeys: Boolean = false): Any? {
+        val p = Parser(text, rejectDuplicateKeys)
         p.skipWhitespace()
         val value = p.value(0)
         p.skipWhitespace()
@@ -79,7 +84,7 @@ object MiniJson {
         return value
     }
 
-    private class Parser(val s: String) {
+    private class Parser(val s: String, val rejectDuplicateKeys: Boolean) {
         var pos = 0
 
         fun skipWhitespace() {
@@ -115,6 +120,7 @@ object MiniJson {
                 skipWhitespace()
                 if (peek() != '"') throw JsonException("object key expected at $pos")
                 val key = str()
+                if (rejectDuplicateKeys && out.containsKey(key)) throw JsonException("duplicate key")
                 skipWhitespace()
                 expect(':')
                 skipWhitespace()
