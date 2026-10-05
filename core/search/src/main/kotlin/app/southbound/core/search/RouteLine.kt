@@ -1,5 +1,6 @@
 package app.southbound.core.search
 
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sqrt
 
@@ -70,6 +71,27 @@ class RouteLine(val points: List<LatLon>) {
         val segment = cumulative[i] - cumulative[i - 1]
         val t = if (segment > 0) (along - cumulative[i - 1]) / segment else 0.0
         return LatLon(a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon))
+    }
+
+    /**
+     * The direction of travel [along] metres from the start, in degrees clockwise from
+     * north (0 up to, not including, 360): the bearing of the segment that point is on.
+     * Null for a line without a segment of length. At a corner it is the leg arriving there.
+     */
+    fun bearingAt(along: Double): Double? {
+        // The first segment with length that ends at or past [along]; past the end, the last one with length.
+        var seg = -1
+        for (i in 1 until points.size) {
+            if (cumulative[i] == cumulative[i - 1]) continue
+            seg = i
+            if (cumulative[i] >= along) break
+        }
+        if (seg < 0) return null
+        val a = points[seg - 1]
+        val b = points[seg]
+        val east = (b.lon - a.lon) * cos(Math.toRadians((a.lat + b.lat) / 2))
+        val north = b.lat - a.lat
+        return (Math.toDegrees(atan2(east, north)) + 360.0) % 360.0
     }
 
     /**

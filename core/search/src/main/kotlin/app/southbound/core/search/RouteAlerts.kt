@@ -45,6 +45,13 @@ object RouteAlerts {
     const val SAME_SPOT_M = 25.0
 
     /**
+     * A camera with a known direction counts for a route when it faces within this many degrees
+     * of the route's direction of travel there, or of the opposite (the rear-plate side); past that
+     * it faces across the road. The boundary counts.
+     */
+    const val DIRECTION_TOLERANCE_DEG = 45
+
+    /**
      * The [kind] landmarks within [withinMeters] of [route], each once even
      * when overlapping boxes returned it twice; in no particular order. E.g.
      * the plate readers to steer around.
@@ -55,10 +62,38 @@ object RouteAlerts {
         }
 
     /**
+     * Whether a camera facing [direction] (degrees clockwise from north) is
+     * watching a road travelled on [travelBearing]: within [toleranceDegrees]
+     * of the bearing or of the bearing + 180. A null direction (the pack has
+     * no direction, or OSM doesn't say) always counts, and so does a null
+     * bearing (a route with no length to point along).
+     */
+    fun faces(direction: Int?, travelBearing: Double?, toleranceDegrees: Int = DIRECTION_TOLERANCE_DEG): Boolean {
+        if (direction == null || travelBearing == null) return true
+        val off = angleBetween(direction.toDouble(), travelBearing)
+        return off <= toleranceDegrees || 180.0 - off <= toleranceDegrees
+    }
+
+    /** The angle between two bearings in degrees, 0 to 180. */
+    private fun angleBetween(a: Double, b: Double): Double {
+        val d = ((a - b) % 360.0 + 360.0) % 360.0
+        return if (d > 180.0) 360.0 - d else d
+    }
+
+    /** Whether [mark] counts for [route] by its direction: [faces] at the point of the route nearest it. */
+    private fun facesRoute(route: RouteLine, mark: Landmark): Boolean {
+        if (mark.direction == null) return true
+        val along = route.locate(mark.point)?.along ?: return true
+        return faces(mark.direction, route.bearingAt(along))
+    }
+
+    /**
      * How many [kind] landmarks a drive along [route] passes, e.g. "3 plate
-     * readers" on a route option: those within [withinMeters] of the line,
-     * with cameras within [sameSpotMeters] of one already counted counting
-     * as the same one.
+     * readers" on a route option: those within [withinMeters] of the line
+     * and not facing across the road (see [faces]; landmarks without a
+     * direction always count), with cameras within [sameSpotMeters] of one
+     * already counted counting as the same one. This is the count only:
+     * what the app steers around is [alongRoute], whatever way a camera faces.
      */
     fun count(
         route: RouteLine,
@@ -69,10 +104,17 @@ object RouteAlerts {
     ): Int {
         val spots = mutableListOf<LatLon>()
         for (mark in alongRoute(route, landmarks, kind, withinMeters)) {
+            if (!facesRoute(route, mark)) continue
             if (spots.none { RouteLine.distanceMeters(it, mark.point) <= sameSpotMeters }) spots += mark.point
         }
         return spots.size
     }
+
+    /** What a drive along [route] is exposed to: its plate readers and speed cameras, by [count]. */
+    fun exposure(route: RouteLine, landmarks: List<Landmark>): RouteExposure = RouteExposure(
+        plateReaders = count(route, landmarks, AlertKind.ALPR_CAMERA),
+        speedCameras = count(route, landmarks, AlertKind.SPEED_CAMERA),
+    )
 
     /** The alerts on [route], in driving order. */
     fun onRoute(route: RouteLine, landmarks: List<Landmark>): List<RouteAlert> =
@@ -106,6 +148,11 @@ object RouteAlerts {
 
     /** [speak]: one per alert to say now. [covered]: every id to mark as announced. */
     data class Due(val speak: List<RouteAlert>, val covered: Set<Long>)
+}
+
+/** The per-route exposure line: how many plate readers and speed cameras a route passes. */
+data class RouteExposure(val plateReaders: Int, val speedCameras: Int) {
+    val isEmpty: Boolean get() = plateReaders == 0 && speedCameras == 0
 }
 
 /**
