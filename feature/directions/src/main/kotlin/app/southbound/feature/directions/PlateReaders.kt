@@ -16,26 +16,35 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.southbound.core.search.RouteExposure
 
 /** The purple of the plate-reader dots on the map. */
 private val PlateReaderPurple = Color(0xFF7B1FA2)
 
-/** "No plate readers", "1 plate reader", "4 plate readers" on a route option. */
+/**
+ * "3 plate readers · 1 speed camera" on a route option: what the route is exposed to. A part with
+ * none is left out, and so is the whole line when both are none.
+ */
 @Composable
-internal fun PlateReaderCount(count: Int, modifier: Modifier = Modifier) {
+internal fun RouteExposureLine(exposure: RouteExposure, modifier: Modifier = Modifier) {
+    if (exposure.isEmpty) return
+    val parts = buildList {
+        if (exposure.plateReaders > 0) {
+            add(pluralStringResource(R.plurals.directions_plate_readers, exposure.plateReaders, exposure.plateReaders))
+        }
+        if (exposure.speedCameras > 0) {
+            add(pluralStringResource(R.plurals.directions_speed_cameras, exposure.speedCameras, exposure.speedCameras))
+        }
+    }
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Icon(
             Icons.Filled.Videocam,
             contentDescription = null,
-            tint = if (count > 0) PlateReaderPurple else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (exposure.plateReaders > 0) PlateReaderPurple else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(14.dp),
         )
         Text(
-            if (count == 0) {
-                stringResource(R.string.directions_plate_readers_none)
-            } else {
-                pluralStringResource(R.plurals.directions_plate_readers, count, count)
-            },
+            parts.joinToString(" \u00B7 "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
