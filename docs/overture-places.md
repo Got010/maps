@@ -84,7 +84,8 @@ on). Every other slug is kept as is, and `Place.categoryLabel` turns
 Websites without a scheme get `https://`, and ZIP+4 codes are cut to five
 digits. `meta` records `overture_release` and adds Overture to `attribution`.
 
-**`SCHEMA_VERSION` stays 2.** The tables are purely additive, and
+**Overture does not change `SCHEMA_VERSION`** (2 then; 3 since the landmark `direction`
+column). The tables are purely additive, and
 `SearchIndex` detects them by name (`hasOverture`), the same way it handles the
 address and landmark tables. Older packs, and packs built with `OVERTURE=0`,
 search OSM alone.

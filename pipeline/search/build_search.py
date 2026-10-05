@@ -35,6 +35,10 @@ places ("past the gas station"), and what the driver is warned about (speed
 and licence-plate cameras, school zones). The app reads it with small
 bounding-box queries along the route (see core/search Landmarks). Packs built
 before it existed simply lack the table, and the app then skips landmarks.
+Since schema 3 the table has a nullable `direction` column: for speed and
+licence-plate cameras the OSM `direction` tag as degrees clockwise from north
+(0-359), NULL for every other row and for a tag that isn't one bearing (see
+parse_direction). Packs built before it simply lack the column.
 
 The app reads it with SQLite's FTS5 (see core/search). PRAGMA
 application_id marks the file as a search pack so an import can recognise
@@ -54,6 +58,7 @@ Usage: build_search.py <input.osm.pbf> <output.sqlite> <region>
 import argparse
 import math
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -66,7 +71,9 @@ from states import state_at
 APPLICATION_ID = 0x53425331  # "SBS1", matches PackKind.SEARCH_APPLICATION_ID
 # 2: address_street, address_street_fts and address tables, and streets carry
 #    their town. The app detects each table, so older packs still open.
-SCHEMA_VERSION = 2
+# 3: landmark.direction (nullable). Nothing else changed, and the app reads
+#    packs of version 2 and 3 alike.
+SCHEMA_VERSION = 3
 
 LOCALITY, PLACE, STREET, ADDRESS = 0, 1, 2, 3
 
@@ -166,7 +173,8 @@ CREATE TABLE landmark (
   category TEXT NOT NULL,
   name TEXT,
   lat REAL NOT NULL,
-  lon REAL NOT NULL
+  lon REAL NOT NULL,
+  direction INTEGER
 );
 CREATE TABLE address_street (
   id INTEGER PRIMARY KEY,
@@ -269,6 +277,39 @@ def landmark_category(tags):
             return category
     if tags.get("amenity") == "place_of_worship" and tags.get("religion") == "christian":
         return "church"
+    return None
+
+
+DIRECTION_CATEGORIES = ("alpr_camera", "speed_camera")
+# The 16 compass names in whole degrees (22.5 steps, truncated: NNE is 22).
+COMPASS = {
+    "N": 0, "NNE": 22, "NE": 45, "ENE": 67, "E": 90, "ESE": 112, "SE": 135, "SSE": 157,
+    "S": 180, "SSW": 202, "SW": 225, "WSW": 247, "W": 270, "WNW": 292, "NW": 315, "NNW": 337,
+}
+DEGREES = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", re.ASCII)
+
+
+def parse_direction(value):
+    """The OSM `direction` tag as whole degrees 0-359 clockwise from north, or None.
+
+    A number is rounded (half up) and reduced modulo 360, so -90 is 270 and
+    359.5 is 0. The 16 compass names (N, NNE, NE ... NNW) map to their bearing.
+    Anything that is not a single bearing is None: a range (90-180), a list
+    (90;270), "both", "forward", words, empty or missing.
+    """
+    if value is None:
+        return None
+    text = value.strip()
+    if DEGREES.fullmatch(text):
+        degrees = float(text)
+        return math.floor(degrees + 0.5) % 360 if math.isfinite(degrees) else None
+    return COMPASS.get(text.upper())
+
+
+def landmark_direction(tags, category):
+    """The way a camera faces, for plate readers and speed cameras only."""
+    if category in DIRECTION_CATEGORIES:
+        return parse_direction(tags.get("direction"))
     return None
 
 
@@ -491,7 +532,8 @@ class Collector:
             self.address_rows.clear()
         if self.landmarks:
             self.db.executemany(
-                "INSERT INTO landmark (category, name, lat, lon) VALUES (?,?,?,?)", self.landmarks
+                "INSERT INTO landmark (category, name, lat, lon, direction) VALUES (?,?,?,?,?)",
+                self.landmarks,
             )
             self.landmarks.clear()
 
@@ -502,7 +544,10 @@ class Collector:
             return
         if nodes_only and category in ("traffic_signals", "stop"):
             return
-        self.landmarks.append((category, landmark_name(tags, category), round(lat, 6), round(lon, 6)))
+        self.landmarks.append((
+            category, landmark_name(tags, category), round(lat, 6), round(lon, 6),
+            landmark_direction(tags, category),
+        ))
         self.landmark_count += 1
         if len(self.landmarks) >= 50_000:
             self.flush()
