@@ -41,11 +41,13 @@ set -euo pipefail
 REGION="${1:?usage: build.sh <region>}"
 # shellcheck source=pipeline/lib/common.sh
 source "$(dirname "$0")/../lib/common.sh"
-PYTHON_IMAGE="${PYTHON_IMAGE:-python:3.12-slim}"
-GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.9.2}"
-PYOSMIUM_VERSION="4.3.1"
+PYTHON_IMAGE="${PYTHON_IMAGE:-python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d}"
+GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.9.2@sha256:6af57cbe64534fd8c3803ac4158e9bf812dfb1968cf13e8922b80f665d76d063}"
 SEARCH_MAX_MB="${SEARCH_MAX_MB:-1900}"
-DUCKDB_VERSION="1.5.6"
+# pyosmium, DuckDB and what they need, locked by hash in the file ci.yml installs for the unit tests (its
+# header says how to regenerate it). Mounted into the container; pip refuses anything not in it.
+PIP_LOCK="$(cd "$PIPELINE_DIR/.." && pwd)/.github/pipeline-requirements.txt"
+[[ -f "$PIP_LOCK" ]] || { echo "Missing $PIP_LOCK (the pinned pip requirements)." >&2; exit 1; }
 OVERTURE_MAX_MB="${OVERTURE_MAX_MB:-700}"
 OVERTURE_MIN_CONFIDENCE="${OVERTURE_MIN_CONFIDENCE:-0.5}"
 
@@ -161,8 +163,7 @@ fi
 OVERTURE_STEP=""
 if [[ "${OVERTURE:-0}" == 1 ]]; then
   OVERTURE_CSV="/data/tmp/overture-$REGION.csv"
-  OVERTURE_STEP="pip install -q --root-user-action=ignore duckdb==$DUCKDB_VERSION
-    python /search/overture.py fetch --bounds=$BOUNDS --out=$OVERTURE_CSV --min-confidence=$OVERTURE_MIN_CONFIDENCE
+  OVERTURE_STEP="python /search/overture.py fetch --bounds=$BOUNDS --out=$OVERTURE_CSV --min-confidence=$OVERTURE_MIN_CONFIDENCE
     chown $(id -u):$(id -g) $OVERTURE_CSV $OVERTURE_CSV.json"
   ARGS="$ARGS --overture=$OVERTURE_CSV --overture-max-mb=$OVERTURE_MAX_MB"
   echo "==> Adding Overture Places (release: ${OVERTURE_RELEASE:-default})"
@@ -176,12 +177,13 @@ docker run --rm \
   -v "$DATA_DIR:/data" \
   -v "$PIPELINE_DIR/search:/search:ro" \
   -v "$PIPELINE_DIR/regions.json:/regions.json:ro" \
+  -v "$PIP_LOCK:/requirements.txt:ro" \
   -e OVERTURE_RELEASE="${OVERTURE_RELEASE:-}" \
   "$PYTHON_IMAGE" bash -c "
     set -e
     # pyosmium's wheel links against libexpat, which the slim image lacks.
     apt-get update -qq >/dev/null && apt-get install -y -qq libexpat1 >/dev/null
-    pip install -q --root-user-action=ignore osmium==$PYOSMIUM_VERSION
+    pip install -q --root-user-action=ignore --require-hashes --only-binary :all: -r /requirements.txt
     $OVERTURE_STEP
     python /search/build_search.py $CLIPPED_IN_DOCKER /data/out/$OUTPUT $REGION $ARGS
     chown $(id -u):$(id -g) /data/out/$OUTPUT

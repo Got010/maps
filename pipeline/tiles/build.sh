@@ -14,7 +14,7 @@ set -euo pipefail
 REGION="${1:?usage: build.sh <region>}"
 # shellcheck source=pipeline/lib/common.sh
 source "$(dirname "$0")/../lib/common.sh"
-PLANETILER_IMAGE="${PLANETILER_IMAGE:-ghcr.io/onthegomap/planetiler:0.10.2}"
+PLANETILER_IMAGE="${PLANETILER_IMAGE:-ghcr.io/onthegomap/planetiler:0.10.2@sha256:cf32202dbc001a9ab4bc11534b642b13de3798179817da8558e567a3d13dd403}"
 # A GitHub runner for a private repository has 7 GB of RAM; the node map goes
 # to a memory-mapped file so the heap stays well under that for any region.
 PLANETILER_HEAP="${PLANETILER_HEAP:-4g}"

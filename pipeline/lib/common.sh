@@ -18,7 +18,15 @@
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${DATA_DIR:-$PIPELINE_DIR/data}"
 GEOFABRIK_URL="https://download.geofabrik.de/north-america/us"
-OSMIUM_IMAGE="${OSMIUM_IMAGE:-debian:bookworm-slim}"
+# Images are pinned by digest (the tag only says what the digest is): a rebuilt or moved tag can't change a
+# pack. To move one, pull the new tag, `docker buildx imagetools inspect <image>:<tag>` for the digest of the
+# index (not of one platform), and change it here with the same tag; nothing else needs to change.
+# Not pinned: the apt packages the containers install (osmium-tool here, libexpat1 in search/build.sh) come
+# from Debian's current archive, which keeps only the newest version of a package, so an exact version would
+# stop installing at the next security update (a snapshot mirror would fix that, but it is another host); and
+# Planetiler's own downloads (water polygons, Natural Earth) and Geofabrik's "latest" extracts, which are
+# meant to move (the extracts are checked against Geofabrik's .md5).
+OSMIUM_IMAGE="${OSMIUM_IMAGE:-debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251}"
 REGIONS_JSON="$PIPELINE_DIR/regions.json"
 
 mkdir -p "$DATA_DIR/sources" "$DATA_DIR/out" "$DATA_DIR/tmp"

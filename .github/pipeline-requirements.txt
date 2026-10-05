@@ -1,7 +1,8 @@
-# Python packages for the pipeline job in .github/workflows/ci.yml, pinned by hash
-# (pip install --require-hashes --only-binary :all: -r .github/pipeline-requirements.txt).
-# Regenerate with uv 0.12.23 from a file holding osmium==4.3.1 and duckdb==1.5.6 (the versions
-# pipeline/search/build.sh installs for the packs):
+# Python packages for the data pipeline, pinned by hash. Two places install this one file with
+# pip install --require-hashes --only-binary :all: -r: the pipeline job in .github/workflows/ci.yml (unit
+# tests) and the search pack's build container (pipeline/search/build.sh mounts it at /requirements.txt).
+# Regenerate with uv 0.12.23 from a file holding osmium==4.3.1 and duckdb==1.5.6 (pipeline/tests/test_pins.py
+# checks that both are still locked, with a hash for every package):
 #    uv pip compile --universal --generate-hashes --python-version 3.12 requirements.in -o .github/pipeline-requirements.txt
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \

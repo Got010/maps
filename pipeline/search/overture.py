@@ -259,7 +259,9 @@ def fetch(bounds, out, release=None, source=None, min_confidence=MIN_CONFIDENCE)
                 return None
     db = duckdb.connect()
     if source is None:
-        # httpfs comes from extensions.duckdb.org on first use.
+        # httpfs comes from extensions.duckdb.org on first use. DuckDB asks for the build that matches its own
+        # version, which the hash-locked wheel fixes (.github/pipeline-requirements.txt), and checks the
+        # extension's signature before loading it; the file itself isn't hashed here.
         db.execute("INSTALL httpfs; LOAD httpfs; SET s3_region = 'us-west-2';")
     print(f"==> Fetching Overture places {stamp['release']} inside {','.join(map(str, bounds))}", file=sys.stderr)
     query = fetch_sql(stamp["source"], bounds, min_confidence)
