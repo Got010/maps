@@ -36,7 +36,7 @@ and licence-plate cameras, school zones). The app reads it with small
 bounding-box queries along the route (see core/search Landmarks). Packs built
 before it existed simply lack the table, and the app then skips landmarks.
 Since schema 3 the table has a nullable `direction` column: for speed and
-licence-plate cameras the OSM `direction` tag as degrees clockwise from north
+licence-plate cameras the OSM `direction` tag (else `camera:direction`) as degrees clockwise from north
 (0-359), NULL for every other row and for a tag that isn't one bearing (see
 parse_direction). Packs built before it simply lack the column.
 
@@ -307,10 +307,19 @@ def parse_direction(value):
 
 
 def landmark_direction(tags, category):
-    """The way a camera faces, for plate readers and speed cameras only."""
-    if category in DIRECTION_CATEGORIES:
-        return parse_direction(tags.get("direction"))
-    return None
+    """The way a camera faces, for plate readers and speed cameras only.
+
+    The `direction` tag decides when the object has one; `camera:direction`,
+    the usual tag on surveillance cameras, is read only when `direction` is
+    absent, so a `direction` that isn't one bearing (both, 90-180) stays NULL
+    rather than being overruled.
+    """
+    if category not in DIRECTION_CATEGORIES:
+        return None
+    value = tags.get("direction")
+    if value is None:
+        value = tags.get("camera:direction")
+    return parse_direction(value)
 
 
 def is_alpr(tags):

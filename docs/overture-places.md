@@ -171,13 +171,16 @@ stay the same.
 
 ## Unverified
 
-- **DuckDB `httpfs` in `python:3.12-slim` on GitHub Actions.** The extension
-  downloads at runtime from extensions.duckdb.org, which this sandbox blocks,
-  so the `INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2'` path and the
-  anonymous S3 glob have not been run end to end. The `spatial` extension is
-  not needed: the query uses only plain `bbox` struct fields. The bucket
-  itself is reachable, and I listed and read the release over HTTPS here. The
-  first `data.yml` run on this PR is the real test.
+- **DuckDB `httpfs` in `python:3.12-slim` on GitHub Actions: verified.** The
+  extension downloads at runtime from extensions.duckdb.org, which the
+  authoring sandbox blocks. The `INSTALL httpfs; LOAD httpfs; SET
+  s3_region='us-west-2'` path and the anonymous S3 glob ran end to end in
+  `data.yml` (NYC, release 2026-09-23.1, 504,843 places read) on the
+  pinned python image with the hash-locked DuckDB 1.5.6 (maps PR #26, run
+  37383312853). The extension binary itself is not hash-pinned: DuckDB asks
+  for the build matching its own version and checks its signature. The
+  `spatial` extension is not needed: the query uses only plain `bbox` struct
+  fields.
 - **S3 path and schema** were verified for `2026-09-23.1` only. Overture
   changed the schema recently (`categories` was replaced by `taxonomy` and
   `basic_category`), and a future release may rename columns again; the fetch
