@@ -64,16 +64,12 @@ def nycdot():
     base = "https://data.cityofnewyork.us/resource/i4gi-tjb9.json"
     status, body = show(base + "?%24order=data_as_of%20DESC&%24limit=4", chars=6000, label="4 newest rows, all columns")
     show(base + "?%24select=max(data_as_of),min(data_as_of),count(*)", label="newest/oldest/count")
-    show(base + "?%24select=link_id,max(data_as_of)%20as%20newest&%24group=link_id&%24order=newest%20DESC&%24limit=400",
-         chars=200, label="links by newest reading (count below)")
-    _, _, _, b = get(base + "?%24select=link_id,max(data_as_of)%20as%20newest&%24group=link_id&%24limit=2000")
+    # Links seen over the last day of readings (a group-by over the whole table times out).
+    _, _, _, b = get(base + "?%24select=link_id,count(*)&%24where=data_as_of%3E%272026-10-06T00:00:00%27&%24group=link_id&%24limit=5000")
     try:
-        rows = json.loads(b)
-        print(f"distinct links: {len(rows)}; newest per link, top 5:",
-              sorted((r.get("newest", "") for r in rows), reverse=True)[:5],
-              "oldest 5:", sorted(r.get("newest", "") for r in rows)[:5])
+        print("links reporting since Oct 6:", len(json.loads(b)))
     except ValueError:
-        print("group query not JSON:", b[:300])
+        print("link count not JSON:", b[:300])
     # The app's own query, to measure what one fetch returns.
     app = (base + "?%24select=id,speed,travel_time,status,data_as_of,link_id,link_points,link_name,borough"
            "&%24order=data_as_of%20DESC&%24limit=1200")
@@ -95,23 +91,38 @@ def nycdot():
         print("rowsUpdatedAt", m.get("rowsUpdatedAt"), "columns", [(c.get("fieldName"), c.get("dataTypeName")) for c in m.get("columns", [])])
     except ValueError:
         pass
-    show("http://207.251.86.229/nyc-links-cams/LinkSpeedQuery.txt", chars=800, label="DOT's own realtime text feed")
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    print("now in New York:", datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%dT%H:%M:%S"))
 
 
 def fiveeleven():
     head("511NY")
-    for path in ("/api/getevents?format=json", "/api/getevents?key=PROBE&format=json",
-                 "/api/getcameras?key=PROBE&format=json", "/api/getmessagesigns?key=PROBE&format=json",
-                 "/api/v2/get/event?key=PROBE&format=json", "/api/v2/get/cameras?key=PROBE&format=json",
-                 "/api/v2/get/messagesigns?key=PROBE&format=json"):
-        show("https://511ny.org" + path, chars=600)
-    for path in ("/developers/help", "/developers/help/api/get-api-getevents_key_format",
-                 "/developers/help/api/get-api-getcameras_key_format",
-                 "/developers/help/api/get-api-getmessagesigns_key_format",
-                 "/help/endpoint/event", "/help/endpoint/cameras", "/help/endpoint/messagesigns"):
-        status, _, _, body = get("https://511ny.org" + path)
-        print(f"--- doc {path}  status {status}")
-        print(text_of(body)[:9000])
+    # 511ny.org answered every path, /api/ included, with its new web app's HTML (October 2026):
+    # find where that app gets its data and whether the old API lives on elsewhere.
+    status, final, _, page = get("https://511ny.org/")
+    print("root", status, final, len(page), "chars")
+    print(page[:6000])
+    urls = sorted(set(re.findall(r"""https?://[^\s"'<>)]+""", page)) | set(re.findall(r'(?:src|href)="([^"]+)"', page)))
+    for u in urls:
+        print("url", u)
+    status, body = show("https://demo.511ny.org/configs/main.json?v=1.8.5", chars=20000, label="app config")
+    for u in sorted(set(re.findall(r"""https?://[^\s"'<>]+""", body))):
+        print("config url", u)
+    for script in [u for u in urls if u.endswith(".js")][:6]:
+        _, _, _, js = get(urllib.parse.urljoin("https://511ny.org/", script))
+        found = sorted(set(re.findall(r"""["'`](/?(?:api|Api|API)[^"'`]{0,80})["'`]""", js)) |
+                       set(re.findall(r"""https?://[a-z0-9.-]*511[^"'`\s]{0,80}""", js)))
+        print(f"js {script}: {len(js)} chars, api-like strings:", found[:80])
+    for url in ("https://ny.ibi511.com/api/getevents?key=PROBE&format=json",
+                "https://ny.ibi511.com/api/v2/get/event?key=PROBE&format=json",
+                "https://www.511ny.org/api/getevents?key=PROBE&format=json",
+                "https://api.511ny.org/api/getevents?key=PROBE&format=json",
+                "https://old.511ny.org/api/getevents?key=PROBE&format=json",
+                "https://legacy.511ny.org/api/getevents?key=PROBE&format=json",
+                "https://511ny.org/developers", "https://511ny.org/developers/doc",
+                "https://511ny.org/api", "https://511ny.org/api/v2"):
+        show(url, chars=400)
 
 
 def addresses():
@@ -156,6 +167,20 @@ def addresses():
 
 def tomtom():
     head("TomTom terms")
+    # The developer terms page is rendered by script: find the document it loads.
+    _, _, _, page = get("https://docs.tomtom.com/legal/terms-and-conditions")
+    print(page[:3000])
+    docs = sorted(set(re.findall(r"""["'(]((?:https?://[^"' )]+|/)[^"' )]*(?:legal|terms)[^"' )]*)["')]""", page)))
+    for u in docs[:40]:
+        print("terms url", u)
+    for u in docs[:15]:
+        u = urllib.parse.urljoin("https://docs.tomtom.com/", u)
+        status, final, _, body = get(u)
+        text = text_of(body)
+        print(f"--- {u} status {status} ({len(text)} chars)")
+        for para in text.splitlines():
+            if re.search(r"(?i)cach|stor(e|age)|retain|routing|route|combin|non-tomtom|third.part|offline|prefetch|open source", para):
+                print("  >", para[:900])
     for url in ("https://developer.tomtom.com/terms-and-conditions", "https://developer.tomtom.com/legal",
                 "https://www.tomtom.com/legal/terms-and-conditions/", "https://developer.tomtom.com/legal/terms-of-use",
                 "https://www.tomtom.com/en_gb/legal/eula-api/"):
