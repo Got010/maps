@@ -1,0 +1,84 @@
+# Prints what 511NY, NYC Open Data and gis.ny.gov really send (scripts/feed-probe.py), since the
+# dev container can't reach them. Read the job log; the answers become test fixtures. No secret, no key,
+# a read-only token. Run it from the Actions tab (Feed probe > Run workflow), or it runs when this file or
+# the script changes on a branch.
+name: Feed probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - .github/workflows/feed-probe.yml
+      - scripts/feed-probe.py
+
+permissions: {}
+
+concurrency:
+  group: feed-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Each step may fail or time out without hiding the others.
+      - name: 511NY
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py 511ny
+      - name: 511NY new platform
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py 511ny-new
+      - name: 511NY travel times
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py 511ny-travel
+      - name: NYS Address Points
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py addresses
+      # The statewide file itself: its layers, columns and how pipeline/search/addresses.py reads it.
+      # About four minutes and a 336 MB download, so only on a manual run.
+      - name: NYS Address Points statewide file
+        if: github.event_name == 'workflow_dispatch'
+        timeout-minutes: 15
+        continue-on-error: true
+        env:
+          URL: https://gisdata.ny.gov/GISData/State/Address_Points/SAM_Master_Statewide_Database.gdb.zip
+          GDAL_IMAGE: ghcr.io/osgeo/gdal:ubuntu-small-3.9.2@sha256:6af57cbe64534fd8c3803ac4158e9bf812dfb1968cf13e8922b80f665d76d063
+        run: |
+          mkdir -p "$RUNNER_TEMP/ap" && cd "$RUNNER_TEMP/ap"
+          curl -sSfL --retry 3 -o sam.zip "$URL"
+          ls -l sam.zip
+          python3 -m zipfile -l sam.zip | head -20
+          python3 -m zipfile -e sam.zip .
+          gdb="$(find . -maxdepth 3 -name '*.gdb' | head -1)"
+          echo "gdb: $gdb"
+          docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro "/d/$gdb"
+          for layer in $(docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" | sed -n 's/^\(Layer: \|[0-9]*: \)\([^ ]*\).*/\2/p'); do
+            echo "== layer $layer"
+            docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -so "/d/$gdb" "$layer" | head -90
+            for col in SuffixAddressNumber PrefixAddressNumber; do
+              docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" -sql "SELECT DISTINCT $col FROM $layer" 2>/dev/null \
+                | sed -n "s/^ *$col ([^)]*) = /$col: /p" | head -20
+            done
+          done
+          # What the release build does (search/build.sh), cut to Albany so the check runs quickly.
+          docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogr2ogr -f CSV -overwrite -lco GEOMETRY=AS_XY -t_srs EPSG:4326 \
+            -spat -73.85 42.62 -73.70 42.70 -spat_srs EPSG:4326 /d/albany.csv "/d/$gdb" ${ADDRESS_POINTS_LAYER:-}
+          ls -l albany.csv*
+          head -3 albany.csv
+          python3 "$GITHUB_WORKSPACE/pipeline/search/addresses.py" --check albany.csv -n 15
+
+      - name: NYC DOT speeds
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py nycdot

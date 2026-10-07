@@ -1,0 +1,43 @@
+[
+  {
+    "ID": 482913,
+    "SourceId": "NYSDOT-12345",
+    "Organization": "NYSDOT",
+    "RoadwayName": "I-90",
+    "DirectionOfTravel": "Eastbound",
+    "Description": "Crash on I-90 Eastbound at Exit 24. Right lane closed.",
+    "Reported": 1791331200,
+    "LastUpdated": 1791334800,
+    "StartDate": 1791331200,
+    "PlannedEndDate": null,
+    "LanesAffected": "1 Right lane closed",
+    "Latitude": 42.7071,
+    "Longitude": -73.8170,
+    "LatitudeSecondary": 0,
+    "LongitudeSecondary": 0,
+    "EventType": "accidentsAndIncidents",
+    "EventSubType": "Crash",
+    "IsFullClosure": false,
+    "Severity": "Minor"
+  },
+  {
+    "ID": 482914,
+    "RoadwayName": "NY-17",
+    "DirectionOfTravel": "Westbound",
+    "Description": "Bridge work on NY-17 Westbound.",
+    "LastUpdated": 1791334800000,
+    "LanesAffected": "All lanes",
+    "Latitude": 41.3,
+    "Longitude": -74.3,
+    "EventType": "roadwork",
+    "EventSubType": "Bridge maintenance",
+    "IsFullClosure": true
+  },
+  {
+    "ID": 482915,
+    "Description": "No position yet.",
+    "EventType": "roadwork",
+    "Latitude": 0,
+    "Longitude": 0
+  }
+]
