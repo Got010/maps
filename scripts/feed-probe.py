@@ -145,10 +145,20 @@ def fiveeleven_new():
         print(f"--- {page} {status} {h.get('Content-Type')} final {final}")
         if "swagger" in b.lower():
             print(b[:1500])
-            for js in re.findall(r'src="([^"]*initializer[^"]*)"', b):
+            for js in re.findall(r'src="([^"]+\.js)"', b):
+                if "bundle" in js or "standalone" in js:
+                    continue
                 _, _, _, init = get(urllib.parse.urljoin(final, js))
-                print("initializer:", init[:1500])
+                print("init script", js, len(init), "chars")
                 specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", init)]
+                # swagger-ui-express puts the whole document in the init script as "swaggerDoc".
+                m = re.search(r'"swaggerDoc":\s*', init)
+                if m:
+                    try:
+                        doc, _ = json.JSONDecoder().raw_decode(init[m.end():])
+                        show_spec(doc)
+                    except ValueError as e:
+                        print("swaggerDoc unreadable:", e, init[m.end():m.end() + 500])
             specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", b)]
     for guess in ("api-docs", "swagger.json", "openapi.json", "events/api-docs", "api/events/swagger.json",
                   "api/events/openapi.json", "api/swagger.json", "v3/api-docs", "swagger/v1/swagger.json"):
@@ -167,14 +177,40 @@ def fiveeleven_new():
         if not isinstance(doc, dict) or "paths" not in doc:
             print(b[:300])
             continue
-        print("servers:", doc.get("servers"), "basePath:", doc.get("basePath"), "host:", doc.get("host"))
-        for path, ops in doc["paths"].items():
-            for method, op in ops.items():
-                if not isinstance(op, dict):
-                    continue
-                params = [(p.get("name"), p.get("in"), p.get("required")) for p in op.get("parameters", []) if isinstance(p, dict)]
-                print(f"  {method.upper()} {path} :: {op.get('summary') or op.get('description', '')[:120]} :: {params}")
-        print("schemas:", json.dumps(doc.get("components", doc.get("definitions", {})))[:12000])
+        show_spec(doc)
+
+
+def show_spec(doc):
+    print("servers:", doc.get("servers"), "basePath:", doc.get("basePath"), "host:", doc.get("host"))
+    gets = []
+    for path, ops in doc.get("paths", {}).items():
+        for method, op in ops.items():
+            if not isinstance(op, dict):
+                continue
+            params = [(p.get("name"), p.get("in"), p.get("required")) for p in op.get("parameters", []) if isinstance(p, dict)]
+            print(f"  {method.upper()} {path} :: {(op.get('summary') or op.get('description') or '')[:160]} :: {params}")
+            if method == "get" and "{" not in path and not any(r for _, i, r in params if r):
+                gets.append(path)
+    print("schemas:", json.dumps(doc.get("components", doc.get("definitions", {})))[:15000])
+    # Call every parameterless GET once, to see what the collections hold.
+    bases = [s.get("url") for s in doc.get("servers") or [] if isinstance(s, dict)] or [""]
+    for path in gets[:12]:
+        for base in bases[:2]:
+            url = urllib.parse.urljoin("https://api-511x-nysdot.carsprogram.org/", (base or "") + path)
+            status, _, h, body = get(url, limit=40_000_000)
+            print(f"--- call {url} {status} {h.get('Content-Type')} {len(body)} bytes")
+            try:
+                data = json.loads(body)
+            except ValueError:
+                print(body[:300])
+                continue
+            rows = data if isinstance(data, list) else next((v for v in data.values() if isinstance(v, list)), data) if isinstance(data, dict) else data
+            if isinstance(rows, list):
+                print("rows:", len(rows))
+                for r in rows[:2]:
+                    print(json.dumps(r)[:6000])
+            else:
+                print(json.dumps(data)[:3000])
 
 
 def fiveeleven():
