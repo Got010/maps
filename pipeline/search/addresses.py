@@ -17,7 +17,7 @@ Feature per line), so a small hand-made file works too.
 Columns are found by name, ignoring case; the first name present wins:
 
   number    AddressLabel's leading number if hyphenated (Queens "12-34"),
-            else AddressNumberPrefix + AddressNumber + AddressNumberSuffix
+            else PrefixAddressNumber + AddressNumber + SuffixAddressNumber
   street    CompleteStreetName, else StreetName
   city      ZipName (the postal town, "Nyack"), else PostalCommunityName,
             PostalCity, CityTownName
@@ -45,8 +45,8 @@ import sys
 FIELDS = {
     "label": ["AddressLabel", "FullAddress"],
     "number": ["AddressNumber", "AddNum", "HouseNumber", "number", "addr:housenumber"],
-    "number_prefix": ["AddressNumberPrefix", "AddNum_Pre"],
-    "number_suffix": ["AddressNumberSuffix", "AddNum_Suf"],
+    "number_prefix": ["PrefixAddressNumber", "AddressNumberPrefix", "AddNum_Pre"],
+    "number_suffix": ["SuffixAddressNumber", "AddressNumberSuffix", "AddNum_Suf"],
     "street": ["CompleteStreetName", "StreetName", "FullStreetName", "street", "addr:street"],
     "city": ["ZipName", "PostalCommunityName", "PostalCity", "PostalCommunity", "city", "addr:city",
              "CityTownName"],
