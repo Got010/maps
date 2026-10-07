@@ -98,7 +98,11 @@ def house_number(get):
         return match.group(1)
     number = get("number")
     if number:
-        return "".join(p for p in (get("number_prefix"), number, get("number_suffix")) if p)
+        # SAM's suffixes are letters ("12A") or fractions, which keep a space ("12 1/2").
+        suffix = get("number_suffix")
+        if suffix and suffix[0].isdigit():
+            suffix = " " + suffix
+        return "".join(p for p in (get("number_prefix"), number, suffix) if p)
     if label:
         return label.split()[0]
     return None
