@@ -124,102 +124,40 @@ def cars(path, n=2):
 
 
 def fiveeleven_new():
-    head("511NY new platform")
-    events = cars("events", n=3) or []
-    if isinstance(events, list):
-        from collections import Counter
-        for field in ("type", "eventType", "category", "subType", "severity", "status", "priority", "source"):
-            values = Counter(str(e.get(field)) for e in events if isinstance(e, dict) and field in e)
-            if values:
-                print(f"{field}:", values.most_common(25))
-        closures = [e for e in events if isinstance(e, dict) and "clos" in json.dumps(e).lower()][:2]
-        for e in closures:
-            print("closure-like:", json.dumps(e)[:5000])
-    cars("signs", n=3)
-    cars("cameras", n=3)
-    # How the web app reads a layer's "api" + "collection": look at its main bundle.
-    _, _, _, page = get("https://511ny.org/")
-    for script in re.findall(r'src="(/assets/index-[^"]+\.js)"', page):
-        _, _, _, js = get("https://511ny.org" + script, limit=40_000_000)
-        print(f"bundle {script}: {len(js)} chars")
-        for word in ("collection", "socket", "firestore", "firebase", "mqtt", "EventSource", "graphql",
-                     "/events", "carsprogram", "x-api-key", "apiKey", "Authorization", "poll"):
-            for m in list(re.finditer(re.escape(word), js))[:4]:
-                print(f"  [{word}] ...{js[max(0, m.start() - 220):m.end() + 220]!r}")
-    # The collections answer {"healthy":true}; the service documents itself with Swagger UI.
+    """511NY's new site reads {api}/map-features?{layer query} per layer (and {api}/hash to skip unchanged
+    ones); found in its config (demo.511ny.org/configs/main.json) and main bundle, October 2026."""
+    head("511NY new platform: map-features")
+    from collections import Counter
     base = "https://api-511x-nysdot.carsprogram.org/"
-    specs = []
-    for page in ("api/events", "api/signs", "api/cameras", "events/api", "api", "docs", "events/docs"):
-        status, final, h, b = get(base + page)
-        print(f"--- {page} {status} {h.get('Content-Type')} final {final}")
-        if "swagger" in b.lower():
-            print(b[:1500])
-            for js in re.findall(r'src="([^"]+\.js)"', b):
-                if "bundle" in js or "standalone" in js:
-                    continue
-                _, _, _, init = get(urllib.parse.urljoin(final, js))
-                print("init script", js, len(init), "chars")
-                specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", init)]
-                # swagger-ui-express puts the whole document in the init script as "swaggerDoc".
-                m = re.search(r'"swaggerDoc":\s*', init)
-                if m:
-                    try:
-                        doc, _ = json.JSONDecoder().raw_decode(init[m.end():])
-                        show_spec(doc)
-                    except ValueError as e:
-                        print("swaggerDoc unreadable:", e, init[m.end():m.end() + 500])
-            specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", b)]
-    for guess in ("api-docs", "swagger.json", "openapi.json", "events/api-docs", "api/events/swagger.json",
-                  "api/events/openapi.json", "api/swagger.json", "v3/api-docs", "swagger/v1/swagger.json"):
-        specs.append(base + guess)
-    seen = set()
-    for spec in specs:
-        if spec in seen:
-            continue
-        seen.add(spec)
-        status, _, h, b = get(spec)
-        print(f"--- spec {spec} {status} {h.get('Content-Type')} {len(b)} bytes")
+    for path, query in (("events", "eventClassifications=incidents"),
+                        ("events", "eventClassifications=closures&maxBeginDateOffset=300000"),
+                        ("events", "eventClassifications=construction&maxBeginDateOffset=300000"),
+                        ("events", ""), ("signs", ""), ("cameras", "")):
+        url = f"{base}{path}/map-features" + (f"?{query}" if query else "")
+        status, _, h, body = get(url, limit=60_000_000)
+        print(f"--- {url}\nstatus {status} type {h.get('Content-Type')} bytes {len(body)} encoding {h.get('Content-Encoding')}")
         try:
-            doc = json.loads(b)
+            doc = json.loads(body)
         except ValueError:
+            print(body[:800])
             continue
-        if not isinstance(doc, dict) or "paths" not in doc:
-            print(b[:300])
+        feats = doc.get("features") if isinstance(doc, dict) else doc
+        if not isinstance(feats, list):
+            print("top:", list(doc)[:20] if isinstance(doc, dict) else type(doc).__name__, json.dumps(doc)[:1500])
             continue
-        show_spec(doc)
-
-
-def show_spec(doc):
-    print("servers:", doc.get("servers"), "basePath:", doc.get("basePath"), "host:", doc.get("host"))
-    gets = []
-    for path, ops in doc.get("paths", {}).items():
-        for method, op in ops.items():
-            if not isinstance(op, dict):
-                continue
-            params = [(p.get("name"), p.get("in"), p.get("required")) for p in op.get("parameters", []) if isinstance(p, dict)]
-            print(f"  {method.upper()} {path} :: {(op.get('summary') or op.get('description') or '')[:160]} :: {params}")
-            if method == "get" and "{" not in path and not any(r for _, i, r in params if r):
-                gets.append(path)
-    print("schemas:", json.dumps(doc.get("components", doc.get("definitions", {})))[:15000])
-    # Call every parameterless GET once, to see what the collections hold.
-    bases = [s.get("url") for s in doc.get("servers") or [] if isinstance(s, dict)] or [""]
-    for path in gets[:12]:
-        for base in bases[:2]:
-            url = urllib.parse.urljoin("https://api-511x-nysdot.carsprogram.org/", (base or "") + path)
-            status, _, h, body = get(url, limit=40_000_000)
-            print(f"--- call {url} {status} {h.get('Content-Type')} {len(body)} bytes")
-            try:
-                data = json.loads(body)
-            except ValueError:
-                print(body[:300])
-                continue
-            rows = data if isinstance(data, list) else next((v for v in data.values() if isinstance(v, list)), data) if isinstance(data, dict) else data
-            if isinstance(rows, list):
-                print("rows:", len(rows))
-                for r in rows[:2]:
-                    print(json.dumps(r)[:6000])
-            else:
-                print(json.dumps(data)[:3000])
+        print("features:", len(feats), "top keys:", list(doc)[:10] if isinstance(doc, dict) else "list")
+        geoms = Counter((f.get("geometry") or {}).get("type") for f in feats if isinstance(f, dict))
+        print("geometry types:", geoms)
+        keys = Counter(k for f in feats if isinstance(f, dict) for k in (f.get("properties") or {}))
+        print("property keys:", keys.most_common(80))
+        for field in ("eventType", "icon", "priority", "eventClassification", "type", "status", "layer"):
+            values = Counter(str((f.get("properties") or {}).get(field)) for f in feats if isinstance(f, dict))
+            if len(values) > 1 or "None" not in values:
+                print(f"{field}:", values.most_common(30))
+        for f in feats[:3]:
+            print(json.dumps(f)[:6000])
+        _, _, _, hb = get(f"{base}{path}/hash" + (f"?{query}" if query else ""))
+        print("hash:", hb[:200])
 
 
 def fiveeleven():
