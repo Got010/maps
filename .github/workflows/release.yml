@@ -608,9 +608,12 @@ jobs:
       - name: Build ${{ matrix.pack }}
         env:
           # Optional repository variables (Settings > Secrets and variables >
-          # Actions > Variables). ADDRESS_POINTS_URL adds the NYS Address Points
-          # to the search pack; unset, search has OSM's addresses only.
-          ADDRESS_POINTS_URL: ${{ vars.ADDRESS_POINTS_URL }}
+          # Actions > Variables). The search pack takes its addresses from NYS
+          # Address Points, the statewide geodatabase listed on
+          # https://gis.ny.gov/streets-addresses (one layer, AddressPoints_SAM;
+          # about 336 MB, 6.6 M points, October 2026). ADDRESS_POINTS_URL
+          # overrides the link; set it to "none" for OSM's addresses only.
+          ADDRESS_POINTS_URL: ${{ vars.ADDRESS_POINTS_URL || 'https://gisdata.ny.gov/GISData/State/Address_Points/SAM_Master_Statewide_Database.gdb.zip' }}
           ADDRESS_POINTS_LAYER: ${{ vars.ADDRESS_POINTS_LAYER }}
           # Overture Places in the search pack, in their own tables (see
           # pipeline/search/overture.py). Set the variable OVERTURE to 0 to
