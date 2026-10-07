@@ -30,10 +30,11 @@ class IncidentAlertsTest {
     }
 
     @Test
-    fun `lane closures from roadwork are spoken, plain roadwork, closures and police are not`() {
-        assertEquals(IncidentAlertKind.LANES, IncidentAlerts.kindOf(event("a", IncidentKind.ROADWORK, "Roadwork.", lanes = "Two right lanes of three blocked")))
-        assertEquals(IncidentAlertKind.LANES, IncidentAlerts.kindOf(event("b", IncidentKind.ROADWORK, "Roadwork.", lanes = "1 of 3 lanes closed")))
-        assertNull(IncidentAlerts.kindOf(event("c", IncidentKind.ROADWORK, "Road construction.")))
+    fun `roadwork is spoken with or without lanes, closures and police are not`() {
+        assertEquals(IncidentAlertKind.ROADWORK, IncidentAlerts.kindOf(event("a", IncidentKind.ROADWORK, "Roadwork.", lanes = "Two right lanes of three blocked")))
+        assertEquals(IncidentAlertKind.ROADWORK, IncidentAlerts.kindOf(event("b", IncidentKind.ROADWORK, "Roadwork.", lanes = "1 of 3 lanes closed")))
+        assertEquals(IncidentAlertKind.ROADWORK, IncidentAlerts.kindOf(event("c", IncidentKind.ROADWORK, "Road construction.")))
+        assertEquals(IncidentAlertKind.LANES, IncidentAlerts.kindOf(event("h", IncidentKind.OTHER, "Debris.", lanes = "Left lane blocked")))
         assertNull(IncidentAlerts.kindOf(event("d", IncidentKind.ROADWORK, "Roadwork.", lanes = "All lanes closed")))
         assertNull(IncidentAlerts.kindOf(event("e", IncidentKind.CLOSURE, "Road closed.")))
         assertNull(IncidentAlerts.kindOf(event("f", IncidentKind.POLICE, "Police activity.", lanes = "Right lane closed")))
@@ -46,10 +47,10 @@ class IncidentAlertsTest {
         val further = event("further", IncidentKind.ROADWORK, "Roadwork.", lanes = "Right lane closed", lon = -73.970) // about 2.5 km
         val tooFar = event("tooFar", IncidentKind.ACCIDENT, "Crash.", lon = -73.950) // about 4.2 km
         val otherSide = event("otherSide", IncidentKind.ACCIDENT, "Crash.", lon = -73.990, direction = "Westbound")
-        val plain = event("plain", IncidentKind.ROADWORK, "Roadwork.", lon = -73.990)
+        val plain = event("plain", IncidentKind.OTHER, "Traffic incident reported.", lon = -73.990)
         val found = IncidentAlerts.ahead(east, listOf(tooFar, further, otherSide, plain, near))
         assertEquals(listOf("near", "further"), found.map { it.incident.id })
-        assertEquals(listOf(IncidentAlertKind.CRASH, IncidentAlertKind.LANES), found.map { it.kind })
+        assertEquals(listOf(IncidentAlertKind.CRASH, IncidentAlertKind.ROADWORK), found.map { it.kind })
         assertEquals(1266.0, found.first().metersAhead, 15.0)
         assertTrue(IncidentAlerts.ahead(east, listOf(plain)).isEmpty())
     }
@@ -60,5 +61,19 @@ class IncidentAlertsTest {
         assertNull(IncidentAlerts.lanesClosed(event("b", IncidentKind.ACCIDENT, "Crash.", lanes = "All lanes closed")))
         assertNull(IncidentAlerts.lanesClosed(event("c", IncidentKind.ACCIDENT, "Crash.", lanes = "Shoulder closed")))
         assertNull(IncidentAlerts.lanesClosed(event("d", IncidentKind.ACCIDENT, "Crash.")))
+    }
+
+    @Test
+    fun `roadwork in a row on the same road is one work zone`() {
+        val first = event("w1", IncidentKind.ROADWORK, "Roadwork.", lon = -73.990) // about 0.85 km
+        val second = event("w2", IncidentKind.ROADWORK, "Roadwork.", lon = -73.980) // about 1.7 km
+        val crash = event("c", IncidentKind.ACCIDENT, "Crash.", lon = -73.985)
+        val elsewhere = first.copy(id = "w3", roadway = "NY 9A", location = GeoPoint(40.70005, -73.982))
+        val later = event("w4", IncidentKind.ROADWORK, "Roadwork.", lon = -73.965) // about 3 km, past the zone
+        val found = IncidentAlerts.ahead(east, listOf(first, second, crash, elsewhere, later))
+        val spoken = found.first()
+        assertEquals("w1", spoken.incident.id)
+        assertEquals(listOf("w2"), IncidentAlerts.sameZone(spoken, found).map { it.incident.id })
+        assertTrue(IncidentAlerts.sameZone(found.single { it.incident.id == "c" }, found).isEmpty())
     }
 }
