@@ -24,16 +24,20 @@ import app.southbound.core.voice.VoiceSettings
 
 /**
  * `settings.json`: the preferences, in groups (network, route, driving, fuel, voice, packs, updates). Every group
- * and every field of schema 1 is required and nothing else is allowed; an enum is its constant's name; a number
+ * and every field of the bundle's schema is required and nothing else is allowed (schema 2 added the route group's
+ * `avoid_dot_cameras`; a schema 1 bundle reads with it off); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
     private val NETWORK_KEYS = NetworkFeature.entries.map { it.name }.toSet()
-    private val ROUTE_KEYS = setOf(
+    private val ROUTE_KEYS_1 = setOf(
         "avoid_tolls", "avoid_highways", "avoid_ferries", "avoid_alpr", "vehicle", "height_ft", "width_ft", "length_ft",
         "weight_tons", "walk_avoid_stairs", "walk_step_free", "walk_prefer_paths", "bike_type", "bike_avoid_hills",
         "bike_avoid_busy_roads",
     )
+
+    /** Schema 2: "Avoid DOT cameras". */
+    private val ROUTE_KEYS = ROUTE_KEYS_1 + "avoid_dot_cameras"
     private val FUEL_KEYS = setOf("mpg", "price_per_gallon", "price_source", "region")
     private val VOICE_KEYS = setOf(
         "mode", "driving", "cycling", "walking", "transit", "engine", "street_names", "detail", "traffic_alerts",
@@ -53,6 +57,9 @@ internal object SettingsEntry {
     /** How many values the settings hold, as the manifest counts them (the region list is one value). */
     fun count(s: AppSettings): Int = tree(s).values.sumOf { (it as Map<*, *>).size }
 
+    /** [count] as a bundle of [schema] lists them: schema 1 had no `avoid_dot_cameras`. */
+    fun count(s: AppSettings, schema: Long): Int = count(s) - if (schema < 2) 1 else 0
+
     private fun tree(s: AppSettings): Map<String, Any?> = linkedMapOf(
         "network" to NetworkFeature.entries.associate { it.name to (s.network[it] ?: false) },
         "route" to linkedMapOf<String, Any?>(
@@ -60,6 +67,7 @@ internal object SettingsEntry {
             "avoid_highways" to s.route.avoidHighways,
             "avoid_ferries" to s.route.avoidFerries,
             "avoid_alpr" to s.route.avoidAlpr,
+            "avoid_dot_cameras" to s.route.avoidDotCameras,
             "vehicle" to s.route.vehicle.name,
             "height_ft" to s.route.heightFt,
             "width_ft" to s.route.widthFt,
@@ -109,18 +117,20 @@ internal object SettingsEntry {
         "updates" to linkedMapOf<String, Any?>("allow_mobile_data" to s.allowMobileData),
     )
 
-    fun decode(bytes: ByteArray): AppSettings {
+    /** Reads settings written with bundle [schema] (1 or 2; schema 1 has no `avoid_dot_cameras`, read as off). */
+    fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
 
         val net = root.obj("network", NETWORK_KEYS)
         val network = NetworkFeature.entries.associateWith { net.bool(it.name) }
 
-        val r = root.obj("route", ROUTE_KEYS)
+        val r = root.obj("route", if (schema >= 2) ROUTE_KEYS else ROUTE_KEYS_1)
         val route = RoutePrefs(
             avoidTolls = r.bool("avoid_tolls"),
             avoidHighways = r.bool("avoid_highways"),
             avoidFerries = r.bool("avoid_ferries"),
             avoidAlpr = r.bool("avoid_alpr"),
+            avoidDotCameras = schema >= 2 && r.bool("avoid_dot_cameras"),
             vehicle = r.enum<VehicleKind>("vehicle"),
             heightFt = r.double("height_ft", 3.0, 16.0),
             widthFt = r.double("width_ft", 3.0, 12.0),

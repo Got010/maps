@@ -1,8 +1,12 @@
 package app.southbound.feature.directions
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -10,10 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -31,15 +38,25 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import app.southbound.core.map.Eta
 import app.southbound.core.map.RouteColors
 import app.southbound.core.map.Units
@@ -76,6 +93,10 @@ sealed interface RoutePreviewState {
 /**
  * The sheet under the map while choosing a route: travel mode, the route
  * options (each marked with its line colour on the map), and Start.
+ *
+ * Swipe it down (or tap its handle) to shrink it to one line, the chosen
+ * route's time and distance with Start, so the routes on the map show; swipe
+ * that line up (or tap it) for the whole sheet again.
  */
 @Composable
 fun RoutePreviewSheet(
@@ -97,13 +118,59 @@ fun RoutePreviewSheet(
     afterModes: (@Composable () -> Unit)? = null,
     beforeStart: (@Composable () -> Unit)? = null,
 ) {
+    var collapsed by rememberSaveable { mutableStateOf(false) }
+    // How far the finger has dragged the sheet (down is positive), while it is down.
+    var drag by remember { mutableFloatStateOf(0f) }
+    val threshold = with(LocalDensity.current) { SWIPE_THRESHOLD.toPx() }
+    val flingSpeed = with(LocalDensity.current) { FLING_SPEED.toPx() }
+    val dragState = rememberDraggableState { delta ->
+        // Follow the finger the way the sheet can go: down when open, up when shrunk.
+        drag = if (collapsed) (drag + delta).coerceIn(-threshold * 2, 0f) else (drag + delta).coerceIn(0f, threshold * 4)
+    }
+    val toggleLabel = stringResource(if (collapsed) R.string.directions_show_options else R.string.directions_hide_options)
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .offset { IntOffset(0, if (collapsed) 0 else drag.roundToInt()) }
+            .draggable(
+                dragState,
+                Orientation.Vertical,
+                onDragStopped = { velocity ->
+                    // A long drag or a quick flick does it.
+                    if (!collapsed && (drag > threshold || velocity > flingSpeed)) {
+                        collapsed = true
+                    } else if (collapsed && (drag < -threshold || velocity < -flingSpeed)) {
+                        collapsed = false
+                    }
+                    drag = 0f
+                },
+            )
+            .animateContentSize(),
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 3.dp,
         shadowElevation = 6.dp,
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = if (collapsed) 8.dp else 16.dp)) {
+            // The handle: drag it, or tap it to shrink or grow the sheet.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(end = 8.dp)
+                    .clickable(onClickLabel = toggleLabel) { collapsed = !collapsed }
+                    .semantics { contentDescription = toggleLabel }
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(2.dp)),
+                )
+            }
+            if (collapsed) {
+                CollapsedRoute(destinationName, state, startEnabled = startName == null, onStart = onStart, onExpand = { collapsed = false })
+                return@Column
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.directions_to, destinationName),
@@ -177,6 +244,57 @@ fun RoutePreviewSheet(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** How far a swipe must go to shrink or grow the sheet, or how fast a flick (per second). */
+private val SWIPE_THRESHOLD = 48.dp
+private val FLING_SPEED = 600.dp
+
+/**
+ * The shrunk sheet: where to, the chosen route's time and distance, and Start. Tapping it grows the
+ * sheet again.
+ */
+@Composable
+private fun CollapsedRoute(
+    destinationName: String,
+    state: RoutePreviewState,
+    startEnabled: Boolean,
+    onStart: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    val ready = state as? RoutePreviewState.Ready
+    val summary = ready?.summaries?.getOrNull(ready.selected)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(end = 8.dp).clickable(onClick = onExpand),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.directions_to, destinationName),
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (summary != null) {
+                val delay = ready.delaySeconds.getOrElse(ready.selected) { 0.0 }
+                Text(
+                    Units.duration(summary.durationSeconds + delay) + " \u00B7 " + Units.distance(summary.distanceMeters),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (Eta.isLate(delay)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            } else if (state is RoutePreviewState.Loading) {
+                Text(stringResource(R.string.directions_finding), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (summary != null) {
+            Button(onClick = onStart, enabled = startEnabled, modifier = Modifier.height(40.dp)) {
+                Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
+                Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))
             }
         }
     }

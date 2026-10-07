@@ -7,6 +7,8 @@
     <string name="directions_from">From %1$s. Navigation starts from your own location, so Start is off; clear the start point on the map to use it.</string>
     <string name="directions_no_location">Waiting for your location. Step outside or near a window.</string>
     <string name="directions_start">Start</string>
+    <string name="directions_hide_options">Shrink the route sheet to see the map</string>
+    <string name="directions_show_options">Show the route options</string>
     <string name="directions_via">via %1$s</string>
     <string name="directions_arrive">Arrive %1$s</string>
     <string name="directions_eta_plus">+%1$d min</string>

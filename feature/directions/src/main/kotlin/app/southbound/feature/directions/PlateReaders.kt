@@ -22,8 +22,8 @@ import app.southbound.core.search.RouteExposure
 private val PlateReaderPurple = Color(0xFF7B1FA2)
 
 /**
- * "3 plate readers · 1 speed camera" on a route option: what the route is exposed to. A part with
- * none is left out, and so is the whole line when both are none.
+ * "3 plate readers · 1 speed camera · 2 DOT cameras" on a route option: what the route is exposed to.
+ * A part with none is left out, and so is the whole line when all are none.
  */
 @Composable
 internal fun RouteExposureLine(exposure: RouteExposure, modifier: Modifier = Modifier) {
@@ -34,6 +34,9 @@ internal fun RouteExposureLine(exposure: RouteExposure, modifier: Modifier = Mod
         }
         if (exposure.speedCameras > 0) {
             add(pluralStringResource(R.plurals.directions_speed_cameras, exposure.speedCameras, exposure.speedCameras))
+        }
+        if (exposure.dotCameras > 0) {
+            add(pluralStringResource(R.plurals.directions_dot_cameras, exposure.dotCameras, exposure.dotCameras))
         }
     }
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -51,7 +54,7 @@ internal fun RouteExposureLine(exposure: RouteExposure, modifier: Modifier = Mod
     }
 }
 
-/** Under the options when "Avoid plate readers" is on but the best route still passes one. */
+/** Under the options when "Avoid plate readers" or "Avoid DOT cameras" is on but the best route still passes one. */
 @Composable
 internal fun PlateReaderAvoidNote(modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
