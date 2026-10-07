@@ -196,6 +196,21 @@ class RouteAlertsTest {
     }
 
     @Test
+    fun dotCamerasAreCountedButNeverAnAlert() {
+        val marks = listOf(
+            Hand.mark(Landmark.DOT_CAMERA, 5.0, 200.0),
+            Hand.mark(Landmark.DOT_CAMERA, 8.0, 210.0), // the same pole, counted once
+            Hand.mark(Landmark.DOT_CAMERA, 5.0, 600.0),
+            Hand.mark(Landmark.DOT_CAMERA, 300.0, 600.0), // another road
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 400.0),
+        )
+        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 0, dotCameras = 2), RouteAlerts.exposure(northbound, marks))
+        assertEquals(3, RouteAlerts.alongRoute(northbound, marks, Landmark.DOT_CAMERA).size)
+        assertTrue(RouteAlerts.onRoute(northbound, marks).none { it.kind != AlertKind.ALPR_CAMERA })
+        assertTrue(!RouteExposure(0, 0, 1).isEmpty)
+    }
+
+    @Test
     fun anOldPackWithoutTheColumnCountsEveryCamera() {
         // A pack without the column reads every direction as NULL, so the count is the one it always was.
         assertEquals("NULL", LandmarkColumns.directionSelect(setOf("id", "category", "name", "lat", "lon")))

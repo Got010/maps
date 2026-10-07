@@ -159,6 +159,21 @@ else
   echo "==> ADDRESS_POINTS_URL is not set: addresses from OSM only"
 fi
 
+# State DOT traffic cameras for "Avoid DOT cameras" (dot_cameras.py): the
+# whole state's list, fetched here so the phone never asks for it. A failed
+# fetch leaves them out rather than failing the pack.
+if [[ "${DOT_CAMERAS:-1}" == 1 ]]; then
+  DOT_FILE="$DATA_DIR/tmp/dot-cameras-$REGION.json"
+  DOT_URL="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import dot_cameras; print(dot_cameras.SOURCES["NY"])' "$PIPELINE_DIR/search")"
+  echo "==> Fetching DOT cameras $DOT_URL"
+  if curl -sSfL --retry 3 --max-time 120 -o "$DOT_FILE" "$DOT_URL" && python3 "$PIPELINE_DIR/search/dot_cameras.py" --check "$DOT_FILE" | tail -1; then
+    ARGS="$ARGS --dot-cameras=/data/tmp/$(basename "$DOT_FILE")"
+  else
+    echo "::warning::DOT cameras could not be fetched; the pack has none"
+    rm -f "$DOT_FILE"
+  fi
+fi
+
 # Overture Places: overture.py fetch reads the region's rows from Overture's
 # bucket into a staging CSV (kept in tmp/ and reused while the release and
 # bounds stay the same), then build_search.py loads it into its own tables.
