@@ -46,25 +46,39 @@ object FiveElevenNy {
     }
 
     private fun incident(m: Map<*, *>): Incident? {
-        val lat = m.number("Latitude") ?: return null
-        val lon = m.number("Longitude") ?: return null
-        if (lat == 0.0 && lon == 0.0) return null
-        val id = m.text("ID") ?: return null
+        // The v2 API sends ID as a number; the older one as a string.
+        val id = m.id() ?: return null
+        val (lat, lon) = m.position() ?: return null
         val type = m.text("EventType")
         val subType = m.text("EventSubType")
         val lanes = m.text("LanesStatus") ?: m.text("LanesAffected")
         val description = m.text("Description") ?: subType ?: type ?: "Incident"
+        val kind = kindOf(type, subType, lanes, description)
         return Incident(
             id = id,
-            kind = kindOf(type, subType, lanes, description),
-            roadway = m.text("RoadwayName"),
-            direction = m.text("DirectionOfTravel"),
+            kind = if (m.flag("IsFullClosure")) IncidentKind.CLOSURE else kind,
+            roadway = m.text("RoadwayName") ?: m.text("Roadway"),
+            direction = m.direction(),
             description = description,
             location = GeoPoint(lat, lon),
             severity = m.text("Severity"),
             lanesStatus = lanes,
-            updatedAt = parseDate(m.text("LastUpdated") ?: m.text("Reported")),
+            updatedAt = m.date("LastUpdated") ?: m.date("Reported"),
         )
+    }
+
+    /** A date field: Unix time (the v2 API, seconds or milliseconds) or 511NY's text form. */
+    private fun Map<*, *>.date(key: String): Long? = when (val v = this[key]) {
+        is Number -> epochMillis(v.toDouble())
+        is String -> v.trim().toDoubleOrNull()?.let(::epochMillis) ?: parseDate(v)
+        else -> null
+    }
+
+    // Seconds until the year 33658; anything larger is already milliseconds. 0 and negatives mean "none".
+    private fun epochMillis(v: Double): Long? = when {
+        v <= 0 || v.isNaN() || v.isInfinite() -> null
+        v < 1e12 -> (v * 1000).toLong()
+        else -> v.toLong()
     }
 
     /** The feed's EventType values, with closures also found by their lane status or wording. */
@@ -210,7 +224,7 @@ object FiveElevenNy {
             lines = signLines(raw),
             roadway = roadway,
             direction = direction,
-            updatedAt = parseDate(m.text("LastUpdated")),
+            updatedAt = m.date("LastUpdated"),
         )
     }
 

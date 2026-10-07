@@ -70,7 +70,7 @@ class ExploreServices private constructor(context: Context) {
     val userData by lazy { UserDataStore(File(appContext.noBackupFilesDir, UserDataStore.FILE_NAME), KeystoreSealer()) }
 
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
-    val traffic = TrafficFeed(networkGate, key511 = { secrets.get(ApiKey.NY_511) })
+    val traffic = TrafficFeed(networkGate)
 
     /** Fuel economy, gas price and the state to look it up for (a Settings choice, never GPS). */
     val fuelPrefs = FuelPrefs.get(appContext)

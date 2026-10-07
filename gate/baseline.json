@@ -808,7 +808,7 @@
     },
     {
       "value": "511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
+      "note": "Text only: the Settings > Live data note for 511NY (feature/settings strings.xml, live_511_note) names the site whose feeds are read. Not contacted: since 511NY's October 2026 move the app reads api-511x-nysdot.carsprogram.org (see that entry)."
     },
     {
       "value": "api.github.com",
@@ -831,24 +831,16 @@
       "note": "Bare scheme prefix strings: feature/search PlaceCard.kt (adds https:// to a place's website before opening it in the browser) and core/traffic FiveElevenNy.kt (URL checks). Not hosts."
     },
     {
-      "value": "http://511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
-    },
-    {
       "value": "http://valhalla.invalid",
       "note": "Placeholder endpoint that Ferrostar's Valhalla route provider requires (core/routing OfflineRouter.kt, 'Never contacted'); .invalid never resolves, and routes come from the on-device Valhalla engine."
-    },
-    {
-      "value": "http://www.511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
     },
     {
       "value": "https://",
       "note": "Bare scheme prefix strings: feature/search PlaceCard.kt (adds https:// to a place's website before opening it in the browser) and core/traffic FiveElevenNy.kt (URL checks). Not hosts."
     },
     {
-      "value": "https://511ny.org",
-      "note": "511NY traffic events, cameras and message signs: core/traffic FiveElevenNy.kt (the http:// forms are only matched and upgraded to https, never fetched as http), camera images via feature/explore TrafficCameraCard. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default, user-entered key). FiveElevenNy.absoluteUrl passes any absolute camera-image URL in the feed through unchanged to NetworkGate.get (redirects followed), so whatever hosts the 511NY feed names are contacted under TRAFFIC_511NY when a camera image loads, and are not in this baseline."
+      "value": "https://api-511x-nysdot.carsprogram.org",
+      "note": "511NY's public collections, the ones 511ny.org's own map reads since its October 2026 move to the CARS platform: core/traffic FiveElevenNyCars.kt fetches /events/map-features (incidents, closures, construction, each with the site's own query), /signs/map-features and /cameras/map-features, and /hash for each to skip unchanged ones. The whole state every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511NY (Settings > Live data, off by default). Camera stills are the feed's videoPreviewUrl (seen on public.carsprogram.org), passed to NetworkGate.get under the same toggle when a camera card opens, so that host is not in this baseline."
     },
     {
       "value": "https://api-endpoint.mta.info",

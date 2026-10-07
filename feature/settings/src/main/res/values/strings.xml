@@ -78,9 +78,7 @@
     <string name="live_key_remove">Remove key</string>
     <string name="live_traffic">Live traffic</string>
     <string name="live_511">Incidents and closures (511NY)</string>
-    <string name="live_511_note">Crashes, closures and work zones across the state, fetched whole every few minutes. Routes steer around closures. Also shows traffic cameras and message signs on the map. Needs a free developer key from 511ny.org.</string>
-    <string name="live_511_key">511NY key</string>
-    <string name="live_511_key_saved">511NY key saved (type to replace)</string>
+    <string name="live_511_note">Crashes, closures and work zones across the state, fetched whole every few minutes. Routes steer around closures. Also shows traffic cameras and message signs on the map. No key needed: these are the feeds 511ny.org\'s own map reads.</string>
     <string name="live_dot">Traffic speeds (NYC DOT)</string>
     <string name="live_dot_note">Speeds on NYC highways and main roads from NYC Open Data, fetched whole. No key needed. The city\'s copy sometimes lags; readings older than two hours are not shown.</string>
     <string name="live_traffic_hint">With either on, a traffic button appears on the map. Feeds are fetched only while the layer is shown or while navigating.</string>

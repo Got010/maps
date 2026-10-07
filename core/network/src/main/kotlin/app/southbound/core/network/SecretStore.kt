@@ -14,7 +14,10 @@ import javax.crypto.spec.GCMParameterSpec
 enum class ApiKey {
     MTA_BUS_TIME,
 
-    /** A free 511NY developer key, for incidents and closures. */
+    /**
+     * A 511NY developer key. Unused since 511NY's October 2026 move, whose feeds need none
+     * (core/traffic FiveElevenNyCars); kept so a saved key and older backups still read.
+     */
     NY_511,
 
     /** A read-only GitHub token, needed for updates while the repository is private. */

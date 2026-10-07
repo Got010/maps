@@ -24,7 +24,6 @@ import java.util.Collections
  */
 class TrafficFeed(
     private val gate: NetworkGate,
-    private val key511: () -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
 ) {
@@ -34,6 +33,10 @@ class TrafficFeed(
     private var speedsStale = false
     private var cameras: Cached<List<TrafficCamera>>? = null
     private var signs: Cached<List<MessageSign>>? = null
+
+    // 511NY's collections with the hash each was fetched at: an unchanged hash skips the download.
+    private val eventLayers = HashMap<FiveElevenNyCars.EventLayer, Hashed<List<Incident>>>()
+    private var signsHashed: Hashed<List<MessageSign>>? = null
     private val _snapshot = MutableStateFlow(TrafficSnapshot.EMPTY)
 
     /** The latest result, for screens that only want to watch. */
@@ -43,13 +46,9 @@ class TrafficFeed(
     val isEnabled: Boolean
         get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) || gate.isAllowed(NetworkFeature.TRAFFIC_NYC_DOT)
 
-    /** 511NY is on and has a key. */
+    /** 511NY is on. Its feeds need no key since its October 2026 move (see [FiveElevenNyCars]). */
     val hasIncidents: Boolean
-        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) && !key511().isNullOrBlank()
-
-    /** 511NY is turned on but has no key yet, so nothing is fetched from it. */
-    val needsIncidentsKey: Boolean
-        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) && key511().isNullOrBlank()
+        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY)
 
     /**
      * Fetches whatever is stale among the feeds that are on and returns the
@@ -73,9 +72,7 @@ class TrafficFeed(
                 } else if (!force && incidents?.fresh(now, INCIDENTS_TTL_MILLIS) == true) {
                     incidents
                 } else {
-                    load(now, incidents, errors, "511NY") {
-                        FiveElevenNy.parseEvents(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNy.eventsUrl(key511()!!)).decodeToString())
-                    }
+                    load(now, incidents, errors, "511NY") { loadEvents() }
                 }
             }
             val speedsJob = async {
@@ -93,13 +90,13 @@ class TrafficFeed(
                     }
                 }
             }
-            // Cameras and signs: the same 511NY toggle and key, the whole state each time.
+            // Cameras and signs: the same 511NY toggle, the whole state each time.
             val camerasJob = async {
                 when {
                     !hasIncidents -> null
                     !mapExtras || (!force && cameras?.fresh(now, CAMERAS_TTL_MILLIS) == true) -> cameras
                     else -> load(now, cameras, extraErrors, "511NY cameras") {
-                        FiveElevenNy.parseCameras(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNy.camerasUrl(key511()!!)).decodeToString())
+                        FiveElevenNyCars.parseCameras(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNyCars.CAMERAS_URL).decodeToString())
                     }
                 }
             }
@@ -108,7 +105,9 @@ class TrafficFeed(
                     !hasIncidents -> null
                     !mapExtras || (!force && signs?.fresh(now, SIGNS_TTL_MILLIS) == true) -> signs
                     else -> load(now, signs, extraErrors, "511NY signs") {
-                        FiveElevenNy.parseSigns(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNy.signsUrl(key511()!!)).decodeToString())
+                        sameOrFetch(signsHashed, FiveElevenNyCars.SIGNS_HASH_URL) {
+                            FiveElevenNyCars.parseSigns(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNyCars.SIGNS_URL).decodeToString())
+                        }.also { signsHashed = it }.value
                     }
                 }
             }
@@ -117,7 +116,7 @@ class TrafficFeed(
             cameras = camerasJob.await()
             signs = signsJob.await()
         }
-        // A refused key fails all three 511NY requests alike: say it once.
+        // An outage fails all three 511NY requests alike: say it once.
         val mainErrors = errors.toList()
         val shownErrors = mainErrors + extraErrors.toList().filterNot { extra ->
             mainErrors.any { it.substringAfter(": ") == extra.substringAfter(": ") }
@@ -132,6 +131,38 @@ class TrafficFeed(
             speedsStale = speedsStale && speeds != null,
         ).also { _snapshot.value = it }
     }
+
+    /**
+     * The three event layers 511NY's map shows, merged by id (a closure listed under construction
+     * as well stays a closure). Each is downloaded only when its hash changed.
+     */
+    private fun loadEvents(): List<Incident> {
+        val merged = LinkedHashMap<String, Incident>()
+        for (layer in EVENT_LAYERS) {
+            val layerEvents = sameOrFetch(eventLayers[layer], FiveElevenNyCars.eventsHashUrl(layer)) {
+                FiveElevenNyCars.parseEvents(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNyCars.eventsUrl(layer)).decodeToString(), layer)
+            }
+            eventLayers[layer] = layerEvents
+            for (incident in layerEvents.value) merged.putIfAbsent(incident.id, incident)
+        }
+        return merged.values.toList()
+    }
+
+    /**
+     * [had] again when [hashUrl] still gives its hash, else [download] with the new hash. A hash that
+     * can't be read just means downloading; a turned-off feature still stops everything.
+     */
+    private fun <T> sameOrFetch(had: Hashed<T>?, hashUrl: String, download: () -> T): Hashed<T> {
+        val hash = try {
+            FiveElevenNyCars.parseHash(fetch(NetworkFeature.TRAFFIC_511NY, hashUrl).decodeToString())
+        } catch (e: IOException) {
+            null
+        }
+        if (had != null && hash != null && had.hash == hash) return had
+        return Hashed(hash, download())
+    }
+
+    private data class Hashed<T>(val hash: String?, val value: T)
 
     /** Fetches [block] off the main thread; on failure keeps [previous] and records why. */
     private suspend fun <T> load(now: Long, previous: Cached<T>?, errors: MutableList<String>, name: String, block: () -> T): Cached<T>? =
@@ -153,6 +184,13 @@ class TrafficFeed(
     }
 
     companion object {
+        /** Closures first, so an event in two layers keeps the closure's kind. */
+        private val EVENT_LAYERS = listOf(
+            FiveElevenNyCars.EventLayer.CLOSURES,
+            FiveElevenNyCars.EventLayer.INCIDENTS,
+            FiveElevenNyCars.EventLayer.CONSTRUCTION,
+        )
+
         const val INCIDENTS_TTL_MILLIS = 180_000L
         const val SPEEDS_TTL_MILLIS = 90_000L
 

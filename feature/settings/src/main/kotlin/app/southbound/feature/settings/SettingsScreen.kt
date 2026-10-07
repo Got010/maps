@@ -295,7 +295,6 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_511, toggles.getValue(NetworkFeature.TRAFFIC_511NY), R.string.live_511_note) {
         network.set(NetworkFeature.TRAFFIC_511NY, it)
     }
-    KeyField(secrets, ApiKey.NY_511, R.string.live_511_key, R.string.live_511_key_saved)
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }

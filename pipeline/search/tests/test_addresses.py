@@ -213,6 +213,38 @@ class AddressPointsTest(unittest.TestCase):
         self.assertEqual(6, len(rows))
         self.assertIsNone(rows[5]["number"])
 
+    def test_statewide_file_columns(self):
+        # The header and two rows of the real statewide file (SAM_Master_Statewide_Database.gdb,
+        # layer AddressPoints_SAM) as search/build.sh's ogr2ogr writes it, trimmed to the columns
+        # read here plus a few others; the third row adds a fraction and the fourth a letter suffix.
+        header = ("X,Y,NYSAddressPointID,PrefixAddressNumber,AddressNumber,SuffixAddressNumber,StreetName,"
+                  "ZipName,State,ZipCode,PointType,PrimaryPoint,CityTownName,CompleteStreetName,Status,"
+                  "AddressLabel,Latitude,Longitude")
+        rows = [
+            "-73.8192503045,42.6999459098,ALBA074317,,8,,Cherry,Albany,NY,12205,1,Y,Colonie,Cherry Street,"
+            "Active,8 Cherry St,42.6999545530001,-73.81925182",
+            "-73.8190887117,42.6997753923,ALBA074316,,10,,Cherry,Albany,NY,12205,1,Y,Colonie,Cherry Street,"
+            "Active,10 Cherry St,42.6997840350001,-73.8190902269999",
+            "-73.81,42.69,X1,,12,1/2,Cherry,Albany,NY,12205,1,Y,Colonie,Cherry Street,Active,12 1/2 Cherry St,42.69,-73.81",
+            "-73.81,42.69,X2,,14,A,Cherry,Albany,NY,12205,1,Y,Colonie,Cherry Street,Active,14A Cherry St,42.69,-73.81",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "address-points-nys.csv")
+            with open(path, "w") as f:
+                f.write(header + "\n" + "\n".join(rows) + "\n")
+            columns = next(addresses.records(path))[0]
+            self.assertEqual("PrefixAddressNumber", columns["number_prefix"])
+            self.assertEqual("SuffixAddressNumber", columns["number_suffix"])
+            self.assertEqual("CompleteStreetName", columns["street"])
+            self.assertEqual("Latitude", columns["lat"])
+            points = list(addresses.points(path))
+        self.assertEqual(
+            {"number": "8", "street": "Cherry Street", "city": "Albany", "alt_city": "Colonie",
+             "postcode": "12205", "state": "NY", "lat": 42.6999545530001, "lon": -73.81925182},
+            points[0],
+        )
+        self.assertEqual(["8", "10", "12 1/2", "14A"], [p["number"] for p in points])
+
     def test_columns_by_name_ignoring_case(self):
         columns = addresses.pick_columns(["x", "y", "ADDRESSNUMBER", "completestreetname", "ZIPCODE"])
         self.assertEqual("ADDRESSNUMBER", columns["number"])
