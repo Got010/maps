@@ -37,6 +37,7 @@ include(
     ":core:search",
     ":core:transit",
     ":core:traffic",
+    ":core:weather",
     ":core:packs",
     ":core:updates",
     ":core:userdata",

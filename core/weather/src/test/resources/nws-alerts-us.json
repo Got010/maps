@@ -1,0 +1,381 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.34b315bfab7ca97a5f52408702a6cd0e25d57a61.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -80.66,
+       28.2
+      ],
+      [
+       -80.59,
+       28.22
+      ],
+      [
+       -80.53,
+       28.04
+      ],
+      [
+       -80.87,
+       27.98
+      ],
+      [
+       -80.86,
+       28.14
+      ],
+      [
+       -80.66,
+       28.2
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.34b315bfab7ca97a5f52408702a6cd0e25d57a61.001.1",
+    "areaDesc": "Brevard, FL",
+    "geocode": {
+     "SAME": [
+      "012009"
+     ],
+     "UGC": [
+      "FLC009"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/FLC009"
+    ],
+    "references": [],
+    "sent": "2026-10-07T16:18:00-04:00",
+    "effective": "2026-10-07T16:18:00-04:00",
+    "onset": "2026-10-07T16:18:00-04:00",
+    "expires": "2026-10-07T18:15:00-04:00",
+    "ends": "2026-10-07T18:15:00-04:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Minor",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Flood Advisory",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Melbourne FL",
+    "headline": "Flood Advisory issued October 7 at 4:18PM EDT until October 7 at 6:15PM EDT by NWS Melbourne FL",
+    "description": "* WHAT...Flooding caused by excessive rainfall is expected.\n\n* WHERE...Southern Brevard County in east central Florida...\n\n* WHEN...Until 615 PM EDT.\n\n* IMPACTS...Minor flooding in low-lying and poor drainage areas.\n\n* ADDITIONAL DETAILS...\n- At 418 PM EDT, Doppler radar indicated heavy rain. Minor flooding\nis ongoing or expected to begin shortly in the advisory area.\nBetween 1 and 2 inches of rai",
+    "instruction": "Turn around, don't drown when encountering flooded roads. Most flood\ndeaths occur in vehicles.\n\nBe aware of your surroundings and do not drive on flooded roads.",
+    "response": "Avoid",
+    "note": null,
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "FAY"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.42e77e287d1ec7e211ccf78e0f47f617c1f0da10.001.1",
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -66.36,
+       17.97
+      ],
+      [
+       -66.34,
+       18.18
+      ],
+      [
+       -65.77,
+       18.14
+      ],
+      [
+       -65.8,
+       18.06
+      ],
+      [
+       -65.84,
+       18.05
+      ],
+      [
+       -65.83,
+       18.01
+      ],
+      [
+       -65.92,
+       17.98
+      ],
+      [
+       -66.02,
+       17.98
+      ],
+      [
+       -66.16,
+       17.93
+      ],
+      [
+       -66.15,
+       17.94
+      ],
+      [
+       -66.21,
+       17.93
+      ],
+      [
+       -66.21,
+       17.94
+      ],
+      [
+       -66.17,
+       17.94
+      ],
+      [
+       -66.21,
+       17.96
+      ],
+      [
+       -66.23,
+       17.93
+      ],
+      [
+       -66.26,
+       17.94
+      ],
+      [
+       -66.25,
+       17.93
+      ],
+      [
+       -66.32,
+       17.98
+      ],
+      [
+       -66.36,
+       17.97
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.42e77e287d1ec7e211ccf78e0f47f617c1f0da10.001.1",
+    "areaDesc": "Northeast; Southeast; Eastern Interior; Central Interior; Ponce and Vicinity",
+    "geocode": {
+     "SAME": [
+      "072029",
+      "072037",
+      "072053",
+      "072069",
+      "072087",
+      "072089",
+      "072103",
+      "072119",
+      "072015",
+      "072057",
+      "072095",
+      "072109",
+      "072123",
+      "072151",
+      "072007",
+      "072025",
+      "072035",
+      "072041",
+      "072045",
+      "072063",
+      "072077",
+      "072085",
+      "072129",
+      "072009",
+      "072019",
+      "072039",
+      "072043",
+      "072047",
+      "072073",
+      "072101",
+      "072105",
+      "072107",
+      "072149",
+      "072059",
+      "072075",
+      "072111",
+      "072113",
+      "072133",
+      "072153"
+     ],
+     "UGC": [
+      "PRZ002",
+      "PRZ003",
+      "PRZ004",
+      "PRZ006",
+      "PRZ007"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/PRZ002",
+     "https://api.weather.gov/zones/forecast/PRZ003",
+     "https://api.weather.gov/zones/forecast/PRZ004",
+     "https://api.weather.gov/zones/forecast/PRZ006",
+     "https://api.weather.gov/zones/forecast/PRZ007"
+    ],
+    "references": [],
+    "sent": "2026-10-07T16:14:00-04:00",
+    "effective": "2026-10-07T16:14:00-04:00",
+    "onset": "2026-10-07T16:14:00-04:00",
+    "expires": "2026-10-07T17:00:00-04:00",
+    "ends": null,
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Moderate",
+    "certainty": "Observed",
+    "urgency": "Expected",
+    "event": "Special Weather Statement",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS San Juan PR",
+    "headline": "Special Weather Statement issued October 7 at 4:14PM AST by NWS San Juan PR",
+    "description": "At 414 PM AST, Doppler radar was tracking an area of strong\nthunderstorms extending from the coastal waters of Salinas to about\n30 miles southeast of Maunabo, moving north at 20 mph.\n\nHAZARD...Wind gusts up to 40 mph.\n\nSOURCE...Radar indicated.\n\nIMPACT...Gusty winds could knock down tree limbs and blow around\nunsecured objects.\n\nLocations impacted include...\nGuayama, Cayey, Arroyo, Patillas, Aibon",
+    "instruction": "Monitor the weather situation closely and be alert for threatening\nweather conditions.",
+    "response": "Execute",
+    "note": null,
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "SPS"
+     ],
+     "NationalWeatherService": [
+      "SPS"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.03221181190cffd47c3b2f523bdc1fe49cf16f22.001.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.03221181190cffd47c3b2f523bdc1fe49cf16f22.001.1",
+    "areaDesc": "Crittenden; DeSoto; Shelby",
+    "geocode": {
+     "SAME": [
+      "005035",
+      "028033",
+      "047157"
+     ],
+     "UGC": [
+      "ARZ036",
+      "MSZ001",
+      "TNZ088"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/ARZ036",
+     "https://api.weather.gov/zones/forecast/MSZ001",
+     "https://api.weather.gov/zones/forecast/TNZ088"
+    ],
+    "references": [],
+    "sent": "2026-10-07T15:00:00-05:00",
+    "effective": "2026-10-07T14:59:00-05:00",
+    "onset": "2026-10-07T14:59:00-05:00",
+    "expires": "2026-10-08T17:30:00-05:00",
+    "ends": null,
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Unknown",
+    "certainty": "Unknown",
+    "urgency": "Unknown",
+    "event": "Air Quality Alert",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS Memphis TN",
+    "headline": "Air Quality Alert issued October 7 at 2:59PM CDT by NWS Memphis TN",
+    "description": "AQAMEG\n\nThe Shelby County Health Department has issued a Code Orange Ozone\nForecast effective for Shelby County Tennessee, Crittenden County\nArkansas, and DeSoto County Mississippi, including the city of\nMemphis for Thursday. This ozone forecast is due to forecasted ozone\nvalues that will be unhealthy for sensitive groups. These values\nwill exceed the Environmental Protection Agency's federal safe",
+    "instruction": "",
+    "response": "Monitor",
+    "note": "Non-Weather Emergency Message. Not sent to IPAWS.",
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "AQA"
+     ]
+    }
+   }
+  },
+  {
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.3ae2ebe2f5bd5a06768ab277e7d14bff22d75e9f.002.1",
+   "type": "Feature",
+   "geometry": null,
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.3ae2ebe2f5bd5a06768ab277e7d14bff22d75e9f.002.1",
+    "areaDesc": "North Bay Interior Valleys",
+    "geocode": {
+     "SAME": [
+      "006041",
+      "006055",
+      "006097"
+     ],
+     "UGC": [
+      "CAZ506"
+     ]
+    },
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/CAZ506"
+    ],
+    "references": [],
+    "sent": "2026-10-07T12:33:00-07:00",
+    "effective": "2026-10-07T12:33:00-07:00",
+    "onset": "2026-10-07T12:33:00-07:00",
+    "expires": "2026-10-08T13:00:00-07:00",
+    "ends": "2026-10-14T16:00:00-07:00",
+    "status": "Actual",
+    "messageType": "Alert",
+    "category": "Met",
+    "severity": "Minor",
+    "certainty": "Likely",
+    "urgency": "Expected",
+    "event": "Coastal Flood Advisory",
+    "sender": "w-nws.webmaster@noaa.gov",
+    "senderName": "NWS San Francisco CA",
+    "headline": "Coastal Flood Advisory issued October 7 at 12:33PM PDT until October 14 at 4:00PM PDT by NWS San Francisco CA",
+    "description": "* WHAT...Up to 1.2 ft of inundation above ground level is\npossible in low-lying areas near shorelines and tidal waterways.\n\n* WHERE...Bayshore locations along the San Pablo Bay.\n\n* WHEN...Until 4 PM PDT Wednesday.\n\n* IMPACTS...High tides will result in flooding of low-lying\ninfrastructure, isolated road closures, and coastal erosion.\nRising tides will bring water and waves farther up the beach\ntha",
+    "instruction": "If travel is required, allow extra time as some roads may be\nclosed. Do not drive around barricades or through water of\nunknown depth. Take the necessary actions to protect flood-prone\nproperty.",
+    "response": "Monitor",
+    "note": null,
+    "scope": "Public",
+    "code": "IPAWSv1.0",
+    "language": "en-US",
+    "web": "http://www.weather.gov",
+    "eventCode": {
+     "SAME": [
+      "NWS"
+     ],
+     "NationalWeatherService": [
+      "CFY"
+     ]
+    }
+   }
+  }
+ ],
+ "title": "Current watches, warnings, and advisories",
+ "updated": "2026-10-07T20:15:00+00:00"
+}
