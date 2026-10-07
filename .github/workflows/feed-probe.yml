@@ -60,7 +60,7 @@ jobs:
           for layer in $(docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" | sed -n 's/^\(Layer: \|[0-9]*: \)\([^ ]*\).*/\2/p'); do
             echo "== layer $layer"
             docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -so "/d/$gdb" "$layer" | head -90
-            for col in Status PointType PrimaryPoint AddressType AP_Flag State PlaceType; do
+            for col in SuffixAddressNumber PrefixAddressNumber; do
               docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" -sql "SELECT DISTINCT $col FROM $layer" 2>/dev/null \
                 | sed -n "s/^ *$col ([^)]*) = /$col: /p" | head -20
             done
