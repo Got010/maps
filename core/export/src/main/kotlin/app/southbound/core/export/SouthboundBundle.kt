@@ -30,7 +30,7 @@ import java.util.TimeZone
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 2L
+    const val SCHEMA = 3L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */

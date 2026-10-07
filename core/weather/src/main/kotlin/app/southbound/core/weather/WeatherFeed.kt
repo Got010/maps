@@ -1,0 +1,166 @@
+package app.southbound.core.weather
+
+import app.southbound.core.network.NetworkFeature
+import app.southbound.core.network.NetworkFeatureDisabledException
+import app.southbound.core.network.NetworkGate
+import app.southbound.core.traffic.GeoPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.IOException
+import kotlin.math.PI
+import kotlin.math.ln
+import kotlin.math.tan
+
+/**
+ * The radar picture of the whole state, a transparent PNG in Web Mercator spanning
+ * [Radar.BOUNDS], so the map draws it between those corners. [fetchedAt] is POSIX millis.
+ */
+class RadarImage(val png: ByteArray, val fetchedAt: Long)
+
+/** The latest weather: alerts for the state, the shapes of their areas and, when asked for, radar. */
+data class WeatherSnapshot(
+    val alerts: List<WeatherAlert> = emptyList(),
+    /** Each alert's id to its area: its own polygons, else its zones' shapes once read. */
+    val areas: Map<String, List<Ring>> = emptyMap(),
+    val radar: RadarImage? = null,
+    /** POSIX millis of the last good alert list, or null. */
+    val alertsAt: Long? = null,
+    val errors: List<String> = emptyList(),
+) {
+    /** The alerts whose area contains [point]: "here" or a destination. */
+    fun alertsAt(point: GeoPoint, now: Long): List<WeatherAlert> = alerts.filter { a ->
+        (a.ends == null || a.ends >= now) && RouteWeather.contains(areas[a.id].orEmpty().ifEmpty { a.polygons }, point)
+    }
+
+    companion object {
+        val EMPTY = WeatherSnapshot()
+    }
+}
+
+/** NOAA's radar mosaic as one picture of New York (seen on 2026-10-07: a 60-70 KB PNG, cached 2 min upstream). */
+object Radar {
+    /** West, south, east, north: the state with a margin, the same for every phone. */
+    val BOUNDS = doubleArrayOf(-79.8, 40.4, -71.8, 45.1)
+    const val WIDTH = 1024
+    const val HEIGHT = 820
+
+    /**
+     * MRMS quality-controlled base reflectivity from NCEP's map server, as a WMS GetMap of
+     * [BOUNDS] in EPSG:3857 (so it lines up with the map drawn between the corners).
+     */
+    val URL: String = run {
+        val (x0, y0) = mercator(BOUNDS[0], BOUNDS[1])
+        val (x1, y1) = mercator(BOUNDS[2], BOUNDS[3])
+        "https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetMap" +
+            "&layers=conus_bref_qcd&styles=&crs=EPSG:3857&bbox=${x0.toLong()},${y0.toLong()},${x1.toLong()},${y1.toLong()}" +
+            "&width=$WIDTH&height=$HEIGHT&format=image/png&transparent=true"
+    }
+
+    private fun mercator(lon: Double, lat: Double): Pair<Double, Double> =
+        lon * 20037508.34 / 180 to ln(tan((90 + lat) * PI / 360)) * 6378137
+
+    /** A PNG starts with these eight bytes; anything else (an error page) is not drawn. */
+    fun isPng(bytes: ByteArray): Boolean = bytes.size > 8 &&
+        bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() && bytes[2] == 'N'.code.toByte() && bytes[3] == 'G'.code.toByte()
+}
+
+/**
+ * Fetches the weather the user turned on (Settings > Live data > Weather), through
+ * [NetworkGate]: the state's alerts, the shapes of the zones they name, and the radar
+ * picture while the weather layer is shown. Every request is the same for every phone in
+ * New York; none carries a location, search or route.
+ */
+class WeatherFeed(
+    private val gate: NetworkGate,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
+) {
+    private val mutex = Mutex()
+    private var alerts: List<WeatherAlert>? = null
+    private var alertsAt = 0L
+    private var radar: RadarImage? = null
+
+    // A zone's shape rarely changes: once read, kept for the life of the process.
+    private val zoneShapes = HashMap<String, List<Ring>>()
+    private val _snapshot = MutableStateFlow(WeatherSnapshot.EMPTY)
+
+    val snapshot: StateFlow<WeatherSnapshot> = _snapshot.asStateFlow()
+
+    val isEnabled: Boolean
+        get() = gate.isAllowed(NetworkFeature.WEATHER)
+
+    /**
+     * Fetches what is stale and returns the snapshot. [withRadar] also fetches the radar
+     * picture (for the map's weather layer); without it the last one is kept but nothing
+     * is requested for it. A failure keeps the last good data and adds an error.
+     */
+    suspend fun refresh(force: Boolean = false, withRadar: Boolean = false): WeatherSnapshot = mutex.withLock {
+        if (!isEnabled) {
+            alerts = null
+            radar = null
+            return@withLock WeatherSnapshot.EMPTY.also { _snapshot.value = it }
+        }
+        val now = clock()
+        val errors = ArrayList<String>()
+        withContext(Dispatchers.IO) {
+            if (force || alerts == null || now - alertsAt >= ALERTS_TTL_MILLIS) {
+                try {
+                    alerts = NwsAlerts.parse(fetch(NetworkFeature.WEATHER, NwsAlerts.URL).decodeToString())
+                    alertsAt = now
+                } catch (e: NetworkFeatureDisabledException) {
+                    throw e
+                } catch (e: IOException) {
+                    errors += "Weather alerts: ${e.message}"
+                } catch (e: IllegalArgumentException) {
+                    errors += "Weather alerts: ${e.message}"
+                }
+            }
+            loadZones(alerts.orEmpty(), errors)
+            if (withRadar && (force || radar == null || now - radar!!.fetchedAt >= RADAR_TTL_MILLIS)) {
+                try {
+                    val png = fetch(NetworkFeature.WEATHER, Radar.URL)
+                    if (Radar.isPng(png)) radar = RadarImage(png, now) else errors += "Radar: not an image"
+                } catch (e: NetworkFeatureDisabledException) {
+                    throw e
+                } catch (e: IOException) {
+                    errors += "Radar: ${e.message}"
+                }
+            }
+        }
+        val list = alerts.orEmpty()
+        val areas = list.associate { a ->
+            a.id to a.polygons.ifEmpty { a.zoneUrls.flatMap { zoneShapes[it].orEmpty() } }
+        }
+        WeatherSnapshot(list, areas, radar, alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
+    }
+
+    /** Reads the shapes of the zones alerts without a polygon name, a few per refresh. */
+    private fun loadZones(list: List<WeatherAlert>, errors: MutableList<String>) {
+        val missing = list.filter { it.polygons.isEmpty() }.flatMap { it.zoneUrls }.distinct().filter { it !in zoneShapes }
+        var failed = 0
+        for (url in missing.take(MAX_ZONES_PER_REFRESH)) {
+            if (!url.startsWith(NwsAlerts.ZONE_PREFIX)) continue
+            try {
+                zoneShapes[url] = NwsZones.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
+            } catch (e: IOException) {
+                failed++
+            } catch (e: IllegalArgumentException) {
+                zoneShapes[url] = emptyList()
+            }
+        }
+        if (failed > 0) errors += "Weather zones: $failed couldn't be read"
+    }
+
+    companion object {
+        const val ALERTS_TTL_MILLIS = 5 * 60_000L
+        const val RADAR_TTL_MILLIS = 5 * 60_000L
+
+        /** A storm can name most of the state's 88 forecast zones; a few dozen at a time, the rest next refresh. */
+        const val MAX_ZONES_PER_REFRESH = 40
+    }
+}
