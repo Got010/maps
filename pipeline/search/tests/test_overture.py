@@ -45,9 +45,7 @@ class RowMappingTest(unittest.TestCase):
 
     def test_row_shape(self):
         row = self.row("Joe's Pizza")
-        (gers, name, category, address, lat, lon, phone, website, confidence, dataset,
-         name_key, text) = row
-        self.assertEqual("08f2a100-0000-4000-8000-000000000001", gers)
+        (name, category, address, lat, lon, phone, website, confidence, name_key, text) = row
         self.assertEqual("Joe's Pizza", name)
         self.assertEqual("pizza_restaurant", category)  # no OSM twin: Overture's slug
         self.assertEqual("7 Carmine St, New York 10014", address)  # ZIP+4 cut to 5
@@ -55,23 +53,23 @@ class RowMappingTest(unittest.TestCase):
         self.assertEqual("+12123661182", phone)
         self.assertEqual("https://www.joespizzanyc.com", website)
         self.assertEqual(0.95, confidence)
-        self.assertEqual("meta", dataset)
         # The same normalisation as `feature`, so the app's SearchText matches.
         self.assertEqual(normalize("Joe's Pizza"), name_key)
-        self.assertEqual(" joes pizza 7 carmine st new york 10014 pizza restaurant restaurant ", text)
+        # The town and ZIP are searchable, the street isn't (it stays in the address).
+        self.assertEqual(" joes pizza new york 10014 pizza restaurant restaurant ", text)
 
     def test_category_maps_to_osm_values(self):
-        self.assertEqual("cafe", self.row("Blue Bottle Coffee")[2])
-        self.assertEqual("bookstore", self.row("Nyack Books")[2])
+        self.assertEqual("cafe", self.row("Blue Bottle Coffee")[1])
+        self.assertEqual("bookstore", self.row("Nyack Books")[1])
         self.assertEqual("fuel", overture.map_category("gas_station", "gas_station"))
         self.assertEqual("casual_eatery", overture.map_category(None, "casual_eatery"))
         self.assertIsNone(overture.map_category("", None))
 
     def test_brand_is_searchable_once(self):
         # The brand equal to the name adds nothing; a different one is a word.
-        self.assertEqual(" blue bottle coffee 450 w 15 st new york 10011 cafe coffee shop ",
-                         self.row("Blue Bottle Coffee")[11])
-        self.assertTrue(self.row("Dunkin' Penn Station")[11].endswith(" coffee shop dunkin "))
+        self.assertEqual(" blue bottle coffee new york 10011 cafe coffee shop ",
+                         self.row("Blue Bottle Coffee")[9])
+        self.assertTrue(self.row("Dunkin' Penn Station")[9].endswith(" coffee shop dunkin "))
 
     def test_skips(self):
         self.assertIsNone(self.row("Shaky Listing"))  # confidence 0.3
