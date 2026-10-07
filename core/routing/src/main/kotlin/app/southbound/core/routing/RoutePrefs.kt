@@ -100,6 +100,11 @@ data class RoutePrefs(
      * on each route and routes again (see [CameraAvoidance]).
      */
     val avoidAlpr: Boolean = false,
+    /**
+     * Steer clear of state DOT traffic cameras (511NY's list, in the search
+     * pack), squared off the same way as [avoidAlpr].
+     */
+    val avoidDotCameras: Boolean = false,
     val vehicle: VehicleKind = VehicleKind.CAR,
     val heightFt: Double = DEFAULT_HEIGHT_FT,
     val widthFt: Double = DEFAULT_WIDTH_FT,
@@ -114,7 +119,7 @@ data class RoutePrefs(
     val costing: String get() = if (vehicle == VehicleKind.TRUCK) "truck" else TravelMode.DRIVE.valhallaCosting
 
     /** True when every driving option is at its default, so requests stay as Ferrostar built them. */
-    val isDefault: Boolean get() = costingOptionsJson() == null && !avoidAlpr
+    val isDefault: Boolean get() = costingOptionsJson() == null && !avoidAlpr && !avoidDotCameras
 
     /** [isDefault] for the options that apply to [mode] only, e.g. a walk preference doesn't light up the Drive chip. */
     fun isDefaultFor(mode: TravelMode): Boolean = when (mode) {

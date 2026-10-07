@@ -57,8 +57,12 @@ object RouteAlerts {
      * the plate readers to steer around.
      */
     fun alongRoute(route: RouteLine, landmarks: List<Landmark>, kind: AlertKind, withinMeters: Double = MAX_OFFSET_M): List<Landmark> =
+        alongRoute(route, landmarks, kind.category, withinMeters)
+
+    /** [alongRoute] for a landmark [category] that is not spoken, e.g. [Landmark.DOT_CAMERA]. */
+    fun alongRoute(route: RouteLine, landmarks: List<Landmark>, category: String, withinMeters: Double = MAX_OFFSET_M): List<Landmark> =
         landmarks.distinctBy { it.id }.filter { mark ->
-            mark.category == kind.category && (route.locate(mark.point)?.offset ?: Double.POSITIVE_INFINITY) <= withinMeters
+            mark.category == category && (route.locate(mark.point)?.offset ?: Double.POSITIVE_INFINITY) <= withinMeters
         }
 
     /**
@@ -105,19 +109,29 @@ object RouteAlerts {
         kind: AlertKind,
         withinMeters: Double = MAX_OFFSET_M,
         sameSpotMeters: Double = SAME_SPOT_M,
+    ): Int = count(route, landmarks, kind.category, withinMeters, sameSpotMeters)
+
+    /** [count] for a landmark [category] that is not spoken, e.g. [Landmark.DOT_CAMERA]. */
+    fun count(
+        route: RouteLine,
+        landmarks: List<Landmark>,
+        category: String,
+        withinMeters: Double = MAX_OFFSET_M,
+        sameSpotMeters: Double = SAME_SPOT_M,
     ): Int {
         val spots = mutableListOf<LatLon>()
-        for (mark in alongRoute(route, landmarks, kind, withinMeters)) {
+        for (mark in alongRoute(route, landmarks, category, withinMeters)) {
             if (!facesRoute(route, mark, withinMeters)) continue
             if (spots.none { RouteLine.distanceMeters(it, mark.point) <= sameSpotMeters }) spots += mark.point
         }
         return spots.size
     }
 
-    /** What a drive along [route] is exposed to: its plate readers and speed cameras, by [count]. */
+    /** What a drive along [route] is exposed to: its plate readers, speed cameras and DOT cameras, by [count]. */
     fun exposure(route: RouteLine, landmarks: List<Landmark>): RouteExposure = RouteExposure(
         plateReaders = count(route, landmarks, AlertKind.ALPR_CAMERA),
         speedCameras = count(route, landmarks, AlertKind.SPEED_CAMERA),
+        dotCameras = count(route, landmarks, Landmark.DOT_CAMERA),
     )
 
     /** The alerts on [route], in driving order. */
@@ -155,8 +169,8 @@ object RouteAlerts {
 }
 
 /** The per-route exposure line: how many plate readers and speed cameras a route passes. */
-data class RouteExposure(val plateReaders: Int, val speedCameras: Int) {
-    val isEmpty: Boolean get() = plateReaders == 0 && speedCameras == 0
+data class RouteExposure(val plateReaders: Int, val speedCameras: Int, val dotCameras: Int = 0) {
+    val isEmpty: Boolean get() = plateReaders == 0 && speedCameras == 0 && dotCameras == 0
 }
 
 /**

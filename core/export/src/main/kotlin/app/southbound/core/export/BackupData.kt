@@ -16,7 +16,7 @@ data class FuelChoices(
     val region: GasRegion,
 )
 
-/** The preferences an export carries, as typed values (bundle schema 1; docs/EXPORT.md lists them). */
+/** The preferences an export carries, as typed values (bundle schema 2; docs/EXPORT.md lists them). */
 data class AppSettings(
     /** Every [NetworkFeature]'s toggle. */
     val network: Map<NetworkFeature, Boolean>,

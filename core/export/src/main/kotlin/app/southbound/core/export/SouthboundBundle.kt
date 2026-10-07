@@ -15,7 +15,8 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 1. The entries, in
+ * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 2 (schema 1 is still
+ * read). The entries, in
  * this order and all required: [MANIFEST], [PLACES], [API_KEYS], [SETTINGS]. docs/EXPORT.md lists what each holds.
  * The bundle is sealed with the passphrase alone, so it opens on a phone that has none of this phone's Keystore keys.
  *
@@ -25,10 +26,11 @@ import java.util.TimeZone
  *
  * Schema 1 is these four entries; a new entry, a new ApiKey or NetworkFeature, or a change to any entry's format
  * bumps it, and the importer then declares the range it supports (with a tested migration for the older ones).
+ * Schema 2 (October 2026) added the route setting `avoid_dot_cameras`; a schema 1 bundle imports with it off.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 1L
+    const val SCHEMA = 2L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */
@@ -84,24 +86,26 @@ object SouthboundBundle {
     }
 
     /**
-     * Checks a whole set of entries and turns them into data: each entry parses with the exact fields of schema 1,
+     * Checks a whole set of entries and turns them into data: each entry parses with the exact fields of its schema,
      * every value is inside its range, and the manifest's counts match what the entries hold. Anything wrong is
      * FwxException(MALFORMED_PAYLOAD). Nothing is applied here.
      */
     fun decode(entries: Map<String, ByteArray>): BackupData {
-        if (entries.keys.toList() != ENTRY_NAMES) invalid("the entries are not the four schema 1 lists")
+        if (entries.keys.toList() != ENTRY_NAMES) invalid("the entries are not the four Southbound entries")
         val manifest = Obj.of(parseJson(entries.getValue(MANIFEST), MANIFEST), "manifest", MANIFEST_KEYS.toSet())
-        val userData = PlacesEntry.decode(entries.getValue(PLACES))
-        val keys = KeysEntry.decode(entries.getValue(API_KEYS))
-        val settings = SettingsEntry.decode(entries.getValue(SETTINGS))
-        val data = BackupData(userData, keys, settings)
-
-        if (manifest.string("app", 32) != APP_ID || manifest.long("schema", 0, Long.MAX_VALUE) != SCHEMA) {
+        val schema = manifest.long("schema", 0, Long.MAX_VALUE)
+        if (manifest.string("app", 32) != APP_ID || schema !in SCHEMA_RANGE) {
             invalid("the manifest doesn't describe a Southbound export")
         }
+        val userData = PlacesEntry.decode(entries.getValue(PLACES))
+        val keys = KeysEntry.decode(entries.getValue(API_KEYS))
+        val settings = SettingsEntry.decode(entries.getValue(SETTINGS), schema)
+        val data = BackupData(userData, keys, settings)
+
         manifest.string("app_version", MAX_VERSION)
         val c = data.counts()
-        val listed = listOf(c.lists, c.savedPlaces, c.recents, c.home, c.work, c.apiKeys, c.settings)
+        // The settings count is the one the file's schema writes (schema 1 had one route field fewer).
+        val listed = listOf(c.lists, c.savedPlaces, c.recents, c.home, c.work, c.apiKeys, SettingsEntry.count(settings, schema))
         val names = MANIFEST_KEYS.drop(3)
         for ((i, name) in names.withIndex()) {
             if (manifest.long(name, 0, Long.MAX_VALUE) != listed[i].toLong()) invalid("the contents don't match the manifest")
@@ -120,9 +124,9 @@ object SouthboundBundle {
         writer.finish()
     }
 
-    /** Never write an export that Southbound would refuse to import: the entries are the schema 1 four, each within its limit. */
+    /** Never write an export that Southbound would refuse to import: the entries are the four, each within its limit. */
     fun checkSizes(entries: Map<String, ByteArray>) {
-        if (entries.keys.toList() != ENTRY_NAMES) throw IllegalArgumentException("not the schema 1 entries")
+        if (entries.keys.toList() != ENTRY_NAMES) throw IllegalArgumentException("not the four Southbound entries")
         for ((name, bytes) in entries) {
             if (bytes.size > LIMITS.getValue(name)) throw FwxException(FwxError.TOO_LARGE, "$name is too large")
         }

@@ -69,8 +69,8 @@ class SouthboundBundleTest {
         val entries = SouthboundBundle.encode(Samples.data(), "0.1.14")
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
-            """{"app":"southbound","schema":1,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":54}""",
+            """{"app":"southbound","schema":2,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":55}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -110,7 +110,7 @@ class SouthboundBundleTest {
         val bytes = file(entries)
         val header = SouthboundBundle.readHeader(ByteArrayInputStream(bytes))
         assertEquals("southbound", header.appId)
-        assertEquals(1L, header.schemaVersion)
+        assertEquals(2L, header.schemaVersion)
         assertEquals(1_791_028_800_000L, header.createdMs)
         assertFalse(header.verified)
         assertEquals(entries.mapValues { it.value.toList() }, read(bytes).mapValues { it.value.toList() })
@@ -153,8 +153,29 @@ class SouthboundBundleTest {
     }
 
     @Test
+    fun `a schema 1 file still imports, with DOT cameras not avoided`() {
+        // A schema 1 export as v0.1.21 wrote it: schema 1 in the header and the manifest, 54 settings, and the route
+        // group without avoid_dot_cameras.
+        val two = SouthboundBundle.encode(Samples.data(), "0.1.21")
+        val one = linkedMapOf<String, ByteArray>()
+        for ((name, bytes) in two) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":2", "\"schema\":1")
+                .replace("\"settings\":55", "\"settings\":54")
+                .replace("\"avoid_dot_cameras\":true,", "")
+            one[name] = t.toByteArray()
+        }
+        val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
+        assertEquals(1L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
+        val data = SouthboundBundle.decode(read(bytes))
+        val expected = Samples.data().settings
+        assertEquals(expected.copy(route = expected.route.copy(avoidDotCameras = false)), data.settings)
+        assertEquals(Samples.data().userData, data.userData)
+    }
+
+    @Test
     fun `a newer schema is refused from the header alone`() {
-        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 2)
+        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 3)
         assertEquals(FwxError.SCHEMA_TOO_NEW, code { SouthboundBundle.readHeader(ByteArrayInputStream(bytes)) })
     }
 
@@ -214,11 +235,13 @@ class SouthboundBundleTest {
     fun `manifest must match the contents`() {
         refuses(mutated("manifest.json", "\"saved_places\":3", "\"saved_places\":4"))
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
-        refuses(mutated("manifest.json", "\"settings\":54", "\"settings\":53"))
+        refuses(mutated("manifest.json", "\"settings\":55", "\"settings\":54"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
-        refuses(mutated("manifest.json", "\"schema\":1", "\"schema\":2"))
+        refuses(mutated("manifest.json", "\"schema\":2", "\"schema\":3"))
+        // Schema 1 settings have no avoid_dot_cameras, so these settings don't fit a schema 1 manifest.
+        refuses(mutated("manifest.json", "\"schema\":2", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
-        refuses(mutated("manifest.json", ",\"settings\":54", ""))
+        refuses(mutated("manifest.json", ",\"settings\":55", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
     }
 
@@ -413,7 +436,7 @@ class SouthboundBundleTest {
 
     /** If one of these fails, the bundle's contents changed: update docs/EXPORT.md and bump the schema (with a migration). */
     @Test
-    fun `schema 1 pins what the stores hold`() {
+    fun `schema 2 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
         assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA"), ApiKey.entries.map { it.name })
@@ -426,13 +449,13 @@ class SouthboundBundleTest {
         )
         fun fields(c: Class<*>) = c.declaredFields.filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.isSynthetic }.size
         assertEquals(24, fields(VoiceSettings::class.java))
-        // RoutePrefs: 11 of its own, plus WalkPrefs (3) and BikePrefs (3) as 2 of the 11.
-        assertEquals(11, fields(RoutePrefs::class.java))
+        // RoutePrefs: 12 of its own (schema 2 added avoidDotCameras), plus WalkPrefs (3) and BikePrefs (3) as 2 of the 12.
+        assertEquals(12, fields(RoutePrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.WalkPrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.BikePrefs::class.java))
-        assertEquals(54, SettingsEntry.count(Samples.settings()))
+        assertEquals(55, SettingsEntry.count(Samples.settings()))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
-        assertEquals(1L..1L, SouthboundBundle.SCHEMA_RANGE)
+        assertEquals(1L..2L, SouthboundBundle.SCHEMA_RANGE)
     }
 
     @Test
