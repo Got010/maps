@@ -7,7 +7,7 @@ answers end up in the job log. No key is used: 511NY is asked with a dummy
 key (to see its error document) and for its public API docs. Nothing here
 carries a location, search text or route.
 
-    feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new addresses tomtom (default: all)
+    feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses (default: all)
 """
 
 import html
@@ -160,6 +160,53 @@ def fiveeleven_new():
         print("hash:", hb[:200])
 
 
+def fiveeleven_travel():
+    """The other speed-like layers in 511ny.org's config: bridge & tunnel travel times (its own API) and
+    "traffic speeds" (a map function, toggleTrafficSpeeds)."""
+    head("511NY travel times")
+    from collections import Counter
+    _, _, _, cfg = get("https://demo.511ny.org/configs/main.json?v=1.8.5")
+    try:
+        conf = json.loads(cfg)
+    except ValueError:
+        conf = {}
+    for layer in conf.get("layers", []):
+        if layer.get("name") in ("bridge & tunnel travel times", "traffic speeds"):
+            print("layer:", json.dumps({k: v for k, v in layer.items() if k != "legend"}))
+    print("apis:", json.dumps(conf.get("apis", {}))[:3000])
+    base = "https://nysdot-special-layers.carsprogram.org/api/v1/"
+    for path in ("travel-times", "border-crossings", "travel-times/hash"):
+        status, _, h, body = get(base + path, limit=40_000_000)
+        print(f"--- {base}{path}\nstatus {status} type {h.get('Content-Type')} bytes {len(body)} cache {h.get('Cache-Control')}")
+        try:
+            doc = json.loads(body)
+        except ValueError:
+            print(body[:800])
+            continue
+        rows = doc.get("features") if isinstance(doc, dict) and "features" in doc else doc
+        if isinstance(doc, dict) and not isinstance(rows, list):
+            print("keys:", list(doc)[:30])
+            rows = next((v for v in doc.values() if isinstance(v, list)), None)
+        if not isinstance(rows, list):
+            print(json.dumps(doc)[:3000])
+            continue
+        print("rows:", len(rows))
+        props = [r.get("properties", r) if isinstance(r, dict) else r for r in rows]
+        keys = Counter(k for p in props if isinstance(p, dict) for k in p)
+        print("fields:", keys.most_common(60))
+        for r in rows[:4]:
+            print(json.dumps(r)[:4000])
+        geoms = Counter((r.get("geometry") or {}).get("type") for r in rows if isinstance(r, dict))
+        print("geometry:", geoms)
+    # How the site uses them: the script around each name.
+    _, _, _, page = get("https://511ny.org/")
+    for script in re.findall(r'src="(/assets/index-[^"]+\.js)"', page)[:1]:
+        _, _, _, js = get("https://511ny.org" + script, limit=40_000_000)
+        for word in ("toggleTrafficSpeeds", "travelTimes", "travel-times", "TrafficLayer"):
+            for m in list(re.finditer(re.escape(word), js))[:3]:
+                print(f"  [{word}] ...{js[max(0, m.start() - 300):m.end() + 300]!r}")
+
+
 def fiveeleven():
     head("511NY")
     # 511ny.org answered every path, /api/ included, with its new web app's HTML (October 2026):
@@ -228,35 +275,6 @@ def addresses():
     except ValueError:
         print("hub search not JSON", b[:200])
 
-
-def tomtom():
-    head("TomTom terms")
-    # The developer terms page is rendered by script: find the document it loads.
-    _, _, _, page = get("https://docs.tomtom.com/legal/terms-and-conditions")
-    print(page[:3000])
-    docs = sorted(set(re.findall(r"""["'(]((?:https?://[^"' )]+|/)[^"' )]*(?:legal|terms)[^"' )]*)["')]""", page)))
-    for u in docs[:40]:
-        print("terms url", u)
-    for u in docs[:15]:
-        u = urllib.parse.urljoin("https://docs.tomtom.com/", u)
-        status, final, _, body = get(u)
-        text = text_of(body)
-        print(f"--- {u} status {status} ({len(text)} chars)")
-        for para in text.splitlines():
-            if re.search(r"(?i)cach|stor(e|age)|retain|routing|route|combin|non-tomtom|third.part|offline|prefetch|open source", para):
-                print("  >", para[:900])
-    for url in ("https://developer.tomtom.com/terms-and-conditions", "https://developer.tomtom.com/legal",
-                "https://www.tomtom.com/legal/terms-and-conditions/", "https://developer.tomtom.com/legal/terms-of-use",
-                "https://www.tomtom.com/en_gb/legal/eula-api/"):
-        status, final, _, body = get(url)
-        text = text_of(body)
-        print(f"--- {url} status {status} final {final} ({len(text)} chars)")
-        for para in re.split(r"\n", text):
-            if re.search(r"(?i)cach|stor(e|age)|retain|routing|route|combin|third.part|navigation|offline|prefetch|mirror", para):
-                print("  >", para[:700])
-
-
-SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "addresses": addresses, "tomtom": tomtom}
 
 class Timeout(Exception):
     pass
