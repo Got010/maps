@@ -102,8 +102,11 @@ CoMaps and OsmAnd, from general knowledge, not measured here). Southbound's New 
 
 What that means for Southbound, cheapest first:
 
-1. **Trim Overture** (a setting): a higher confidence cut-off, no unread columns, no address in its search text.
-   Measured by `pipeline/search/overture_sizes.py` (run by the feed probe workflow).
+1. **Trim Overture** (done, October 2026): no GERS id or dataset columns (the app never read them) and no
+   street in its search text (the town and ZIP stay searchable): the statewide Overture tables went from
+   482.6 MB to 388.8 MB with all 1,124,477 places kept. A higher confidence cut-off was measured and left alone
+   (0.6 saves 27 MB more but drops 81k real places, mostly shops, restaurants and services; 0.8 saves 88 MB more
+   and drops 259k). Measured by `pipeline/search/overture_sizes.py` (run by the feed probe workflow).
 2. **Routing per state plus a national highway pack** (section 2), which is what the shortcut-based apps do in
    effect: long trips on a small top-level graph, local roads only where you are.
 3. **Switching routing engines** (OsmAnd's router, as Vela did) would shrink routing the most but replaces

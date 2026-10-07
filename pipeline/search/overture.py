@@ -16,13 +16,12 @@ dedupes them against OSM only at query time (core/search OverturePlaces):
                   rowid = overture_place.rowid
 
 Kept small (measured with overture_sizes.py on the statewide pack, October
-2026: 482.6 MB before, 1,124,477 places): the GERS id and the source dataset
-are not stored (the app never read them; about 52 MB), and the search text
-has the name, the town and ZIP, the categories and the brand but not the
-street (the address is still stored and shown; about 75 MB less text and
-trigram index). So "pizza nyack" still finds an Overture-only place, "pizza
+2026, 1,124,477 places: 482.6 MB before, 388.8 MB after): the GERS id and
+the source dataset are not stored (the app never read them), and the search
+text has the name, the town and ZIP, the categories and the brand but not
+the street (the address is still stored and shown). So "pizza nyack" still finds an Overture-only place, "pizza
 main st" finds it only through an OSM twin. A higher confidence cut-off
-saves less and drops real places (0.6: 25 MB fewer, 81k places gone).
+saves less and drops real places (0.6: 27 MB fewer, 81k places gone).
 
 Two steps, so the slow download can be kept and reused:
 
