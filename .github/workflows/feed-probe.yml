@@ -42,7 +42,9 @@ jobs:
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py addresses
       # The statewide file itself: its layers, columns and how pipeline/search/addresses.py reads it.
+      # About four minutes and a 336 MB download, so only on a manual run.
       - name: NYS Address Points statewide file
+        if: github.event_name == 'workflow_dispatch'
         timeout-minutes: 15
         continue-on-error: true
         env:
