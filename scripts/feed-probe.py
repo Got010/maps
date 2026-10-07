@@ -276,6 +276,10 @@ def addresses():
         print("hub search not JSON", b[:200])
 
 
+SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
+            "addresses": addresses}
+
+
 class Timeout(Exception):
     pass
 
