@@ -37,6 +37,37 @@ jobs:
         timeout-minutes: 4
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py addresses
+      # The statewide file itself: its layers, columns and how pipeline/search/addresses.py reads it.
+      - name: NYS Address Points statewide file
+        timeout-minutes: 15
+        continue-on-error: true
+        env:
+          URL: https://gisdata.ny.gov/GISData/State/Address_Points/SAM_Master_Statewide_Database.gdb.zip
+          GDAL_IMAGE: ghcr.io/osgeo/gdal:ubuntu-small-3.9.2@sha256:6af57cbe64534fd8c3803ac4158e9bf812dfb1968cf13e8922b80f665d76d063
+        run: |
+          mkdir -p "$RUNNER_TEMP/ap" && cd "$RUNNER_TEMP/ap"
+          curl -sSfL --retry 3 -o sam.zip "$URL"
+          ls -l sam.zip
+          python3 -m zipfile -l sam.zip | head -20
+          python3 -m zipfile -e sam.zip .
+          gdb="$(find . -maxdepth 3 -name '*.gdb' | head -1)"
+          echo "gdb: $gdb"
+          docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro "/d/$gdb"
+          for layer in $(docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" | sed -n 's/^[0-9]*: \([^ ]*\).*/\1/p'); do
+            echo "== layer $layer"
+            docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -so "/d/$gdb" "$layer" | head -90
+            for col in Status PointType PrimaryPoint AddressType AP_Flag State; do
+              docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" -sql "SELECT DISTINCT $col FROM $layer" 2>/dev/null \
+                | sed -n "s/^ *$col ([^)]*) = /$col: /p" | head -20
+            done
+          done
+          # What the release build does (search/build.sh), cut to Albany so the check runs quickly.
+          docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogr2ogr -f CSV -overwrite -lco GEOMETRY=AS_XY -t_srs EPSG:4326 \
+            -spat -73.85 42.62 -73.70 42.70 -spat_srs EPSG:4326 /d/albany.csv "/d/$gdb" ${ADDRESS_POINTS_LAYER:-}
+          ls -l albany.csv*
+          head -3 albany.csv
+          python3 "$GITHUB_WORKSPACE/pipeline/search/addresses.py" --check albany.csv -n 15
+
       - name: TomTom terms
         timeout-minutes: 3
         continue-on-error: true
