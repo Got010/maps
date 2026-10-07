@@ -315,6 +315,27 @@ def weather_alerts():
         print("  keys:", sorted(p.keys()))
     if feats:
         print("first feature, raw:", json.dumps(feats[0])[:2500])
+    # New York may have none today: show the shape of real ones from anywhere, for fixtures (one with a
+    # polygon, one with only zones), compacted.
+    status, _, headers, body = get("https://api.weather.gov/alerts/active?status=actual&message_type=alert", limit=40_000_000)
+    us = (_json(body) or {}).get("features") or []
+    print("US active alerts", len(us), "bytes", len(body))
+    events = {}
+    for f in us:
+        e = f.get("properties", {}).get("event")
+        events[e] = events.get(e, 0) + 1
+    print("events", sorted(events.items(), key=lambda kv: -kv[1])[:25])
+    with_shape = [f for f in us if f.get("geometry")]
+    zone_only = [f for f in us if not f.get("geometry")]
+    for label, pick in (("polygon", with_shape[:2]), ("zones only", zone_only[:2])):
+        for f in pick:
+            p = dict(f.get("properties", {}))
+            p.pop("@id", None)
+            p["description"] = (p.get("description") or "")[:400]
+            p["instruction"] = (p.get("instruction") or "")[:200]
+            p.pop("parameters", None)
+            f = {"id": f.get("id"), "type": "Feature", "geometry": f.get("geometry"), "properties": p}
+            print(f"SAMPLE {label}:", json.dumps(f, separators=(",", ":"))[:6000])
     # The zones an alert names (affectedZones) need shapes on the phone when an alert has no polygon.
     for url in ("https://api.weather.gov/zones?area=NY&type=forecast",
                 "https://api.weather.gov/zones?area=NY&type=county"):
@@ -397,7 +418,22 @@ def weather_radar():
            "&format=image/png&transparent=true")
     rest = ("https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity/MapServer/export"
             f"?bbox={w},{s},{e},{n}&bboxSR=4326&imageSR=4326&size=1024,600&format=png32&transparent=true&f=image")
-    for label, url in (("NCEP MRMS WMS", wms), ("NOAA mapservices export", rest)):
+    # In the map's own projection (Web Mercator), so the image lines up when drawn between its corners.
+    import math
+
+    def merc(lon, lat):
+        x = lon * 20037508.34 / 180
+        y = math.log(math.tan((90 + lat) * math.pi / 360)) * 6378137
+        return x, y
+
+    (x0, y0), (x1, y1) = merc(w, s), merc(e, n)
+    wms3857 = ("https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetMap"
+               f"&layers=conus_bref_qcd&styles=&crs=EPSG:3857&bbox={x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f}&width=1024&height=820"
+               "&format=image/png&transparent=true")
+    rest3857 = ("https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity/MapServer/export"
+                f"?bbox={w},{s},{e},{n}&bboxSR=4326&imageSR=3857&size=1024,820&format=png32&transparent=true&f=image")
+    for label, url in (("NCEP MRMS WMS", wms), ("NOAA mapservices export", rest),
+                       ("NCEP MRMS WMS 3857", wms3857), ("NOAA mapservices export 3857", rest3857)):
         status, final, headers, body = get(url, limit=10_000_000)
         print(f"--- {label}: status {status} type {headers.get('Content-Type')} bytes {len(body)} cache {headers.get('Cache-Control')}"
               f" last-modified {headers.get('Last-Modified')} png {body[1:4] == 'PNG'}")
