@@ -175,7 +175,8 @@ def fiveeleven_travel():
             print("layer:", json.dumps({k: v for k, v in layer.items() if k != "legend"}))
     print("apis:", json.dumps(conf.get("apis", {}))[:3000])
     base = "https://nysdot-special-layers.carsprogram.org/api/v1/"
-    for path in ("travel-times", "border-crossings", "travel-times/hash"):
+    # Like the other layers, the site reads {api}/map-features (the bare path is a 404).
+    for path in ("travel-times/map-features", "border-crossings/map-features", "travel-times/hash"):
         status, _, h, body = get(base + path, limit=40_000_000)
         print(f"--- {base}{path}\nstatus {status} type {h.get('Content-Type')} bytes {len(body)} cache {h.get('Cache-Control')}")
         try:
