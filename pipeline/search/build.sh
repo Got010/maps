@@ -150,7 +150,9 @@ ARGS="--bounds=$BOUNDS --max-mb=$SEARCH_MAX_MB"
 if [[ -n "${SEARCH_STATE:-}" ]]; then
   ARGS="$ARGS --state=$SEARCH_STATE"
 fi
-if [[ -n "${ADDRESS_POINTS_URL:-}" ]]; then
+if [[ "${ADDRESS_POINTS_URL:-}" == none ]]; then
+  echo "==> ADDRESS_POINTS_URL is none: addresses from OSM only"
+elif [[ -n "${ADDRESS_POINTS_URL:-}" ]]; then
   fetch_address_points "$ADDRESS_POINTS_URL"
   ARGS="$ARGS --address-points=$ADDRESS_POINTS_IN_DOCKER"
 else
