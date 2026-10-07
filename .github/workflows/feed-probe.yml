@@ -21,18 +21,27 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: NYC DOT speeds
-        run: python3 scripts/feed-probe.py nycdot
+      # Each step may fail or time out without hiding the others.
       - name: 511NY
-        run: python3 scripts/feed-probe.py 511ny
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py 511ny
       - name: NYS Address Points
-        run: python3 scripts/feed-probe.py addresses
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py addresses
       - name: TomTom terms
-        run: python3 scripts/feed-probe.py tomtom
+        timeout-minutes: 3
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py tomtom
+      - name: NYC DOT speeds
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py nycdot

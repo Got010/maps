@@ -13,6 +13,7 @@ carries a location, search text or route.
 import html
 import json
 import re
+import signal
 import sys
 import urllib.error
 import urllib.parse
@@ -24,6 +25,8 @@ UA = "Southbound feed probe (+https://github.com/StrongHorse44/maps)"
 def get(url, limit=4_000_000, method="GET"):
     """(status, final url, headers, body text) without raising on HTTP errors."""
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"}, method=method)
+    print(f"... {method} {url}", flush=True)
+    signal.alarm(45)  # a whole request, not just one socket read
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             body = r.read(limit) if method == "GET" else b""
@@ -32,6 +35,8 @@ def get(url, limit=4_000_000, method="GET"):
         return e.code, url, dict(e.headers), e.read(limit).decode("utf-8", "replace")
     except Exception as e:  # noqa: BLE001 - a probe reports every failure
         return None, url, {}, f"{type(e).__name__}: {e}"
+    finally:
+        signal.alarm(0)
 
 
 def text_of(page):
@@ -164,6 +169,15 @@ def tomtom():
 
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "addresses": addresses, "tomtom": tomtom}
 
+class Timeout(Exception):
+    pass
+
+
+def _alarm(*_):
+    raise Timeout("no answer within 45 s")
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGALRM, _alarm)
     for name in sys.argv[1:] or SECTIONS:
         SECTIONS[name]()
