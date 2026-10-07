@@ -166,6 +166,8 @@ private fun ColumnScope.DriveOptions(prefs: RoutePrefs, onChange: (RoutePrefs) -
     OptionSwitch(R.string.options_avoid_ferries, prefs.avoidFerries) { onChange(prefs.copy(avoidFerries = it)) }
     OptionSwitch(R.string.options_avoid_alpr, prefs.avoidAlpr) { onChange(prefs.copy(avoidAlpr = it)) }
     OptionNote(R.string.options_avoid_alpr_note)
+    OptionSwitch(R.string.options_avoid_dot_cameras, prefs.avoidDotCameras) { onChange(prefs.copy(avoidDotCameras = it)) }
+    OptionNote(R.string.options_avoid_dot_cameras_note)
 
     Text(stringResource(R.string.options_vehicle), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

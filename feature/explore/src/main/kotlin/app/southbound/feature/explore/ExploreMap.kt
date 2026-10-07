@@ -96,6 +96,7 @@ import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelModel
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.RouteOptionsStore
+import app.southbound.core.routing.RoutePrefs
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.routing.SpeedWarningPolicy
@@ -105,6 +106,7 @@ import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.AlertKind
+import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.RouteExposure
@@ -441,9 +443,11 @@ internal fun ExploreMap(
             withContext(Dispatchers.IO) { services.hasPack(PackKind.SEARCH) } -> withTimeoutOrNull(SEARCH_WAIT_MS) { snapshotFlow { searchIndex }.filterNotNull().first() }
             else -> null
         }
-        val found = if (driving && routePrefs.avoidAlpr && cameraIndex != null && plainRoutes.isNotEmpty()) {
+        // "Avoid plate readers" and "Avoid DOT cameras" use the same squares; either or both may be on.
+        val avoidCameras = routePrefs.avoidedCameraCategories()
+        val found = if (driving && avoidCameras.isNotEmpty() && cameraIndex != null && plainRoutes.isNotEmpty()) {
             withContext(Dispatchers.Default) {
-                attempt { PlateReaders.avoid(nav, cameraIndex, from.toUserLocation(), waypoints, target.mode, avoid, plainRoutes).routes }
+                attempt { PlateReaders.avoid(nav, cameraIndex, from.toUserLocation(), waypoints, target.mode, avoid, plainRoutes, avoidCameras).routes }
             } ?: plainRoutes.also { nav.cameraAvoid = emptyList() }
         } else {
             plainRoutes
@@ -463,7 +467,7 @@ internal fun ExploreMap(
             TrafficRanking.order(
                 durationsSeconds = found.map { RouteSummary.of(it).durationSeconds },
                 delaysSeconds = valhallaSlow.map { it.delaySeconds },
-                mayLead = { i -> !routePrefs.avoidAlpr || valhallaExposure.getOrNull(i).readers() <= valhallaExposure.getOrNull(0).readers() },
+                mayLead = { i -> valhallaExposure.getOrNull(i).avoided(routePrefs) <= valhallaExposure.getOrNull(0).avoided(routePrefs) },
             )
         }
         val ranked = TrafficRanking.reorder(found, order)
@@ -481,7 +485,7 @@ internal fun ExploreMap(
                 delaySeconds = delays,
                 fuelGallons = fuelGallonsFor(ranked, delays, services.fuelPrefs.settings.value.mpg),
                 exposure = exposure,
-                cameraAvoidIncomplete = routePrefs.avoidAlpr && driving && exposure.firstOrNull().readers() > 0,
+                cameraAvoidIncomplete = driving && exposure.firstOrNull().avoided(routePrefs) > 0,
             )
             cameraRequest = CameraRequest.Fit(
                 found.flatMap { route -> route.geometry.map { MapPoint(it.lat, it.lng) } } +
@@ -1302,8 +1306,15 @@ private const val SEARCH_WAIT_MS = 5_000L
 /** A faster route found mid-trip, with its points for telling it apart later. */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
 
-/** Plate readers on a route option; none when its exposure is unknown (no search pack). */
-private fun RouteExposure?.readers(): Int = this?.plateReaders ?: 0
+/** The cameras on a route option that the driver asked to avoid (plate readers, DOT cameras or both); none when unknown. */
+private fun RouteExposure?.avoided(prefs: RoutePrefs): Int =
+    (if (prefs.avoidAlpr) this?.plateReaders ?: 0 else 0) + (if (prefs.avoidDotCameras) this?.dotCameras ?: 0 else 0)
+
+/** The landmark categories the avoid options square off. */
+private fun RoutePrefs.avoidedCameraCategories(): List<String> = buildList {
+    if (avoidAlpr) add(Landmark.ALPR_CAMERA)
+    if (avoidDotCameras) add(Landmark.DOT_CAMERA)
+}
 
 private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
