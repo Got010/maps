@@ -33,6 +33,10 @@ jobs:
         timeout-minutes: 4
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py 511ny
+      - name: 511NY new platform
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py 511ny-new
       - name: NYS Address Points
         timeout-minutes: 4
         continue-on-error: true
@@ -53,10 +57,10 @@ jobs:
           gdb="$(find . -maxdepth 3 -name '*.gdb' | head -1)"
           echo "gdb: $gdb"
           docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro "/d/$gdb"
-          for layer in $(docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" | sed -n 's/^[0-9]*: \([^ ]*\).*/\1/p'); do
+          for layer in $(docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" | sed -n 's/^\(Layer: \|[0-9]*: \)\([^ ]*\).*/\2/p'); do
             echo "== layer $layer"
             docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -so "/d/$gdb" "$layer" | head -90
-            for col in Status PointType PrimaryPoint AddressType AP_Flag State; do
+            for col in Status PointType PrimaryPoint AddressType AP_Flag State PlaceType; do
               docker run --rm -v "$PWD:/d" "$GDAL_IMAGE" ogrinfo -ro -q "/d/$gdb" -sql "SELECT DISTINCT $col FROM $layer" 2>/dev/null \
                 | sed -n "s/^ *$col ([^)]*) = /$col: /p" | head -20
             done

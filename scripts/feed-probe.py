@@ -7,7 +7,7 @@ answers end up in the job log. No key is used: 511NY is asked with a dummy
 key (to see its error document) and for its public API docs. Nothing here
 carries a location, search text or route.
 
-    feed-probe.py [section ...]   sections: nycdot 511ny addresses tomtom (default: all)
+    feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new addresses tomtom (default: all)
 """
 
 import html
@@ -94,6 +94,52 @@ def nycdot():
     from datetime import datetime
     from zoneinfo import ZoneInfo
     print("now in New York:", datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%dT%H:%M:%S"))
+
+
+def cars(path, n=2):
+    """511NY's new site (CARS program, October 2026) reads these whole-state collections."""
+    url = "https://api-511x-nysdot.carsprogram.org/" + path
+    status, final, headers, body = get(url, limit=40_000_000)
+    print(f"--- {url}\nstatus {status} type {headers.get('Content-Type')} bytes {len(body)} "
+          f"cache {headers.get('Cache-Control')} cors {headers.get('Access-Control-Allow-Origin')}")
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        print(body[:1500])
+        return
+    rows = doc
+    if isinstance(doc, dict):
+        print("object keys:", list(doc)[:30])
+        rows = next((v for v in doc.values() if isinstance(v, list)), [])
+    print("rows:", len(rows))
+    keys = {}
+    for r in rows if isinstance(rows, list) else []:
+        if isinstance(r, dict):
+            for k, v in r.items():
+                keys.setdefault(k, set()).add(type(v).__name__)
+    print("fields:", {k: sorted(v) for k, v in keys.items()})
+    for r in rows[:n]:
+        print(json.dumps(r)[:5000])
+    return rows
+
+
+def fiveeleven_new():
+    head("511NY new platform")
+    events = cars("events", n=3) or []
+    if isinstance(events, list):
+        from collections import Counter
+        for field in ("type", "eventType", "category", "subType", "severity", "status", "priority", "source"):
+            values = Counter(str(e.get(field)) for e in events if isinstance(e, dict) and field in e)
+            if values:
+                print(f"{field}:", values.most_common(25))
+        closures = [e for e in events if isinstance(e, dict) and "clos" in json.dumps(e).lower()][:2]
+        for e in closures:
+            print("closure-like:", json.dumps(e)[:5000])
+    cars("signs", n=3)
+    cars("cameras", n=3)
+    for path in ("events?limit=1", "api/events", "events/", "signs/", "cameras/"):
+        status, _, h, b = get("https://api-511x-nysdot.carsprogram.org/" + path)
+        print(f"--- {path} {status} {h.get('Content-Type')} {b[:200]!r}")
 
 
 def fiveeleven():
@@ -192,7 +238,7 @@ def tomtom():
                 print("  >", para[:700])
 
 
-SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "addresses": addresses, "tomtom": tomtom}
+SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "addresses": addresses, "tomtom": tomtom}
 
 class Timeout(Exception):
     pass
