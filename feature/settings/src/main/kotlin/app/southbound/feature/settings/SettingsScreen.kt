@@ -305,6 +305,11 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
 
+    Subheading(R.string.live_weather_heading)
+    Toggle(R.string.live_weather, toggles.getValue(NetworkFeature.WEATHER), R.string.live_weather_note) {
+        network.set(NetworkFeature.WEATHER, it)
+    }
+
     // Gas price for the fuel estimate on route cards. The state is a choice made here, never worked out from GPS.
     val fuelPrefs = FuelPrefs.get(LocalContext.current)
     val fuel by fuelPrefs.settings.collectAsState()

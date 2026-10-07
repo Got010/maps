@@ -25,11 +25,14 @@ import app.southbound.core.voice.VoiceSettings
 /**
  * `settings.json`: the preferences, in groups (network, route, driving, fuel, voice, packs, updates). Every group
  * and every field of the bundle's schema is required and nothing else is allowed (schema 2 added the route group's
- * `avoid_dot_cameras`; a schema 1 bundle reads with it off); an enum is its constant's name; a number
+ * `avoid_dot_cameras`, schema 3 the network group's `WEATHER`; an older bundle reads with each off); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
     private val NETWORK_KEYS = NetworkFeature.entries.map { it.name }.toSet()
+
+    /** Schema 3 added the weather toggle. */
+    private val NETWORK_KEYS_2 = NETWORK_KEYS - NetworkFeature.WEATHER.name
     private val ROUTE_KEYS_1 = setOf(
         "avoid_tolls", "avoid_highways", "avoid_ferries", "avoid_alpr", "vehicle", "height_ft", "width_ft", "length_ft",
         "weight_tons", "walk_avoid_stairs", "walk_step_free", "walk_prefer_paths", "bike_type", "bike_avoid_hills",
@@ -57,8 +60,8 @@ internal object SettingsEntry {
     /** How many values the settings hold, as the manifest counts them (the region list is one value). */
     fun count(s: AppSettings): Int = tree(s).values.sumOf { (it as Map<*, *>).size }
 
-    /** [count] as a bundle of [schema] lists them: schema 1 had no `avoid_dot_cameras`. */
-    fun count(s: AppSettings, schema: Long): Int = count(s) - if (schema < 2) 1 else 0
+    /** [count] as a bundle of [schema] lists them: schema 1 had no `avoid_dot_cameras`, schemas 1 and 2 no `WEATHER`. */
+    fun count(s: AppSettings, schema: Long): Int = count(s) - (if (schema < 2) 1 else 0) - (if (schema < 3) 1 else 0)
 
     private fun tree(s: AppSettings): Map<String, Any?> = linkedMapOf(
         "network" to NetworkFeature.entries.associate { it.name to (s.network[it] ?: false) },
@@ -117,12 +120,15 @@ internal object SettingsEntry {
         "updates" to linkedMapOf<String, Any?>("allow_mobile_data" to s.allowMobileData),
     )
 
-    /** Reads settings written with bundle [schema] (1 or 2; schema 1 has no `avoid_dot_cameras`, read as off). */
+    /**
+     * Reads settings written with bundle [schema] (1 to 3; schema 1 has no `avoid_dot_cameras` and schemas 1 and 2 no
+     * `WEATHER` toggle, each read as off).
+     */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
 
-        val net = root.obj("network", NETWORK_KEYS)
-        val network = NetworkFeature.entries.associateWith { net.bool(it.name) }
+        val net = root.obj("network", if (schema >= 3) NETWORK_KEYS else NETWORK_KEYS_2)
+        val network = NetworkFeature.entries.associateWith { (it != NetworkFeature.WEATHER || schema >= 3) && net.bool(it.name) }
 
         val r = root.obj("route", if (schema >= 2) ROUTE_KEYS else ROUTE_KEYS_1)
         val route = RoutePrefs(

@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 55), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 56), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -334,7 +334,10 @@ class BackupServiceTest {
         val b = device("b") // defaults: only PACK_DOWNLOADS on
         val outcome = import(b, file) as ImportOutcome.Done
         assertEquals(
-            listOf("APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME", "TRANSIT_BUS_TIME", "GAS_PRICES"),
+            listOf(
+                "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME", "TRANSIT_BUS_TIME", "GAS_PRICES",
+                "WEATHER",
+            ),
             outcome.turnedOn.map { it.name },
         )
         // Into a phone that already has them on, or from a bundle that turns none on: none.
@@ -346,9 +349,9 @@ class BackupServiceTest {
         // A kept import says the same before it lands.
         val c = device("c")
         c.stores.failApply = true
-        assertEquals(7, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
+        assertEquals(8, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
         c.stores.failApply = false
-        assertEquals(7, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
+        assertEquals(8, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
     }
 
     @Test
