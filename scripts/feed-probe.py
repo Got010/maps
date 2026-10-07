@@ -137,6 +137,15 @@ def fiveeleven_new():
             print("closure-like:", json.dumps(e)[:5000])
     cars("signs", n=3)
     cars("cameras", n=3)
+    # How the web app reads a layer's "api" + "collection": look at its main bundle.
+    _, _, _, page = get("https://511ny.org/")
+    for script in re.findall(r'src="(/assets/index-[^"]+\.js)"', page):
+        _, _, _, js = get("https://511ny.org" + script, limit=40_000_000)
+        print(f"bundle {script}: {len(js)} chars")
+        for word in ("collection", "socket", "firestore", "firebase", "mqtt", "EventSource", "graphql",
+                     "/events", "carsprogram", "x-api-key", "apiKey", "Authorization", "poll"):
+            for m in list(re.finditer(re.escape(word), js))[:4]:
+                print(f"  [{word}] ...{js[max(0, m.start() - 220):m.end() + 220]!r}")
     # The collections answer {"healthy":true}; the service documents itself with Swagger UI.
     base = "https://api-511x-nysdot.carsprogram.org/"
     specs = []
