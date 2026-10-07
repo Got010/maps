@@ -70,7 +70,7 @@ object Samples {
     fun settings() = AppSettings(
         network = NetworkFeature.entries.associateWith { !it.enabledByDefault },
         route = RoutePrefs(
-            avoidTolls = true, avoidHighways = true, avoidFerries = true, avoidAlpr = true, vehicle = VehicleKind.TRUCK,
+            avoidTolls = true, avoidHighways = true, avoidFerries = true, avoidAlpr = true, avoidDotCameras = true, vehicle = VehicleKind.TRUCK,
             heightFt = 11.5, widthFt = 8.0, lengthFt = 53.0, weightTons = 33.5,
             walk = WalkPrefs(avoidStairs = true, stepFree = true, preferPaths = true),
             bike = BikePrefs(BikeType.MOUNTAIN, avoidHills = true, avoidBusyRoads = true),

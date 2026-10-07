@@ -33,5 +33,12 @@ data class Landmark(
         const val SPEED_CAMERA = "speed_camera"
         const val SCHOOL_ZONE = "school_zone"
         const val ALPR_CAMERA = "alpr_camera"
+
+        /**
+         * A state DOT traffic camera (511NY's list, read when the pack is built; see
+         * pipeline/search/dot_cameras.py). Never spoken and never a landmark in directions:
+         * only counted on route options and squared off by "Avoid DOT cameras".
+         */
+        const val DOT_CAMERA = "dot_camera"
     }
 }

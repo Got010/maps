@@ -39,7 +39,26 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(54, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(55, SettingsEntry.count(Samples.defaultSettings()))
+    }
+
+    @Test
+    fun `a schema 1 bundle reads with DOT cameras not avoided`() {
+        val s = Samples.settings()
+        // What schema 1 wrote: the same groups without the route group's avoid_dot_cameras.
+        val one = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""""avoid_dot_cameras":true,""", "")
+        assertTrue("avoid_dot_cameras" !in one)
+        val back = SettingsEntry.decode(one.toByteArray(), schema = 1)
+        assertEquals(s.copy(route = s.route.copy(avoidDotCameras = false)), back)
+        // Schema 2 requires the field, and schema 1 refuses it.
+        for ((text, schema) in listOf(one to 2L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 1L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
     }
 
     @Test

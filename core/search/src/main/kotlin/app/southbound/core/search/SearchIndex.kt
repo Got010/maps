@@ -104,8 +104,9 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         if (!hasLandmarks) return emptyList()
         return synchronized(connection) {
             connection.prepare(
+                // DOT cameras are only for route options; keep them out of the spoken landmarks' limit.
                 "SELECT id, category, name, lat, lon FROM landmark" +
-                    " WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT $limit",
+                    " WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND category != '${Landmark.DOT_CAMERA}' LIMIT $limit",
             ).use { stmt ->
                 stmt.bindDouble(1, box.south)
                 stmt.bindDouble(2, box.north)

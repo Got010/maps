@@ -727,13 +727,14 @@ def way_start(way):
 
 
 def build(pbf, output, region, state=None, address_points=None, bounds=None, max_mb=None, overture=None,
-          overture_max_mb=None):
+          overture_max_mb=None, dot_cameras=None):
     """Builds the pack; returns the row counts per kind (ADDRESS counts the
     address table). Addresses and streets without addr:state are in `state`
     if given, else wherever states.state_at puts them. overture is a staging
     CSV from overture.py fetch: its places go into their own tables (see
     overture.py). Fails if the file ends up larger than max_mb, or the
-    Overture tables alone larger than overture_max_mb."""
+    Overture tables alone larger than overture_max_mb. dot_cameras is a
+    state's traffic camera list (see dot_cameras.py), loaded as landmarks."""
     if os.path.exists(output):
         os.remove(output)
     tmp = output + ".part"
@@ -780,6 +781,11 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
 
         addresses.load(collector, address_points, SOURCE_STATE, bounds=bounds)
         attribution += "; NYS Address Points, NYS GIS Program Office, CC0"
+    if dot_cameras:
+        import dot_cameras as dot  # only needed with a camera list
+
+        dot.load(collector, dot_cameras, bounds=bounds)
+        attribution += "; " + dot.ATTRIBUTION
     collector.flush()
     overture_kept = overture_skipped = 0
     if overture:
@@ -801,6 +807,7 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
             ("state", state or "by location"),
             ("source", os.path.basename(pbf)),
             ("address_points", os.path.basename(address_points) if address_points else ""),
+            ("dot_cameras", os.path.basename(dot_cameras) if dot_cameras else ""),
             ("overture_release", overture_places.release_of(overture) if overture else ""),
             ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
             ("attribution", attribution),
@@ -866,10 +873,11 @@ def main():
     parser.add_argument("--max-mb", type=float, help="fail if the pack is larger than this")
     parser.add_argument("--overture", help="Overture places staging CSV from overture.py fetch")
     parser.add_argument("--overture-max-mb", type=float, help="fail if the Overture tables are larger than this")
+    parser.add_argument("--dot-cameras", help="a state's traffic cameras as GeoJSON (see dot_cameras.py)")
     args = parser.parse_args()
     build(args.pbf, args.output, args.region, state=args.state.upper() if args.state else None,
           address_points=args.address_points, bounds=args.bounds, max_mb=args.max_mb,
-          overture=args.overture, overture_max_mb=args.overture_max_mb)
+          overture=args.overture, overture_max_mb=args.overture_max_mb, dot_cameras=args.dot_cameras)
 
 
 if __name__ == "__main__":

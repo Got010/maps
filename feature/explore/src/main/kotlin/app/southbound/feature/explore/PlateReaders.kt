@@ -5,7 +5,6 @@ import app.southbound.core.map.MapPoint
 import app.southbound.core.routing.CameraAvoidance
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.TravelMode
-import app.southbound.core.search.AlertKind
 import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.RouteAlerts
@@ -40,16 +39,18 @@ internal object PlateReaders {
         val line = route.line()
         RouteAlerts.exposure(
             line,
-            near(index, line, RouteAlerts.MAX_OFFSET_M) + near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.SPEED_CAMERA),
+            near(index, line, RouteAlerts.MAX_OFFSET_M) + near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.SPEED_CAMERA) +
+                near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.DOT_CAMERA),
         )
     }
 
-    /** Routes found around plate readers, and the camera squares they were found with. */
+    /** Routes found around the cameras, and the camera squares they were found with. */
     class Avoided(val routes: List<Route>, val polygons: List<List<Pair<Double, Double>>>)
 
     /**
-     * "Avoid plate readers": starting from the plain [first] routes, squares
-     * off the cameras on the best route and routes again, up to
+     * "Avoid plate readers" and "Avoid DOT cameras": starting from the plain
+     * [first] routes, squares off the cameras of [categories] (landmark
+     * categories, e.g. [Landmark.ALPR_CAMERA]) on the best route and routes again, up to
      * [CameraAvoidance.MAX_PASSES] times while new cameras turn up on the new
      * best route. Only the cameras actually met are excluded, never a whole
      * corridor, which keeps within Valhalla's polygon limit. When a pass finds
@@ -66,6 +67,7 @@ internal object PlateReaders {
         mode: TravelMode,
         closures: List<List<Pair<Double, Double>>>,
         first: List<Route>,
+        categories: List<String> = listOf(Landmark.ALPR_CAMERA),
     ): Avoided {
         val ends = listOf(CameraAvoidance.Spot(from.coordinates.lat, from.coordinates.lng)) +
             waypoints.map { CameraAvoidance.Spot(it.coordinate.lat, it.coordinate.lng) }
@@ -76,8 +78,9 @@ internal object PlateReaders {
             val route = best.routes.firstOrNull() ?: return best
             if (spots.size >= CameraAvoidance.MAX_CAMERAS) return best
             val line = route.line()
-            val fresh = RouteAlerts.alongRoute(line, near(index, line, CameraAvoidance.NEAR_ROUTE_METERS), AlertKind.ALPR_CAMERA, CameraAvoidance.NEAR_ROUTE_METERS)
-                .filter { it.id !in spots }
+            val fresh = categories.flatMap { category ->
+                RouteAlerts.alongRoute(line, near(index, line, CameraAvoidance.NEAR_ROUTE_METERS, category), category, CameraAvoidance.NEAR_ROUTE_METERS)
+            }.filter { it.id !in spots }
             if (fresh.isEmpty()) return best
             fresh.forEach { spots[it.id] = squareSpot(line, it) }
             val polygons = CameraAvoidance.polygons(spots.values.toList(), ends)

@@ -11,6 +11,7 @@ on:
     paths:
       - .github/workflows/feed-probe.yml
       - scripts/feed-probe.py
+      - pipeline/search/overture_sizes.py
 
 permissions: {}
 
@@ -77,6 +78,15 @@ jobs:
           ls -l albany.csv*
           head -3 albany.csv
           python3 "$GITHUB_WORKSPACE/pipeline/search/addresses.py" --check albany.csv -n 15
+
+      # What trimming Overture Places would save in the statewide search pack (pipeline/search/overture_sizes.py).
+      - name: Overture Places sizes
+        timeout-minutes: 30
+        continue-on-error: true
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r .github/pipeline-requirements.txt
+          "$RUNNER_TEMP/venv/bin/python" -u pipeline/search/overture_sizes.py --region nys --work "$RUNNER_TEMP/overture"
 
       - name: NYC DOT speeds
         timeout-minutes: 5
