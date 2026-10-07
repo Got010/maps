@@ -8,16 +8,21 @@ Overture warns that a database *joined* with OSM may inherit OSM's ODbL, so
 these rows go into their own tables, never into `feature`, and the app
 dedupes them against OSM only at query time (core/search OverturePlaces):
 
-  overture_place  one row per place: GERS id, name, category, address,
-                  lat/lon, phone, website, Overture's confidence, the
-                  source dataset (meta, Foursquare, AllThePlaces, ...), and
+  overture_place  one row per place: name, category, address, lat/lon,
+                  phone, website, Overture's confidence, and
                   name_key/search_text built by normalize.py exactly as for
                   `feature`, so the Kotlin SearchText matches both
   overture_fts    FTS5 trigram index over search_text (detail='none'),
                   rowid = overture_place.rowid
 
-The GERS id is kept but not indexed (an index on it would cost another
-~50 bytes a row and nothing reads by it yet).
+Kept small (measured with overture_sizes.py on the statewide pack, October
+2026: 482.6 MB before, 1,124,477 places): the GERS id and the source dataset
+are not stored (the app never read them; about 52 MB), and the search text
+has the name, the town and ZIP, the categories and the brand but not the
+street (the address is still stored and shown; about 75 MB less text and
+trigram index). So "pizza nyack" still finds an Overture-only place, "pizza
+main st" finds it only through an OSM twin. A higher confidence cut-off
+saves less and drops real places (0.6: 25 MB fewer, 81k places gone).
 
 Two steps, so the slow download can be kept and reused:
 
@@ -136,7 +141,6 @@ STATE_NAMES = {"new york": "NY", "new jersey": "NJ"}
 
 SCHEMA = """
 CREATE TABLE overture_place (
-  id TEXT NOT NULL,
   name TEXT NOT NULL,
   category TEXT,
   address TEXT,
@@ -145,7 +149,6 @@ CREATE TABLE overture_place (
   phone TEXT,
   website TEXT,
   confidence REAL NOT NULL,
-  dataset TEXT,
   name_key TEXT NOT NULL,
   search_text TEXT NOT NULL
 );
@@ -392,18 +395,19 @@ def place_row(rec, scopes=None, min_confidence=MIN_CONFIDENCE):
     basic = (rec.get("basic_category") or "").strip() or None
     category = map_category(raw_category, basic)
     address = format_address(rec.get("freeform"), rec.get("locality"), rec.get("postcode"))
+    # The town and ZIP are searchable ("pizza nyack"); the street isn't (see the module notes).
+    town = format_address(None, rec.get("locality"), rec.get("postcode"))
     brand = (rec.get("brand") or "").strip()
     name_key = normalize(name)
     words = [
         name,
-        address,
+        town,
         # Overture's own slugs as words too, so "pizza" finds a pizza_restaurant
         # filed under "restaurant", and "deli" a delicatessen.
         *dict.fromkeys(c.replace("_", " ") for c in (category, raw_category, basic) if c),
         brand if brand and normalize(brand) != name_key else None,
     ]
     return (
-        rec["id"],
         name,
         category,
         address,
@@ -412,7 +416,6 @@ def place_row(rec, scopes=None, min_confidence=MIN_CONFIDENCE):
         (rec.get("phone") or "").strip() or None,
         clean_website(rec.get("website")),
         round(confidence, 3),
-        (rec.get("dataset") or "").strip() or None,
         name_key,
         search_text(*words),
     )
@@ -445,8 +448,8 @@ def load(db, path, scopes=None, min_confidence=MIN_CONFIDENCE):
 
 def _insert(db, batch):
     db.executemany(
-        "INSERT INTO overture_place (id, name, category, address, lat, lon, phone, website, confidence,"
-        " dataset, name_key, search_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO overture_place (name, category, address, lat, lon, phone, website, confidence,"
+        " name_key, search_text) VALUES (?,?,?,?,?,?,?,?,?,?)",
         batch,
     )
     batch.clear()
