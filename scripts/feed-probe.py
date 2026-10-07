@@ -137,9 +137,44 @@ def fiveeleven_new():
             print("closure-like:", json.dumps(e)[:5000])
     cars("signs", n=3)
     cars("cameras", n=3)
-    for path in ("events?limit=1", "api/events", "events/", "signs/", "cameras/"):
-        status, _, h, b = get("https://api-511x-nysdot.carsprogram.org/" + path)
-        print(f"--- {path} {status} {h.get('Content-Type')} {b[:200]!r}")
+    # The collections answer {"healthy":true}; the service documents itself with Swagger UI.
+    base = "https://api-511x-nysdot.carsprogram.org/"
+    specs = []
+    for page in ("api/events", "api/signs", "api/cameras", "events/api", "api", "docs", "events/docs"):
+        status, final, h, b = get(base + page)
+        print(f"--- {page} {status} {h.get('Content-Type')} final {final}")
+        if "swagger" in b.lower():
+            print(b[:1500])
+            for js in re.findall(r'src="([^"]*initializer[^"]*)"', b):
+                _, _, _, init = get(urllib.parse.urljoin(final, js))
+                print("initializer:", init[:1500])
+                specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", init)]
+            specs += [urllib.parse.urljoin(final, u) for u in re.findall(r"""url:\s*["']([^"']+)["']""", b)]
+    for guess in ("api-docs", "swagger.json", "openapi.json", "events/api-docs", "api/events/swagger.json",
+                  "api/events/openapi.json", "api/swagger.json", "v3/api-docs", "swagger/v1/swagger.json"):
+        specs.append(base + guess)
+    seen = set()
+    for spec in specs:
+        if spec in seen:
+            continue
+        seen.add(spec)
+        status, _, h, b = get(spec)
+        print(f"--- spec {spec} {status} {h.get('Content-Type')} {len(b)} bytes")
+        try:
+            doc = json.loads(b)
+        except ValueError:
+            continue
+        if not isinstance(doc, dict) or "paths" not in doc:
+            print(b[:300])
+            continue
+        print("servers:", doc.get("servers"), "basePath:", doc.get("basePath"), "host:", doc.get("host"))
+        for path, ops in doc["paths"].items():
+            for method, op in ops.items():
+                if not isinstance(op, dict):
+                    continue
+                params = [(p.get("name"), p.get("in"), p.get("required")) for p in op.get("parameters", []) if isinstance(p, dict)]
+                print(f"  {method.upper()} {path} :: {op.get('summary') or op.get('description', '')[:120]} :: {params}")
+        print("schemas:", json.dumps(doc.get("components", doc.get("definitions", {})))[:12000])
 
 
 def fiveeleven():
