@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- License plate readers (Flock and others, as mapped in OpenStreetMap) and speed cameras on route options (one line: "3 plate readers · 1 speed camera"). -->
+<!-- License plate readers (Flock and others, as mapped in OpenStreetMap), speed cameras and DOT traffic cameras on route options (one line: "3 plate readers · 1 speed camera · 2 DOT cameras"). -->
 <resources>
     <plurals name="directions_plate_readers">
         <item quantity="one">%1$d plate reader</item>
@@ -9,7 +9,13 @@
         <item quantity="one">%1$d speed camera</item>
         <item quantity="other">%1$d speed cameras</item>
     </plurals>
-    <string name="directions_plate_readers_not_avoided">Couldn\'t avoid every plate reader on this route.</string>
+    <plurals name="directions_dot_cameras">
+        <item quantity="one">%1$d DOT camera</item>
+        <item quantity="other">%1$d DOT cameras</item>
+    </plurals>
+    <string name="directions_plate_readers_not_avoided">Couldn\'t avoid every camera you asked to avoid on this route.</string>
     <string name="options_avoid_alpr">Avoid plate readers</string>
     <string name="options_avoid_alpr_note">Flock and other license plate cameras mapped in OpenStreetMap. Routes may be longer.</string>
+    <string name="options_avoid_dot_cameras">Avoid DOT cameras</string>
+    <string name="options_avoid_dot_cameras_note">NYSDOT and city traffic cameras listed by 511NY, from the map data (updated with it). Routes may be longer.</string>
 </resources>
