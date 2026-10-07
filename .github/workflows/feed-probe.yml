@@ -1,0 +1,38 @@
+# Prints what 511NY, NYC Open Data, gis.ny.gov and TomTom really send (scripts/feed-probe.py), since the
+# dev container can't reach them. Read the job log; the answers become test fixtures. No secret, no key,
+# a read-only token. Run it from the Actions tab (Feed probe > Run workflow), or it runs when this file or
+# the script changes on a branch.
+name: Feed probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - .github/workflows/feed-probe.yml
+      - scripts/feed-probe.py
+
+permissions: {}
+
+concurrency:
+  group: feed-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: NYC DOT speeds
+        run: python3 scripts/feed-probe.py nycdot
+      - name: 511NY
+        run: python3 scripts/feed-probe.py 511ny
+      - name: NYS Address Points
+        run: python3 scripts/feed-probe.py addresses
+      - name: TomTom terms
+        run: python3 scripts/feed-probe.py tomtom
