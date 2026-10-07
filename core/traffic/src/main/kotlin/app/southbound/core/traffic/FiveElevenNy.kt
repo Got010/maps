@@ -90,7 +90,7 @@ object FiveElevenNy {
         return when {
             t.startsWith("closure") || sub.contains("closure") || sub.contains("closed") ||
                 ("all lanes" in lanesLower && "closed" in lanesLower) ||
-                d.startsWith("road closed") || d.startsWith("ramp closed") || " is closed" in d -> IncidentKind.CLOSURE
+                d.startsWith("road closed") || d.startsWith("ramp closed") || " is closed" in d.replace(LANE_CLOSED, "") -> IncidentKind.CLOSURE
             // Before accidents: the feed files police activity under accidentsAndIncidents.
             isPolice(t) || isPolice(sub) -> IncidentKind.POLICE
             t.startsWith("accident") || sub.contains("accident") || sub.contains("crash") || sub.contains("disabled") -> IncidentKind.ACCIDENT
@@ -101,6 +101,9 @@ object FiveElevenNy {
             else -> IncidentKind.OTHER
         }
     }
+
+    /** "The left lane is closed" shuts a lane, not the road. */
+    private val LANE_CLOSED = Regex("""\blanes? (is|are) closed""")
 
     private val POLICE_WORDS = listOf("police", "law enforcement", "traffic stop", "speed enforcement", "radar")
 

@@ -41,6 +41,15 @@
     <string name="explore_closure_spoken">Road closed ahead on %1$s. Finding another way.</string>
     <string name="explore_police_spoken">Police activity ahead on %1$s.</string>
     <string name="explore_police_spoken_no_road">Police activity ahead.</string>
+    <!-- A crash ahead on the route: the road, then the spoken distance ("1.8 miles"). The lanes closed may follow. -->
+    <string name="explore_crash_spoken">Crash ahead on %1$s in %2$s.</string>
+    <string name="explore_crash_spoken_no_road">Crash ahead in %1$s.</string>
+    <!-- Roadwork ahead on the route: the road, then the spoken distance. The lanes closed may follow. -->
+    <string name="explore_roadwork_spoken">Roadwork ahead on %1$s in %2$s.</string>
+    <string name="explore_roadwork_spoken_no_road">Roadwork ahead in %1$s.</string>
+    <!-- Some lanes closed ahead by something other than a crash or roadwork: the lanes as 511NY words them ("Right lane closed"), the road, the distance. -->
+    <string name="explore_lanes_spoken">%1$s ahead on %2$s in %3$s.</string>
+    <string name="explore_lanes_spoken_no_road">%1$s ahead in %2$s.</string>
     <string name="explore_incident_police">Police activity</string>
     <string name="explore_incident_police_on">Police activity \u00B7 %1$s</string>
     <string name="explore_incident_severity">Severity: %1$s</string>
