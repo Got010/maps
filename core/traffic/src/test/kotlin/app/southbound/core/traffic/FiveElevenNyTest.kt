@@ -55,6 +55,23 @@ class FiveElevenNyTest {
     }
 
     @Test
+    fun `reads the v2 layout - numeric ids, Unix times and IsFullClosure`() {
+        val events = FiveElevenNy.parseEvents(File("src/test/resources/511ny-events-v2.json").readText())
+        assertEquals(listOf("482913", "482914"), events.map { it.id })
+
+        val crash = events[0]
+        assertEquals(IncidentKind.ACCIDENT, crash.kind)
+        assertEquals("I-90 Eastbound", crash.title)
+        assertEquals("1 Right lane closed", crash.lanesStatus)
+        assertEquals(1791334800_000L, crash.updatedAt) // seconds
+
+        val bridge = events[1]
+        assertEquals(IncidentKind.CLOSURE, bridge.kind) // IsFullClosure, though filed as roadwork
+        assertTrue(bridge.isClosure)
+        assertEquals(1791334800_000L, bridge.updatedAt) // already milliseconds
+    }
+
+    @Test
     fun `an error document is reported, not treated as no incidents`() {
         try {
             FiveElevenNy.parseEvents("""{"Message":"Invalid key"}""")
