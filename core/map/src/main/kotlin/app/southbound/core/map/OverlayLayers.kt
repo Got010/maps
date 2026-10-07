@@ -1,5 +1,8 @@
 package app.southbound.core.map
 
+import android.graphics.BitmapFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.eq
 import org.maplibre.android.style.expressions.Expression.get
@@ -13,12 +16,15 @@ import org.maplibre.android.style.expressions.Expression.switchCase
 import org.maplibre.android.style.expressions.Expression.toColor
 import org.maplibre.android.style.expressions.Expression.zoom
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.fillColor
+import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
@@ -29,8 +35,11 @@ import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
 import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
+import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
+import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.ImageSource
 import java.lang.ref.WeakReference
 
 /** Adds the route, pin and traffic layers to a freshly loaded style and fills them. */
@@ -80,6 +89,16 @@ internal object OverlayLayers {
     private const val MESSAGE_SIGN_ICON = "southbound-message-sign"
     private const val MESSAGE_SIGN_MIN_ZOOM = 11f
 
+    /** Weather alert areas (tap for the alert), tinted by severity, under the routes; radar under them. */
+    const val WEATHER_AREAS = "southbound-weather-areas"
+    private const val WEATHER_OUTLINE = "southbound-weather-areas-outline"
+    private const val RADAR = "southbound-radar"
+    private const val WEATHER_EXTREME = "#7B1FA2"
+    private const val WEATHER_SEVERE = "#D93025"
+    private const val WEATHER_MODERATE = "#E8710A"
+    private const val WEATHER_MINOR = "#F9AB00"
+    private const val WEATHER_OTHER = "#5F6368"
+
     // Alerts from the map data, pinned along the route while navigating.
     private const val ALERT_SPEED_CAMERA = "#1A73E8"
     private const val ALERT_ALPR_CAMERA = "#7B1FA2"
@@ -93,6 +112,7 @@ internal object OverlayLayers {
         style.addSource(GeoJsonSource(SLOWDOWNS, OverlayGeoJson.speeds(emptyList())))
         style.addSource(GeoJsonSource(INCIDENTS, OverlayGeoJson.incidents(emptyList())))
         style.addSource(GeoJsonSource(CAMERAS, OverlayGeoJson.cameras(emptyList())))
+        style.addSource(GeoJsonSource(WEATHER_AREAS, OverlayGeoJson.weatherAreas(emptyList())))
 
         val speedColor = step(
             get("speed"), literal(SPEED_STOPPED),
@@ -143,9 +163,25 @@ internal object OverlayLayers {
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND),
         )
+        // Weather alert areas: a light tint and an outline in the alert's colour, under everything else.
+        val weatherColor = match(
+            get("severity"), literal(WEATHER_OTHER),
+            stop("EXTREME", literal(WEATHER_EXTREME)),
+            stop("SEVERE", literal(WEATHER_SEVERE)),
+            stop("MODERATE", literal(WEATHER_MODERATE)),
+            stop("MINOR", literal(WEATHER_MINOR)),
+        )
+        val weatherFill = FillLayer(WEATHER_AREAS, WEATHER_AREAS).withProperties(fillColor(weatherColor), fillOpacity(0.16f))
+        val weatherOutline = LineLayer(WEATHER_OUTLINE, WEATHER_AREAS).withProperties(
+            lineColor(weatherColor),
+            lineWidth(1.5f),
+            lineOpacity(0.8f),
+        )
         // Routes sit under the basemap's labels so street names stay readable.
         val firstLabel = style.layers.firstOrNull { it is SymbolLayer }?.id
         if (firstLabel != null) {
+            style.addLayerBelow(weatherFill, firstLabel)
+            style.addLayerBelow(weatherOutline, firstLabel)
             style.addLayerBelow(speeds, firstLabel)
             style.addLayerBelow(walk, firstLabel)
             style.addLayerBelow(casing, firstLabel)
@@ -153,6 +189,8 @@ internal object OverlayLayers {
             style.addLayerBelow(slowdowns, firstLabel)
             style.addLayerBelow(threads, firstLabel)
         } else {
+            style.addLayer(weatherFill)
+            style.addLayer(weatherOutline)
             style.addLayer(speeds)
             style.addLayer(walk)
             style.addLayer(casing)
@@ -238,6 +276,39 @@ internal object OverlayLayers {
         updateCameras(style, overlays.cameras)
         trafficCamerasSource.update(style, overlays.trafficCameras) { OverlayGeoJson.trafficCameras(it) }
         messageSignsSource.update(style, overlays.messageSigns) { OverlayGeoJson.messageSigns(it) }
+        weatherAreasSource.update(style, overlays.weather.areas) { OverlayGeoJson.weatherAreas(it) }
+        updateRadar(style, overlays.weather.radar)
+    }
+
+    private val weatherAreasSource = ListSource<WeatherArea>(WEATHER_AREAS)
+
+    // The radar picture is decoded and handed to the map only when a new one arrives.
+    private var radarShown: RadarPicture? = null
+    private var radarStyle: WeakReference<Style>? = null
+
+    private fun updateRadar(style: Style, radar: RadarPicture?) {
+        if (radar == null) {
+            style.getLayer(RADAR)?.let { style.removeLayer(it) }
+            style.getSource(RADAR)?.let { style.removeSource(it) }
+            radarShown = null
+            return
+        }
+        if (radarShown === radar && radarStyle?.get() === style && style.getSource(RADAR) != null) return
+        val bitmap = BitmapFactory.decodeByteArray(radar.png, 0, radar.png.size) ?: return
+        val source = style.getSourceAs<ImageSource>(RADAR)
+        if (source != null) {
+            source.setImage(bitmap)
+        } else {
+            val quad = LatLngQuad(
+                LatLng(radar.north, radar.west), LatLng(radar.north, radar.east),
+                LatLng(radar.south, radar.east), LatLng(radar.south, radar.west),
+            )
+            style.addSource(ImageSource(RADAR, quad, bitmap))
+            // Under the alert areas, and so under the routes and labels.
+            style.addLayerBelow(RasterLayer(RADAR, RADAR).withProperties(rasterOpacity(0.6f)), WEATHER_AREAS)
+        }
+        radarShown = radar
+        radarStyle = WeakReference(style)
     }
 
     // 511NY's cameras and signs are thousands of points that change every few minutes at most:

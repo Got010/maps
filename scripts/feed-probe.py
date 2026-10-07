@@ -7,7 +7,8 @@ answers end up in the job log. No key is used: 511NY is asked with a dummy
 key (to see its error document) and for its public API docs. Nothing here
 carries a location, search text or route.
 
-    feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses (default: all)
+    feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses
+                                  weather-alerts weather-forecast weather-radar (default: all)
 """
 
 import html
@@ -276,9 +277,184 @@ def addresses():
     except ValueError:
         print("hub search not JSON", b[:200])
 
+# --- Weather (October 2026): which sources can be pulled whole for New York, so no request says where the
+# driver is. The single Albany point below is only for the probe, to see a forecast's shape.
+
+NY_BOX = (-79.8, 40.4, -71.8, 45.1)  # west, south, east, north: the state with a margin
+
+
+def _json(body):
+    try:
+        return json.loads(body)
+    except ValueError:
+        return None
+
+
+def weather_alerts():
+    head("NWS active alerts, all of New York")
+    status, final, headers, body = get("https://api.weather.gov/alerts/active?area=NY", limit=20_000_000)
+    print(f"status {status}  type {headers.get('Content-Type')}  bytes {len(body)}  cache {headers.get('Cache-Control')}"
+          f"  expires {headers.get('Expires')}  last-modified {headers.get('Last-Modified')}")
+    doc = _json(body)
+    if not isinstance(doc, dict):
+        print(body[:800])
+        return
+    feats = doc.get("features") or []
+    print("features", len(feats), "| updated", doc.get("updated"), "| title", doc.get("title"))
+    shapes = {}
+    for f in feats:
+        g = f.get("geometry")
+        shapes[g.get("type") if g else None] = shapes.get(g.get("type") if g else None, 0) + 1
+    print("geometry types", shapes)
+    for f in feats[:8]:
+        p = f.get("properties", {})
+        print("-", p.get("event"), "|", p.get("severity"), p.get("urgency"), p.get("certainty"), "|", p.get("messageType"),
+              "|", (p.get("areaDesc") or "")[:100], "| zones", len(p.get("affectedZones") or []),
+              "| onset", p.get("onset"), "| ends", p.get("ends") or p.get("expires"))
+        print("  headline:", (p.get("headline") or "")[:160])
+        print("  keys:", sorted(p.keys()))
+    if feats:
+        print("first feature, raw:", json.dumps(feats[0])[:2500])
+    # New York may have none today: show the shape of real ones from anywhere, for fixtures (one with a
+    # polygon, one with only zones), compacted.
+    status, _, headers, body = get("https://api.weather.gov/alerts/active?status=actual&message_type=alert", limit=40_000_000)
+    us = (_json(body) or {}).get("features") or []
+    print("US active alerts", len(us), "bytes", len(body))
+    events = {}
+    for f in us:
+        e = f.get("properties", {}).get("event")
+        events[e] = events.get(e, 0) + 1
+    print("events", sorted(events.items(), key=lambda kv: -kv[1])[:25])
+    with_shape = [f for f in us if f.get("geometry")]
+    zone_only = [f for f in us if not f.get("geometry")]
+    for label, pick in (("polygon", with_shape[:2]), ("zones only", zone_only[:2])):
+        for f in pick:
+            p = dict(f.get("properties", {}))
+            p.pop("@id", None)
+            p["description"] = (p.get("description") or "")[:400]
+            p["instruction"] = (p.get("instruction") or "")[:200]
+            p.pop("parameters", None)
+            f = {"id": f.get("id"), "type": "Feature", "geometry": f.get("geometry"), "properties": p}
+            print(f"SAMPLE {label}:", json.dumps(f, separators=(",", ":"))[:6000])
+    # The zones an alert names (affectedZones) need shapes on the phone when an alert has no polygon.
+    for url in ("https://api.weather.gov/zones?area=NY&type=forecast",
+                "https://api.weather.gov/zones?area=NY&type=county"):
+        status, _, headers, body = get(url, limit=20_000_000)
+        doc = _json(body) or {}
+        zs = doc.get("features") or []
+        print(f"--- {url}\nstatus {status} bytes {len(body)} zones {len(zs)}",
+              [z.get("properties", {}).get("id") for z in zs[:12]], "| geometry in list:", bool(zs and zs[0].get("geometry")))
+    show("https://api.weather.gov/zones/forecast/NYZ052", 800, "one forecast zone with its shape (Albany County)")
+    # NWS publishes zone shapefiles too (pipeline could ship them in a pack).
+    status, _, headers, body = get("https://www.weather.gov/gis/PublicZones", limit=600_000)
+    links = sorted(set(re.findall(r'href="([^"]*z_[^"]*\.zip)"', body)))
+    print("PublicZones status", status, "zips:", links[:10])
+
+
+def weather_forecast():
+    head("NWS forecast, the shape of one point and one zone")
+    status, body = show("https://api.weather.gov/points/42.6526,-73.7562", 1200, "points (Albany, probe only)")
+    props = (_json(body) or {}).get("properties", {})
+    print("gridId", props.get("gridId"), props.get("gridX"), props.get("gridY"), "| forecastZone", props.get("forecastZone"),
+          "| county", props.get("county"))
+    for key in ("forecast", "forecastHourly"):
+        url = props.get(key)
+        if url:
+            status, _, headers, b = get(url, limit=4_000_000)
+            d = _json(b) or {}
+            periods = d.get("properties", {}).get("periods") or []
+            print(f"--- {key}: status {status} bytes {len(b)} periods {len(periods)} cache {headers.get('Cache-Control')}")
+            for per in periods[:3]:
+                print("  ", json.dumps(per)[:600])
+    # A whole-zone forecast, the text the pack would carry: one request per zone, about 60 for New York.
+    status, _, headers, b = get("https://api.weather.gov/zones/forecast/NYZ052/forecast")
+    d = _json(b) or {}
+    periods = d.get("properties", {}).get("periods") or []
+    print(f"--- zone forecast NYZ052: status {status} bytes {len(b)} periods {len(periods)} cache {headers.get('Cache-Control')}")
+    for per in periods[:4]:
+        print("  ", json.dumps(per)[:500])
+    show("https://api.weather.gov/products/types/ZFP/locations/ALY", 600, "zone forecast product list (ALY)")
+
+    head("Open-Meteo, many fixed points in one request")
+    # A coarse fixed lattice over the state: the same request from every phone.
+    lats, lons = [], []
+    lat = NY_BOX[1]
+    while lat <= NY_BOX[3]:
+        lon = NY_BOX[0]
+        while lon <= NY_BOX[2]:
+            lats.append(f"{lat:.2f}")
+            lons.append(f"{lon:.2f}")
+            lon += 0.5
+        lat += 0.5
+    q = urllib.parse.urlencode({
+        "latitude": ",".join(lats), "longitude": ",".join(lons),
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max",
+        "forecast_days": 7, "timezone": "America/New_York", "temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
+    })
+    url = "https://api.open-meteo.com/v1/forecast?" + q
+    print("points", len(lats), "url length", len(url))
+    status, _, headers, b = get(url, limit=30_000_000)
+    d = _json(b)
+    print(f"status {status} bytes {len(b)} type {headers.get('Content-Type')}")
+    if isinstance(d, list):
+        print("locations", len(d), "first:", json.dumps(d[0])[:900])
+    else:
+        print(b[:800])
+    show("https://open-meteo.com/en/terms", 1500, "Open-Meteo terms")
+
+    head("NDFD grids, northeast sector (what a GitHub Action could decode)")
+    base = "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.neast"
+    for vp in ("VP.001-003", "VP.004-007"):
+        for el in ("ds.maxt.bin", "ds.mint.bin", "ds.pop12.bin", "ds.wx.bin", "ds.sky.bin", "ds.wspd.bin"):
+            status, _, headers, _ = get(f"{base}/{vp}/{el}", method="HEAD")
+            print(f"  {vp}/{el}: {status} {headers.get('Content-Length')} bytes, {headers.get('Last-Modified')}")
+
+
+def weather_radar():
+    head("Radar as one image of the whole state")
+    w, s, e, n = NY_BOX
+    wms = ("https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetMap"
+           f"&layers=conus_bref_qcd&styles=&crs=EPSG:4326&bbox={s},{w},{n},{e}&width=1024&height=600"
+           "&format=image/png&transparent=true")
+    rest = ("https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity/MapServer/export"
+            f"?bbox={w},{s},{e},{n}&bboxSR=4326&imageSR=4326&size=1024,600&format=png32&transparent=true&f=image")
+    # In the map's own projection (Web Mercator), so the image lines up when drawn between its corners.
+    import math
+
+    def merc(lon, lat):
+        x = lon * 20037508.34 / 180
+        y = math.log(math.tan((90 + lat) * math.pi / 360)) * 6378137
+        return x, y
+
+    (x0, y0), (x1, y1) = merc(w, s), merc(e, n)
+    wms3857 = ("https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetMap"
+               f"&layers=conus_bref_qcd&styles=&crs=EPSG:3857&bbox={x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f}&width=1024&height=820"
+               "&format=image/png&transparent=true")
+    rest3857 = ("https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity/MapServer/export"
+                f"?bbox={w},{s},{e},{n}&bboxSR=4326&imageSR=3857&size=1024,820&format=png32&transparent=true&f=image")
+    for label, url in (("NCEP MRMS WMS", wms), ("NOAA mapservices export", rest),
+                       ("NCEP MRMS WMS 3857", wms3857), ("NOAA mapservices export 3857", rest3857)):
+        status, final, headers, body = get(url, limit=10_000_000)
+        print(f"--- {label}: status {status} type {headers.get('Content-Type')} bytes {len(body)} cache {headers.get('Cache-Control')}"
+              f" last-modified {headers.get('Last-Modified')} png {body[1:4] == 'PNG'}")
+        if not (headers.get("Content-Type") or "").startswith("image/"):
+            print(body[:600])
+    status, _, headers, body = get(
+        "https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetCapabilities",
+        limit=3_000_000)
+    print("WMS capabilities status", status, "bytes", len(body))
+    for m in re.findall(r"<Dimension[^>]*>[^<]{0,300}", body)[:3]:
+        print("  ", m[:300])
+    status, _, headers, body = get(
+        "https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity/MapServer?f=json",
+        limit=2_000_000)
+    d = _json(body) or {}
+    print("mapservices info status", status, "| timeInfo", json.dumps(d.get("timeInfo"))[:400], "| copyright", d.get("copyrightText"))
+
 
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
-            "addresses": addresses}
+            "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
+            "weather-radar": weather_radar}
 
 
 class Timeout(Exception):

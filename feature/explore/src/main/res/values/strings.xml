@@ -32,6 +32,18 @@
     <string name="explore_rerouting_spoken">Rerouting.</string>
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
+    <string name="explore_weather_show">Show weather radar and alerts</string>
+    <string name="explore_weather_hide">Hide weather radar and alerts</string>
+    <!-- The weather alert card: when it starts (only when that is still to come) and ends, as weekday and time. -->
+    <string name="explore_weather_from">From %1$s</string>
+    <string name="explore_weather_until">Until %1$s</string>
+    <!-- Under the route preview: an alert the route passes through, now or after a distance ("12 miles"). -->
+    <string name="explore_weather_on_route_now">%1$s where you start</string>
+    <string name="explore_weather_on_route_ahead">%1$s on this route in %2$s</string>
+    <string name="explore_weather_on_route_more">and %1$d more weather alerts on this route</string>
+    <!-- Spoken on a trip, once per alert: the alert's name ("Winter Storm Warning"), then the distance. -->
+    <string name="explore_weather_here_spoken">%1$s in effect where you are.</string>
+    <string name="explore_weather_ahead_spoken">%1$s on your route in %2$s.</string>
     <string name="explore_traffic_hide">Hide live traffic</string>
     <string name="explore_traffic_empty">No live readings here. NYC DOT speeds cover the five boroughs.</string>
     <string name="explore_traffic_stale">NYC DOT data is stale (newest reading older than 2 hours).</string>

@@ -112,6 +112,11 @@ fun SouthboundMap(
     onTrafficCameraTap: ((String) -> Unit)? = null,
     /** A tap on a 511NY message sign ([MapOverlays.messageSigns]) reports its id. */
     onMessageSignTap: ((String) -> Unit)? = null,
+    /**
+     * A tap inside a weather alert's area ([WeatherOverlay.areas]) that hit nothing else reports
+     * the alert's id; where areas overlap, the most severe one (drawn on top) wins.
+     */
+    onWeatherAreaTap: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -286,6 +291,7 @@ fun SouthboundMap(
 
     val currentOnIncidentTap by rememberUpdatedState(onIncidentTap)
     val currentOnRouteTap by rememberUpdatedState(onRouteTap)
+    val currentOnWeatherAreaTap by rememberUpdatedState(onWeatherAreaTap)
     DisposableEffect(map) {
         val loadedMap = map ?: return@DisposableEffect onDispose { }
         // Returns true only when the tap was used, so other click listeners still see the rest.
@@ -312,6 +318,15 @@ fun SouthboundMap(
                     .minOrNull()
                 if (rank != null) {
                     routeHandler(rank)
+                    return@OnMapClickListener true
+                }
+            }
+            // Last, a weather alert's area: only where the tap itself lands, not the slop box.
+            val weatherHandler = currentOnWeatherAreaTap
+            if (weatherHandler != null && loadedStyle.getLayer(OverlayLayers.WEATHER_AREAS) != null) {
+                val id = loadedMap.queryRenderedFeatures(screen, OverlayLayers.WEATHER_AREAS).firstOrNull()?.getStringProperty("id")
+                if (id != null) {
+                    weatherHandler(id)
                     return@OnMapClickListener true
                 }
             }

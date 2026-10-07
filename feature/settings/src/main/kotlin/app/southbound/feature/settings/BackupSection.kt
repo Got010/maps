@@ -353,6 +353,7 @@ private fun networkLabel(feature: NetworkFeature): Int = when (feature) {
     NetworkFeature.TRANSIT_REALTIME -> R.string.backup_net_transit
     NetworkFeature.TRANSIT_BUS_TIME -> R.string.backup_net_bus
     NetworkFeature.GAS_PRICES -> R.string.backup_net_gas
+    NetworkFeature.WEATHER -> R.string.backup_net_weather
 }
 
 /** Counts only: no place, list or key name, and never a key. */

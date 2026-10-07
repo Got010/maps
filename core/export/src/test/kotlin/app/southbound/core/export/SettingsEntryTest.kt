@@ -1,5 +1,7 @@
 package app.southbound.core.export
 
+import app.southbound.core.network.NetworkFeature
+
 import app.southbound.core.export.fwx.FwxError
 import app.southbound.core.export.fwx.FwxException
 import org.junit.Assert.assertEquals
@@ -39,19 +41,41 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(55, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(56, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
     fun `a schema 1 bundle reads with DOT cameras not avoided`() {
         val s = Samples.settings()
-        // What schema 1 wrote: the same groups without the route group's avoid_dot_cameras.
+        // What schema 1 wrote: the same groups without the route group's avoid_dot_cameras or the weather toggle.
         val one = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""""avoid_dot_cameras":true,""", "")
+            .replace(""","WEATHER":true""", "")
         assertTrue("avoid_dot_cameras" !in one)
         val back = SettingsEntry.decode(one.toByteArray(), schema = 1)
-        assertEquals(s.copy(route = s.route.copy(avoidDotCameras = false)), back)
+        assertEquals(s.copy(route = s.route.copy(avoidDotCameras = false), network = s.network + (NetworkFeature.WEATHER to false)), back)
         // Schema 2 requires the field, and schema 1 refuses it.
         for ((text, schema) in listOf(one to 2L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 1L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
+    }
+
+    @Test
+    fun `a schema 2 bundle reads with weather off`() {
+        val s = Samples.settings()
+        assertTrue(s.network.getValue(NetworkFeature.WEATHER))
+        // What schema 2 wrote: the network group without the weather toggle.
+        val two = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""","WEATHER":true""", "")
+        assertTrue("WEATHER" !in two)
+        assertEquals(s.copy(network = s.network + (NetworkFeature.WEATHER to false)), SettingsEntry.decode(two.toByteArray(), schema = 2))
+        assertEquals(55, SettingsEntry.count(s, 2))
+        assertEquals(54, SettingsEntry.count(s, 1))
+        // Schema 3 requires it, and schema 2 refuses it.
+        for ((text, schema) in listOf(two to 3L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 2L)) {
             try {
                 SettingsEntry.decode(text.toByteArray(), schema)
                 fail("accepted schema $schema")
