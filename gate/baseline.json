@@ -855,6 +855,10 @@
       "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com."
     },
     {
+      "value": "https://api.weather.gov",
+      "note": "National Weather Service alerts: core/weather NwsAlerts.kt fetches /alerts/active?area=NY (every active alert for the whole state) and WeatherFeed reads the shapes of the /zones/ that alerts name (only zones named by New York's alerts, the same for every phone). No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://apps.mapbox.com",
       "note": "Strings inside the MapLibre Android SDK (attribution and feedback links, Mapbox host checks inherited from its Mapbox lineage). App code never uses them: the map style is bundled (assets/light.json, dark.json) and tiles come from pmtiles://file:// on the phone."
     },
@@ -881,6 +885,10 @@
     {
       "value": "https://kotl.in",
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
+    },
+    {
+      "value": "https://opengeo.ncep.noaa.gov",
+      "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around New York in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
       "value": "https://www.mapbox.com",
