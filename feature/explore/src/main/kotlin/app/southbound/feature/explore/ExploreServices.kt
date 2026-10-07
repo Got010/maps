@@ -22,6 +22,7 @@ import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.TripBroadcast
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.traffic.TrafficFeed
+import app.southbound.core.weather.WeatherFeed
 import app.southbound.core.transit.AndroidTransitDb
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.transit.TransitRealtime
@@ -71,6 +72,9 @@ class ExploreServices private constructor(context: Context) {
 
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
     val traffic = TrafficFeed(networkGate)
+
+    /** NWS alerts for the whole state and NOAA radar, behind the weather toggle. */
+    val weather = WeatherFeed(networkGate)
 
     /** Fuel economy, gas price and the state to look it up for (a Settings choice, never GPS). */
     val fuelPrefs = FuelPrefs.get(appContext)
