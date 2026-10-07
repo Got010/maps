@@ -13,23 +13,38 @@ import java.io.IOException
 
 class TrafficFeedTest {
 
-    private val events = File("src/test/resources/511ny-events.json").readBytes()
+    private val incidents = File("src/test/resources/511ny-cars-incidents.json").readBytes()
+    private val closures = File("src/test/resources/511ny-cars-closures.json").readBytes()
+    private val construction = File("src/test/resources/511ny-cars-construction.json").readBytes()
     private val speeds = File("src/test/resources/nycdot-speeds.json").readBytes()
     private val requested = ArrayList<Pair<NetworkFeature, String>>()
     private var now = 1_790_000_000_000L
     private var fail = false
 
-    private fun feed(ny511: Boolean, dot: Boolean, key: String? = "KEY"): TrafficFeed {
+    /** Changes every layer's hash, as 511NY does when an event changes. */
+    private var version = 1
+
+    private fun feed(ny511: Boolean, dot: Boolean): TrafficFeed {
         val toggles = InMemoryNetworkToggles(mapOf(NetworkFeature.TRAFFIC_511NY to ny511, NetworkFeature.TRAFFIC_NYC_DOT to dot))
         val gate = NetworkGate(toggles)
-        return TrafficFeed(gate, { key }, { now }) { feature, url ->
+        return TrafficFeed(gate, { now }) { feature, url ->
             gate.request(feature) {
-                requested.add(feature to url)
+                synchronized(requested) { requested.add(feature to url) }
                 if (fail) throw IOException("HTTP 503 from somewhere")
-                if ("511ny" in url) events else speeds
+                when {
+                    "/events/hash?" in url -> """{"hash":"${url.substringAfter("eventClassifications=").substringBefore('&')}-$version"}""".toByteArray()
+                    "eventClassifications=incidents" in url -> incidents
+                    "eventClassifications=closures" in url -> closures
+                    "eventClassifications=construction" in url -> construction
+                    "data.cityofnewyork.us" in url -> speeds
+                    else -> throw IOException("unexpected $url")
+                }
             }
         }
     }
+
+    private fun downloads() = synchronized(requested) { requested.count { "/map-features" in it.second } }
+    private fun dotRequests() = synchronized(requested) { requested.count { it.first == NetworkFeature.TRAFFIC_NYC_DOT } }
 
     @Test
     fun `off by default fetches nothing`() = runBlocking {
@@ -40,14 +55,35 @@ class TrafficFeedTest {
     }
 
     @Test
-    fun `511NY needs its toggle and a key`() = runBlocking {
-        assertTrue(feed(ny511 = true, dot = false, key = null).refresh().incidents.isEmpty())
-        assertTrue(requested.isEmpty())
-        val snapshot = feed(ny511 = true, dot = false).refresh()
-        assertEquals(8, snapshot.incidents.size)
+    fun `511NY needs only its toggle and reads the three event layers whole`() = runBlocking {
+        val feed = feed(ny511 = true, dot = false)
+        assertTrue(feed.hasIncidents)
+        val snapshot = feed.refresh()
+        assertEquals(9, snapshot.incidents.size)
         assertEquals(3, snapshot.closures.size)
-        assertEquals(listOf(NetworkFeature.TRAFFIC_511NY), requested.map { it.first })
-        assertTrue(requested.single().second.startsWith("https://511ny.org/api/getevents?key=KEY"))
+        assertEquals(setOf(NetworkFeature.TRAFFIC_511NY), requested.map { it.first }.toSet())
+        // The site's own whole-state queries: nothing about where the user is.
+        assertEquals(
+            listOf(
+                "https://api-511x-nysdot.carsprogram.org/events/map-features?eventClassifications=closures&maxBeginDateOffset=300000",
+                "https://api-511x-nysdot.carsprogram.org/events/map-features?eventClassifications=incidents",
+                "https://api-511x-nysdot.carsprogram.org/events/map-features?eventClassifications=construction&maxBeginDateOffset=300000",
+            ),
+            requested.map { it.second }.filter { "/map-features" in it },
+        )
+    }
+
+    @Test
+    fun `an unchanged layer is not downloaded again`() = runBlocking {
+        val feed = feed(ny511 = true, dot = false)
+        val first = feed.refresh()
+        assertEquals(3, downloads())
+        val again = feed.refresh(force = true)
+        assertEquals(3, downloads()) // three hash checks, no downloads
+        assertEquals(first.incidents, again.incidents)
+        version++
+        feed.refresh(force = true)
+        assertEquals(6, downloads())
     }
 
     @Test
@@ -68,30 +104,24 @@ class TrafficFeedTest {
     }
 
     @Test
-    fun `a missing 511NY key is visible`() {
-        assertTrue(feed(ny511 = true, dot = false, key = null).needsIncidentsKey)
-        assertTrue(feed(ny511 = true, dot = false, key = "  ").needsIncidentsKey)
-        assertFalse(feed(ny511 = true, dot = false).needsIncidentsKey)
-        assertFalse(feed(ny511 = false, dot = false, key = null).needsIncidentsKey)
-    }
-
-    @Test
     fun `each feed is cached for its own interval`() = runBlocking {
         val feed = feed(ny511 = true, dot = true)
         feed.refresh()
-        assertEquals(2, requested.size)
+        assertEquals(3, downloads())
+        assertEquals(1, dotRequests())
         now += 60_000
         feed.refresh()
-        assertEquals(2, requested.size)
+        assertEquals(1, dotRequests())
         now += 40_000 // 100 s: speeds are stale, incidents not yet
+        val hashChecks = requested.size
         feed.refresh()
-        assertEquals(3, requested.size)
-        assertEquals(NetworkFeature.TRAFFIC_NYC_DOT, requested.last().first)
-        now += 100_000
+        assertEquals(2, dotRequests())
+        assertEquals(hashChecks + 1, requested.size)
+        now += 100_000 // 200 s: both are stale
+        version++
         feed.refresh()
-        assertEquals(5, requested.size)
-        feed.refresh(force = true)
-        assertEquals(7, requested.size)
+        assertEquals(6, downloads())
+        assertEquals(3, dotRequests())
     }
 
     @Test
@@ -107,5 +137,15 @@ class TrafficFeedTest {
         assertEquals(2, second.errors.size)
         assertTrue(second.errors.any { it.startsWith("511NY: HTTP 503") })
         assertEquals(second, feed.snapshot.value)
+    }
+
+    @Test
+    fun `the old API's HTML page is reported, not shown as no traffic`() = runBlocking {
+        val gate = NetworkGate(InMemoryNetworkToggles(mapOf(NetworkFeature.TRAFFIC_511NY to true)))
+        val feed = TrafficFeed(gate, { now }) { feature, _ -> gate.request(feature) { "<!doctype html><html>".toByteArray() } }
+        val snapshot = feed.refresh()
+        assertTrue(snapshot.incidents.isEmpty())
+        assertEquals(1, snapshot.errors.size)
+        assertTrue(snapshot.errors.single().startsWith("511NY: "))
     }
 }

@@ -1047,10 +1047,8 @@ internal fun ExploreMap(
                         )
                     }
                     // Why the traffic layer may look empty: say so instead of showing nothing.
-                    val trafficNeedsKey = remember(resumes, trafficVisible) { services.traffic.needsIncidentsKey }
                     val trafficNote = when {
                         !trafficVisible || !trafficOn -> null
-                        trafficNeedsKey -> R.string.explore_traffic_needs_key
                         traffic.speedsStale -> R.string.explore_traffic_stale
                         traffic.fetchedAt > 0 && traffic.isEmpty && traffic.errors.isEmpty() -> R.string.explore_traffic_empty
                         else -> null
