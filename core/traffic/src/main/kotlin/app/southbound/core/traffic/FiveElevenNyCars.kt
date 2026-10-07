@@ -99,7 +99,7 @@ object FiveElevenNyCars {
         val details = plainText(p.text("description") ?: words?.text("descriptionFull"))
         val description = listOfNotNull(tooltip, details).joinToString(" ").ifBlank { "Incident" }
         val headline = words?.text("headlinePhrase") // "Disabled Vehicle", "Road Closed"
-        val lanes = lanesStatus(details)
+        val lanes = lanesStatus(details) ?: lanesFromImpacts(report?.get("laneImpacts") as? Map<*, *>)
         val wordingKind = FiveElevenNy.kindOf(null, headline, lanes, description)
         val kind = when (layer) {
             EventLayer.CLOSURES -> IncidentKind.CLOSURE
@@ -130,14 +130,50 @@ object FiveElevenNyCars {
         return DIRECTION.find(head)?.value?.lowercase(Locale.US)?.replaceFirstChar { it.titlecase(Locale.US) }
     }
 
-    /** "All lanes are closed" in the details becomes "All lanes closed", which marks a closure. */
-    private fun lanesStatus(details: String?): String? {
+    /**
+     * The lanes an event closes, from its details: "All lanes closed" (which marks a closure),
+     * or the details' own sentence about some lanes ("The right lane is closed." becomes
+     * "Right lane closed"). Shoulders alone don't count.
+     */
+    fun lanesStatus(details: String?): String? {
         val d = details?.lowercase(Locale.US) ?: return null
-        return when {
-            "all lanes are closed" in d || "all lanes closed" in d || "the road is closed" in d -> "All lanes closed"
-            else -> null
-        }
+        if ("all lanes are closed" in d || "all lanes closed" in d || "the road is closed" in d) return "All lanes closed"
+        val sentence = details.split(SENTENCE).map { it.trim() }.firstOrNull { s ->
+            val l = s.lowercase(Locale.US)
+            LANE.containsMatchIn(l) && ("closed" in l || "blocked" in l)
+        } ?: return null
+        val said = sentence
+            .replace(LEAD, "")
+            .replace(VERB, " ")
+            .replace(TAIL, "")
+            .trim().trimEnd('.', ',', ';').trim()
+        return said.takeIf { it.isNotEmpty() && it.length <= 80 }?.replaceFirstChar { it.titlecase(Locale.US) }
     }
+
+    /**
+     * "1 of 3 lanes closed" from the structured `laneImpacts` ({"positiveLaneImpact": {"laneCount": 3,
+     * "lanesAffected": {"1": true}}}), for events whose details don't say; null when it shows none.
+     * A side with every lane affected is skipped: only the details' wording makes an event a
+     * closure, since the sides aren't tied to the driver's direction here.
+     */
+    fun lanesFromImpacts(impacts: Map<*, *>?): String? {
+        val sides = impacts?.values?.mapNotNull { it as? Map<*, *> }.orEmpty()
+        var best: Pair<Int, Int>? = null
+        for (side in sides) {
+            val count = (side["laneCount"] as? Number)?.toInt() ?: continue
+            val affected = (side["lanesAffected"] as? Map<*, *>).orEmpty().values.count { it == true }
+            if (count <= 0 || affected <= 0) continue
+            if (affected >= count) continue
+            if (best == null || affected > best.first) best = affected to count
+        }
+        return best?.let { (n, of) -> "$n of $of lanes closed" }
+    }
+
+    private val SENTENCE = Regex("""(?<=[.!?])\s+""")
+    private val LANE = Regex("""\blanes?\b""")
+    private val LEAD = Regex("""^(the|a|an)\s+""", RegexOption.IGNORE_CASE)
+    private val VERB = Regex("""\s+(is|are)\s+""", RegexOption.IGNORE_CASE)
+    private val TAIL = Regex("""\s+(in the \w+ direction.*|because of .*|due to .*|until .*)$""", RegexOption.IGNORE_CASE)
 
     private val TAG = Regex("<[^>]+>")
     private val SPACE = Regex("""\s+""")
