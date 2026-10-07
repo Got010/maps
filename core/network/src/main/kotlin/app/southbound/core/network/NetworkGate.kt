@@ -23,6 +23,9 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** The weekly average gas price for the state the user picked, from EIA. */
     GAS_PRICES(enabledByDefault = false),
+
+    /** National Weather Service alerts for the whole state, and NOAA radar as one picture of it. */
+    WEATHER(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {
