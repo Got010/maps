@@ -117,6 +117,8 @@ import app.southbound.core.traffic.FasterRoute
 import app.southbound.core.traffic.Geo
 import app.southbound.core.traffic.GeoPoint
 import app.southbound.core.traffic.Incident
+import app.southbound.core.traffic.IncidentAlertKind
+import app.southbound.core.traffic.IncidentAlerts
 import app.southbound.core.traffic.IncidentKind
 import app.southbound.core.traffic.PoliceAlerts
 import app.southbound.core.traffic.RouteSlowdowns
@@ -128,6 +130,7 @@ import app.southbound.core.traffic.TripTraffic
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.SpeedAlertMode
+import app.southbound.core.voice.SpokenUnits
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.feature.directions.MissingRegionWarning
 import app.southbound.feature.directions.RouteOptionsChip
@@ -655,6 +658,49 @@ internal fun ExploreMap(
         announcedPolice += next.incident.id
         val road = next.incident.roadway
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, if (road != null) policeSpoken.format(road) else policeSpokenNoRoad)
+    }
+
+    // Crashes, roadwork and lane closures ahead (511NY events), said once each within about two miles on what
+    // is left of a driving route, on our side of the road, with the distance and the lanes when the feed gives
+    // them: "Crash ahead on I-87 in 1.8 miles. Right lane closed." A work zone made of several events in a row
+    // is said once. Closures and police have their own lines above.
+    val crashSpoken = stringResource(R.string.explore_crash_spoken)
+    val crashSpokenNoRoad = stringResource(R.string.explore_crash_spoken_no_road)
+    val roadworkSpoken = stringResource(R.string.explore_roadwork_spoken)
+    val roadworkSpokenNoRoad = stringResource(R.string.explore_roadwork_spoken_no_road)
+    val lanesSpoken = stringResource(R.string.explore_lanes_spoken)
+    val lanesSpokenNoRoad = stringResource(R.string.explore_lanes_spoken_no_road)
+    val announcedIncidents = remember { mutableSetOf<String>() }
+    LaunchedEffect(inTrip) { if (!inTrip) announcedIncidents.clear() }
+    LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
+        val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
+        if (!services.traffic.hasIncidents || navigator?.mode != TravelMode.DRIVE) return@LaunchedEffect
+        val fresh = traffic.incidents.filter { it.id !in announcedIncidents }
+        if (fresh.isEmpty()) return@LaunchedEffect
+        val here = navigating.snappedUserLocation.coordinates
+        val geometry = navState.routeGeometry
+        val found = withContext(Dispatchers.Default) {
+            val ahead = RouteTraffic.remaining(geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
+            IncidentAlerts.ahead(ahead, fresh)
+        }
+        val next = found.firstOrNull() ?: return@LaunchedEffect
+        announcedIncidents += next.incident.id
+        announcedIncidents += IncidentAlerts.sameZone(next, found).map { it.incident.id }
+        val road = next.incident.roadway
+        val distance = SpokenUnits.distance(next.metersAhead)
+        val lanes = IncidentAlerts.lanesClosed(next.incident)
+        val text = when (next.kind) {
+            IncidentAlertKind.CRASH -> {
+                val crash = if (road != null) crashSpoken.format(road, distance) else crashSpokenNoRoad.format(distance)
+                if (lanes != null) "$crash $lanes." else crash
+            }
+            IncidentAlertKind.ROADWORK -> {
+                val work = if (road != null) roadworkSpoken.format(road, distance) else roadworkSpokenNoRoad.format(distance)
+                if (lanes != null) "$work $lanes." else work
+            }
+            IncidentAlertKind.LANES -> if (road != null) lanesSpoken.format(lanes, road, distance) else lanesSpokenNoRoad.format(lanes, distance)
+        }
+        services.voice.announce(UtteranceKind.TRAFFIC_ALERT, text)
     }
 
     // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?

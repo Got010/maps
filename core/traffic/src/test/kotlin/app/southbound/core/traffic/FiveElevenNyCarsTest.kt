@@ -141,4 +141,41 @@ class FiveElevenNyCarsTest {
         assertNull(FiveElevenNyCars.parseHash("""{"healthy":true}"""))
         assertNull(FiveElevenNyCars.parseHash("<html>"))
     }
+
+    // The sample day's features closed all lanes or none, so the partial wordings below follow
+    // 511NY's sentence pattern ("All lanes are closed in the eastbound direction of travel.").
+    @Test
+    fun `some lanes closed are read from the details, shoulders alone are not`() {
+        assertEquals("All lanes closed", FiveElevenNyCars.lanesStatus("between NY 3 and NY 73. All lanes are closed in the eastbound direction of travel."))
+        assertEquals("Right lane closed", FiveElevenNyCars.lanesStatus("between Exit 8 and Exit 9. The right lane is closed because of a crash. Until 5PM."))
+        assertEquals(
+            "Two left lanes of three blocked",
+            FiveElevenNyCars.lanesStatus("at Exit 4. Two left lanes of three are blocked in the northbound direction of travel."),
+        )
+        assertNull(FiveElevenNyCars.lanesStatus("at Exit 4. The right shoulder is closed."))
+        assertNull(FiveElevenNyCars.lanesStatus("between Exit 8 and 951L (Buffalo). Look out for a disabled vehicle."))
+        assertNull(FiveElevenNyCars.lanesStatus(null))
+    }
+
+    @Test
+    fun `lane impacts give a count when the details don't, never a full closure`() {
+        val one = mapOf("positiveLaneImpact" to mapOf("laneCount" to 3L, "lanesAffected" to mapOf("1" to true, "2" to false)))
+        assertEquals("1 of 3 lanes closed", FiveElevenNyCars.lanesFromImpacts(one))
+        val all = mapOf("positiveLaneImpact" to mapOf("laneCount" to 1L, "lanesAffected" to mapOf("1" to true)))
+        assertNull(FiveElevenNyCars.lanesFromImpacts(all))
+        assertNull(FiveElevenNyCars.lanesFromImpacts(emptyMap<String, Any>()))
+        assertNull(FiveElevenNyCars.lanesFromImpacts(null))
+    }
+
+    @Test
+    fun `a crash with a lane sentence carries it`() {
+        val json = """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[-73.9,40.8]},
+            "properties":{"id":"X-1","active":true,"route":"I-87","tooltip":"I-87 northbound: Crash.","title":"I-87 northbound: Crash.",
+            "description":"<p> at Exit 4. The left lane is closed because of a crash.</p>",
+            "eventReport":{"eventDescription":{"headlinePhrase":"Crash"}}}}]}"""
+        val event = FiveElevenNyCars.parseEvents(json, EventLayer.INCIDENTS).single()
+        assertEquals(IncidentKind.ACCIDENT, event.kind)
+        assertEquals("Left lane closed", event.lanesStatus)
+        assertEquals(IncidentAlertKind.CRASH, IncidentAlerts.kindOf(event))
+    }
 }

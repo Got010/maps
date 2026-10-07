@@ -31,13 +31,21 @@ object PoliceAlerts {
      * of the driver, nearest first. An incident whose direction ("Northbound")
      * runs against the route there is left out.
      */
-    fun ahead(route: List<GeoPoint>, incidents: List<Incident>, withinMeters: Double = AHEAD_METERS): List<PoliceAhead> {
-        if (route.size < 2) return emptyList()
-        val police = incidents.filter { it.kind == IncidentKind.POLICE }
-        if (police.isEmpty()) return emptyList()
+    fun ahead(route: List<GeoPoint>, incidents: List<Incident>, withinMeters: Double = AHEAD_METERS): List<PoliceAhead> =
+        onRoute(route, incidents.filter { it.kind == IncidentKind.POLICE }) { withinMeters }
+            .map { (incident, along) -> PoliceAhead(incident, along) }
+
+    /**
+     * Any of [incidents] on [route] (what is left of it, starting at the driver) within its own
+     * [withinMeters] of the driver, with its distance along, nearest first. An incident whose
+     * direction ("Northbound") runs against the route there is left out. Used for police and, by
+     * [IncidentAlerts], for crashes and lane closures.
+     */
+    fun onRoute(route: List<GeoPoint>, incidents: List<Incident>, withinMeters: (Incident) -> Double): List<Pair<Incident, Double>> {
+        if (route.size < 2 || incidents.isEmpty()) return emptyList()
         val cumulative = DoubleArray(route.size)
         for (i in 1 until route.size) cumulative[i] = cumulative[i - 1] + Geo.distanceMeters(route[i - 1], route[i])
-        return police.mapNotNull { incident ->
+        return incidents.mapNotNull { incident ->
             var bestDistance = Double.POSITIVE_INFINITY
             var along = 0.0
             var heading = 0.0
@@ -57,11 +65,11 @@ object PoliceAlerts {
                     heading = bearing(dx, dy)
                 }
             }
-            if (bestDistance > ROUTE_METERS || along > withinMeters) return@mapNotNull null
+            if (bestDistance > ROUTE_METERS || along > withinMeters(incident)) return@mapNotNull null
             val bound = boundHeading(incident.direction)
             if (bound != null && angleBetween(bound, heading) > OPPOSITE_DEGREES) return@mapNotNull null
-            PoliceAhead(incident, along)
-        }.sortedBy { it.metersAhead }
+            incident to along
+        }.sortedBy { it.second }
     }
 
     /** Compass degrees (0 north, 90 east) of a displacement of [dx] east and [dy] north (same units). */
