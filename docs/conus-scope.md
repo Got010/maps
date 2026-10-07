@@ -76,6 +76,41 @@ Proposed design, to be proven by a spike:
 National transit is its own project: hundreds of GTFS feeds (Mobility Database), a RAPTOR pack per metro area,
 realtime per agency. Suggest metro-by-metro after driving works nationally.
 
+## How other offline apps stay small
+
+For scale: offline-first OSM apps keep the whole US to roughly 10 GB, a few hundred MB a state (Organic Maps,
+CoMaps and OsmAnd, from general knowledge, not measured here). Southbound's New York today is about 2.5 GB:
+`routing-nys.tar` 861 MB, `search-nys.sqlite` 831 MB, plus six basemaps. Where the difference comes from:
+
+- **One file, shared geometry.** Organic Maps' `.mwm` and OsmAnd's `.obf` hold the map, the routing graph and the
+  search index for a region in one compact binary file, so each road's geometry is stored once. Southbound
+  stores roads three times: in the PMTiles basemap, in Valhalla's tiles and (names and positions) in the search
+  pack.
+- **Compact encodings.** Quantized, delta-coded coordinates; geometry simplified per zoom; only the tags the app
+  shows. Valhalla's tiles carry rich per-edge data for its costing (and for traffic, elevation, restrictions),
+  which makes them large.
+- **Precomputed shortcuts instead of a big graph.** Vela Maps (a degoogled Android client) routes offline with
+  OsmAnd's Java router over `.obf` files baked with highway-hierarchy shortcuts, so a 256 km trip resolves in
+  about half a second within 256 MB of memory; its Delaware file with routing is about 71 MB
+  ([Vela's spec](https://raw.githubusercontent.com/PimpinPumpkin/Vela/master/SPEC.md)). Vela also streams map
+  tiles and places online when it can, and takes traffic, reviews and photos from Google: smaller downloads, but
+  requests that reveal where you look, which Southbound's rules don't allow.
+- **Small search indexes.** Prefix tries over names rather than SQLite FTS. Southbound's FTS5 indexes are already
+  contentless with `detail='none'`; the weight is in what is stored and indexed. In the v0.1.21 statewide pack,
+  Overture places are 482 MB of 831 (the table 356 MB, its trigram index 92 MB, its name index 34 MB), addresses
+  206 MB, OSM features and their index about 107 MB.
+
+What that means for Southbound, cheapest first:
+
+1. **Trim Overture** (a setting): a higher confidence cut-off, no unread columns, no address in its search text.
+   Measured by `pipeline/search/overture_sizes.py` (run by the feed probe workflow).
+2. **Routing per state plus a national highway pack** (section 2), which is what the shortcut-based apps do in
+   effect: long trips on a small top-level graph, local roads only where you are.
+3. **Switching routing engines** (OsmAnd's router, as Vela did) would shrink routing the most but replaces
+   Valhalla, which Ferrostar's turn-by-turn, lane guidance, closures-as-polygons and camera avoidance are built
+   on. Only worth a spike if (2) falls short.
+4. **Streaming** stays out, or opt-in like TomTom was: it breaks the rule that no request reveals where you are.
+
 ## Costs and limits
 
 - **Actions minutes**: a national rebuild is *est.* 10-20 times today's, far past a private repo's 2,000 free
