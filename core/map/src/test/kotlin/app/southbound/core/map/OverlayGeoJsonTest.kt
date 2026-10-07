@@ -153,4 +153,24 @@ class OverlayGeoJsonTest {
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.messageSigns(emptyList()))
     }
+
+    @Test
+    fun weatherAreasAreClosedPolygonsWorstOnTop() {
+        val ring = listOf(MapPoint(42.0, -74.0), MapPoint(42.0, -73.0), MapPoint(43.0, -73.0))
+        val json = OverlayGeoJson.weatherAreas(
+            listOf(
+                WeatherArea("warn", listOf(ring), "SEVERE"),
+                WeatherArea("adv", listOf(ring, listOf(MapPoint(1.0, 1.0))), "MINOR"),
+            ),
+        )
+        // The minor advisory first so the warning draws over it; a ring of fewer than 3 points is left out;
+        // each ring is closed.
+        val closed = """[[[-74.000000,42.000000],[-73.000000,42.000000],[-73.000000,43.000000],[-74.000000,42.000000]]]"""
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"adv","severity":"MINOR"},"geometry":{"type":"Polygon","coordinates":$closed}},""" +
+                """{"type":"Feature","properties":{"id":"warn","severity":"SEVERE"},"geometry":{"type":"Polygon","coordinates":$closed}}]}""",
+            json,
+        )
+    }
 }

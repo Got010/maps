@@ -34,9 +34,11 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
 import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -81,6 +83,7 @@ import app.southbound.core.map.MessageSignPin
 import app.southbound.core.map.TrafficCameraPin
 import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
+import app.southbound.core.map.WeatherOverlay
 import app.southbound.core.map.NYC_CENTER
 import app.southbound.core.map.NightMode
 import app.southbound.core.map.SouthboundMap
@@ -131,6 +134,8 @@ import app.southbound.core.transit.TransitPack
 import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.SpeedAlertMode
 import app.southbound.core.voice.SpokenUnits
+import app.southbound.core.weather.AlertOnRoute
+import app.southbound.core.weather.RouteWeather
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.feature.directions.MissingRegionWarning
 import app.southbound.feature.directions.RouteOptionsChip
@@ -191,6 +196,9 @@ private sealed interface ShownThing {
     /** Looked up by id in the latest snapshot, so the card follows the feed. */
     data class TrafficCam(val id: String) : ShownThing
     data class Sign(val id: String) : ShownThing
+
+    /** A weather alert, looked up by id in the latest weather snapshot. */
+    data class WeatherAlertShown(val id: String) : ShownThing
 }
 
 private const val PLACE_ZOOM = 16.0
@@ -347,6 +355,21 @@ internal fun ExploreMap(
     // Gas price from EIA (opt-in, and rate-limited to one request a day): on resume, when directions open,
     // and when the state is changed in Settings.
     val directionsOpen = panel is Panel.Directions
+
+    // Weather: NWS alerts for the state and NOAA radar, behind Settings > Live data > Weather. The layer button
+    // shows radar and every alert; without it, only alerts on the route being planned or driven are drawn.
+    var weatherVisible by rememberSaveable { mutableStateOf(false) }
+    var weatherOn by remember { mutableStateOf(services.weather.isEnabled) }
+    val weather by services.weather.snapshot.collectAsState()
+    LaunchedEffect(resumes) { weatherOn = services.weather.isEnabled }
+    LaunchedEffect(weatherVisible, inTrip, weatherOn, directionsOpen) {
+        if (!weatherOn || !(weatherVisible || inTrip || directionsOpen)) return@LaunchedEffect
+        while (true) {
+            // The radar picture only while the layer is shown; the alerts whenever a route needs them.
+            withContext(Dispatchers.IO) { attempt { services.weather.refresh(withRadar = weatherVisible) } }
+            delay(WEATHER_POLL_MS)
+        }
+    }
     LaunchedEffect(resumes, directionsOpen, fuel.region) {
         if (services.gasPrices.isReady) attempt { services.gasPrices.refresh() }
     }
@@ -703,6 +726,46 @@ internal fun ExploreMap(
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, text)
     }
 
+    // Weather alerts the route passes through: listed under the route preview, drawn on the map, and on a trip
+    // said once each (warnings, watches and moderate advisories) within about ten miles, or at once if already in
+    // one. Worked out on the phone from the whole-state alerts; the route is never sent.
+    var routeWeather by remember { mutableStateOf<List<AlertOnRoute>>(emptyList()) }
+    val previewWeatherRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
+    LaunchedEffect(weather, weatherOn, inTrip, navState.routeGeometry.size, tripProgressBucket, previewWeatherRoute) {
+        if (!weatherOn || weather.alerts.isEmpty()) {
+            routeWeather = emptyList()
+            return@LaunchedEffect
+        }
+        val navigating = trip as? TripState.Navigating
+        val geometry = when {
+            inTrip -> navState.routeGeometry
+            else -> previewWeatherRoute?.geometry.orEmpty()
+        }
+        val here = navigating?.snappedUserLocation?.coordinates
+        val snapshot = weather
+        routeWeather = withContext(Dispatchers.Default) {
+            val line = geometry.map { GeoPoint(it.lat, it.lng) }
+            val ahead = if (here != null) RouteTraffic.remaining(line, GeoPoint(here.lat, here.lng)) else line
+            RouteWeather.alongRoute(ahead, snapshot.alerts, snapshot.areas, System.currentTimeMillis())
+        }
+    }
+    val weatherHereSpoken = stringResource(R.string.explore_weather_here_spoken)
+    val weatherAheadSpoken = stringResource(R.string.explore_weather_ahead_spoken)
+    val announcedWeather = remember { mutableSetOf<String>() }
+    LaunchedEffect(inTrip) { if (!inTrip) announcedWeather.clear() }
+    LaunchedEffect(routeWeather, inTrip) {
+        if (!inTrip) return@LaunchedEffect
+        val next = routeWeather.firstOrNull { it.alert.id !in announcedWeather && it.alert.severity.spoken && it.metersAhead <= WEATHER_AHEAD_METERS }
+            ?: return@LaunchedEffect
+        announcedWeather += next.alert.id
+        val text = if (next.metersAhead < 100) {
+            weatherHereSpoken.format(next.alert.event)
+        } else {
+            weatherAheadSpoken.format(next.alert.event, SpokenUnits.distance(next.metersAhead))
+        }
+        services.voice.announce(UtteranceKind.TRAFFIC_ALERT, text)
+    }
+
     // Every few minutes of a trip with traffic on: is there a route that now saves 5+ minutes?
     val latestNav by rememberUpdatedState(navState)
     val latestTraffic by rememberUpdatedState(traffic)
@@ -864,6 +927,17 @@ internal fun ExploreMap(
     } else {
         emptyList()
     }
+    // With the layer shown: radar and every alert. Otherwise only the alerts on the route, so a warning that
+    // matters shows up without the layer. Remembered, so the map only gets a new picture or list when one arrives.
+    val radarPicture = remember(weather.radar) { weather.radar?.toPicture() }
+    val weatherAreas = remember(weather, weatherVisible, routeWeather) {
+        val shown = if (weatherVisible) weather.alerts else routeWeather.map { it.alert }
+        shown.map { it.toArea(weather.areas[it.id].orEmpty().ifEmpty { it.polygons }) }
+    }
+    val weatherOverlay = when {
+        !weatherOn -> WeatherOverlay.NONE
+        else -> WeatherOverlay(radar = if (weatherVisible) radarPicture else null, areas = weatherAreas)
+    }
     val trafficOverlay = baseTrafficOverlay.copy(
         incidents = (baseTrafficOverlay.incidents + routeIncidents.map { it.toPin() } + alertPins).distinctBy { it.id },
     )
@@ -959,6 +1033,7 @@ internal fun ExploreMap(
                 cameras = cameraPins,
                 trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
                 messageSigns = if (trafficVisible && trafficOn) messageSignPins else emptyList(),
+                weather = weatherOverlay,
             ),
             cameraRequest = cameraRequest,
             navigating = inTrip,
@@ -990,6 +1065,7 @@ internal fun ExploreMap(
             },
             onTrafficCameraTap = { id -> shownThing = ShownThing.TrafficCam(id) },
             onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
+            onWeatherAreaTap = { id -> shownThing = ShownThing.WeatherAlertShown(id) },
         )
 
         if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
@@ -1081,6 +1157,7 @@ internal fun ExploreMap(
                         LocationStatus(hasPermission, location, asked, ::requestPermission)
                     }
                     Column(Modifier.align(Alignment.BottomEnd), horizontalAlignment = Alignment.End) {
+                        if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
                         if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
                         if (location != null) RecenterButton(following, { following = true }, Modifier)
                     }
@@ -1090,7 +1167,7 @@ internal fun ExploreMap(
                             Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(
                                 bottom = when (shownThing) {
                                     null, is ShownThing.PlateReader -> 28.dp
-                                    is ShownThing.TrafficCam -> 400.dp
+                                    is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown -> 400.dp
                                     is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
                                 },
                             ),
@@ -1236,6 +1313,7 @@ internal fun ExploreMap(
                             )
                         },
                         beforeStart = {
+                            WeatherOnRouteNote(routeWeather, onOpen = { shownThing = ShownThing.WeatherAlertShown(it.id) })
                             MissingRegionWarning(
                                 regionNames = missingRegions.map { it.name },
                                 onDownload = {
@@ -1266,6 +1344,10 @@ internal fun ExploreMap(
             }
             is ShownThing.Sign -> traffic.signs.firstOrNull { it.id == shown.id }?.let { sign ->
                 MessageSignCard(sign, onClose = { shownThing = null }, modifier = cardModifier)
+            }
+            // A weather alert, from its area on the map or the route note. Expired or gone from the feed: no card.
+            is ShownThing.WeatherAlertShown -> weather.alerts.firstOrNull { it.id == shown.id }?.let { alert ->
+                WeatherAlertCard(alert, onClose = { shownThing = null }, modifier = cardModifier)
             }
         }
     }
@@ -1339,6 +1421,12 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
 }
 
 private const val TRAFFIC_POLL_MS = 60_000L
+
+// The weather feed keeps its own five-minute cache; this only decides how often to ask it.
+private const val WEATHER_POLL_MS = 60_000L
+
+/** A weather alert on the route is said once it is within about ten miles. */
+private const val WEATHER_AHEAD_METERS = 16_000.0
 private const val AUTO_RECENTER_MS = 10_000L
 private const val PARKING_RADIUS_M = 300.0
 private const val FASTER_ROUTE_OFFER_MS = 90_000L
@@ -1377,6 +1465,21 @@ private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
         contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Icon(if (shown) Icons.Filled.Traffic else Icons.Outlined.TrafficOutlined, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
+    }
+}
+
+@Composable
+private fun WeatherButton(shown: Boolean, onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Icon(
+            if (shown) Icons.Filled.Cloud else Icons.Outlined.CloudOutlined,
+            contentDescription = stringResource(if (shown) R.string.explore_weather_hide else R.string.explore_weather_show),
+        )
     }
 }
 

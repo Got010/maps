@@ -44,6 +44,26 @@ data class TrafficCameraPin(val id: String, val point: MapPoint, val offline: Bo
 /** A 511NY variable message sign, drawn with the traffic layer. [id] comes back from a tap. */
 data class MessageSignPin(val id: String, val point: MapPoint)
 
+/**
+ * A weather alert's area, drawn tinted by [severity] (the alert's AlertSeverity name). [id]
+ * comes back from a tap. Each ring is an outer ring of the area.
+ */
+data class WeatherArea(val id: String, val rings: List<List<MapPoint>>, val severity: String)
+
+/**
+ * A radar picture to draw between [west], [south], [east] and [north] (it is in Web Mercator,
+ * so drawing it between its corners lines it up). [png] is the image; [fetchedAt] tells one
+ * picture from the next.
+ */
+class RadarPicture(val png: ByteArray, val fetchedAt: Long, val west: Double, val south: Double, val east: Double, val north: Double)
+
+/** The weather layer: radar under everything, alert areas over it. */
+data class WeatherOverlay(val radar: RadarPicture? = null, val areas: List<WeatherArea> = emptyList()) {
+    companion object {
+        val NONE = WeatherOverlay()
+    }
+}
+
 /** The live traffic layer: speeds under the routes, incidents over them. */
 data class TrafficOverlay(
     val speeds: List<SpeedLine> = emptyList(),
@@ -74,6 +94,8 @@ data class MapOverlays(
     val trafficCameras: List<TrafficCameraPin> = emptyList(),
     /** 511NY message signs (tap for what they say), with the traffic layer, from zoom 11. */
     val messageSigns: List<MessageSignPin> = emptyList(),
+    /** Radar and weather alert areas, under the routes. */
+    val weather: WeatherOverlay = WeatherOverlay.NONE,
 )
 
 /**
@@ -161,6 +183,19 @@ internal object OverlayGeoJson {
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )
+
+    fun weatherAreas(areas: List<WeatherArea>): String = featureCollection(
+        // The least severe first, so the worst alert draws on top.
+        areas.sortedByDescending { SEVERITY_ORDER.indexOf(it.severity) }.flatMap { area ->
+            area.rings.filter { it.size >= 3 }.map { ring ->
+                val closed = if (ring.first() == ring.last()) ring else ring + ring.first()
+                """{"type":"Feature","properties":{"id":${quote(area.id)},"severity":${quote(area.severity)}},""" +
+                    """"geometry":{"type":"Polygon","coordinates":[[${closed.joinToString(",") { coordinate(it) }}]]}}"""
+            }
+        },
+    )
+
+    private val SEVERITY_ORDER = listOf("EXTREME", "SEVERE", "MODERATE", "MINOR", "UNKNOWN")
 
     private fun quote(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""
 
