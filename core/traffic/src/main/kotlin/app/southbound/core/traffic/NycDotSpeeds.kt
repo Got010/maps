@@ -73,6 +73,10 @@ object NycDotSpeeds {
 
     private fun speedLink(m: Map<*, *>): SpeedLink? {
         val id = m.text("link_id") ?: return null
+        // A sensor without a reading reports status -101 with speed and travel time 0 (seen in the real
+        // feed, October 2026); only status 0 is a reading. Rows without a status are taken as readings.
+        val status = m.text("status")
+        if (status != null && status.toDoubleOrNull() != 0.0) return null
         val speed = m.text("speed")?.toDoubleOrNull() ?: return null
         if (speed < 0) return null
         val points = parseLinkPoints(m.text("link_points") ?: return null)

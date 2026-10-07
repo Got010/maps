@@ -31,6 +31,21 @@ class NycDotSpeedsTest {
     }
 
     @Test
+    fun `real rows - a sensor without a reading (status -101, speed 0) is dropped`() {
+        // Four rows from the live dataset, fetched 2026-10-07 by the feed probe workflow.
+        val real = File("src/test/resources/nycdot-speeds-real.json").readText()
+        val at = ZonedDateTime.of(2026, 10, 7, 8, 30, 0, 0, ZoneId.of("America/New_York")).toInstant().toEpochMilli()
+        val links = NycDotSpeeds.parse(real, at)
+        assertEquals(listOf("4362250", "4362249"), links.map { it.id })
+        assertEquals(30.44, links[0].speedMph, 1e-9)
+        assertEquals(544, links[0].travelTimeSeconds)
+        assertEquals("Queens", links[0].borough)
+        assertEquals("CVE NB GCP - WILLETS PT BLVD", links[0].name)
+        assertEquals(ZonedDateTime.of(2026, 10, 7, 7, 51, 8, 0, ZoneId.of("America/New_York")).toInstant().toEpochMilli(), links[0].asOf)
+        assertTrue(links.all { it.points.size >= 2 })
+    }
+
+    @Test
     fun `everything is kept when age doesn't matter`() {
         val links = NycDotSpeeds.parse(fixture, now, maxAgeMillis = Long.MAX_VALUE)
         assertEquals(listOf("4616337", "4456479", "4329500"), links.map { it.id })
