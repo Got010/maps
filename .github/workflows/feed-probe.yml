@@ -54,6 +54,10 @@ jobs:
         timeout-minutes: 4
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py weather-radar
+      - name: Weather current conditions
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py weather-current
       - name: NYS Address Points
         timeout-minutes: 4
         continue-on-error: true
