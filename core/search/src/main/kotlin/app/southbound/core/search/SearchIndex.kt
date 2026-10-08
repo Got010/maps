@@ -32,7 +32,12 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         val (candidates, addresses) = synchronized(connection) {
             candidates(query, near) to (address?.let { addressResults(it, near) } ?: emptyList())
         }
-        return SearchRanking.rank(query, candidates, near, limit, addresses)
+        val ranked = SearchRanking.rank(query, candidates, near, limit, addresses)
+        if (!query.asksWeather) return ranked
+        // "weather albany": the towns and cities of that name first, however far, then everything else.
+        val towns = synchronized(connection) { candidates(query, null, PlaceKind.LOCALITY) }
+        val first = SearchRanking.rank(query, towns, near, limit, pointsPerKm = SearchRanking.TOWN_POINTS_PER_KM)
+        return (first + ranked).distinctBy { it.place.id }.take(limit)
     }
 
     /**
