@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
@@ -201,6 +202,9 @@ private sealed interface ShownThing {
     data class WeatherAlertShown(val id: String) : ShownThing
 }
 
+/** A paused trip: guidance stopped, what was left of it kept so Resume can route there again from here. */
+private data class PausedTrip(val place: Place, val stops: List<Place>, val mode: TravelMode)
+
 private const val PLACE_ZOOM = 16.0
 
 // Phase 6: a new stop closer than this to an existing one (or the destination) is the same stop.
@@ -325,6 +329,11 @@ internal fun ExploreMap(
     var showRouteOptions by remember { mutableStateOf(false) }
     // The route preview that is waiting while the user searches for a stop to add to it.
     var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
+
+    // Pause: the plan the running trip came from, the trip once paused, and a Resume waiting for its new route.
+    var tripPlan by remember { mutableStateOf<Panel.Directions?>(null) }
+    var pausedTrip by remember { mutableStateOf<PausedTrip?>(null) }
+    var resumeWhenReady by remember { mutableStateOf(false) }
     val drivingPrefs = remember { DrivingPrefs.get(context) }
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
     // Fuel economy and gas price for the cost on route cards; changing them never recomputes routes.
@@ -883,6 +892,8 @@ internal fun ExploreMap(
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         services.voice.guidanceMode = target.mode.guidanceMode()
+        tripPlan = target
+        pausedTrip = null
         // Says "Starting. You'll arrive at about 1:11 PM, 12 miles." before the first turn.
         val summary = ready.summaries.getOrNull(ready.selected) ?: RouteSummary.of(route)
         services.guidance.startTrip(
@@ -893,6 +904,19 @@ internal fun ExploreMap(
             durationSeconds = summary.durationSeconds + ready.delaySeconds.getOrElse(ready.selected) { 0.0 },
             distanceMeters = summary.distanceMeters,
         )
+    }
+
+    // Resume: the route from here to what was left of the paused trip, started as soon as it is planned.
+    LaunchedEffect(resumeWhenReady, preview, directions) {
+        if (!resumeWhenReady) return@LaunchedEffect
+        when (preview) {
+            is RoutePreviewState.Ready -> {
+                resumeWhenReady = false
+                startTrip()
+            }
+            is RoutePreviewState.Failed -> resumeWhenReady = false
+            else -> Unit
+        }
     }
 
     BackHandler(enabled = !inTrip && panel != Panel.Browse) {
@@ -1101,6 +1125,24 @@ internal fun ExploreMap(
             )
         }
 
+        // A paused trip: where it was going, End (X) and Resume on the far right, over the browsing map.
+        val paused = pausedTrip
+        if (!inTrip && paused != null && panel !is Panel.Directions) {
+            PausedTripBar(
+                paused.place.name,
+                onEnd = { pausedTrip = null },
+                onResume = {
+                    pausedTrip = null
+                    // Wait for a new route from here, not the one the trip started with.
+                    routes = emptyList()
+                    preview = RoutePreviewState.Loading
+                    resumeWhenReady = true
+                    panel = Panel.Directions(paused.place, paused.mode, stops = paused.stops)
+                },
+                modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = 8.dp),
+            )
+        }
+
         val mutedUntilTurn by services.voice.mutedUntilNextTurn.collectAsState()
         if (inTrip) {
             NavigationOverlay(
@@ -1130,6 +1172,17 @@ internal fun ExploreMap(
                 parkingNearby = parkingNearby,
                 mutedUntilNextTurn = mutedUntilTurn,
                 onVoiceLongPress = { if (mutedUntilTurn) services.voice.resumeVoice() else services.voice.muteUntilNextTurn() },
+                // Pause keeps what is left of the trip (the destination and the stops not yet reached) and ends
+                // guidance: no prompts, no rerouting while stopped for gas or food. Resume routes again from there.
+                onPause = tripPlan?.takeIf { !it.transit }?.let { plan ->
+                    fun() {
+                        val all = plan.stops + plan.place
+                        val left = (trip as? TripState.Navigating)?.remainingWaypoints?.size ?: all.size
+                        val remaining = all.takeLast(left.coerceIn(1, all.size))
+                        pausedTrip = PausedTrip(remaining.last(), remaining.dropLast(1), plan.mode)
+                        navigator?.stop()
+                    }
+                },
             )
             if (!following && location != null) {
                 // Above the ETA and trip progress at the bottom.
@@ -1465,6 +1518,30 @@ private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
         contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Icon(if (shown) Icons.Filled.Traffic else Icons.Outlined.TrafficOutlined, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
+    }
+}
+
+/** The paused trip's bar: "Paused, to Joe's Pizza", then End (X) and Resume on the far right. */
+@Composable
+private fun PausedTripBar(destination: String, onEnd: () -> Unit, onResume: () -> Unit, modifier: Modifier) {
+    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.explore_trip_paused), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.explore_trip_paused_to, destination),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            IconButton(onClick = onEnd) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_trip_paused_end))
+            }
+            IconButton(onClick = onResume) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.explore_trip_resume))
+            }
+        }
     }
 }
 

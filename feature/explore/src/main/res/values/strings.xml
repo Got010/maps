@@ -33,6 +33,11 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_weather_show">Show weather radar and alerts</string>
+    <!-- A trip paused from the navigation bar: what is left of it, to resume or end. -->
+    <string name="explore_trip_paused">Navigation paused</string>
+    <string name="explore_trip_paused_to">To %1$s</string>
+    <string name="explore_trip_resume">Resume navigation</string>
+    <string name="explore_trip_paused_end">End the paused trip</string>
     <string name="explore_weather_hide">Hide weather radar and alerts</string>
     <!-- The weather alert card: when it starts (only when that is still to come) and ends, as weekday and time. -->
     <string name="explore_weather_from">From %1$s</string>
