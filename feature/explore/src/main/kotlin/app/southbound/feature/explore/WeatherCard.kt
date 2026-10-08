@@ -322,3 +322,19 @@ internal fun ArrivalWeatherNote(destination: String, arrival: Long, period: Fore
         )
     }
 }
+
+/**
+ * A town's weather at the end of a search row: the icon and the temperature now (the nearest station), else
+ * today's high from the forecast pack. Nothing when neither is near.
+ */
+@Composable
+internal fun WeatherBadge(now: CurrentConditions?, today: ForecastDay?) {
+    val sky = now?.sky ?: today?.sky ?: return
+    val night = now?.night() ?: (today?.high == null)
+    val temp = now?.tempF ?: today?.high ?: today?.low
+    val icon = remember(sky, night) { WeatherIcons.glyph(sky.name, night, 24).asImageBitmap() }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Image(icon, contentDescription = stringResource(sky.label()), modifier = Modifier.size(24.dp))
+        temp?.let { Text("$it\u00B0", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 4.dp)) }
+    }
+}
