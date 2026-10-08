@@ -25,6 +25,12 @@ interface GuidanceContext {
     fun lanesFor(instruction: SpokenInstruction): String? = null
 
     /**
+     * Lane advice for the follow-up turn ([followUpFor]), said with it: "..., then turn left onto Elm Street, use
+     * the left lane". That turn's own early prompt is skipped once it was chained, so this is where its lanes go.
+     */
+    fun followUpLanesFor(instruction: SpokenInstruction): String? = null
+
+    /**
      * False once the turn the prompt [utteranceId] announces is behind the
      * driver, or so close that the prompt would be heard during it. Asked
      * again just before the prompt plays.
