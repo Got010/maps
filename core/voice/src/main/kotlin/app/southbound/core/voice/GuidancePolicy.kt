@@ -60,6 +60,8 @@ object GuidancePolicy {
         followUp: String? = null,
         lanes: String? = null,
         followUpLanes: String? = null,
+        /** The exit's number, said on every prompt for it, not only the last ([InstructionText.withExitNumber]). */
+        exitNumber: String? = null,
     ): GuidanceAction {
         if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text, chime = chimeFor(settings, kind))
         if (kind == UtteranceKind.SPEED_LIMIT) return speedLimitAction(settings, mode, text)
@@ -85,7 +87,7 @@ object GuidancePolicy {
             (mode == GuidanceMode.WALKING && !modeOn))
         return when {
             voiceOn && wanted -> GuidanceAction.Speak(
-                compose(settings, kind, text, atTurn, landmark, followUp, lanes, followUpLanes),
+                compose(settings, kind, text, atTurn, landmark, followUp, lanes, followUpLanes, exitNumber),
                 vibrate = buzz,
                 chime = chimeFor(settings, kind),
             )
@@ -121,6 +123,7 @@ object GuidancePolicy {
         followUp: String?,
         lanes: String? = null,
         followUpLanes: String? = null,
+        exitNumber: String? = null,
     ): String {
         fun plain(sentence: String): String {
             var out = if (settings.streetNames) sentence else withoutStreetNames(sentence)
@@ -131,6 +134,7 @@ object GuidancePolicy {
         if (kind == UtteranceKind.TRIP_START || kind == UtteranceKind.ARRIVAL) return text
         if (kind != UtteranceKind.INSTRUCTION) return if (settings.streetNames) text else withoutStreetNames(text)
         var out = plain(text)
+        if (exitNumber != null) out = InstructionText.withExitNumber(out, exitNumber)
         if (landmark != null) out = InstructionText.withLandmark(out, landmark)
         if (lanes != null) out = InstructionText.withLanes(out, lanes)
         if (followUp != null) {

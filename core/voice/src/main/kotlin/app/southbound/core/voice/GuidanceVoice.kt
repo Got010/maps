@@ -206,8 +206,11 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         val followUp = instruction?.let { runCatching { context?.followUpFor(it) }.getOrNull() }
         val lanes = instruction?.let { runCatching { context?.lanesFor(it) }.getOrNull() }
         val followUpLanes = instruction?.takeIf { followUp != null }?.let { runCatching { context?.followUpLanesFor(it) }.getOrNull() }
+        val exitNumber = instruction?.let { runCatching { context?.exitNumberFor(it) }.getOrNull() }
         return Decision(
-            GuidancePolicy.decide(settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp, lanes, followUpLanes),
+            GuidancePolicy.decide(
+                settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp, lanes, followUpLanes, exitNumber,
+            ),
             followUp,
         )
     }

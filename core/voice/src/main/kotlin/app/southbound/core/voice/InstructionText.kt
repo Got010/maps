@@ -93,6 +93,32 @@ object InstructionText {
         return "${text.trim().trimEnd('.', ' ', ',')}, $advice."
     }
 
+    private val HAS_EXIT_NUMBER = Regex("""\bexits?\s+\d""", RegexOption.IGNORE_CASE)
+    private val THE_EXIT = Regex("""\bthe\s+exit\b""", RegexOption.IGNORE_CASE)
+    // The exit's name: words after "the" and before "exit", never across another "the" or a verb ("Enter the
+    // roundabout and take the 2nd exit" names no exit).
+    private val THE_NAMED_EXIT = Regex("""\bthe\s+((?:(?!\b(?:the|and|take|onto)\b)[^.,;]){1,60}?)\s+exit\b""", RegexOption.IGNORE_CASE)
+    private val ORDINAL = Regex("""^\d+(st|nd|rd|th)$""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Names the exit's number where the sentence leaves it out, as Valhalla's early prompts do:
+     * "In 2 miles, Take the exit on the right." + "14" -> "In 2 miles, Take exit 14 on the right.";
+     * "Take the I 87 North exit toward Albany." -> "Take exit 14, the I 87 North exit, toward Albany."
+     * Unchanged when it already has a number, or doesn't mention an exit ("Continue on I 87 for 2 miles.").
+     * Only for a highway exit with a number on its sign; a roundabout's "2nd exit" is never touched.
+     */
+    fun withExitNumber(text: String, number: String): String {
+        val n = number.trim()
+        if (n.isEmpty() || HAS_EXIT_NUMBER.containsMatchIn(text)) return text
+        THE_EXIT.find(text)?.let { return text.replaceRange(it.range, "exit $n") }
+        val named = THE_NAMED_EXIT.find(text) ?: return text
+        val name = named.groupValues[1]
+        if (ORDINAL.matches(name.trim())) return text
+        val rest = text.substring(named.range.last + 1)
+        val joiner = if (rest.isEmpty() || rest[0] in ".,;") "" else ","
+        return text.substring(0, named.range.first) + "exit $n, the $name exit$joiner" + rest
+    }
+
     private val ARRIVED = Regex("""\barrived\b""", RegexOption.IGNORE_CASE)
 
     /**
