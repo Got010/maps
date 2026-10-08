@@ -104,6 +104,9 @@ class GuidanceSupport(
     /** Prompts not to say: their turn was already said as a follow-up. Touched by the voice too. */
     private val chainedAway: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    // The "now" prompts of turns already said as a follow-up, with their lanes.
+    private val chainedNow: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     /** The navigator being followed, to end a trip after arriving. */
     @Volatile
     private var navigator: Navigator? = null
@@ -199,6 +202,7 @@ class GuidanceSupport(
             nearRoute = emptyList()
             _routeAlerts.value = emptyList()
             chainedAway.clear()
+            chainedNow.clear()
             spokenEarly.clear()
             loading?.cancel()
             val line = RouteLine(state.routeGeometry.map { LatLon(it.lat, it.lng) })
@@ -222,6 +226,7 @@ class GuidanceSupport(
         announced.clear()
         spokenEarly.clear()
         chainedAway.clear()
+        chainedNow.clear()
         steps = emptyList()
         nearRoute = emptyList()
         distanceToManeuver = Double.MAX_VALUE
@@ -369,14 +374,22 @@ class GuidanceSupport(
         return Landmarks.phraseFor(approach, nearby, heard)
     }
 
-    override fun followUpFor(instruction: SpokenInstruction): String? {
+    /** The step whose turn comes so soon after the one [instruction] announces that both are said together. */
+    private fun chainedNext(instruction: SpokenInstruction): RouteStep? {
         // "Continue for 2 miles" isn't about the turn ahead; "..., then turn left" would skip it.
         if (TurnTiming.isProgress(instruction.text)) return null
         val current = steps
         val i = stepIn(current, instruction.utteranceId.toString()) ?: return null
         // This prompt's turn ends step i; the next turn ends step i + 1, its length further on.
         val next = current.getOrNull(i + 1) ?: return null
-        if (!TurnTiming.chains(next.distance, speedMps, voice.guidanceMode)) return null
+        return next.takeIf { TurnTiming.chains(it.distance, speedMps, voice.guidanceMode) }
+    }
+
+    override fun followUpLanesFor(instruction: SpokenInstruction): String? =
+        chainedNext(instruction)?.let { LaneWording.phrase(StepLanes.of(it)) }
+
+    override fun followUpFor(instruction: SpokenInstruction): String? {
+        val next = chainedNext(instruction) ?: return null
         // The prompt Valhalla gives right at that turn is its plainest wording.
         val now = TurnTiming.nowIndex(prompts(next)) ?: return null
         val text = next.spokenInstructions.getOrNull(now)?.text ?: return null
@@ -388,9 +401,14 @@ class GuidanceSupport(
         val current = steps
         val id = instruction.utteranceId.toString()
         val step = current.getOrNull(stepIn(current, id) ?: return null) ?: return null
-        // One early prompt per turn says it; the "now" prompt stays short.
+        // One early prompt per turn says it; the "now" prompt stays short...
         val index = step.spokenInstructions.indexOfFirst { it.utteranceId.toString() == id }
-        if (index < 0 || index != LanePrompt.indexFor(prompts(step))) return null
+        if (index < 0) return null
+        val lanePrompt = LanePrompt.indexFor(prompts(step))
+        val onNow = lanePrompt == null && index == TurnTiming.nowIndex(prompts(step)) && id !in chainedNow
+        // ...unless the step has no earlier prompt (a short one, often right after an exit) and its lanes weren't
+        // said as a follow-up: then the "now" prompt is the only chance.
+        if (index != lanePrompt && !onNow) return null
         return LaneWording.phrase(StepLanes.of(step))
     }
 
@@ -422,6 +440,8 @@ class GuidanceSupport(
         for (index in TurnTiming.skippedAfterChain(prompts(next))) {
             next.spokenInstructions.getOrNull(index)?.let { chainedAway += it.utteranceId.toString() }
         }
+        // Its lanes were said with it; the "now" prompt at that turn stays short.
+        TurnTiming.nowIndex(prompts(next))?.let { now -> next.spokenInstructions.getOrNull(now)?.let { chainedNow += it.utteranceId.toString() } }
     }
 
     /** Tells routes apart cheaply: a reroute changes the shape. */

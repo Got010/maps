@@ -111,4 +111,36 @@ class LaneVoiceTest {
             ),
         )
     }
+
+    @Test
+    fun aChainedTurnKeepsItsLanes() {
+        // Off an exit and onto a four-lane road, then a left at the light 250 m on: the left turn is said with the
+        // ramp's prompt, and its own early prompt (which carried the lanes) is skipped. Its lanes go with it.
+        assertEquals(
+            Speak("Turn right onto NY 9, then turn left onto Elm Street, use the far left lane."),
+            GuidancePolicy.decide(
+                defaults,
+                GuidanceMode.DRIVING,
+                UtteranceKind.INSTRUCTION,
+                "Turn right onto NY 9.",
+                triggerDistanceMeters = 60.0,
+                followUp = "Turn left onto Elm Street.",
+                followUpLanes = "use the far left lane",
+            ),
+        )
+        // Both turns with lanes: each keeps its own.
+        assertEquals(
+            Speak("In 500 feet, Turn right onto NY 9, use the right lane, then turn left onto Elm Street, use the far left lane."),
+            GuidancePolicy.decide(
+                defaults,
+                GuidanceMode.DRIVING,
+                UtteranceKind.INSTRUCTION,
+                "In 500 feet, Turn right onto NY 9.",
+                triggerDistanceMeters = 152.0,
+                followUp = "Turn left onto Elm Street.",
+                lanes = "use the right lane",
+                followUpLanes = "use the far left lane",
+            ),
+        )
+    }
 }

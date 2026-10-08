@@ -205,7 +205,11 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         val landmark = instruction?.let { runCatching { context?.landmarkFor(it) }.getOrNull() }
         val followUp = instruction?.let { runCatching { context?.followUpFor(it) }.getOrNull() }
         val lanes = instruction?.let { runCatching { context?.lanesFor(it) }.getOrNull() }
-        return Decision(GuidancePolicy.decide(settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp, lanes), followUp)
+        val followUpLanes = instruction?.takeIf { followUp != null }?.let { runCatching { context?.followUpLanesFor(it) }.getOrNull() }
+        return Decision(
+            GuidancePolicy.decide(settings.value, guidanceMode, kind, text, triggerDistance, landmark, followUp, lanes, followUpLanes),
+            followUp,
+        )
     }
 
     /** A prompt from the route, from Ferrostar or [speakEarly]. On [intake]. */

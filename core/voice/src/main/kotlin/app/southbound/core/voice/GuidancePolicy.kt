@@ -59,6 +59,7 @@ object GuidancePolicy {
         landmark: String? = null,
         followUp: String? = null,
         lanes: String? = null,
+        followUpLanes: String? = null,
     ): GuidanceAction {
         if (kind == UtteranceKind.TEST) return GuidanceAction.Speak(text, chime = chimeFor(settings, kind))
         if (kind == UtteranceKind.SPEED_LIMIT) return speedLimitAction(settings, mode, text)
@@ -84,7 +85,7 @@ object GuidancePolicy {
             (mode == GuidanceMode.WALKING && !modeOn))
         return when {
             voiceOn && wanted -> GuidanceAction.Speak(
-                compose(settings, kind, text, atTurn, landmark, followUp, lanes),
+                compose(settings, kind, text, atTurn, landmark, followUp, lanes, followUpLanes),
                 vibrate = buzz,
                 chime = chimeFor(settings, kind),
             )
@@ -119,6 +120,7 @@ object GuidancePolicy {
         landmark: String?,
         followUp: String?,
         lanes: String? = null,
+        followUpLanes: String? = null,
     ): String {
         fun plain(sentence: String): String {
             var out = if (settings.streetNames) sentence else withoutStreetNames(sentence)
@@ -131,7 +133,11 @@ object GuidancePolicy {
         var out = plain(text)
         if (landmark != null) out = InstructionText.withLandmark(out, landmark)
         if (lanes != null) out = InstructionText.withLanes(out, lanes)
-        if (followUp != null) out = InstructionText.withFollowUp(out, plain(followUp))
+        if (followUp != null) {
+            // The second turn's lanes ride with it: its own early prompt is skipped once it is chained.
+            val next = plain(followUp).let { if (followUpLanes != null) InstructionText.withLanes(it, followUpLanes) else it }
+            out = InstructionText.withFollowUp(out, next)
+        }
         return out
     }
 
