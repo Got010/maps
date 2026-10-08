@@ -173,4 +173,20 @@ class OverlayGeoJsonTest {
             json,
         )
     }
+
+    @Test
+    fun weatherStationsNameTheirBadge() {
+        val json = OverlayGeoJson.weatherStations(
+            listOf(
+                WeatherStationPin("KALB", MapPoint(42.75, -73.80), "RAIN", night = false, tempF = 57),
+                WeatherStationPin("KART", MapPoint(43.99, -76.03), "CLEAR", night = true, tempF = null),
+            ),
+        )
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"KALB","kind":"weather","icon":"southbound-wx-RAIN-d-57"},"geometry":{"type":"Point","coordinates":[-73.800000,42.750000]}},""" +
+                """{"type":"Feature","properties":{"id":"KART","kind":"weather","icon":"southbound-wx-CLEAR-n-x"},"geometry":{"type":"Point","coordinates":[-76.030000,43.990000]}}]}""",
+            json,
+        )
+    }
 }

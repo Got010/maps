@@ -35,6 +35,21 @@ class SearchQueryTest {
     }
 
     @Test
+    fun weatherWordsAskForThePlacesWeather() {
+        for (raw in listOf("weather albany", "Albany weather", "weather in Albany", "forecast for albany")) {
+            val query = SearchQuery.parse(raw)
+            assertEquals(raw, listOf("albany"), query.tokens)
+            assertTrue(raw, query.asksWeather)
+        }
+        assertEquals(listOf("nyack"), SearchQuery.parse("weather nyack ny").tokens)
+        // On its own, or inside a name, it is just a word.
+        assertEquals(listOf("weather"), SearchQuery.parse("weather").tokens)
+        assertFalse(SearchQuery.parse("weather").asksWeather)
+        assertEquals(listOf("weathersfield"), SearchQuery.parse("Weathersfield").tokens)
+        assertFalse(SearchQuery.parse("pizza").asksWeather)
+    }
+
+    @Test
     fun emptyQuery() {
         assertTrue(SearchQuery.parse("  ,. ").isEmpty)
     }
