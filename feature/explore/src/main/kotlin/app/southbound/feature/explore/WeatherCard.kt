@@ -1,6 +1,7 @@
 package app.southbound.feature.explore
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,21 +21,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.MapPoint
 import app.southbound.core.map.RadarPicture
+import app.southbound.core.map.SunTimes
 import app.southbound.core.map.WeatherArea
+import app.southbound.core.map.WeatherIcons
+import app.southbound.core.map.WeatherStationPin
 import app.southbound.core.voice.SpokenUnits
 import app.southbound.core.weather.AlertOnRoute
 import app.southbound.core.weather.AlertSeverity
+import app.southbound.core.weather.CurrentConditions
 import app.southbound.core.weather.Radar
 import app.southbound.core.weather.RadarImage
+import app.southbound.core.weather.Sky
 import app.southbound.core.weather.Ring
 import app.southbound.core.weather.WeatherAlert
 
@@ -53,6 +61,66 @@ internal val AlertSeverity.spoken: Boolean
 
 internal fun WeatherAlert.toArea(rings: List<Ring>) =
     WeatherArea(id, rings.map { ring -> ring.map { MapPoint(it.lat, it.lon) } }, severity.name)
+
+/** Dark at the station now: the icon shows the moon instead of the sun. */
+internal fun CurrentConditions.night(now: Long = System.currentTimeMillis()) = SunTimes.isNight(now, location.lat, location.lon)
+
+internal fun CurrentConditions.toPin(now: Long) =
+    WeatherStationPin(station, MapPoint(location.lat, location.lon), sky.name, night(now), tempF)
+
+@androidx.annotation.StringRes
+internal fun Sky.label(): Int = when (this) {
+    Sky.THUNDER -> R.string.explore_sky_thunder
+    Sky.SNOW -> R.string.explore_sky_snow
+    Sky.SLEET -> R.string.explore_sky_sleet
+    Sky.RAIN -> R.string.explore_sky_rain
+    Sky.DRIZZLE -> R.string.explore_sky_drizzle
+    Sky.FOG -> R.string.explore_sky_fog
+    Sky.OVERCAST -> R.string.explore_sky_overcast
+    Sky.MOSTLY_CLOUDY -> R.string.explore_sky_mostly_cloudy
+    Sky.PARTLY_CLOUDY -> R.string.explore_sky_partly_cloudy
+    Sky.CLEAR -> R.string.explore_sky_clear
+}
+
+/**
+ * Current weather in one row, with the map's icon: "57° · Light rain", then where and when it was
+ * observed ("Albany Intl · 12 min ago · wind 8 mph"). For a place card and a tapped station badge.
+ */
+@Composable
+internal fun WeatherNowRow(now: CurrentConditions, modifier: Modifier = Modifier) {
+    val night = now.night()
+    val icon = remember(now.sky, night) { WeatherIcons.glyph(now.sky.name, night, 36).asImageBitmap() }
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Image(icon, contentDescription = null, modifier = Modifier.size(36.dp))
+        Column(Modifier.weight(1f)) {
+            val sky = stringResource(now.sky.label())
+            Text(
+                listOfNotNull(now.tempF?.let { "$it\u00B0" }, sky).joinToString(" \u00B7 "),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            val ago = DateUtils.getRelativeTimeSpanString(now.observedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+            Text(
+                listOfNotNull(now.name, ago.toString(), now.windMph?.let { stringResource(R.string.explore_weather_wind, it) })
+                    .joinToString(" \u00B7 "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** A tapped station badge: its current weather, with Close. */
+@Composable
+internal fun WeatherStationCard(now: CurrentConditions, onClose: () -> Unit, modifier: Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            WeatherNowRow(now, Modifier.weight(1f))
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.explore_import_ok))
+            }
+        }
+    }
+}
 
 internal fun RadarImage.toPicture() =
     RadarPicture(png, fetchedAt, Radar.BOUNDS[0], Radar.BOUNDS[1], Radar.BOUNDS[2], Radar.BOUNDS[3])

@@ -1,0 +1,101 @@
+[
+ {
+  "icaoId": "KART",
+  "receiptTime": "2026-10-08T00:00:15.744Z",
+  "obsTime": 1791417360,
+  "reportTime": "2026-10-08T00:00:00.000Z",
+  "temp": 13.9,
+  "dewp": 9.4,
+  "wdir": 220,
+  "wspd": 4,
+  "visib": "10+",
+  "altim": 1004.5,
+  "slp": 1004.4,
+  "qcField": 14,
+  "wxString": "-RA",
+  "presTend": -0.8,
+  "maxT": 21.1,
+  "minT": 13.9,
+  "precip": 0.02,
+  "pcp6hr": 0.02,
+  "metarType": "METAR",
+  "rawOb": "METAR KART 072356Z AUTO 22004KT 10SM -RA BKN065 BKN075 OVC110 14/09 A2966 RMK AO2 RAB34 SLP044 P0002 60002 T01390094 10211 20139 55008 $",
+  "lat": 43.9888,
+  "lon": -76.0261,
+  "elev": 100,
+  "name": "Watertown Intl, NY, US",
+  "cover": "OVC",
+  "clouds": [
+   {
+    "cover": "BKN",
+    "base": 6500
+   },
+   {
+    "cover": "BKN",
+    "base": 7500
+   },
+   {
+    "cover": "OVC",
+    "base": 11000
+   }
+  ],
+  "fltCat": "VFR"
+ },
+ {
+  "icaoId": "KJHW",
+  "receiptTime": "2026-10-07T23:58:28.853Z",
+  "obsTime": 1791417360,
+  "reportTime": "2026-10-08T00:00:00.000Z",
+  "temp": 16.7,
+  "dewp": 8.9,
+  "wdir": 200,
+  "wspd": 9,
+  "visib": "10+",
+  "altim": 1008.5,
+  "slp": 1008.8,
+  "qcField": 6,
+  "presTend": 0.1,
+  "maxT": 20,
+  "minT": 16.7,
+  "metarType": "METAR",
+  "rawOb": "METAR KJHW 072356Z AUTO 20009KT 10SM FEW049 17/09 A2978 RMK AO2 SLP088 T01670089 10200 20167 50001",
+  "lat": 42.1534,
+  "lon": -79.2541,
+  "elev": 520,
+  "name": "Jamestown/Chautauqua Cnty, NY, US",
+  "cover": "FEW",
+  "clouds": [
+   {
+    "cover": "FEW",
+    "base": 4900
+   }
+  ],
+  "fltCat": "VFR"
+ },
+ {
+  "icaoId": "KHPN",
+  "receiptTime": "2026-10-08T00:00:16.325Z",
+  "obsTime": 1791417360,
+  "reportTime": "2026-10-08T00:00:00.000Z",
+  "temp": 12.8,
+  "dewp": 10,
+  "wdir": 160,
+  "wspd": 4,
+  "visib": "10+",
+  "altim": 1012.3,
+  "slp": 1012.2,
+  "qcField": 4,
+  "presTend": -0.4,
+  "maxT": 17.8,
+  "minT": 12.8,
+  "metarType": "METAR",
+  "rawOb": "METAR KHPN 072356Z 16004KT 10SM CLR 13/10 A2989 RMK AO2 SLP122 T01280100 10178 20128 58004",
+  "lat": 41.0624,
+  "lon": -73.7045,
+  "elev": 113,
+  "name": "White Plains/Westchester Cnty, NY, US",
+  "cover": "CLR",
+  "clouds": [],
+  "fltCat": "VFR"
+ }
+]

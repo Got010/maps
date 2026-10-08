@@ -33,6 +33,19 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_weather_show">Show weather radar and alerts</string>
+    <!-- Current weather at the nearest station (an airport's report). -->
+    <string name="explore_sky_thunder">Thunderstorm</string>
+    <string name="explore_sky_snow">Snow</string>
+    <string name="explore_sky_sleet">Sleet or freezing rain</string>
+    <string name="explore_sky_rain">Rain</string>
+    <string name="explore_sky_drizzle">Drizzle</string>
+    <string name="explore_sky_fog">Fog or mist</string>
+    <string name="explore_sky_overcast">Overcast</string>
+    <string name="explore_sky_mostly_cloudy">Mostly cloudy</string>
+    <string name="explore_sky_partly_cloudy">Partly cloudy</string>
+    <string name="explore_sky_clear">Clear</string>
+    <string name="explore_weather_wind">wind %1$d mph</string>
+    <string name="explore_weather_none_near">No weather station within 25 miles</string>
     <!-- A trip paused from the navigation bar: what is left of it, to resume or end. -->
     <string name="explore_trip_paused">Navigation paused</string>
     <string name="explore_trip_paused_to">To %1$s</string>
