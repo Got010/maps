@@ -376,7 +376,8 @@ internal fun ExploreMap(
     var weatherOn by remember { mutableStateOf(services.weather.isEnabled) }
     val weather by services.weather.snapshot.collectAsState()
     LaunchedEffect(resumes) { weatherOn = services.weather.isEnabled }
-    val placeCardOpen = panel is Panel.PlaceShown
+    // Search too: a weather search shows the towns' weather in its rows.
+    val placeCardOpen = panel is Panel.PlaceShown || panel == Panel.Search
     LaunchedEffect(weatherVisible, inTrip, weatherOn, directionsOpen, placeCardOpen) {
         if (!weatherOn || !(weatherVisible || inTrip || directionsOpen || placeCardOpen)) return@LaunchedEffect
         while (true) {
@@ -1258,7 +1259,7 @@ internal fun ExploreMap(
                                     null, is ShownThing.PlateReader, is ShownThing.WeatherStation -> 28.dp
                                     is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown -> 400.dp
                                     is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
-                                },
+                                } + if (pausedTrip != null) PAUSED_BAR_CLEARANCE else 0.dp, // above the paused trip's bar
                             ),
                         )
                     }
@@ -1295,6 +1296,18 @@ internal fun ExploreMap(
                     }
                 }
                 Panel.Search -> SearchPanel(
+                    // A weather search ("weather albany") shows each town's weather in its row.
+                    weatherFor = if (weatherOn) {
+                        { place ->
+                            val point = GeoPoint(place.lat, place.lon)
+                            WeatherBadge(
+                                Metar.nearest(weather.conditions, point),
+                                weather.forecast?.nearest(point)?.let { Forecasts.days(it, clockMs, count = 1).firstOrNull() },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     index = searchIndex,
                     near = near,
                     onPick = { showPlace(it.place) },
@@ -1551,6 +1564,9 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
 }
 
 private const val TRAFFIC_POLL_MS = 60_000L
+
+/** How far Re-center moves up while the paused trip's bar is at the bottom of the map. */
+private val PAUSED_BAR_CLEARANCE = 72.dp
 
 // The weather feed keeps its own five-minute cache; this only decides how often to ask it.
 private const val WEATHER_POLL_MS = 60_000L

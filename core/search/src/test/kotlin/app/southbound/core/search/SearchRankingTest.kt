@@ -103,4 +103,20 @@ class SearchRankingTest {
         val d = SearchRanking.distanceMeters(unionSquare, 40.7580, -73.9855)
         assertEquals(2500.0, d, 150.0)
     }
+
+    @Test
+    fun aWeatherSearchPutsTheTownFirstHoweverFar() {
+        // From Peekskill: the city of Albany is about 150 km away; "Albany Post Road" runs past the door.
+        val peekskill = LatLon(41.29, -73.92)
+        val query = SearchQuery.parse("weather albany")
+        val city = candidate(1, "Albany", 42.6526, -73.7562, importance = 60)
+        val hamlet = candidate(2, "South Albany", 41.30, -73.90, importance = 10)
+        // With the usual distance weight the city loses to anything nearby...
+        val road = candidate(3, "Albany Post Road", 41.30, -73.91)
+        assertEquals(3L, SearchRanking.rank(query, listOf(city, road), peekskill, 10).first().place.id)
+        // ...among towns, by name and size, distance only a tie-break: the city first.
+        val towns = SearchRanking.rank(query, listOf(hamlet, city), peekskill, 10, pointsPerKm = SearchRanking.TOWN_POINTS_PER_KM)
+        assertEquals(listOf(1L, 2L), towns.map { it.place.id })
+        assertEquals(152_000.0, towns.first().distanceMeters!!, 5_000.0)
+    }
 }
