@@ -22,12 +22,14 @@ import kotlin.math.tan
  */
 class RadarImage(val png: ByteArray, val fetchedAt: Long)
 
-/** The latest weather: alerts for the state, the shapes of their areas and, when asked for, radar. */
+/** The latest weather: alerts for the state, the shapes of their areas and, when asked for, radar and current conditions. */
 data class WeatherSnapshot(
     val alerts: List<WeatherAlert> = emptyList(),
     /** Each alert's id to its area: its own polygons, else its zones' shapes once read. */
     val areas: Map<String, List<Ring>> = emptyMap(),
     val radar: RadarImage? = null,
+    /** The latest observation at each station in the state, when asked for. */
+    val conditions: List<CurrentConditions> = emptyList(),
     /** POSIX millis of the last good alert list, or null. */
     val alertsAt: Long? = null,
     val errors: List<String> = emptyList(),
@@ -84,6 +86,8 @@ class WeatherFeed(
     private var alerts: List<WeatherAlert>? = null
     private var alertsAt = 0L
     private var radar: RadarImage? = null
+    private var conditions: List<CurrentConditions>? = null
+    private var conditionsAt = 0L
 
     // A zone's shape rarely changes: once read, kept for the life of the process.
     private val zoneShapes = HashMap<String, List<Ring>>()
@@ -96,13 +100,15 @@ class WeatherFeed(
 
     /**
      * Fetches what is stale and returns the snapshot. [withRadar] also fetches the radar
-     * picture (for the map's weather layer); without it the last one is kept but nothing
-     * is requested for it. A failure keeps the last good data and adds an error.
+     * picture (for the map's weather layer) and [withConditions] the stations' current
+     * conditions (the layer's temperatures, a place card); without them the last ones are
+     * kept but nothing is requested for them. A failure keeps the last good data and adds an error.
      */
-    suspend fun refresh(force: Boolean = false, withRadar: Boolean = false): WeatherSnapshot = mutex.withLock {
+    suspend fun refresh(force: Boolean = false, withRadar: Boolean = false, withConditions: Boolean = false): WeatherSnapshot = mutex.withLock {
         if (!isEnabled) {
             alerts = null
             radar = null
+            conditions = null
             return@withLock WeatherSnapshot.EMPTY.also { _snapshot.value = it }
         }
         val now = clock()
@@ -121,6 +127,18 @@ class WeatherFeed(
                 }
             }
             loadZones(alerts.orEmpty(), errors)
+            if (withConditions && (force || conditions == null || now - conditionsAt >= CONDITIONS_TTL_MILLIS)) {
+                try {
+                    conditions = Metar.parse(fetch(NetworkFeature.WEATHER, Metar.URL).decodeToString())
+                    conditionsAt = now
+                } catch (e: NetworkFeatureDisabledException) {
+                    throw e
+                } catch (e: IOException) {
+                    errors += "Current weather: ${e.message}"
+                } catch (e: IllegalArgumentException) {
+                    errors += "Current weather: ${e.message}"
+                }
+            }
             if (withRadar && (force || radar == null || now - radar!!.fetchedAt >= RADAR_TTL_MILLIS)) {
                 try {
                     val png = fetch(NetworkFeature.WEATHER, Radar.URL)
@@ -136,7 +154,7 @@ class WeatherFeed(
         val areas = list.associate { a ->
             a.id to a.polygons.ifEmpty { a.zoneUrls.flatMap { zoneShapes[it].orEmpty() } }
         }
-        WeatherSnapshot(list, areas, radar, alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
+        WeatherSnapshot(list, areas, radar, conditions.orEmpty(), alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
     }
 
     /** Reads the shapes of the zones alerts without a polygon name, a few per refresh. */
@@ -158,7 +176,11 @@ class WeatherFeed(
 
     companion object {
         const val ALERTS_TTL_MILLIS = 5 * 60_000L
-        const val RADAR_TTL_MILLIS = 5 * 60_000L
+        /** NOAA's mosaic updates about every 2 minutes; a new picture every 3, on the home map and while driving. */
+        const val RADAR_TTL_MILLIS = 3 * 60_000L
+
+        /** Stations report hourly, more often when the weather changes. */
+        const val CONDITIONS_TTL_MILLIS = 10 * 60_000L
 
         /** A storm can name most of the state's 88 forecast zones; a few dozen at a time, the rest next refresh. */
         const val MAX_ZONES_PER_REFRESH = 40

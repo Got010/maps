@@ -10,6 +10,7 @@
     <string name="navigation_arrive">Arrive %1$s</string>
     <string name="navigation_arrive_clock">arrive %1$s</string>
     <string name="navigation_end">End navigation</string>
+    <string name="navigation_pause">Pause navigation</string>
     <string name="navigation_eta_plus">+%1$d min</string>
     <string name="navigation_typical">Typical: %1$s</string>
     <string name="navigation_faster_route">Faster route found, saves %1$d min</string>

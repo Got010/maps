@@ -56,6 +56,31 @@ class LandmarksTest {
     }
 
     @Test
+    fun aLightJustBehindWhereThePromptTriggersStillCounts() {
+        // Heard 250 m out by the trigger, but GPS may run ahead: a light 260 m back may still be ahead of the car.
+        val turnLight = Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, 300.0)
+        assertNull(phrase(turnLight, Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, 40.0)))
+        assertEquals("at the next light", phrase(turnLight, Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, 10.0)))
+    }
+
+    @Test
+    fun nearKeepsEveryLightTheDriverMayPass() {
+        val turn = Hand.at(0.0, 300.0)
+        val turnLight = Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, 300.0)
+        val earlier = Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, 120.0) // 180 m before the turn
+        val wayBack = Hand.mark(Landmark.TRAFFIC_SIGNALS, 0.0, -400.0) // 700 m before: heard after passing it
+        val shell = Hand.mark(Landmark.FUEL, 15.0, 295.0, "Shell")
+        val farShell = Hand.mark(Landmark.FUEL, 15.0, 150.0, "Shell")
+        val near = Landmarks.near(turn, listOf(turnLight, earlier, wayBack, shell, farShell), 250.0)
+        assertEquals(listOf(turnLight, earlier, shell), near)
+        // Before, only landmarks within 60 m of the turn were passed on, so the earlier light was never seen and
+        // the prompt said "at the next light" with two lights ahead. Now the lights say nothing; the corner's
+        // gas station still can.
+        assertEquals("at the Shell gas station", Landmarks.phraseFor(approach, near, 250.0))
+        assertNull(Landmarks.phraseFor(approach, near - shell, 250.0))
+    }
+
+    @Test
     fun bothCarriagewaysOfOneJunctionCountOnce() {
         assertEquals(
             "at the next light",

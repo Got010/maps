@@ -8,7 +8,7 @@ key (to see its error document) and for its public API docs. Nothing here
 carries a location, search text or route.
 
     feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses
-                                  weather-alerts weather-forecast weather-radar (default: all)
+                                  weather-alerts weather-forecast weather-radar weather-current (default: all)
 """
 
 import html
@@ -452,9 +452,53 @@ def weather_radar():
     print("mapservices info status", status, "| timeInfo", json.dumps(d.get("timeInfo"))[:400], "| copyright", d.get("copyrightText"))
 
 
+def weather_current():
+    head("Current conditions for the whole state in one request")
+    # aviationweather.gov (NWS Aviation Weather Center): every New York METAR at once (@NY), no key.
+    for url in ("https://aviationweather.gov/api/data/metar?ids=@NY&format=json",
+                "https://aviationweather.gov/api/data/stationinfo?ids=@NY&format=json"):
+        status, _, headers, body = get(url, limit=8_000_000)
+        print(f"--- {url}\nstatus {status} type {headers.get('Content-Type')} bytes {len(body)} cache {headers.get('Cache-Control')}")
+        d = _json(body)
+        if isinstance(d, list):
+            print("items", len(d))
+            for item in d[:3]:
+                print("  ", json.dumps(item)[:900])
+            if d and "temp" in d[0]:
+                keys = sorted({k for item in d for k in item})
+                print("keys:", keys)
+                print("wxString values:", sorted({str(item.get("wxString")) for item in d})[:40])
+                print("cover values:", sorted({str(item.get("cover")) for item in d}))
+                print("stations:", [(item.get("icaoId"), item.get("name"), item.get("lat"), item.get("lon")) for item in d][:80])
+        else:
+            print(body[:600])
+    # Open-Meteo current conditions for fixed points (the same request from every phone).
+    lats, lons = [], []
+    lat = NY_BOX[1]
+    while lat <= NY_BOX[3]:
+        lon = NY_BOX[0]
+        while lon <= NY_BOX[2]:
+            lats.append(f"{lat:.2f}")
+            lons.append(f"{lon:.2f}")
+            lon += 0.5
+        lat += 0.5
+    q = urllib.parse.urlencode({
+        "latitude": ",".join(lats), "longitude": ",".join(lons),
+        "current": "temperature_2m,weather_code,is_day,wind_speed_10m",
+        "timezone": "America/New_York", "temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
+    })
+    status, _, headers, b = get("https://api.open-meteo.com/v1/forecast?" + q, limit=30_000_000)
+    d = _json(b)
+    print(f"--- Open-Meteo current, {len(lats)} points: status {status} bytes {len(b)}")
+    if isinstance(d, list):
+        print("first:", json.dumps(d[0])[:700])
+    else:
+        print(b[:600])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
-            "weather-radar": weather_radar}
+            "weather-radar": weather_radar, "weather-current": weather_current}
 
 
 class Timeout(Exception):

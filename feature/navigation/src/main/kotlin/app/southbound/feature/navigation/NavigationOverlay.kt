@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
@@ -81,6 +82,8 @@ fun NavigationOverlay(
     mutedUntilNextTurn: Boolean = false,
     /** Long-press on the voice button: mute until the next turn, or lift that mute. */
     onVoiceLongPress: () -> Unit = {},
+    /** Pause the trip: guidance stops, the destination and stops are kept to resume. Null hides the button. */
+    onPause: (() -> Unit)? = null,
 ) {
     KeepScreenOnDisposableEffect()
     // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
@@ -90,7 +93,7 @@ fun NavigationOverlay(
     if (rememberDrivingLandscape()) {
         NavigationLandscape(
             state, voiceMode, onVoiceModeChange, onEnd, modifier, speedMph, onSkipStop, delaySeconds,
-            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress,
+            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress, onPause,
         )
         return@MaterialTheme
     }
@@ -137,7 +140,7 @@ fun NavigationOverlay(
                     if (onSkipStop != null && trip.remainingWaypoints.size > 1) {
                         OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
                     }
-                    EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd)
+                    EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd, onPause)
                 }
             }
             is TripState.Complete -> ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier.align(Alignment.BottomCenter).padding(16.dp))
@@ -249,10 +252,17 @@ internal fun FasterRouteBanner(offer: FasterRouteOffer) {
  * traffic adds more than two minutes the headline turns red with "+X min" and
  * the trip's typical duration follows. This replaces Ferrostar's own progress
  * bar, which led with the arrival clock, so there is one clock on screen.
- * [distanceMeters] and [onEnd] are optional: without them the bar has no distance and no End button.
+ * [distanceMeters], [onEnd] and [onPause] are optional: without them the bar has no distance, no End (X) and no
+ * Pause. Pause is on the far right, End just left of it.
  */
 @Composable
-internal fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMeters: Double? = null, onEnd: (() -> Unit)? = null) {
+internal fun EtaLine(
+    remainingSeconds: Double,
+    delaySeconds: Double,
+    distanceMeters: Double? = null,
+    onEnd: (() -> Unit)? = null,
+    onPause: (() -> Unit)? = null,
+) {
     val late = Eta.isLate(delaySeconds)
     val leftSeconds = remainingSeconds + delaySeconds
     // Recomputed whenever Ferrostar updates the remaining time (about once a second).
@@ -280,6 +290,11 @@ internal fun EtaLine(remainingSeconds: Double, delaySeconds: Double, distanceMet
             if (onEnd != null) {
                 IconButton(onClick = onEnd) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.navigation_end))
+                }
+            }
+            if (onPause != null) {
+                IconButton(onClick = onPause) {
+                    Icon(Icons.Filled.Pause, contentDescription = stringResource(R.string.navigation_pause))
                 }
             }
         }

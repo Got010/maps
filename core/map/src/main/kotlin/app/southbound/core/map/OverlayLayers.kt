@@ -93,6 +93,9 @@ internal object OverlayLayers {
     const val WEATHER_AREAS = "southbound-weather-areas"
     private const val WEATHER_OUTLINE = "southbound-weather-areas-outline"
     private const val RADAR = "southbound-radar"
+
+    /** Each weather station's current conditions, a badge drawn in code (WeatherIcons), over everything. */
+    const val WEATHER_STATIONS = "southbound-weather-stations"
     private const val WEATHER_EXTREME = "#7B1FA2"
     private const val WEATHER_SEVERE = "#D93025"
     private const val WEATHER_MODERATE = "#E8710A"
@@ -238,6 +241,15 @@ internal object OverlayLayers {
             ).also { it.minZoom = CAMERA_MIN_ZOOM },
         )
         installTrafficCamerasAndSigns(style)
+        style.addSource(GeoJsonSource(WEATHER_STATIONS, OverlayGeoJson.weatherStations(emptyList())))
+        // Badges that would overlap give way to each other (NYC has several stations close together), never to labels.
+        style.addLayer(
+            SymbolLayer(WEATHER_STATIONS, WEATHER_STATIONS).withProperties(
+                iconImage(get("icon")),
+                iconAllowOverlap(false),
+                iconIgnorePlacement(true),
+            ),
+        )
     }
 
     /** 511NY cameras and signs: icons drawn in code, over everything else, so a tap finds them. */
@@ -277,10 +289,16 @@ internal object OverlayLayers {
         trafficCamerasSource.update(style, overlays.trafficCameras) { OverlayGeoJson.trafficCameras(it) }
         messageSignsSource.update(style, overlays.messageSigns) { OverlayGeoJson.messageSigns(it) }
         weatherAreasSource.update(style, overlays.weather.areas) { OverlayGeoJson.weatherAreas(it) }
+        for (pin in overlays.weather.stations) {
+            val name = pin.imageName
+            if (style.getImage(name) == null) style.addImage(name, WeatherIcons.badge(pin.sky, pin.night, pin.tempF))
+        }
+        weatherStationsSource.update(style, overlays.weather.stations) { OverlayGeoJson.weatherStations(it) }
         updateRadar(style, overlays.weather.radar)
     }
 
     private val weatherAreasSource = ListSource<WeatherArea>(WEATHER_AREAS)
+    private val weatherStationsSource = ListSource<WeatherStationPin>(WEATHER_STATIONS)
 
     // The radar picture is decoded and handed to the map only when a new one arrives.
     private var radarShown: RadarPicture? = null
