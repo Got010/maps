@@ -118,6 +118,7 @@ internal fun NavigationLandscape(
     parkingNearby: Boolean,
     mutedUntilNextTurn: Boolean,
     onVoiceLongPress: () -> Unit,
+    onPause: (() -> Unit)?,
 ) {
     val panelWidth = rememberDrivingPanelWidth()
     Box(modifier.fillMaxSize()) {
@@ -156,7 +157,7 @@ internal fun NavigationLandscape(
                             OutlinedButton(onClick = onSkipStop) { Text(stringResource(R.string.navigation_skip_stop)) }
                         }
                     }
-                    EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd)
+                    EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd, onPause)
                 }
                 is TripState.Complete -> {
                     Box(Modifier.weight(1f))

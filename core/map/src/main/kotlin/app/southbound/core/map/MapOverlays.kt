@@ -57,8 +57,22 @@ data class WeatherArea(val id: String, val rings: List<List<MapPoint>>, val seve
  */
 class RadarPicture(val png: ByteArray, val fetchedAt: Long, val west: Double, val south: Double, val east: Double, val north: Double)
 
-/** The weather layer: radar under everything, alert areas over it. */
-data class WeatherOverlay(val radar: RadarPicture? = null, val areas: List<WeatherArea> = emptyList()) {
+/**
+ * A weather station's current conditions on the map: a badge with the icon for [sky] (core/weather's Sky name)
+ * and [tempF]. [id] comes back from a tap.
+ */
+data class WeatherStationPin(val id: String, val point: MapPoint, val sky: String, val night: Boolean, val tempF: Int?) {
+    /** The map image for this badge, so each look is drawn and added to the style once. */
+    val imageName: String
+        get() = "southbound-wx-$sky-${if (night) "n" else "d"}-${tempF ?: "x"}"
+}
+
+/** The weather layer: radar under everything, alert areas over it, and each station's temperature on top. */
+data class WeatherOverlay(
+    val radar: RadarPicture? = null,
+    val areas: List<WeatherArea> = emptyList(),
+    val stations: List<WeatherStationPin> = emptyList(),
+) {
     companion object {
         val NONE = WeatherOverlay()
     }
@@ -192,6 +206,13 @@ internal object OverlayGeoJson {
                 """{"type":"Feature","properties":{"id":${quote(area.id)},"severity":${quote(area.severity)}},""" +
                     """"geometry":{"type":"Polygon","coordinates":[[${closed.joinToString(",") { coordinate(it) }}]]}}"""
             }
+        },
+    )
+
+    fun weatherStations(pins: List<WeatherStationPin>): String = featureCollection(
+        pins.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"weather","icon":${quote(pin.imageName)}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )
 

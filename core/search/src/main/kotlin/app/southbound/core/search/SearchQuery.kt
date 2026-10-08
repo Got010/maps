@@ -15,8 +15,11 @@ package app.southbound.core.search
  * Trailing state words and a ZIP ("..., Brooklyn NY 11201") are [soft]:
  * they raise the rows that have them but never drop a row that lacks them,
  * since most rows carry neither.
+ *
+ * "weather albany", "albany weather", "weather in Nyack" search for the place and set [asksWeather], so the
+ * app can show that place's current weather (worked out on the phone; the query never leaves it).
  */
-data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyList()) {
+data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyList(), val asksWeather: Boolean = false) {
 
     val normalized: String = tokens.joinToString(" ")
 
@@ -37,8 +40,21 @@ data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyL
         private val ZIP = Regex("\\d{5}")
         private val ZIP_PLUS_FOUR = Regex("\\d{4}")
 
+        private val WEATHER_WORDS = setOf("weather", "forecast")
+        private val WEATHER_LINKS = setOf("in", "for", "at")
+
         fun parse(raw: String): SearchQuery {
             val tokens = SearchText.normalize(raw).split(' ').filter { it.isNotEmpty() }.toMutableList()
+            // "weather (in) X" or "X weather": a search for X that asks for its weather. "Weather" alone stays a word.
+            var asksWeather = false
+            if (tokens.size > 1 && tokens.first() in WEATHER_WORDS) {
+                tokens.removeAt(0)
+                if (tokens.size > 1 && tokens.first() in WEATHER_LINKS) tokens.removeAt(0)
+                asksWeather = true
+            } else if (tokens.size > 1 && tokens.last() in WEATHER_WORDS) {
+                tokens.removeAt(tokens.lastIndex)
+                asksWeather = true
+            }
             val soft = ArrayList<String>()
             // Keep at least one required word: "NY" alone is still a search for "ny".
             while (tokens.size > 1) {
@@ -52,7 +68,7 @@ data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyL
                     else -> break
                 }
             }
-            return SearchQuery(tokens.toList(), soft)
+            return SearchQuery(tokens.toList(), soft, asksWeather)
         }
 
         /** "\"mai\" AND \"ain\"": every trigram of the words of 3+ letters, or null if none. */

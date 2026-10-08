@@ -117,6 +117,8 @@ fun SouthboundMap(
      * the alert's id; where areas overlap, the most severe one (drawn on top) wins.
      */
     onWeatherAreaTap: ((String) -> Unit)? = null,
+    /** A tap on a weather station's badge ([WeatherOverlay.stations]) reports its id. */
+    onWeatherStationTap: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -292,6 +294,7 @@ fun SouthboundMap(
     val currentOnIncidentTap by rememberUpdatedState(onIncidentTap)
     val currentOnRouteTap by rememberUpdatedState(onRouteTap)
     val currentOnWeatherAreaTap by rememberUpdatedState(onWeatherAreaTap)
+    val currentOnWeatherStationTap by rememberUpdatedState(onWeatherStationTap)
     DisposableEffect(map) {
         val loadedMap = map ?: return@DisposableEffect onDispose { }
         // Returns true only when the tap was used, so other click listeners still see the rest.
@@ -321,7 +324,15 @@ fun SouthboundMap(
                     return@OnMapClickListener true
                 }
             }
-            // Last, a weather alert's area: only where the tap itself lands, not the slop box.
+            // A station's temperature badge, then a weather alert's area: only where the tap itself lands for the area.
+            val stationHandler = currentOnWeatherStationTap
+            if (stationHandler != null && loadedStyle.getLayer(OverlayLayers.WEATHER_STATIONS) != null) {
+                val id = loadedMap.queryRenderedFeatures(box, OverlayLayers.WEATHER_STATIONS).firstOrNull()?.getStringProperty("id")
+                if (id != null) {
+                    stationHandler(id)
+                    return@OnMapClickListener true
+                }
+            }
             val weatherHandler = currentOnWeatherAreaTap
             if (weatherHandler != null && loadedStyle.getLayer(OverlayLayers.WEATHER_AREAS) != null) {
                 val id = loadedMap.queryRenderedFeatures(screen, OverlayLayers.WEATHER_AREAS).firstOrNull()?.getStringProperty("id")

@@ -36,8 +36,15 @@ object Landmarks {
     /** A place passed on the way in must be roadside, within this of the approach. */
     const val ROADSIDE_M = 35.0
 
-    /** How far from the turn landmarks are worth fetching, for callers that pre-filter. */
+    /** How far from the turn places are worth fetching, for callers that pre-filter (see [near]). */
     const val SEARCH_RADIUS_M = 60.0
+
+    /**
+     * The driver may hear a prompt this much further back than its trigger distance says: GPS that runs a little
+     * ahead of the car, Ferrostar's own 5 m, and a fix a second old. A light in that stretch makes "the next light"
+     * ambiguous too, so it is counted.
+     */
+    const val HEARD_MARGIN_M = 30.0
 
     private const val MAX_NAME_LENGTH = 30
 
@@ -49,11 +56,24 @@ object Landmarks {
         if (approach.size < 2) return null
         val turn = approach.last()
         val line = RouteLine(approach)
-        val heardAt = (line.length - heardFromMeters.coerceAtLeast(SIGNAL_BEFORE_M)).coerceAtLeast(0.0)
+        val heardAt = (line.length - heardFromMeters.coerceAtLeast(SIGNAL_BEFORE_M) - HEARD_MARGIN_M).coerceAtLeast(0.0)
 
         signalPhrase(line, turn, nearby, heardAt)?.let { return it }
         stopPhrase(line, turn, nearby, heardAt)?.let { return it }
         return placePhrase(line, turn, nearby)
+    }
+
+    /**
+     * The landmarks [phraseFor] needs from those near the route: places by the turn, and every light and stop sign
+     * the driver may still pass after hearing a prompt [heardFromMeters] before the turn. Only lights near the turn
+     * would make a light further back invisible, and "at the next light" wrong when there are two.
+     */
+    fun near(turn: LatLon, nearRoute: List<Landmark>, heardFromMeters: Double): List<Landmark> {
+        val signReach = heardFromMeters.coerceAtLeast(SIGNAL_BEFORE_M) + HEARD_MARGIN_M + ON_ROAD_M
+        return nearRoute.filter {
+            val d = RouteLine.distanceMeters(it.point, turn)
+            if (it.category == Landmark.TRAFFIC_SIGNALS || it.category == Landmark.STOP) d <= signReach else d <= SEARCH_RADIUS_M
+        }
     }
 
     /** Signs of one kind on the approach between where the driver hears it and the turn, by distance before the turn. */
