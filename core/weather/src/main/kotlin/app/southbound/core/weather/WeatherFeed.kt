@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import kotlin.math.PI
 import kotlin.math.ln
@@ -30,6 +31,8 @@ data class WeatherSnapshot(
     val radar: RadarImage? = null,
     /** The latest observation at each station in the state, when asked for. */
     val conditions: List<CurrentConditions> = emptyList(),
+    /** The 7-day forecast pack, when asked for and not too old ([Forecasts.MAX_AGE_MILLIS]). */
+    val forecast: ForecastPack? = null,
     /** POSIX millis of the last good alert list, or null. */
     val alertsAt: Long? = null,
     val errors: List<String> = emptyList(),
@@ -72,6 +75,18 @@ object Radar {
 }
 
 /**
+ * Where the forecast pack comes from: the "weather" pre-release on Southbound's GitHub (the app wires
+ * GitHubReleases in, under the weather toggle). An interface so the feed is tested without a network.
+ */
+interface ForecastSource {
+    /** The pack's asset id now (it changes with each upload), or null when there is no pack yet. */
+    fun latestId(): Long?
+
+    /** The pack file (gzip'd JSON) with that id. */
+    fun download(id: Long): ByteArray
+}
+
+/**
  * Fetches the weather the user turned on (Settings > Live data > Weather), through
  * [NetworkGate]: the state's alerts, the shapes of the zones they name, and the radar
  * picture while the weather layer is shown. Every request is the same for every phone in
@@ -80,6 +95,10 @@ object Radar {
 class WeatherFeed(
     private val gate: NetworkGate,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** The forecast pack's source; null leaves the forecast out. */
+    private val forecastSource: ForecastSource? = null,
+    /** Where the last forecast pack is kept, so it reads offline and after a restart; null keeps it in memory only. */
+    private val forecastDir: File? = null,
     private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
 ) {
     private val mutex = Mutex()
@@ -88,6 +107,10 @@ class WeatherFeed(
     private var radar: RadarImage? = null
     private var conditions: List<CurrentConditions>? = null
     private var conditionsAt = 0L
+    private var forecast: ForecastPack? = null
+    private var forecastId: Long? = null
+    private var forecastCheckedAt = 0L
+    private var forecastLoaded = false
 
     // A zone's shape rarely changes: once read, kept for the life of the process.
     private val zoneShapes = HashMap<String, List<Ring>>()
@@ -104,7 +127,12 @@ class WeatherFeed(
      * conditions (the layer's temperatures, a place card); without them the last ones are
      * kept but nothing is requested for them. A failure keeps the last good data and adds an error.
      */
-    suspend fun refresh(force: Boolean = false, withRadar: Boolean = false, withConditions: Boolean = false): WeatherSnapshot = mutex.withLock {
+    suspend fun refresh(
+        force: Boolean = false,
+        withRadar: Boolean = false,
+        withConditions: Boolean = false,
+        withForecast: Boolean = false,
+    ): WeatherSnapshot = mutex.withLock {
         if (!isEnabled) {
             alerts = null
             radar = null
@@ -127,6 +155,7 @@ class WeatherFeed(
                 }
             }
             loadZones(alerts.orEmpty(), errors)
+            if (withForecast) loadForecast(now, force, errors)
             if (withConditions && (force || conditions == null || now - conditionsAt >= CONDITIONS_TTL_MILLIS)) {
                 try {
                     conditions = Metar.parse(fetch(NetworkFeature.WEATHER, Metar.URL).decodeToString())
@@ -154,7 +183,53 @@ class WeatherFeed(
         val areas = list.associate { a ->
             a.id to a.polygons.ifEmpty { a.zoneUrls.flatMap { zoneShapes[it].orEmpty() } }
         }
-        WeatherSnapshot(list, areas, radar, conditions.orEmpty(), alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
+        val fresh = forecast?.takeIf { now - it.generatedAt <= Forecasts.MAX_AGE_MILLIS }
+        WeatherSnapshot(list, areas, radar, conditions.orEmpty(), fresh, alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
+    }
+
+    /**
+     * The forecast pack: the one kept on the phone first, then, at most once an hour, the release's current
+     * file, downloaded only when it changed (it is rebuilt every six hours).
+     */
+    private fun loadForecast(now: Long, force: Boolean, errors: MutableList<String>) {
+        if (!forecastLoaded) {
+            forecastLoaded = true
+            val dir = forecastDir
+            if (dir != null) {
+                runCatching {
+                    val file = File(dir, Forecasts.ASSET)
+                    if (file.isFile) {
+                        forecast = Forecasts.parse(file.readBytes())
+                        forecastId = File(dir, ID_FILE).takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+                    }
+                }
+            }
+        }
+        if (!force && forecast != null && now - forecastCheckedAt < FORECAST_CHECK_MILLIS) return
+        val source = forecastSource ?: return
+        try {
+            val id = source.latestId()
+            forecastCheckedAt = now
+            if (id == null || id == forecastId) return
+            val bytes = source.download(id)
+            forecast = Forecasts.parse(bytes)
+            forecastId = id
+            forecastDir?.let { dir ->
+                runCatching {
+                    dir.mkdirs()
+                    val tmp = File(dir, Forecasts.ASSET + ".tmp")
+                    tmp.writeBytes(bytes)
+                    tmp.renameTo(File(dir, Forecasts.ASSET))
+                    File(dir, ID_FILE).writeText(id.toString())
+                }
+            }
+        } catch (e: NetworkFeatureDisabledException) {
+            throw e
+        } catch (e: IOException) {
+            errors += "Forecast: ${e.message}"
+        } catch (e: IllegalArgumentException) {
+            errors += "Forecast: ${e.message}"
+        }
     }
 
     /** Reads the shapes of the zones alerts without a polygon name, a few per refresh. */
@@ -178,6 +253,10 @@ class WeatherFeed(
         const val ALERTS_TTL_MILLIS = 5 * 60_000L
         /** NOAA's mosaic updates about every 2 minutes; a new picture every 3, on the home map and while driving. */
         const val RADAR_TTL_MILLIS = 3 * 60_000L
+
+        /** The forecast pack is rebuilt every six hours; the release is asked about it at most hourly. */
+        const val FORECAST_CHECK_MILLIS = 60 * 60_000L
+        private const val ID_FILE = "forecast-ny.id"
 
         /** Stations report hourly, more often when the weather changes. */
         const val CONDITIONS_TTL_MILLIS = 10 * 60_000L

@@ -1,0 +1,25 @@
+{
+ "properties": {
+  "periods": [
+   {
+    "number": 1,
+    "name": "This Afternoon",
+    "startTime": "2026-10-07T14:00:00-04:00",
+    "endTime": "2026-10-07T18:00:00-04:00",
+    "isDaytime": true,
+    "temperature": 66,
+    "temperatureUnit": "F",
+    "temperatureTrend": null,
+    "probabilityOfPrecipitation": {
+     "unitCode": "wmoUnit:percent",
+     "value": 2
+    },
+    "windSpeed": "13 mph",
+    "windDirection": "S",
+    "icon": "https://api.weather.gov/icons/land/day/skc?size=medium",
+    "shortForecast": "Sunny",
+    "detailedForecast": "Sunny, with a high near 66. South wind around 13 mph."
+   }
+  ]
+ }
+}

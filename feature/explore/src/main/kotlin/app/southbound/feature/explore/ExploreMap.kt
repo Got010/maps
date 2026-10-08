@@ -136,6 +136,7 @@ import app.southbound.core.voice.GuidanceMode
 import app.southbound.core.voice.SpeedAlertMode
 import app.southbound.core.voice.SpokenUnits
 import app.southbound.core.weather.AlertOnRoute
+import app.southbound.core.weather.Forecasts
 import app.southbound.core.weather.Metar
 import app.southbound.core.weather.RouteWeather
 import app.southbound.core.voice.UtteranceKind
@@ -382,7 +383,14 @@ internal fun ExploreMap(
             // Radar and the stations' temperatures while the layer is shown (on the home map and while driving),
             // the current weather for a place card, the alerts whenever a route needs them.
             withContext(Dispatchers.IO) {
-                attempt { services.weather.refresh(withRadar = weatherVisible, withConditions = weatherVisible || placeCardOpen) }
+                attempt {
+                    services.weather.refresh(
+                        withRadar = weatherVisible,
+                        withConditions = weatherVisible || placeCardOpen,
+                        // The forecast pack: checked at most hourly, downloaded only when it changed.
+                        withForecast = true,
+                    )
+                }
             }
             delay(WEATHER_POLL_MS)
         }
@@ -1227,6 +1235,15 @@ internal fun ExploreMap(
                         SearchBar(onSearch = { panel = Panel.Search }, onOpenSettings = onOpenSettings)
                         startPlace?.let { StartChip(it.name, onClear = { startPlace = null }) }
                         LocationStatus(hasPermission, location, asked, ::requestPermission)
+                        // With the weather layer: now and today where the user is (nearest station, forecast pack).
+                        val here = location
+                        if (weatherOn && weatherVisible && here != null) {
+                            val point = GeoPoint(here.latitude, here.longitude)
+                            TodayHereChip(
+                                Metar.nearest(weather.conditions, point),
+                                weather.forecast?.nearest(point)?.let { Forecasts.days(it, clockMs, count = 1).firstOrNull() },
+                            )
+                        }
                     }
                     Column(Modifier.align(Alignment.BottomEnd), horizontalAlignment = Alignment.End) {
                         if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
@@ -1327,15 +1344,23 @@ internal fun ExploreMap(
                     // The place's current weather (the nearest station's report, with the weather toggle on), then
                     // transit departures nearby.
                     extra = run {
-                        val here = if (weatherOn) Metar.nearest(weather.conditions, GeoPoint(current.place.lat, current.place.lon)) else null
+                        val placePoint = GeoPoint(current.place.lat, current.place.lon)
+                        val here = if (weatherOn) Metar.nearest(weather.conditions, placePoint) else null
+                        // The place's 7-day forecast, from the pack's nearest grid point.
+                        val forecastDays = if (weatherOn) {
+                            weather.forecast?.nearest(placePoint)?.let { Forecasts.days(it, clockMs) }.orEmpty()
+                        } else {
+                            emptyList()
+                        }
                         // Reports came in but none is close: say so rather than show a far station's weather.
                         val noneNear = weatherOn && here == null && weather.conditions.isNotEmpty()
-                        if (here == null && !noneNear && boards.isEmpty()) {
+                        if (here == null && !noneNear && forecastDays.isEmpty() && boards.isEmpty()) {
                             null
                         } else {
                             {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     here?.let { WeatherNowRow(it, Modifier.padding(end = 12.dp)) }
+                                    if (forecastDays.isNotEmpty()) ForecastStrip(forecastDays, Modifier.padding(end = 12.dp))
                                     if (noneNear) {
                                         Text(
                                             stringResource(R.string.explore_weather_none_near),
@@ -1404,6 +1429,17 @@ internal fun ExploreMap(
                             )
                         },
                         beforeStart = {
+                            // The forecast at the destination for when the chosen route gets there.
+                            val ready = preview as? RoutePreviewState.Ready
+                            val forecastPoint = if (weatherOn) weather.forecast?.nearest(GeoPoint(current.place.lat, current.place.lon)) else null
+                            if (ready != null && forecastPoint != null) {
+                                val summary = ready.summaries.getOrNull(ready.selected)
+                                if (summary != null) {
+                                    val seconds = summary.durationSeconds + ready.delaySeconds.getOrElse(ready.selected) { 0.0 }
+                                    val arrival = clockMs + (seconds * 1000).toLong()
+                                    ArrivalWeatherNote(current.place.name, arrival, Forecasts.at(forecastPoint, arrival))
+                                }
+                            }
                             WeatherOnRouteNote(routeWeather, onOpen = { shownThing = ShownThing.WeatherAlertShown(it.id) })
                             MissingRegionWarning(
                                 regionNames = missingRegions.map { it.name },
