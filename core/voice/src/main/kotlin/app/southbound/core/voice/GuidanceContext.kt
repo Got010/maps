@@ -30,6 +30,9 @@ interface GuidanceContext {
      */
     fun followUpLanesFor(instruction: SpokenInstruction): String? = null
 
+    /** The number of the exit [instruction] announces ("14", "14S"), from the step's sign; null when none. */
+    fun exitNumberFor(instruction: SpokenInstruction): String? = null
+
     /**
      * False once the turn the prompt [utteranceId] announces is behind the
      * driver, or so close that the prompt would be heard during it. Asked

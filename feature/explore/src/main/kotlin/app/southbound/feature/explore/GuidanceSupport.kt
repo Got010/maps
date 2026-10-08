@@ -385,6 +385,14 @@ class GuidanceSupport(
         return next.takeIf { TurnTiming.chains(it.distance, speedMps, voice.guidanceMode) }
     }
 
+    override fun exitNumberFor(instruction: SpokenInstruction): String? {
+        val current = steps
+        val step = current.getOrNull(stepIn(current, instruction.utteranceId.toString()) ?: return null) ?: return null
+        // The number on the step's sign (the green highway sign on screen), else the one its closest prompt says.
+        step.visualInstructions.firstNotNullOfOrNull { it.primaryContent.exitNumbers.firstOrNull { n -> n.isNotBlank() } }?.let { return it }
+        return step.spokenInstructions.firstNotNullOfOrNull { EXIT_NUMBER.find(it.text)?.groupValues?.get(1) }
+    }
+
     override fun followUpLanesFor(instruction: SpokenInstruction): String? =
         chainedNext(instruction)?.let { LaneWording.phrase(StepLanes.of(it)) }
 
@@ -473,3 +481,6 @@ class GuidanceSupport(
         const val ARRIVAL_MIN_SHOW_MS = 4_000L
     }
 }
+
+/** "Take exit 14S on the right." -> "14S". */
+private val EXIT_NUMBER = Regex("""\bexit\s+(\d+[A-Za-z]?)\b""", RegexOption.IGNORE_CASE)

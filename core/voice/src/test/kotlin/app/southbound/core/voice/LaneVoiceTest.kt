@@ -143,4 +143,20 @@ class LaneVoiceTest {
             ),
         )
     }
+
+    @Test
+    fun theEarlyExitPromptNamesTheNumberAndTheLanes() {
+        assertEquals(
+            Speak("In 2 miles, Take exit 14 on the right, use the far right lane."),
+            GuidancePolicy.decide(
+                defaults,
+                GuidanceMode.DRIVING,
+                UtteranceKind.INSTRUCTION,
+                "In 2 miles, Take the exit on the right.",
+                triggerDistanceMeters = 3200.0,
+                lanes = "use the far right lane",
+                exitNumber = "14",
+            ),
+        )
+    }
 }
