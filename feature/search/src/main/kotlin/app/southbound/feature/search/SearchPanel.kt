@@ -59,6 +59,7 @@ import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceKind
 import app.southbound.core.search.SearchIndex
+import app.southbound.core.search.SearchQuery
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.search.SearchResult
 import java.time.LocalDateTime
@@ -95,6 +96,11 @@ fun SearchPanel(
     work: Place? = null,
     onOpenShortcut: ((Place) -> Unit)? = null,
     onSetShortcut: ((ShortcutSlot, Place) -> Unit)? = null,
+    /**
+     * The current weather at a place (the icon and the temperature), drawn at the end of its row above the
+     * distance, for a weather search ("weather albany") on towns. Null shows no weather (the weather toggle off).
+     */
+    weatherFor: (@Composable (Place) -> Unit)? = null,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
@@ -215,11 +221,14 @@ fun SearchPanel(
                 error != null -> Message(stringResource(R.string.search_failed, error!!))
                 query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
                 else -> LazyColumn(Modifier.fillMaxWidth()) {
+                    // A weather search shows each town's weather in its row.
+                    val asksWeather = weatherFor != null && SearchQuery.parse(query).asksWeather
                     items(results, key = { it.place.id }) { result ->
+                        val weather = weatherFor?.takeIf { asksWeather && result.place.kind == PlaceKind.LOCALITY }
                         ResultRow(result, now = now, onClick = {
                             keyboard?.hide()
                             pick(result)
-                        })
+                        }, weather = weather?.let { w -> { w(result.place) } })
                     }
                 }
             }
@@ -263,6 +272,8 @@ private fun ResultRow(
     now: LocalDateTime,
     onClick: () -> Unit,
     icon: ImageVector = result.place.kind.icon(),
+    /** Drawn above the distance at the end of the row: a town's weather in a weather search. */
+    weather: (@Composable () -> Unit)? = null,
 ) {
     val place = result.place
     val approximate = if (place.approximate) stringResource(R.string.search_approximate) else null
@@ -272,7 +283,16 @@ private fun ResultRow(
         headlineContent = { Text(place.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = supporting?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
         leadingContent = { Icon(icon, contentDescription = null) },
-        trailingContent = result.distanceMeters?.let { { Text(Units.distance(it), style = MaterialTheme.typography.labelMedium) } },
+        trailingContent = if (weather != null) {
+            {
+                Column(horizontalAlignment = Alignment.End) {
+                    weather()
+                    result.distanceMeters?.let { Text(Units.distance(it), style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        } else {
+            result.distanceMeters?.let { { Text(Units.distance(it), style = MaterialTheme.typography.labelMedium) } }
+        },
         modifier = Modifier.clickable(onClick = onClick),
     )
 }

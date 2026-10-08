@@ -29,6 +29,12 @@ object SearchRanking {
     /** Score lost per kilometre from the user. */
     const val POINTS_PER_KM = 8.0
 
+    /**
+     * For a weather search ("weather albany"), towns are ranked by name and size with distance only as a tie-break:
+     * the city of Albany, 150 km off, beats a nearby hamlet only called "... Albany".
+     */
+    const val TOWN_POINTS_PER_KM = 0.05
+
     /** Per soft word (state, ZIP) the row has. */
     const val SOFT_POINTS = 15.0
 
@@ -49,6 +55,7 @@ object SearchRanking {
         near: LatLon?,
         limit: Int,
         extra: List<ScoredResult> = emptyList(),
+        pointsPerKm: Double = POINTS_PER_KM,
     ): List<SearchResult> =
         candidates
             .asSequence()
@@ -57,7 +64,7 @@ object SearchRanking {
                 val distance = near?.let { distanceMeters(it, candidate.place.lat, candidate.place.lon) }
                 val score = textScore(query, candidate) + candidate.importance +
                     SOFT_POINTS * query.softMatches(candidate.searchText) -
-                    (distance ?: 0.0) / 1000.0 * POINTS_PER_KM
+                    (distance ?: 0.0) / 1000.0 * pointsPerKm
                 ScoredResult(SearchResult(candidate.place, distance), score)
             }
             .plus(extra)
