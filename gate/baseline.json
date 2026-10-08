@@ -796,7 +796,7 @@
   "hosts": [
     {
       "value": ".githubusercontent.com",
-      "note": "core/network GitHubReleases.isAllowed accepts any https host ending .githubusercontent.com (where GitHub redirects release asset downloads, e.g. objects.githubusercontent.com), checked on every redirect hop. Used for map pack downloads (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default); every such request runs inside NetworkGate.request(feature), so the feature toggle gates it. The token goes to api.github.com only, never to this host."
+      "note": "core/network GitHubReleases.isAllowed accepts any https host ending .githubusercontent.com (where GitHub redirects release asset downloads, e.g. objects.githubusercontent.com), checked on every redirect hop. Used for map pack downloads (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default); every such request runs inside NetworkGate.request(feature), so the feature toggle gates it. The token goes to api.github.com only, never to this host. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
     {
       "value": ".mapbox.cn",
@@ -812,7 +812,7 @@
     },
     {
       "value": "api.github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
     {
       "value": "bustime.mta.info",
@@ -824,7 +824,7 @@
     },
     {
       "value": "github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
     {
       "value": "http://",
@@ -852,7 +852,7 @@
     },
     {
       "value": "https://api.github.com",
-      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com."
+      "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
     {
       "value": "https://api.weather.gov",

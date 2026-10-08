@@ -45,6 +45,14 @@
     <string name="explore_sky_partly_cloudy">Partly cloudy</string>
     <string name="explore_sky_clear">Clear</string>
     <string name="explore_weather_wind">wind %1$d mph</string>
+    <!-- The 7-day forecast (the National Weather Service's, from the app's forecast pack). -->
+    <string name="explore_forecast_high">high %1$d\u00B0</string>
+    <string name="explore_forecast_low">low %1$d\u00B0</string>
+    <!-- The first day of the strip in words: its name, the NWS's short forecast, then "high 62°, low 45°". -->
+    <string name="explore_forecast_first">%1$s: %2$s, %3$s</string>
+    <string name="explore_weather_here">Here: %1$s</string>
+    <!-- Under the route preview: the destination, the arrival time, the forecast then ("Rain Showers, 54°"). -->
+    <string name="explore_weather_on_arrival">At %1$s around %2$s: %3$s</string>
     <string name="explore_weather_none_near">No weather station within 25 miles</string>
     <!-- A trip paused from the navigation bar: what is left of it, to resume or end. -->
     <string name="explore_trip_paused">Navigation paused</string>
