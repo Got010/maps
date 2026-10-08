@@ -41,6 +41,7 @@ test:
 	python3 -m unittest discover -s search/tests
 	python3 -m unittest discover -s transit/tests
 	python3 -m unittest discover -s tests
+	python3 -m unittest discover -s weather/tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
