@@ -1,0 +1,67 @@
+# Builds the forecast pack (pipeline/weather/forecast_pack.py): the National Weather Service's 7-day forecast for a
+# fixed grid of points over New York, published as forecast-ny.json.gz on the prerelease tagged "weather". Every
+# phone downloads the same file, so no request says where anyone is. A prerelease, so Obtainium and the app's own
+# update check (both read the latest full release) never see it.
+#
+# On main: every six hours, or Actions > Weather forecast pack > Run workflow. On a branch push that touches the
+# pack's code: the tests and a quick build of a few points, printed to the log, nothing published.
+name: Weather forecast pack
+
+on:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - pipeline/weather/**
+      - .github/workflows/weather.yml
+
+permissions: {}
+
+concurrency:
+  group: weather-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      # Publishing the pack to the "weather" prerelease (main only; a branch push publishes nothing).
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PUBLISH: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Tests
+        run: python3 -m unittest discover -s pipeline/weather/tests
+
+      # Which NWS grid cell each lattice point falls in hardly ever changes: the last run's answers are kept next
+      # to the pack, so a run asks only for the forecasts.
+      - name: Last run's grid cells
+        if: env.PUBLISH == 'true'
+        run: |
+          gh release download weather --repo "$GITHUB_REPOSITORY" --pattern points-cache.json --dir "$RUNNER_TEMP" \
+            || echo "No cache yet: every point is looked up."
+
+      - name: Build the pack
+        run: |
+          if [[ "$PUBLISH" == true ]]; then extra=(); else extra=(--limit 12 --print-raw); fi
+          python3 -u pipeline/weather/forecast_pack.py --out "$RUNNER_TEMP/forecast-ny.json.gz" \
+            --cache "$RUNNER_TEMP/points-cache.json" "${extra[@]}"
+
+      - name: Publish
+        if: env.PUBLISH == 'true'
+        run: |
+          if ! gh release view weather --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create weather --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+              --title "Weather forecast (data, refreshed every 6 hours)" \
+              --notes "forecast-ny.json.gz: the National Weather Service 7-day forecast for a fixed grid over New York, read by the app's weather layer. Not an app release."
+          fi
+          gh release upload weather --repo "$GITHUB_REPOSITORY" --clobber \
+            "$RUNNER_TEMP/forecast-ny.json.gz" "$RUNNER_TEMP/points-cache.json"
