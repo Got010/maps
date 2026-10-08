@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 import forecast_pack as fp  # noqa: E402
 
 
-def fixture(name):
+def fixture(name):  # noqa: D103
     with open(os.path.join(HERE, name)) as f:
         return json.load(f)
 
@@ -34,7 +34,8 @@ class ForecastPackTest(unittest.TestCase):
         self.assertEqual((40.0, -74.0), pts[0])
         self.assertEqual((40.6, -73.4), pts[-1])
         # The statewide box at the default step.
-        bounds = tuple(json.load(open(os.path.join(HERE, "..", "..", "regions.json")))["regions"]["nys"]["bounds"])
+        with open(os.path.join(HERE, "..", "..", "regions.json")) as f:
+            bounds = tuple(json.load(f)["regions"]["nys"]["bounds"])
         self.assertEqual(432, len(fp.lattice(bounds)))
 
     def test_icon_codes(self):
@@ -53,6 +54,16 @@ class ForecastPackTest(unittest.TestCase):
         self.assertEqual("sct", periods[1][5])
         self.assertEqual(0, periods[1][2])
         self.assertEqual(22, periods[1][4])
+
+    def test_a_whole_real_answer(self):
+        # gridpoints_buf_77_43.json: a whole real answer (BUF 77,43, south of Rochester, 2026-10-08 00:41Z, printed
+        # by this workflow's branch run): 14 periods, starting with tonight.
+        periods = fp.periods_of(fixture("gridpoints_buf_77_43.json"))
+        self.assertEqual(14, len(periods))
+        self.assertEqual([1791417600, 1791453600, 0, 51, 24, "rain_showers", "Tonight", "Slight Chance Rain Showers"], periods[0])
+        self.assertEqual("few", periods[1][5])  # "day/few/rain_showers,20": the period starts sunny
+        self.assertEqual("Columbus Day", periods[9][6])
+        self.assertEqual(91, periods[7][4])
 
     def test_build_skips_points_without_a_forecast_and_shares_cells(self):
         answers = {

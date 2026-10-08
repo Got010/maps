@@ -45,6 +45,29 @@ class GitHubReleases(
         }
     }
 
+    /** The release tagged [tag], pre-releases included (the weather forecast pack lives on one). */
+    fun byTag(feature: NetworkFeature, tag: String): GitHubRelease = gate.request(feature) {
+        require(Regex("[A-Za-z0-9._-]{1,64}").matches(tag)) { "Not a release tag" }
+        val conn = open("https://$API_HOST/repos/$owner/$repo/releases/tags/$tag", "application/vnd.github+json")
+        try {
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) throw HttpException(conn.responseCode)
+            parseRelease(conn.inputStream.use { readCapped(it, MAX_JSON_BYTES) })
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** A small file of a release as bytes (a gzip'd data file), at most [maxBytes]. */
+    fun bytes(feature: NetworkFeature, asset: ReleaseAsset, maxBytes: Int = MAX_JSON_BYTES): ByteArray = gate.request(feature) {
+        val conn = open(assetUrl(asset), "application/octet-stream")
+        try {
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) throw HttpException(conn.responseCode)
+            conn.inputStream.use { readBytesCapped(it, maxBytes) }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     /** A small text file of a release, such as the manifest. */
     fun text(feature: NetworkFeature, asset: ReleaseAsset): String = gate.request(feature) {
         val conn = open(assetUrl(asset), "application/octet-stream")
@@ -154,7 +177,9 @@ class GitHubReleases(
             return GitHubRelease(tag, assets)
         }
 
-        private fun readCapped(input: InputStream, max: Int): String {
+        private fun readCapped(input: InputStream, max: Int): String = readBytesCapped(input, max).toString(Charsets.UTF_8)
+
+        private fun readBytesCapped(input: InputStream, max: Int): ByteArray {
             val out = java.io.ByteArrayOutputStream()
             val buffer = ByteArray(16 * 1024)
             while (true) {
@@ -163,7 +188,7 @@ class GitHubReleases(
                 if (out.size() + n > max) throw IOException("GitHub's answer is larger than expected")
                 out.write(buffer, 0, n)
             }
-            return out.toString(Charsets.UTF_8.name())
+            return out.toByteArray()
         }
     }
 }

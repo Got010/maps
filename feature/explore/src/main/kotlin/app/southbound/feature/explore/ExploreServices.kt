@@ -6,6 +6,7 @@ import app.southbound.core.export.BackupService
 import app.southbound.core.export.ImportJournal
 import app.southbound.core.export.ResumeOutcome
 import app.southbound.core.network.ApiKey
+import app.southbound.core.network.GitHubReleases
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
@@ -22,6 +23,7 @@ import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.TripBroadcast
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.traffic.TrafficFeed
+import app.southbound.core.weather.GitHubForecastSource
 import app.southbound.core.weather.WeatherFeed
 import app.southbound.core.transit.AndroidTransitDb
 import app.southbound.core.transit.TransitPack
@@ -73,8 +75,15 @@ class ExploreServices private constructor(context: Context) {
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
     val traffic = TrafficFeed(networkGate)
 
-    /** NWS alerts for the whole state and NOAA radar, behind the weather toggle. */
-    val weather = WeatherFeed(networkGate)
+    /**
+     * NWS alerts for the whole state, NOAA radar, the stations' current weather and the 7-day forecast pack (from
+     * the "weather" pre-release on GitHub, kept in files/weather so it reads offline), behind the weather toggle.
+     */
+    val weather = WeatherFeed(
+        networkGate,
+        forecastSource = GitHubForecastSource(GitHubReleases(networkGate, { secrets.get(ApiKey.GITHUB_RELEASES) })),
+        forecastDir = File(appContext.filesDir, "weather"),
+    )
 
     /** Fuel economy, gas price and the state to look it up for (a Settings choice, never GPS). */
     val fuelPrefs = FuelPrefs.get(appContext)
