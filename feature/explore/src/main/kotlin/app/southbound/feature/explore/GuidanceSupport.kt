@@ -351,12 +351,22 @@ class GuidanceSupport(
     }
 
     override fun landmarkFor(instruction: SpokenInstruction): String? {
-        val i = stepOf(instruction.utteranceId.toString()) ?: return null
-        val approach = steps.getOrNull(i)?.geometry?.map { LatLon(it.lat, it.lng) } ?: return null
+        val current = steps
+        val i = stepIn(current, instruction.utteranceId.toString()) ?: return null
+        val step = current.getOrNull(i) ?: return null
+        // The step ends at the turn; the one before it too, since the prompt can be heard before this step starts
+        // (a light there is still ahead of the driver).
+        val own = step.geometry.map { LatLon(it.lat, it.lng) }
+        val before = current.getOrNull(i - 1)?.geometry?.map { LatLon(it.lat, it.lng) }.orEmpty()
+        val approach = if (before.isNotEmpty() && own.isNotEmpty()) before.dropLast(1) + own else own
         val turn = approach.lastOrNull() ?: return null
-        val nearby = nearRoute.filter { RouteLine.distanceMeters(it.point, turn) <= Landmarks.SEARCH_RADIUS_M }
+        // Where the driver hears it: the trigger distance, or further out for a "now" prompt said early at speed.
+        val index = step.spokenInstructions.indexOfFirst { it.utteranceId == instruction.utteranceId }
+        val early = if (index >= 0 && index == TurnTiming.nowIndex(prompts(step))) (speedMps ?: 0.0) * TurnTiming.NOW_LEAD_SECONDS else 0.0
+        val heard = maxOf(instruction.triggerDistanceBeforeManeuver, early)
+        val nearby = Landmarks.near(turn, nearRoute, heard)
         if (nearby.isEmpty()) return null
-        return Landmarks.phraseFor(approach, nearby, instruction.triggerDistanceBeforeManeuver)
+        return Landmarks.phraseFor(approach, nearby, heard)
     }
 
     override fun followUpFor(instruction: SpokenInstruction): String? {
