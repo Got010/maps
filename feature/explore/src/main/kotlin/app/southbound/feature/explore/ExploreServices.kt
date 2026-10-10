@@ -150,8 +150,9 @@ class ExploreServices private constructor(context: Context) {
     }
 
     /**
-     * The installed search packs, New York's first (its result ids stay as they were) and then in the regions'
-     * order. A test pack (search-nyc) is left out when the statewide one is there.
+     * The installed search packs, the statewide one first (its result ids stay as they were) and then in the
+     * regions' order. While search-nys.sqlite is still on the phone (until the update round that brought the
+     * per-region packs deletes it), it holds all of New York City's places, so search-nyc is left out beside it.
      */
     private fun searchFiles(): List<File> {
         val packs = packStore.installed().filter { it.kind == PackKind.SEARCH }
