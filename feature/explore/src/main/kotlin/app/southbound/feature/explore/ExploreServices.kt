@@ -12,7 +12,9 @@ import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
+import app.southbound.core.packs.Regions
 import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
@@ -21,7 +23,9 @@ import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
 import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.TripBroadcast
+import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.SearchIndex
+import app.southbound.core.search.SearchPacks
 import app.southbound.core.traffic.TrafficFeed
 import app.southbound.core.weather.GitHubForecastSource
 import app.southbound.core.weather.WeatherFeed
@@ -55,6 +59,9 @@ class ExploreServices private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val packStore = PackStore(appContext.filesDir, appContext.getExternalFilesDir(null))
+
+    /** The routing tiles from southbound-v2.json's packs, when the updater has put them in. */
+    val tiles = TileFolder(appContext.filesDir)
     val voiceStore = VoiceSettingsStore(appContext)
     val voiceSettings: StateFlow<VoiceSettings> =
         voiceStore.settings.stateIn(scope, SharingStarted.Eagerly, VoiceSettings())
@@ -115,33 +122,60 @@ class ExploreServices private constructor(context: Context) {
         }
     }
 
-    private var search: Opened<SearchIndex>? = null
+    private var search: Pair<String, PlaceSearch>? = null
     private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
 
-    /** The search index, reopened if a newer search pack was imported. Null without one. */
+    /**
+     * Search over every installed search pack (New York's, and one per region in the other states), reopened when
+     * one is added, replaced or removed. Null without one.
+     */
     @Synchronized
-    fun openSearch(): SearchIndex? {
-        val file = installed(PackKind.SEARCH) ?: return null
-        search?.takeIf { it.matches(file) }?.let { return it.value }
-        search?.value?.close()
+    fun openSearch(): PlaceSearch? {
+        val files = searchFiles()
+        if (files.isEmpty()) {
+            search?.second?.close()
+            search = null
+            return null
+        }
+        val key = files.joinToString("|") { "${it.path}:${it.lastModified()}:${it.length()}" }
+        search?.takeIf { it.first == key }?.let { return it.second }
+        search?.second?.close()
         search = null
-        return runCatching { SearchIndex.open(file) }.getOrNull()
-            ?.also { search = Opened(file, it) }
+        val opened = files.mapNotNull { runCatching { SearchIndex.open(it) }.getOrNull() }
+        if (opened.isEmpty()) return null
+        val index: PlaceSearch = opened.singleOrNull() ?: SearchPacks(opened)
+        search = key to index
+        return index
     }
 
     /**
-     * The navigator for the installed routing pack. A newer pack takes over
-     * only between trips, never mid-navigation.
+     * The installed search packs, New York's first (its result ids stay as they were) and then in the regions'
+     * order. A test pack (search-nyc) is left out when the statewide one is there.
+     */
+    private fun searchFiles(): List<File> {
+        val packs = packStore.installed().filter { it.kind == PackKind.SEARCH }
+        val order = listOf(Regions.STATEWIDE) + Regions.all.map { it.id }
+        return packs
+            .filterNot { it.region == PackStore.DEFAULT_REGION && packs.any { p -> p.region == Regions.STATEWIDE } }
+            .sortedBy { order.indexOf(it.region).let { i -> if (i < 0) order.size else i } }
+            .map { it.file }
+    }
+
+    /**
+     * The navigator for the routing tiles, else the installed one-graph pack. A newer one takes over only
+     * between trips, never mid-navigation; the tiles it replaces are deleted then.
      */
     @Synchronized
     fun openNavigator(navigating: Boolean = false): Navigator? {
-        val file = installed(PackKind.ROUTING) ?: return routing?.value?.second
+        val file = routingSource() ?: return routing?.value?.second
         val current = routing
         if (current != null && (current.matches(file) || navigating)) return current.value.second
         current?.value?.first?.close()
         routing = null
         val router = runCatching { OfflineRouter(appContext, file) }.getOrNull() ?: return null
+        // No router reads an older generation of tiles now.
+        if (file.isDirectory) runCatching { tiles.prune(inUse = file) }
         val navigator = Navigator(appContext, router).also {
             it.spokenInstructionObserver = voice
             guidance.attach(it)
@@ -163,17 +197,26 @@ class ExploreServices private constructor(context: Context) {
             ?.also { transit = Opened(file, it) }
     }
 
-    fun hasPack(kind: PackKind): Boolean = installed(kind) != null
+    fun hasPack(kind: PackKind): Boolean =
+        if (kind == PackKind.ROUTING) routingSource() != null else installed(kind) != null
+
+    /** The routing tiles' current generation, else the one-graph routing pack (routing-nys.tar). */
+    private fun routingSource(): File? = tiles.current() ?: installed(PackKind.ROUTING)
 
     /** The statewide pack when installed, else NYC's (see PackStore.installedAny). */
     private fun installed(kind: PackKind): File? = packStore.installedAny(kind)?.file
 
-    /** Remembers which file (and version of it) an open resource came from. */
+    /**
+     * Remembers which file (and version of it) an open resource came from. A tile generation is a folder that
+     * never changes once current: its path is enough.
+     */
     private class Opened<T>(file: File, val value: T) {
         private val path = file.path
+        private val folder = file.isDirectory
         private val modified = file.lastModified()
         private val length = file.length()
-        fun matches(file: File) = file.path == path && file.lastModified() == modified && file.length() == length
+        fun matches(file: File) =
+            file.path == path && (folder || (file.lastModified() == modified && file.length() == length))
     }
 
     companion object {

@@ -1,6 +1,7 @@
 package app.southbound.core.routing
 
 import android.content.Context
+import com.valhalla.config.models.ValhallaConfig
 import com.valhalla.valhalla.Valhalla
 import com.valhalla.valhalla.ValhallaException
 import com.valhalla.valhalla.config.ValhallaConfigFactory
@@ -16,7 +17,9 @@ import java.io.Closeable
 import java.io.File
 
 /**
- * Routes on the phone with Valhalla, reading a routing pack (routing-<region>.tar).
+ * Routes on the phone with Valhalla, reading a routing pack: a folder of tiles
+ * (core/packs TileFolder: routing-main.tar and the packs of the phone's
+ * regions, unpacked together) or a one-graph tar (routing-nys.tar).
  *
  * Ferrostar's Valhalla adapter builds each request and parses the response,
  * so routes come out exactly as its navigation engine expects; only the
@@ -27,7 +30,7 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
 
     private val valhalla: Valhalla = Valhalla(
         context,
-        ValhallaConfigFactory.usingTileExtract(routingPack.absolutePath),
+        configFor(routingPack),
         // One config file per pack, so a router for a new pack can't clobber an open one.
         ValhallaConfigManager(context, ValhallaFile(context, "valhalla-${routingPack.nameWithoutExtension}.json")),
     )
@@ -79,6 +82,29 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
     }
 
     override fun close() = synchronized(valhalla) { valhalla.close() }
+
+    companion object {
+        /**
+         * Tiles read from a folder are held in memory, Valhalla's default allows 1 GB; a long trip touches the
+         * main roads' tiles (about 120 MB for every state) and the local tiles at its ends.
+         */
+        private const val TILE_CACHE_BYTES = 256 * 1024 * 1024
+
+        /**
+         * A folder of tiles is a phone's part of the graph: Loki's connectivity check colours connected areas by
+         * the local tiles present, so with the regions between two places missing it would call them unconnected
+         * though the main roads join them (pipeline/routing/route_check.py found it); it's off, as valhalla-mobile
+         * turns it off for any tile set that isn't whole.
+         */
+        fun configFor(routingPack: File): ValhallaConfig {
+            if (!routingPack.isDirectory) return ValhallaConfigFactory.usingTileExtract(routingPack.absolutePath)
+            val config = ValhallaConfigFactory.usingTilesDir(routingPack.absolutePath)
+            return config.copy(
+                loki = config.loki?.copy(useConnectivity = false),
+                mjolnir = config.mjolnir?.copy(maxCacheSize = TILE_CACHE_BYTES),
+            )
+        }
+    }
 }
 
 class RoutingException(message: String, cause: Throwable? = null) : Exception(message, cause)
