@@ -16,6 +16,7 @@ on:
       - pipeline/routing/split.sh
       - pipeline/routing/split_tiles.py
       - pipeline/routing/route_check.py
+      - pipeline/routing/pack_sizes.py
 
 permissions: {}
 
@@ -57,6 +58,10 @@ jobs:
           du -sh pipeline/data/tmp/valhalla-split-all/tiles/*
           ls -l pipeline/data/out
           df -h /
+
+      # What a phone would download for a few choices of regions, cut per region, per state or in squares.
+      - name: Download sizes
+        run: python3 pipeline/routing/pack_sizes.py pipeline/data/tmp/valhalla-split-all/tiles.jsonl
 
       - name: Route real trips
         run: make -C pipeline routing-check
