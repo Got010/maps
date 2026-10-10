@@ -14,10 +14,11 @@ spike before committing to them; the New York numbers are measured (release v0.1
   - Basemaps per region, as in New York: Northern New Jersey now reaches the Delaware River; new are Southern
     New Jersey, Connecticut, Eastern and Western Pennsylvania (split at 77° W), and Maryland, Delaware and DC.
   - Routing: one graph for every state, built at once so roads join at every state line, then cut by
-    `pipeline/routing/split_tiles.py` into `routing-main.tar` (Valhalla levels 0 and 1: motorways down to
-    tertiary roads, everywhere) and one `routing-<region>.tar` of local roads (level 2) per basemap region. The
-    phone will unpack the packs it has into one tile folder (`ValhallaConfigFactory.usingTilesDir`, which
-    valhalla-mobile 0.6.3 has).
+    `pipeline/routing/split_tiles.py` into `routing-main.tar` (Valhalla level 0: motorways, trunk and primary
+    roads, everywhere) and packs of the rest (secondary roads and local streets) named by the regions each tile
+    covers, each tile once (`routing-hudson.tar`, `routing-hudson-li-njn-nyc.tar`). The phone unpacks the main
+    pack and the packs naming its regions into one tile folder (`ValhallaConfigFactory.usingTilesDir`, which
+    valhalla-mobile 0.6.3 has), with Loki's connectivity check off.
   - Search for the new regions from OSM alone (no Overture, no state address files); New York keeps
     `search-nys`. Live data (511, DOT cameras, weather alerts) stays New York only for now.
 - Phases: (1) pipeline and a test build that measures every pack and routes real trips on the split packs

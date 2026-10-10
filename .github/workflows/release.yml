@@ -74,8 +74,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # What a release ships; `make -C pipeline state` builds the same list.
+  # What a release ships; `make -C pipeline state` builds the same lists. PACKS are the packs every app knows,
+  # and the only ones southbound.json lists: an app from before STATE_PACKS takes every routing and search pack
+  # its manifest names. STATE_PACKS are for apps that read southbound-v2.json: the planned regions' basemaps and
+  # OSM-only search packs, and routing-packs.json, which stands for the split routing build
+  # (pipeline/routing/split.sh): routing-main.tar and the region packs it lists, whose names come from the graph.
   PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles basemap-njn.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite voice-norman.zip
+  STATE_PACKS: basemap-njs.pmtiles basemap-ct.pmtiles basemap-pae.pmtiles basemap-paw.pmtiles basemap-md.pmtiles search-njs.sqlite search-ct.sqlite search-pae.sqlite search-paw.sqlite search-md.sqlite routing-packs.json
   # The Android SDK build-tools that align, sign and verify the release APK, by version, so the signing tools
   # only change in a pull request. The app job's signing rehearsal fails if the runner lacks them.
   BUILD_TOOLS_VERSION: "36.0.0"
@@ -163,9 +168,16 @@ jobs:
           elif ! gh release view "$previous" --json assets --jq '.assets[].name' > assets.txt 2>/dev/null; then
             data=true; reason="$previous has no release"
           else
-            for pack in $PACKS; do
+            for pack in $PACKS $STATE_PACKS; do
               grep -qx "$pack" assets.txt || { data=true; reason="$previous lacks $pack"; }
             done
+            # Every routing pack the previous split listed.
+            if grep -qx routing-packs.json assets.txt; then
+              gh release download "$previous" --pattern routing-packs.json --dir previous-split
+              for pack in $(jq -r 'keys[]' previous-split/routing-packs.json); do
+                grep -qx "$pack" assets.txt || { data=true; reason="$previous lacks $pack"; }
+              done
+            fi
             # The pip lock lives under .github/ (ci.yml installs it too) but is a pipeline input: the search
             # container installs from it, so a lock change rebuilds the packs like a change under pipeline/.
             if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles' .github/pipeline-requirements.txt; then :; else
@@ -173,8 +185,8 @@ jobs:
             fi
           fi
 
-          # The matrix for the data jobs: one entry per pack.
-          packs="$(printf '%s\n' $PACKS | jq -R . | jq -sc .)"
+          # The matrix for the data jobs: one entry per pack (routing-packs.json: the whole split routing build).
+          packs="$(printf '%s\n' $PACKS $STATE_PACKS | jq -R . | jq -sc .)"
 
           echo "Release $tag; data: $data ($reason)"
           {
@@ -624,7 +636,11 @@ jobs:
           OVERTURE_MIN_CONFIDENCE: ${{ vars.OVERTURE_MIN_CONFIDENCE }}
         run: |
           # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys;
-          # voice-norman.zip -> voice-norman
+          # voice-norman.zip -> voice-norman; routing-packs.json -> routing-split (every routing-<x>.tar it lists)
+          if [[ "$PACK" == routing-packs.json ]]; then
+            make -C pipeline routing-split
+            exit
+          fi
           name="${PACK%%.*}"
           kind="${name%%-*}"; region="${name#*-}"
           [[ "$kind" == basemap ]] && kind=tiles
@@ -643,9 +659,15 @@ jobs:
             exit 1
           fi
           cd pipeline/data/out
-          sha256sum "$PACK" | tee "$PACK.sha256"
-          ls -lh "$PACK"
-          gh release upload "$TAG" "$PACK" "$PACK.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+          files=("$PACK")
+          if [[ "$PACK" == routing-packs.json ]]; then
+            mapfile -t -O 1 files < <(jq -r 'keys[]' routing-packs.json)
+          fi
+          for file in "${files[@]}"; do
+            sha256sum "$file" | tee "$file.sha256"
+            ls -lh "$file"
+            gh release upload "$TAG" "$file" "$file.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+          done
 
   publish:
     needs: [plan, release-check, draft, data]
@@ -662,11 +684,15 @@ jobs:
       PREVIOUS: ${{ needs.plan.outputs.previous }}
       DATA: ${{ needs.plan.outputs.data }}
     steps:
-      # Only scripts/release-manifest.py (standard library only) is used from this checkout.
+      # Only scripts/release-manifest.py (standard library only) is used from this checkout, and
+      # pipeline/regions.json, which it reads for southbound-v2.json.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: src
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts/
+            pipeline/regions.json
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -708,7 +734,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p out
-          for pack in $PACKS; do
+          for pack in $PACKS $STATE_PACKS; do
+            gh release download "$PREVIOUS" --repo "$GITHUB_REPOSITORY" --dir out \
+              --pattern "$pack" --pattern "$pack.sha256"
+          done
+          for pack in $(jq -r 'keys[]' out/routing-packs.json); do
             gh release download "$PREVIOUS" --repo "$GITHUB_REPOSITORY" --dir out \
               --pattern "$pack" --pattern "$pack.sha256"
           done
@@ -728,16 +758,20 @@ jobs:
       - name: Write the release manifest
         run: |
           (cd out && sha256sum -c ./*.sha256)
-          for pack in $PACKS; do
+          for pack in $PACKS $STATE_PACKS $(jq -r 'keys[]' out/routing-packs.json); do
             [[ -f "out/$pack" ]] || { echo "::error::The release is missing $pack"; exit 1; }
           done
-          python3 src/scripts/release-manifest.py out "$VERSION" > southbound.json
+          # southbound.json for every app so far: only the packs they know (see PACKS).
+          python3 src/scripts/release-manifest.py out "$VERSION" --only $PACKS > southbound.json
           cat southbound.json
+          # southbound-v2.json for apps that route from a tile folder: every pack, with the regions each needs it.
+          python3 src/scripts/release-manifest.py out "$VERSION" --v2 --regions src/pipeline/regions.json > southbound-v2.json
+          cat southbound-v2.json
 
-      - name: Upload the manifest
+      - name: Upload the manifests
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" southbound.json --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$TAG" southbound.json southbound-v2.json --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish release
         env:
@@ -748,7 +782,7 @@ jobs:
           else
             data_note="Map data unchanged since $PREVIOUS."
           fi
-          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-<region>.pmtiles (the map, one per region: nyc, li, hudson, capital, western, njn for northern New Jersey), search-nys.sqlite (search, New York and northern New Jersey), routing-nys.tar (directions, New York and northern New Jersey), transit-nyc.sqlite (NYC transit schedules) and voice-norman.zip (an extra built-in voice, downloaded only if picked in Settings > Voice). $data_note
+          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-<region>.pmtiles (the map, one per region: nyc, li, hudson, capital, western, njn for northern New Jersey), search-nys.sqlite (search, New York and northern New Jersey), routing-nys.tar (directions, New York and northern New Jersey), transit-nyc.sqlite (NYC transit schedules) and voice-norman.zip (an extra built-in voice, downloaded only if picked in Settings > Voice). Coming next (the app doesn't offer them yet): maps and search for southern New Jersey (njs), Connecticut (ct), eastern and western Pennsylvania (pae, paw) and Maryland with Delaware and DC (md), and directions in pieces: routing-main.tar (main roads in every state) plus the routing-<regions>.tar packs of local roads that routing-packs.json lists. $data_note
 
           Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA."
           # Tags made with this token don't start another run, so no loop.

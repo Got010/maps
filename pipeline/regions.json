@@ -1,35 +1,41 @@
 {
-  "_comment": "The data pack regions. Bounds are minlon,minlat,maxlon,maxlat (WGS84). Basemaps are cut per region so a phone installs only what it needs; routing and search are built once for the whole area (nys: New York plus northern New Jersey) so cross-region trips work. core/packs Regions.kt mirrors this file and a unit test keeps the two in step. 'area' (optional) is a polygon of [lon,lat] points: where a point belongs to the region when its box overlaps others; njn's box takes in Staten Island, Rockland and the Bronx, its area is only the New Jersey side of the state line (approximate, within about a kilometre). 'sources' (optional) says which Geofabrik extracts a region is built from: the default is the New York extract cut to the region's own bounds; each entry maps an extract to null (whole), 'self' (cut to this region's bounds) or another region's id (cut to that region's bounds), and several entries are merged (see pipeline/lib/common.sh clip_extract). 'planned': built by the pipeline but not offered by the app yet (Regions.basemaps leaves it out). 'state' (every address in the region is in that state) or 'default_state' (the state of a point in no polygon of 'states'), for the search pack; without either, New Jersey inside njn's area and New York elsewhere (search/states.py). 'osm_only': the search pack is OSM alone, no Overture or NYS Address Points. 'all' is the routing build for every state at once, split into routing-main.tar (main roads everywhere) and one routing-<region>.tar of local roads per basemap region (routing/split_tiles.py). 'states' holds the outlines search/states.py needs inside a region that spans several states (Delaware and DC in md).",
+  "_comment": "The data pack regions. Bounds are minlon,minlat,maxlon,maxlat (WGS84). Basemaps are cut per region so a phone installs only what it needs; routing and search are built once for the whole area (nys: New York plus northern New Jersey) so cross-region trips work. core/packs Regions.kt mirrors this file and a unit test keeps the two in step. 'area' (optional) is a polygon of [lon,lat] points: where a point belongs to the region when its box overlaps others; njn's box takes in Staten Island, Rockland and the Bronx, its area is only the New Jersey side of the state line (approximate, within about a kilometre). 'sources' (optional) says which Geofabrik extracts a region is built from: the default is the New York extract cut to the region's own bounds; each entry maps an extract to null (whole), 'self' (cut to this region's bounds) or another region's id (cut to that region's bounds), and several entries are merged (see pipeline/lib/common.sh clip_extract). 'planned': built by the pipeline but not offered by the app yet (Regions.basemaps leaves it out). 'state' (every address in the region is in that state) or 'default_state' (the state of a point in no polygon of 'states'), for the search pack; without either, New Jersey inside njn's area and New York elsewhere (search/states.py). 'osm_only': the search pack is OSM alone, no Overture or NYS Address Points. 'search': the search pack a basemap region uses when it isn't its own (New York's regions and njn use nys), for southbound-v2.json. 'all' is the routing build for every state at once, split into routing-main.tar (main roads everywhere) and one routing-<region>.tar of local roads per basemap region (routing/split_tiles.py). 'states' holds the outlines search/states.py needs inside a region that spans several states (Delaware and DC in md).",
   "regions": {
     "nyc": {
       "name": "New York City",
       "bounds": [-74.2591, 40.4774, -73.7004, 40.9176],
-      "basemap": true
+      "basemap": true,
+      "search": "nys"
     },
     "li": {
       "name": "Long Island",
       "bounds": [-73.78, 40.53, -71.75, 41.25],
-      "basemap": true
+      "basemap": true,
+      "search": "nys"
     },
     "hudson": {
       "name": "Hudson Valley and Catskills",
       "bounds": [-75.5, 40.9, -73.24, 42.4],
-      "basemap": true
+      "basemap": true,
+      "search": "nys"
     },
     "capital": {
       "name": "Capital Region, Adirondacks and North Country",
       "bounds": [-75.5, 42.4, -73.24, 45.02],
-      "basemap": true
+      "basemap": true,
+      "search": "nys"
     },
     "western": {
       "name": "Central and Western New York",
       "bounds": [-79.77, 41.99, -75.5, 45.02],
-      "basemap": true
+      "basemap": true,
+      "search": "nys"
     },
     "njn": {
       "name": "Northern New Jersey",
       "bounds": [-75.21, 40.3, -73.88, 41.36],
       "basemap": true,
+      "search": "nys",
       "sources": {"new-jersey": "self"},
       "area": [
         [-74.87, 40.3],

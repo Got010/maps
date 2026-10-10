@@ -98,7 +98,7 @@
     <string name="updates_allow_install">Allow Southbound to install updates</string>
     <string name="updates_mobile">Use mobile data</string>
     <string name="updates_mobile_note">Off: downloads wait for Wi-Fi. Check now always downloads straight away.</string>
-    <string name="updates_token_note">The repository is private, so GitHub needs a token: a fine-grained personal access token with read-only Contents access to StrongHorse44/maps. It\'s stored encrypted on this phone and sent only to api.github.com.</string>
+    <string name="updates_token_note">Optional. The repository is public, so updates need no token; one only lifts GitHub\'s limit of 60 requests an hour from your address. If an old token stops working, remove it. A token is stored encrypted on this phone and sent only to api.github.com.</string>
     <string name="updates_token">GitHub token</string>
     <string name="updates_token_saved">GitHub token saved (type to replace)</string>
     <string name="updates_token_save">Save token</string>

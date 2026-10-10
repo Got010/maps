@@ -41,8 +41,9 @@ class ApkCheckTest {
     }
 
     @Test
-    fun privateRepositoryAsksForAToken() {
-        assertTrue(UpdateErrors.forHttp(404, hasToken = false).needsToken)
+    fun aPublicRepositoryNeedsNoTokenButAStaleOneIsNamed() {
+        assertTrue(!UpdateErrors.forHttp(404, hasToken = false).needsToken)
+        assertTrue(UpdateErrors.forHttp(404, hasToken = true).needsToken)
         assertTrue(UpdateErrors.forHttp(401, hasToken = true).needsToken)
         assertTrue(!UpdateErrors.forHttp(503, hasToken = true).needsToken)
     }
