@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cuts a Valhalla tile directory into routing packs, so a phone downloads the
-main roads everywhere and local roads only where it has the map.
+main roads everywhere and local roads only where it has the map, each tile once.
 
-    split_tiles.py <tiles_dir> <out_dir> [--regions=regions.json] [--max-mb=1900]
+    split_tiles.py <tiles_dir> <out_dir> [--regions=regions.json] [--main-levels=0,1] [--max-mb=1900]
 
 Valhalla keeps its graph in three levels of square tiles, each file named by
 level and tile id (2/000/756/425.gph):
@@ -11,20 +11,24 @@ level and tile id (2/000/756/425.gph):
   level 1, 1-degree tiles: secondary and tertiary roads
   level 2, 0.25-degree tiles: everything else (residential, service, ...)
 
-routing-main.tar gets every tile of levels 0 and 1. Each basemap region of
-regions.json (planned ones too) gets routing-<region>.tar with the level 2
-tiles it covers. A tile is sampled on a 9 by 9 grid of points, and each point
-goes to the regions the app would give it (Regions.basemapsAt in core/packs:
-a region whose area holds the point owns it, else every region whose box
-holds it), so Pennsylvania's local roads stay out of the Hudson Valley pack
-though its box reaches over the river. A tile on a boundary goes into every
-region it touches; the phone unpacks the packs it has into one tile folder,
-where the same tile from two packs is the same file. Level 2 tiles no region
-covers (Ohio, Virginia: the extracts reach a little past the state lines) are
-left out and counted.
+routing-main.tar gets every tile of the main levels (0 and 1 by default), which
+every phone has. Every other tile goes by the basemap regions of regions.json
+(planned ones too) it covers: it is sampled on a 9 by 9 grid of points, and each
+point goes to the regions the app would give it (Regions.basemapsAt in
+core/packs: a region whose area holds the point owns it, else every region whose
+box holds it), so Pennsylvania's local roads stay out of the Hudson Valley's
+though its box reaches over the river. Tiles covering the same regions share a
+pack named by them: routing-hudson.tar holds the tiles only the Hudson Valley
+covers, routing-hudson-njn-nyc.tar those on the edge of three regions. A phone
+takes every pack naming one of its regions, so a tile on a boundary is
+downloaded once, however many of the phone's regions it touches. Tiles no
+region covers (Ohio, Virginia: the extracts reach a little past the state
+lines) are left out and counted.
 
-The packs are plain tars of the tile files, ordered and timestamped the same
-on every run.
+routing-packs.json, next to the packs, lists each pack with the regions it
+serves (an empty list for routing-main.tar: every phone); the release manifest
+copies it. The packs are plain tars of the tile files, ordered and timestamped
+the same on every run.
 """
 
 import argparse
@@ -36,6 +40,7 @@ import tarfile
 LEVEL_SIZES = {0: 4.0, 1: 1.0, 2: 0.25}
 MAIN_LEVELS = (0, 1)
 MAIN_PACK = "main"
+PACKS_JSON = "routing-packs.json"
 SAMPLES = 9
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -127,9 +132,7 @@ def owners_at(regions, lon, lat):
 
 
 def regions_for_tile(regions, level, tile_id):
-    """The packs a tile goes into: [MAIN_PACK] for the main levels, else the regions it covers ([] for none)."""
-    if level in MAIN_LEVELS:
-        return [MAIN_PACK]
+    """The regions a tile covers, in regions.json's order ([] for none)."""
     minlon, minlat, maxlon, maxlat = tile_bounds(level, tile_id)
     found = []
     for i in range(SAMPLES):
@@ -141,6 +144,14 @@ def regions_for_tile(regions, level, tile_id):
                     found.append(name)
     order = list(regions)
     return sorted(found, key=order.index)
+
+
+def pack_for(level, covers, main_levels=MAIN_LEVELS):
+    """The pack a tile goes into: MAIN_PACK for the main levels, else the regions it covers joined in alphabetical
+    order ("hudson-njn-nyc"); None when it covers none."""
+    if level in main_levels:
+        return MAIN_PACK
+    return "-".join(sorted(covers)) or None
 
 
 def tiles_in(tiles_dir):
@@ -171,30 +182,34 @@ def write_tar(path, tiles_dir, paths):
     os.replace(tmp, path)
 
 
-def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None):
-    """Writes the packs and returns {pack: (tiles, bytes)} plus the dropped tiles under None. With index, also
-    writes one JSON line per tile there ([path, level, bytes, packs]) for pack_sizes.py."""
+def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None, main_levels=MAIN_LEVELS):
+    """Writes the packs and routing-packs.json and returns {pack: (tiles, bytes)} plus the left-out tiles under
+    None. With index, also writes one JSON line per tile there ([path, level, bytes, regions it covers]) for
+    pack_sizes.py and route_check.py."""
     packs = {MAIN_PACK: []}
-    packs.update({name: [] for name in regions})
+    covering = {MAIN_PACK: []}
     dropped = []
     level_bytes = {level: 0 for level in LEVEL_SIZES}
     lines = []
     for rel, level, tile_id in tiles_in(tiles_dir):
         size = os.path.getsize(os.path.join(tiles_dir, rel))
         level_bytes[level] += size
-        targets = regions_for_tile(regions, level, tile_id)
-        if not targets:
+        covers = regions_for_tile(regions, level, tile_id)
+        name = pack_for(level, covers, main_levels)
+        if name is None:
             dropped.append(rel)
-        for name in targets:
-            packs[name].append(rel)
-        lines.append(json.dumps([rel, level, size, targets]))
+        else:
+            packs.setdefault(name, []).append(rel)
+            covering.setdefault(name, sorted(covers))
+        lines.append(json.dumps([rel, level, size, covers]))
     if index:
         with open(index, "w") as f:
             f.write("\n".join(lines) + "\n")
 
     os.makedirs(out_dir, exist_ok=True)
     result = {}
-    for name, paths in packs.items():
+    listing = {}
+    for name, paths in sorted(packs.items()):
         if not paths:
             continue
         size = sum(os.path.getsize(os.path.join(tiles_dir, rel)) for rel in paths)
@@ -202,15 +217,21 @@ def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None):
             raise SystemExit(f"routing-{name}.tar would be {size / 1e6:.0f} MB, over {max_mb:.0f} MB")
         write_tar(os.path.join(out_dir, f"routing-{name}.tar"), tiles_dir, paths)
         result[name] = (len(paths), size)
+        listing[f"routing-{name}.tar"] = covering[name]
+    with open(os.path.join(out_dir, PACKS_JSON), "w") as f:
+        json.dump(listing, f, indent=1, sort_keys=True)
+        f.write("\n")
     result[None] = (len(dropped), sum(os.path.getsize(os.path.join(tiles_dir, rel)) for rel in dropped))
 
     print("Level  MB", file=log)
     for level, size in level_bytes.items():
         print(f"{level:5d}  {size / 1e6:8.1f}", file=log)
-    print(f"{'pack':<22} {'tiles':>6} {'MB':>8}", file=log)
+    width = max(len(f"routing-{n}.tar") for n in result if n) if len(result) > 1 else 22
+    print(f"{'pack':<{width}} {'tiles':>6} {'MB':>8}", file=log)
     for name, (count, size) in result.items():
         label = f"routing-{name}.tar" if name else "(no region, left out)"
-        print(f"{label:<22} {count:6d} {size / 1e6:8.1f}", file=log)
+        print(f"{label:<{width}} {count:6d} {size / 1e6:8.1f}", file=log)
+    print(f"{len(result) - 1} packs, longest name {width} characters", file=log)
     return result
 
 
@@ -221,8 +242,12 @@ def main(argv=None):
     parser.add_argument("--regions", default=REGIONS_JSON)
     parser.add_argument("--max-mb", type=float, default=1900, help="fail if a pack would be larger (GitHub's limit is 2 GiB)")
     parser.add_argument("--index", help="write a JSON line per tile here (see pack_sizes.py)")
+    parser.add_argument("--main-levels", default=",".join(str(lv) for lv in MAIN_LEVELS),
+                        help="levels every phone gets in routing-main.tar (default 0,1)")
     args = parser.parse_args(argv)
-    split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb, index=args.index)
+    main_levels = tuple(int(lv) for lv in args.main_levels.split(",") if lv)
+    split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb, index=args.index,
+          main_levels=main_levels)
 
 
 if __name__ == "__main__":

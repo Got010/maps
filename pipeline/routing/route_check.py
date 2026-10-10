@@ -5,13 +5,20 @@ compares each with the same trip on the whole graph.
     route_check.py <work_dir> <out_dir>
 
 <work_dir> is split.sh's Valhalla folder (data/tmp/valhalla-split-all, built
-with KEEP_TILES=1: tiles/ and valhalla.json); <out_dir> holds the packs. For
-each trip the named packs are unpacked into one tile folder, as the app will,
-and Valhalla (the pipeline's pinned image, valhalla_service's one-shot mode)
-routes it there and on the whole graph. A trip marked "same" must come out
-within 5% of the whole graph's length and time; the others only print what
-happens (a destination whose local roads aren't there snaps to the nearest
-main road). Exits 1 when a "same" trip fails or strays.
+with KEEP_TILES=1: tiles/, tiles.jsonl and valhalla.json); <out_dir> holds the
+packs and routing-packs.json. For each trip, a phone with the trip's regions is
+made twice, and Valhalla (the pipeline's pinned image, valhalla_service's
+one-shot mode) routes the trip on each and on the whole graph:
+
+  packs  routing-main.tar and every pack naming one of the regions, unpacked
+         into one tile folder, as the app will.
+  L0     only level 0 shared, level 1 and the local roads of the regions (what
+         split_tiles.py --main-levels=0 would make), linked from the tile index.
+
+A trip marked "same" must come out within 5% of the whole graph's length and
+time on the packs; the others only print what happens (a destination whose
+local roads aren't there). Exits 1 when a "same" trip fails or strays on the
+packs; the L0 column only informs.
 """
 
 import json
@@ -39,17 +46,17 @@ PLACES = {
     "Washington, DC": (38.8977, -77.0365),
 }
 
-# (from, to, packs the phone has, must it match the whole graph)
+# (from, to, the phone's regions, must it match the whole graph)
 TRIPS = [
-    ("Times Square", "Baltimore Inner Harbor", ["main", "nyc", "md"], True),  # through NJ and Delaware on main roads
-    ("Buffalo", "Montauk", ["main", "western", "li"], True),
-    ("Pittsburgh", "Hartford", ["main", "paw", "ct"], True),
-    ("Newark Penn Station", "Hoboken Terminal", ["main", "njn"], True),
-    ("Philadelphia City Hall", "Baltimore Inner Harbor", ["main", "pae", "md"], True),
-    ("Scranton", "Wilmington, DE", ["main", "pae", "md"], True),
-    ("Times Square", "Washington, DC", ["main", "nyc", "md"], True),
+    ("Times Square", "Baltimore Inner Harbor", ["nyc", "md"], True),  # through New Jersey and Delaware on main roads
+    ("Buffalo", "Montauk", ["western", "li"], True),
+    ("Pittsburgh", "Hartford", ["paw", "ct"], True),
+    ("Newark Penn Station", "Hoboken Terminal", ["njn"], True),
+    ("Philadelphia City Hall", "Baltimore Inner Harbor", ["pae", "md"], True),
+    ("Scranton", "Wilmington, DE", ["pae", "md"], True),
+    ("Times Square", "Washington, DC", ["nyc", "md"], True),
     # Without Pennsylvania's local roads: where does the trip end?
-    ("Times Square", "Philadelphia City Hall", ["main", "nyc"], False),
+    ("Times Square", "Philadelphia City Hall", ["nyc"], False),
 ]
 
 
@@ -112,12 +119,27 @@ def end_point(answer):
     return lat / 1e6, lon / 1e6
 
 
-def unpack(out_dir, packs, folder):
+def unpack(out_dir, regions, folder):
+    """The phone's tile folder from the real packs: routing-main.tar and every pack naming one of the regions."""
     shutil.rmtree(folder, ignore_errors=True)
     os.makedirs(folder)
-    for pack in packs:
-        with tarfile.open(os.path.join(out_dir, f"routing-{pack}.tar")) as tar:
-            tar.extractall(folder, filter="data")
+    with open(os.path.join(out_dir, "routing-packs.json")) as f:
+        listing = json.load(f)
+    for name, serves in listing.items():
+        if not serves or set(serves) & set(regions):
+            with tarfile.open(os.path.join(out_dir, name)) as tar:
+                tar.extractall(folder, filter="data")
+
+
+def link(work_dir, regions, folder, main_levels):
+    """The phone's tile folder as packs cut with main_levels would make it, linked from the whole tile folder."""
+    shutil.rmtree(folder, ignore_errors=True)
+    with open(os.path.join(work_dir, "tiles.jsonl")) as f:
+        for line in f:
+            path, level, _size, covers = json.loads(line)
+            if level in main_levels or set(covers) & set(regions):
+                os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
+                os.link(os.path.join(work_dir, "tiles", path), os.path.join(folder, path))
 
 
 def config_for(work_dir, tile_dir, name, partial=False):
@@ -137,40 +159,45 @@ def config_for(work_dir, tile_dir, name, partial=False):
     return path
 
 
+def compare(whole, phone, same):
+    """(column text, strayed) for one phone's answer against the whole graph's."""
+    if "error" in phone:
+        return f"failed: {phone['error']}", same
+    wl, wt = summary(whole)
+    pl, pt = summary(phone)
+    off = max(abs(pl - wl) / wl, abs(pt - wt) / wt)
+    text = f"{pl:7.1f}/{pt:5.0f} " + ("same" if off <= TOLERANCE else f"{off:.0%} off")
+    if not same:
+        lat, lon = end_point(phone)
+        text += f", ends at {lat:.4f},{lon:.4f}"
+    return text, same and off > TOLERANCE
+
+
 def main(argv):
     work_dir, out_dir = (os.path.abspath(a) for a in argv[1:3])
     data_dir = os.path.dirname(os.path.dirname(work_dir))  # .../data (work_dir is data/tmp/<work>)
     work_rel = os.path.relpath(work_dir, data_dir)
     config_for(work_dir, f"/data/{work_rel}/tiles", "whole")
+    config_for(work_dir, f"/data/{work_rel}/phone", "phone", partial=True)
+    folder = os.path.join(work_dir, "phone")
     failed = []
-    print(f"{'trip':<52} {'packs':<18} {'whole km/min':>14} {'packs km/min':>14}  verdict")
-    for start, end, packs, same in TRIPS:
-        folder = os.path.join(work_dir, "phone")
-        unpack(out_dir, packs, folder)
-        config_for(work_dir, f"/data/{work_rel}/phone", "phone", partial=True)
-        whole = docker_route(data_dir, f"{work_rel}/whole.json", PLACES[start], PLACES[end])
-        phone = docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end])
+    print(f"{'trip':<50} {'regions':<12} {'whole km/min':>13}   {'packs':<22} {'L0 shared':<22}")
+    for start, end, regions, same in TRIPS:
         trip = f"{start} -> {end}"
+        whole = docker_route(data_dir, f"{work_rel}/whole.json", PLACES[start], PLACES[end])
         if "error" in whole:
-            print(f"{trip:<52} whole graph failed: {whole['error']}")
+            print(f"{trip:<50} whole graph failed: {whole['error']}")
             failed.append(trip)
             continue
         wl, wt = summary(whole)
-        if "error" in phone:
-            print(f"{trip:<52} {'+'.join(packs):<18} {wl:7.1f}/{wt:5.0f}  failed: {phone['error']}")
-            if same:
-                failed.append(trip)
-            continue
-        pl, pt = summary(phone)
-        off = max(abs(pl - wl) / wl, abs(pt - wt) / wt)
-        verdict = "same" if off <= TOLERANCE else f"{off:.0%} off"
-        if not same:
-            lat, lon = end_point(phone)
-            verdict += f", ends at {lat:.4f},{lon:.4f}"
-        print(f"{trip:<52} {'+'.join(packs):<18} {wl:7.1f}/{wt:5.0f} {pl:7.1f}/{pt:5.0f}  {verdict}")
-        if same and off > TOLERANCE:
+        unpack(out_dir, regions, folder)
+        packs, strayed = compare(whole, docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end]), same)
+        link(work_dir, regions, folder, (0,))
+        level0, _ = compare(whole, docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end]), same)
+        print(f"{trip:<50} {'+'.join(regions):<12} {wl:7.1f}/{wt:5.0f}   {packs:<22} {level0:<22}")
+        if strayed:
             failed.append(trip)
-        shutil.rmtree(folder, ignore_errors=True)
+    shutil.rmtree(folder, ignore_errors=True)
     if failed:
         print("Failed: " + "; ".join(failed))
         return 1
