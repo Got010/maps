@@ -12,12 +12,15 @@ import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
+import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.ManifestException
 import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
 import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.ReleaseManifest
+import app.southbound.core.packs.ReleasePack
+import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.UnrecognizedPackException
 import app.southbound.core.packs.UpdatePlan
 import app.southbound.core.packs.VoiceSelection
@@ -35,13 +38,20 @@ import java.security.MessageDigest
  * installer. Every request goes through NetworkGate: pack downloads are on by
  * default, app updates off until the user turns them on.
  *
- * Which packs: a basemap for each region picked in Settings, and the
- * statewide routing and search packs and NYC transit that every release has.
+ * Which packs: a basemap for each region picked in Settings, NYC transit, and
+ * routing and search. A release with southbound-v2.json names the regions each
+ * routing and search pack serves: the phone takes routing-main.tar and the
+ * routing packs naming its regions, unpacked together into a new generation of
+ * the [TileFolder] (made whole before it replaces the current one: packs of
+ * two builds don't mix), and the search packs of its regions, and drops the
+ * search packs and the one-graph routing-nys.tar it no longer needs. An older
+ * release has only southbound.json: the statewide routing and search packs.
  */
 class Updater(context: Context) {
 
     private val app = context.applicationContext
     private val packStore = PackStore(app.filesDir, app.getExternalFilesDir(null))
+    private val tiles = TileFolder(app.filesDir)
     private val regions = RegionSelection.get(app)
     private val voices = VoiceSelection.get(app)
     private val gate = NetworkGate(PreferenceNetworkToggles.get(app))
@@ -62,61 +72,102 @@ class Updater(context: Context) {
         publish(UpdateState.Checking)
         try {
             val release = client.latest(checkFeature)
-            val manifestAsset = release.asset(ReleaseManifest.FILE_NAME)
+            val v2Asset = release.asset(ReleaseManifest.FILE_NAME_V2)
+            val manifestAsset = v2Asset ?: release.asset(ReleaseManifest.FILE_NAME)
                 ?: return@withContext publish(UpdateState.Failed("The latest release (${release.tag}) has no update manifest yet."))
-            val manifest = ReleaseManifest.parse(client.text(checkFeature, manifestAsset))
+            val v2 = v2Asset != null
+            val manifestText = client.text(checkFeature, manifestAsset)
+            val manifest = if (v2) ReleaseManifest.parseV2(manifestText) else ReleaseManifest.parse(manifestText)
             UpdateScheduler.recordCheck(app, manifest.version)
 
+            val wantedKinds = if (packsOn) PackKind.entries.toSet() else emptySet()
+            val picked = regions.regions.value
             val installed = packStore.installed().associate { (it.kind to it.region) to packStore.installedSha256(it.kind, it.region) }
             val plan = UpdatePlan.of(
-                manifest, regions.regions.value, installed,
-                wanted = if (packsOn) PackKind.entries.toSet() else emptySet(),
+                manifest, picked, installed,
+                wanted = wantedKinds,
                 installedVersionCode = installedVersionCode(),
                 includeApp = appOn,
                 // A voice pack only for the voice picked in Settings > Voice.
                 voices = voices.voices.value,
             )
-            if (plan.isEmpty) return@withContext publish(UpdateState.UpToDate(manifest.version))
-            requireSpace(plan.bytes)
-            beforeDownload(plan)
-
-            var overall = 0L
-            val installedNames = ArrayList<String>()
-            for (pack in plan.packs) {
-                val asset = release.asset(pack.file.name) ?: throw IOException("The release is missing ${pack.file.name}")
-                val part = File(packStore.downloadDir.apply { mkdirs() }, "${pack.file.name}.part")
-                try {
-                    val sha = client.download(NetworkFeature.PACK_DOWNLOADS, asset, part, onProgress = { done ->
-                        progress(pack.file.name, done, pack.file.size, overall + done, plan.bytes)
-                    }, cancelled = { !isActive })
-                    if (sha != pack.file.sha256) throw IOException("${pack.file.name} doesn't match its published checksum")
-                    PackEvents.emit(packStore.installDownloaded(part, pack, sha))
-                    // routing-nys replaces routing-nyc, and so on: don't keep both.
-                    packStore.deleteOtherRegions(pack.kind, pack.region)
-                } finally {
-                    part.delete()
-                }
-                overall += pack.file.size
-                installedNames += pack.file.name
+            // v2 routing packs go into the tile folder together; see the class comment.
+            val routing = if (v2) UpdatePlan.wanted(manifest, picked, wantedKinds).filter { it.kind == PackKind.ROUTING } else emptyList()
+            val routingChanged = v2 && packsOn && routing.associate { it.file.name to it.file.sha256 } != tiles.installed()
+            val others = plan.packs.filterNot { v2 && it.kind == PackKind.ROUTING }
+            if (others.isEmpty() && plan.app == null && !routingChanged) {
+                if (v2 && packsOn) dropUnwanted(manifest, picked)
+                return@withContext publish(UpdateState.UpToDate(manifest.version))
             }
 
-            val apk = plan.app ?: return@withContext publish(UpdateState.Updated(installedNames, null))
-            val asset = release.asset(apk.name) ?: throw IOException("The release is missing ${apk.name}")
-            val dir = File(app.noBackupFilesDir, "updates").apply { deleteRecursively(); mkdirs() }
-            val file = File(dir, apk.name)
-            val sha = client.download(NetworkFeature.APP_UPDATES, asset, file, onProgress = { done ->
-                progress(apk.name, done, apk.size, overall + done, plan.bytes)
-            }, cancelled = { !isActive })
-            when (val verdict = check(file, apk.sha256, sha)) {
-                is ApkCheck.Verdict.Refused -> {
-                    file.delete()
-                    return@withContext publish(UpdateState.Failed("Update not installed. ${verdict.reason}"))
+            var generation: TileFolder.Generation? = null
+            var committed = false
+            try {
+                val routingDownloads = ArrayList<ReleasePack>()
+                if (routingChanged) {
+                    val g = tiles.begin().also { generation = it }
+                    // A pack unchanged since the current generation is linked from it, not downloaded again.
+                    for (pack in routing) if (!g.keep(pack.file.name, pack.file.sha256)) routingDownloads += pack
                 }
-                ApkCheck.Verdict.Ok -> Unit
+                val downloads = UpdatePlan(others + routingDownloads, plan.app)
+                // A routing pack is unpacked beside its download, then the download goes.
+                requireSpace(downloads.bytes + (routingDownloads.maxOfOrNull { it.file.size } ?: 0L))
+                beforeDownload(downloads)
+
+                var overall = 0L
+                val installedNames = ArrayList<String>()
+                for (pack in downloads.packs) {
+                    val asset = release.asset(pack.file.name) ?: throw IOException("The release is missing ${pack.file.name}")
+                    val part = File(packStore.downloadDir.apply { mkdirs() }, "${pack.file.name}.part")
+                    try {
+                        val sha = client.download(NetworkFeature.PACK_DOWNLOADS, asset, part, onProgress = { done ->
+                            progress(pack.file.name, done, pack.file.size, overall + done, downloads.bytes)
+                        }, cancelled = { !isActive })
+                        if (sha != pack.file.sha256) throw IOException("${pack.file.name} doesn't match its published checksum")
+                        val g = generation
+                        if (g != null && pack.kind == PackKind.ROUTING) {
+                            g.unpack(pack.file.name, sha, part)
+                        } else {
+                            PackEvents.emit(packStore.installDownloaded(part, pack, sha))
+                            // routing-nys replaces routing-nyc, and so on: don't keep both (southbound.json only).
+                            if (!v2) packStore.deleteOtherRegions(pack.kind, pack.region)
+                        }
+                    } finally {
+                        part.delete()
+                    }
+                    overall += pack.file.size
+                    installedNames += pack.file.name
+                }
+                generation?.let { g ->
+                    val replaced = tiles.current()
+                    g.commit()
+                    committed = true
+                    // A trip may still read the generation just replaced; anything older goes.
+                    tiles.prune(inUse = replaced)
+                    PackEvents.emit(ImportedPack(PackKind.ROUTING, TILES_REGION, g.dir))
+                }
+                if (v2 && packsOn) dropUnwanted(manifest, picked)
+
+                val apk = plan.app ?: return@withContext publish(UpdateState.Updated(installedNames, null))
+                val asset = release.asset(apk.name) ?: throw IOException("The release is missing ${apk.name}")
+                val dir = File(app.noBackupFilesDir, "updates").apply { deleteRecursively(); mkdirs() }
+                val file = File(dir, apk.name)
+                val sha = client.download(NetworkFeature.APP_UPDATES, asset, file, onProgress = { done ->
+                    progress(apk.name, done, apk.size, overall + done, downloads.bytes)
+                }, cancelled = { !isActive })
+                when (val verdict = check(file, apk.sha256, sha)) {
+                    is ApkCheck.Verdict.Refused -> {
+                        file.delete()
+                        return@withContext publish(UpdateState.Failed("Update not installed. ${verdict.reason}"))
+                    }
+                    ApkCheck.Verdict.Ok -> Unit
+                }
+                publish(UpdateState.AwaitingInstall(manifest.version))
+                AppInstaller.install(app, file)
+                return@withContext UpdateStatus.state.value
+            } finally {
+                if (!committed) generation?.abandon()
             }
-            publish(UpdateState.AwaitingInstall(manifest.version))
-            AppInstaller.install(app, file)
-            UpdateStatus.state.value
         } catch (e: NetworkFeatureDisabledException) {
             publish(UpdateState.Idle)
         } catch (e: GitHubReleases.HttpException) {
@@ -134,6 +185,25 @@ class Updater(context: Context) {
             publish(UpdateState.Failed(e.message?.takeIf { it.isNotBlank() && !offline } ?: UpdateErrors.NO_CONNECTION))
         } finally {
             UpdateNotifications.cancelProgress(app)
+        }
+    }
+
+    /**
+     * After a southbound-v2.json round: search packs no picked region uses go (the user unticked their regions, or
+     * search-nyc gave way to search-nys), and so does the one-graph routing-nys.tar once routing reads tiles.
+     */
+    private fun dropUnwanted(manifest: ReleaseManifest, picked: Set<String>) {
+        val searches = UpdatePlan.wanted(manifest, picked).filter { it.kind == PackKind.SEARCH }.map { it.region }.toSet()
+        for (pack in packStore.installed()) {
+            val unwanted = when (pack.kind) {
+                PackKind.SEARCH -> pack.region !in searches
+                PackKind.ROUTING -> tiles.current() != null
+                else -> false
+            }
+            if (unwanted) {
+                packStore.delete(pack.kind, pack.region)
+                PackEvents.emitRemoved(pack.kind, pack.region)
+            }
         }
     }
 
@@ -212,6 +282,8 @@ class Updater(context: Context) {
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256").digest(this).joinToString("") { "%02x".format(it) }
 
     private companion object {
+        /** The region an installed tile folder is announced under (PackEvents). */
+        const val TILES_REGION = "tiles"
         const val MB = 1L shl 20
         const val PROGRESS_STEP = MB
         const val SPACE_MARGIN = 200 * MB

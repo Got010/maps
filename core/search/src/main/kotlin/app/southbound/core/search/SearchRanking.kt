@@ -56,7 +56,17 @@ object SearchRanking {
         limit: Int,
         extra: List<ScoredResult> = emptyList(),
         pointsPerKm: Double = POINTS_PER_KM,
-    ): List<SearchResult> =
+    ): List<SearchResult> = rankScored(query, candidates, near, limit, extra, pointsPerKm).map { it.result }
+
+    /** [rank] with each result's score, so results from several packs can be merged ([SearchPacks]). */
+    fun rankScored(
+        query: SearchQuery,
+        candidates: List<Candidate>,
+        near: LatLon?,
+        limit: Int,
+        extra: List<ScoredResult> = emptyList(),
+        pointsPerKm: Double = POINTS_PER_KM,
+    ): List<ScoredResult> =
         candidates
             .asSequence()
             .filter { query.matchesText(it.searchText) }
@@ -71,7 +81,6 @@ object SearchRanking {
             .sortedByDescending { it.score }
             .distinctBy { it.result.place.id }
             .take(limit)
-            .map { it.result }
             .toList()
 
     internal fun textScore(query: SearchQuery, candidate: Candidate): Double {

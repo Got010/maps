@@ -31,25 +31,34 @@ class RegionsTest {
     fun `statewide is not a basemap region`() {
         assertTrue(Regions.basemaps.none { it.id == Regions.STATEWIDE })
         assertTrue(Regions.basemaps.none { it.id == "all" })
-        assertEquals(6, Regions.basemaps.size)
+        assertEquals(11, Regions.basemaps.size)
         assertEquals("New York and Northern New Jersey", Regions.nameOf("nys"))
         assertEquals("custom", Regions.nameOf("custom"))
     }
 
-    /** The states beyond New York are built but not offered until their packs are in a release. */
+    /** The four states beyond New York, offered since their packs are in southbound-v2.json. */
     @Test
-    fun `planned regions stay out of the picker`() {
-        assertEquals(listOf("njs", "ct", "pae", "paw", "md"), Regions.all.filter { it.planned }.map { it.id })
-        assertTrue(Regions.basemaps.none { it.planned })
-        assertNull(Regions.basemapAt(39.9526, -75.1636)) // Philadelphia
-        assertEquals("Connecticut", Regions.nameOf("ct"))
+    fun `the other states are offered, grouped by state`() {
+        assertTrue(Regions.all.none { it.planned })
+        assertEquals(
+            listOf("New York", "New Jersey", "Connecticut", "Pennsylvania", "Maryland, Delaware and DC"),
+            Regions.byState.map { it.first },
+        )
+        // Every region under one heading, in the picker's order.
+        assertEquals(Regions.basemaps, Regions.byState.flatMap { it.second })
+        assertEquals("pae", Regions.basemapAt(39.9526, -75.1636)?.id) // Philadelphia
+        assertEquals("paw", Regions.basemapAt(40.4406, -79.9959)?.id) // Pittsburgh
+        assertEquals("ct", Regions.basemapAt(41.0534, -73.5387)?.id) // Stamford, inside Long Island's box
+        assertEquals("md", Regions.basemapAt(38.9072, -77.0369)?.id) // Washington, DC
+        assertEquals("md", Regions.basemapAt(39.7447, -75.5466)?.id) // Wilmington, DE
+        assertEquals("njs", Regions.basemapAt(39.3643, -74.4229)?.id) // Atlantic City
     }
 
     @Test
     fun `northern new jersey reaches the delaware`() {
         assertEquals("njn", Regions.basemapAt(40.6937, -75.1902)?.id) // Phillipsburg
         assertEquals("njn", Regions.basemapAt(41.0582, -74.7527)?.id) // Newton
-        assertNull(Regions.basemapAt(40.6884, -75.2207)) // Easton, PA, across the river
+        assertEquals("pae", Regions.basemapAt(40.6884, -75.2207)?.id) // Easton, PA, across the river
     }
 
     @Test
@@ -57,7 +66,8 @@ class RegionsTest {
         assertEquals("nyc", Regions.basemapAt(40.7484, -73.9857)?.id)
         assertEquals("western", Regions.basemapAt(42.8864, -78.8784)?.id)
         assertEquals("capital", Regions.basemapAt(42.6526, -73.7562)?.id)
-        assertNull(Regions.basemapAt(39.0, -77.0))
+        assertEquals("md", Regions.basemapAt(39.0, -77.0)?.id) // Silver Spring
+        assertNull(Regions.basemapAt(37.5, -78.0)) // Virginia
     }
 
     /** New York City's box covers the New Jersey side of the Hudson; the njn area takes those points back. */

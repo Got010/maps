@@ -7,7 +7,7 @@
     <string name="explore_location_settings">Open settings</string>
     <string name="explore_pack_missing_title">Pick your map regions</string>
     <string name="explore_pack_body">Or load the packs by hand: download them from the latest Southbound release on GitHub, then import them here. Everything stays on this phone.</string>
-    <string name="explore_download_wifi">Southbound downloads the maps for the regions ticked above, plus search and directions for New York and northern New Jersey, and NYC transit data, from its latest release next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
+    <string name="explore_download_wifi">Southbound downloads the map, search and directions for the regions ticked above (with main roads in every state, so a trip can pass through the others), and NYC transit data, from its latest release next time it\'s on Wi-Fi. After that it keeps them up to date by itself.</string>
     <string name="explore_download_off">Map downloads are turned off in Settings &gt; Updates.</string>
     <string name="explore_download_checking">Checking the latest release…</string>
     <string name="explore_download_progress">Downloading map data: %1$d of %2$d MB</string>

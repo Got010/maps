@@ -16,7 +16,7 @@ import app.southbound.core.search.RouteAlert
 import app.southbound.core.search.RouteAlerts
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.RouteProgress
-import app.southbound.core.search.SearchIndex
+import app.southbound.core.search.PlaceSearch
 import app.southbound.core.voice.GuidanceContext
 import app.southbound.core.voice.GuidancePolicy
 import app.southbound.core.voice.GuidanceVoice
@@ -70,7 +70,7 @@ class GuidanceSupport(
     context: Context,
     private val voice: GuidanceVoice,
     private val settings: StateFlow<VoiceSettings>,
-    private val search: () -> SearchIndex?,
+    private val search: () -> PlaceSearch?,
 ) : GuidanceContext {
 
     private val appContext = context.applicationContext

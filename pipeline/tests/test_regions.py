@@ -61,9 +61,11 @@ class RegionsTest(unittest.TestCase):
         self.assertFalse(self.regions["nys"]["basemap"])
         offered = {n: r for n, r in self.regions.items() if r["basemap"] and not r.get("planned")}
         basemaps = [r["bounds"] for r in offered.values()]
-        self.assertEqual(6, len(basemaps))
-        # Every basemap region the app offers lies inside the routing and search region.
+        self.assertEqual(11, len(basemaps))
+        # Every region that searches search-nys lies inside the nys routing and search region.
         for name, region in offered.items():
+            if region.get("search") != "nys":
+                continue
             b = region["bounds"]
             self.assertTrue(state[0] <= b[0] and b[2] <= state[2] and state[1] <= b[1] and b[3] <= state[3], name)
         # A few cities lie in some basemap region and in the state box.
@@ -136,7 +138,7 @@ class RegionsTest(unittest.TestCase):
             "Phillipsburg, NJ": (-75.1902, 40.6937, "njn"),
             "Hackettstown, NJ": (-74.8291, 40.8540, "njn"),
             "Newton, NJ": (-74.7527, 41.0582, "njn"),
-            # Planned regions: Pennsylvania across the river.
+            # Pennsylvania across the river.
             "Easton, PA": (-75.2207, 40.6884, "pae"),
             "Milford, PA": (-74.8024, 41.3223, "pae"),  # inside Hudson Valley's box
             "Stroudsburg, PA": (-75.1946, 40.9868, "pae"),

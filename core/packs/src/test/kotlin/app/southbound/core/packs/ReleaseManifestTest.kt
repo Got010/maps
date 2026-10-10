@@ -39,6 +39,50 @@ class ReleaseManifestTest {
         assertNull(m.pack(PackKind.ROUTING, "nyc"))
     }
 
+    /** southbound-v2.json, written by scripts/release-manifest.py --v2 from a fake release (see the commit). */
+    @Test
+    fun `reads the v2 manifest with the regions each pack serves`() {
+        val m = ReleaseManifest.parseV2(File("src/test/resources/southbound-v2.json").readText())
+        assertNull(m.pack(PackKind.ROUTING, "nys")) // the one-graph pack isn't for a tile folder
+        assertEquals(emptyList<String>(), m.pack(PackKind.ROUTING, "main")!!.regions)
+        assertEquals(listOf("ct", "hudson", "li", "njn", "njs", "nyc"), m.pack(PackKind.ROUTING, "ct-hudson-li-njn-njs-nyc")!!.regions)
+        assertEquals(listOf("nyc", "li", "hudson", "capital", "western", "njn"), m.pack(PackKind.SEARCH, "nys")!!.regions)
+        assertEquals(listOf("ct"), m.pack(PackKind.SEARCH, "ct")!!.regions)
+        assertNull(m.pack(PackKind.BASEMAP, "ct")!!.regions)
+        assertNull(m.pack(PackKind.TRANSIT, "nyc")!!.regions)
+        // southbound.json and southbound-v2.json aren't read as each other.
+        parseFails(File("src/test/resources/southbound-v2.json").readText(), "schema 2")
+        try {
+            ReleaseManifest.parseV2(fixture)
+            fail("read a schema 1 file as v2")
+        } catch (e: ManifestException) {
+            assertTrue(e.message!!.contains("schema 1"))
+        }
+    }
+
+    @Test
+    fun `v2 plan takes the packs naming a picked region and the shared one`() {
+        val m = ReleaseManifest.parseV2(File("src/test/resources/southbound-v2.json").readText())
+        fun wanted(vararg regions: String) =
+            UpdatePlan.wanted(m, regions.toSet()).map { it.file.name }.sorted()
+        assertEquals(
+            listOf("basemap-ct.pmtiles", "routing-ct-hudson-li-njn-njs-nyc.tar", "routing-ct.tar", "routing-main.tar",
+                "search-ct.sqlite", "transit-nyc.sqlite"),
+            wanted("ct"),
+        )
+        assertEquals(
+            listOf("routing-ct-hudson-li-njn-njs-nyc.tar", "routing-main.tar", "search-nys.sqlite", "transit-nyc.sqlite"),
+            wanted("hudson"),
+        )
+        // A bad region in a pack's list is refused.
+        try {
+            ReleaseManifest.parseV2(doc(schema = 2, packs = """[{"kind":"search","region":"ct","file":"search-ct.sqlite","size":5,"sha256":"$sha","regions":["../x"]}]"""))
+            fail("accepted a bad region")
+        } catch (e: ManifestException) {
+            assertTrue(e.message!!.contains("bad region"))
+        }
+    }
+
     @Test
     fun `skips kinds this app doesn't know`() {
         val m = ReleaseManifest.parse(doc(packs = """[{"kind":"terrain","region":"nyc","file":"terrain-nyc.bin","size":5,"sha256":"$sha"}]"""))
