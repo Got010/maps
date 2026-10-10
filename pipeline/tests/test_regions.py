@@ -62,10 +62,11 @@ class RegionsTest(unittest.TestCase):
         offered = {n: r for n, r in self.regions.items() if r["basemap"] and not r.get("planned")}
         basemaps = [r["bounds"] for r in offered.values()]
         self.assertEqual(11, len(basemaps))
-        # Every region that searches search-nys lies inside the nys routing and search region.
-        for name, region in offered.items():
-            if region.get("search") != "nys":
-                continue
+        # Every region whose search pack is cut from search-nys lies inside the nys region.
+        cut = [name for name, region in offered.items() if region.get("search_from") == "nys"]
+        self.assertEqual(["nyc", "li", "hudson", "capital", "western", "njn"], cut)
+        for name in cut:
+            region = offered[name]
             b = region["bounds"]
             self.assertTrue(state[0] <= b[0] and b[2] <= state[2] and state[1] <= b[1] and b[3] <= state[3], name)
         # A few cities lie in some basemap region and in the state box.

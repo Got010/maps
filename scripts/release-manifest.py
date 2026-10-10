@@ -14,14 +14,15 @@ only the packs they know (--only: the six New York basemaps, routing-nys,
 search-nys, transit, voice). Parsed by core/packs ReleaseManifest; keep the two
 in step.
 
-southbound-v2.json (schema 2) lists every pack except the one-graph routing
-packs (routing-nys.tar: a phone routing from a tile folder can't mix it in),
-and says which basemap regions need each routing and search pack in
-"regions": a routing pack's from routing-packs.json (split_tiles.py; an empty
-list, routing-main.tar, is every phone's), a search pack's from regions.json
-(a region's "search", else its own id). A pack without "regions" goes by its
-kind as before: a basemap for its own region, voices when picked, transit for
-every phone.
+southbound-v2.json (schema 2) lists every pack except the ones built whole
+for older apps: routing-nys.tar (a phone routing from a tile folder can't mix
+it in) and search-nys.sqlite (New York's regions have their own, cut from it
+by search/split_search.py). It says which basemap regions need each routing
+and search pack in "regions": a routing pack's from routing-packs.json
+(split_tiles.py; an empty list, routing-main.tar, is every phone's), a search
+pack's is its own region, when regions.json has that basemap region. A pack
+without "regions" goes by its kind as before: a basemap for its own region,
+voices when picked, transit for every phone.
 """
 
 import argparse
@@ -54,14 +55,10 @@ def entry(directory, name):
 
 
 def search_regions(regions_json):
-    """Search pack id -> the basemap regions that use it ("search" in regions.json, else the region's own)."""
+    """Search pack id -> the basemap regions that use it: each basemap region its own."""
     with open(regions_json) as f:
         regions = json.load(f)["regions"]
-    found = {}
-    for name, region in regions.items():
-        if region["basemap"]:
-            found.setdefault(region.get("search", name), []).append(name)
-    return found
+    return {name: [name] for name, region in regions.items() if region["basemap"]}
 
 
 def manifest(directory, version, only=None, v2=False, regions_json=None):
@@ -84,7 +81,7 @@ def manifest(directory, version, only=None, v2=False, regions_json=None):
             pack["regions"] = routing[name]
         elif v2 and pack["kind"] == "search":
             if pack["region"] not in searches:
-                continue  # no basemap region uses it
+                continue  # no basemap region's own (search-nys.sqlite, for older apps)
             pack["regions"] = searches[pack["region"]]
         packs.append(pack)
     return {

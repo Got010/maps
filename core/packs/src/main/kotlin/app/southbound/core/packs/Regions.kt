@@ -17,9 +17,11 @@ data class Bounds(val minLon: Double, val minLat: Double, val maxLon: Double, va
 data class LonLat(val lon: Double, val lat: Double)
 
 /**
- * A data pack region. Basemaps come one per region so a phone installs only
- * the parts of the state it needs; routing and search cover the whole area
- * in one pack each ([Regions.STATEWIDE]), so cross-region trips work.
+ * A data pack region. Basemaps and search packs come one per region so a phone
+ * installs only the parts it needs, and routing in packs named by the regions
+ * their roads cover, with the main roads of every state in one ([TileFolder]),
+ * so cross-region trips work. [Regions.STATEWIDE] is the one-file routing and
+ * search of New York and northern New Jersey, for phones from before those.
  *
  * [area] (empty for most regions) is a polygon tighter than [bounds], used to
  * tell which region a point belongs to where boxes overlap: northern New
@@ -63,9 +65,10 @@ data class Region(
  */
 object Regions {
     /**
-     * The region id of the routing and search packs. The id predates northern
-     * New Jersey and stays "nys" (renaming a pack is a migration); the pack
-     * covers New York and northern New Jersey.
+     * The region id of the one-file routing and search packs of New York and
+     * northern New Jersey (routing-nys.tar, search-nys.sqlite). Releases still
+     * ship them for older apps; a phone on southbound-v2.json takes the
+     * per-region packs instead, and its first round there deletes these.
      */
     const val STATEWIDE = "nys"
 
