@@ -29,15 +29,17 @@ internal object RouteOptions {
      * streets first, see [BikePrefs]). Only the options for [mode] are sent.
      * Like closures, this goes in per request, not into the adapter, so a
      * change in the options sheet takes effect on the next route and reroute.
+     * [useDistance] (driving only) weighs distance into the choice, for the
+     * preview's shorter way ([ShorterRoute]).
      */
-    fun withPrefs(body: String, mode: TravelMode, prefs: RoutePrefs): String {
+    fun withPrefs(body: String, mode: TravelMode, prefs: RoutePrefs, useDistance: Double? = null): String {
         val costing = when (mode) {
             TravelMode.DRIVE -> prefs.costing
             TravelMode.WALK -> TravelMode.WALK.valhallaCosting
             TravelMode.BIKE -> TravelMode.BIKE.valhallaCosting
         }
         val options = when (mode) {
-            TravelMode.DRIVE -> prefs.costingOptionsJson()
+            TravelMode.DRIVE -> prefs.costingOptionsJson(useDistance)
             TravelMode.WALK -> prefs.walk.costingOptionsJson()
             TravelMode.BIKE -> prefs.bikeCostingOptionsJson()
         } ?: return body
@@ -53,6 +55,11 @@ internal object RouteOptions {
     }
 
     private val COSTING_AUTO = Regex(""""costing"\s*:\s*"auto"""")
+
+    /** The request [body] without alternatives: only the best route ([ShorterRoute] wants one). */
+    fun withoutAlternates(body: String): String = ALTERNATES_KEY.replace(body, """"alternates":0""")
+
+    private val ALTERNATES_KEY = Regex(""""alternates"\s*:\s*\d+""")
 
     /**
      * Adds Valhalla `exclude_polygons` (rings of (lon, lat) pairs, e.g. around

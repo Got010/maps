@@ -66,4 +66,5 @@
     <string name="directions_gas_cost">\u2248 %1$s gas</string>
     <string name="directions_least_gas">Most fuel-efficient</string>
     <string name="directions_fastest_least_gas">Fastest and least gas</string>
+    <string name="directions_shorter_way">Shorter way</string>
 </resources>
