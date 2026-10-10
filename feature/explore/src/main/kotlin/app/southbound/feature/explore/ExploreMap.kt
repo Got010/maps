@@ -108,6 +108,7 @@ import app.southbound.core.routing.RouteOptionsStore
 import app.southbound.core.routing.RoutePrefs
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.SpeedLimits
+import app.southbound.core.routing.ShorterRoute
 import app.southbound.core.routing.SpeedWarningPolicy
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
@@ -536,12 +537,22 @@ internal fun ExploreMap(
         }
         // "Avoid plate readers" and "Avoid DOT cameras" use the same squares; either or both may be on.
         val avoidCameras = routePrefs.avoidedCameraCategories()
-        val found = if (driving && avoidCameras.isNotEmpty() && cameraIndex != null && plainRoutes.isNotEmpty()) {
+        val avoided = if (driving && avoidCameras.isNotEmpty() && cameraIndex != null && plainRoutes.isNotEmpty()) {
             withContext(Dispatchers.Default) {
                 attempt { PlateReaders.avoid(nav, cameraIndex, from.toUserLocation(), waypoints, target.mode, avoid, plainRoutes, avoidCameras).routes }
             } ?: plainRoutes.also { nav.cameraAvoid = emptyList() }
         } else {
             plainRoutes
+        }
+        // Also the shorter way: Valhalla prefers main roads to residential streets, so a side street that is shorter
+        // and faster by its own estimate can be missing from the options (ShorterRoute). Driving only.
+        val shorter = if (driving && avoided.isNotEmpty()) {
+            withContext(Dispatchers.Default) { attempt { nav.shorterRoute(from.toUserLocation(), waypoints) } }
+        } else {
+            null
+        }
+        val found = ShorterRoute.merge(avoided, shorter) {
+            ShorterRoute.Option(RouteSummary.of(it).durationSeconds, it.distance, it.geometry.map { p -> p.lat to p.lng })
         }
         val valhallaExposure = if (cameraIndex != null) withContext(Dispatchers.Default) { attempt { PlateReaders.exposure(cameraIndex, found) } }.orEmpty() else emptyList()
         // Live speeds laid over each option: coloured stretches and the delay they add (car traffic: driving only).
@@ -570,9 +581,14 @@ internal fun ExploreMap(
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
             val delays = slow.map { it.delaySeconds }
+            val shorterIndex = shorter?.takeIf { it in found }?.let { ranked.indexOf(it) }?.takeIf { it >= 0 }
             preview = RoutePreviewState.Ready(
-                summaries = ranked.map(RouteSummary::of),
+                // The shorter way says which road makes it so ("via Old Temple Hill Road"), not the one it shares.
+                summaries = ranked.mapIndexed { i, route ->
+                    if (i == shorterIndex) RouteSummary.apartFrom(route, ranked[if (i == 0) 1 else 0]) else RouteSummary.of(route)
+                },
                 selected = 0,
+                shorter = shorterIndex,
                 delaySeconds = delays,
                 fuelGallons = fuelGallonsFor(ranked, delays, services.fuelPrefs.settings.value.mpg),
                 exposure = exposure,

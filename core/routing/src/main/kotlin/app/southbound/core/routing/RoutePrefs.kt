@@ -136,9 +136,11 @@ data class RoutePrefs(
      * from a plain car trip (driving only; see [WalkPrefs] and [BikePrefs]).
      * Valhalla's 0 for use_tolls, use_highways and
      * use_ferry means avoid as far as possible; unset keeps its own default.
+     * [useDistance] weighs distance into the route choice ([ShorterRoute]).
      */
-    fun costingOptionsJson(): String? {
+    fun costingOptionsJson(useDistance: Double? = null): String? {
         val parts = buildList {
+            if (useDistance != null) add(""""use_distance":${num(useDistance)}""")
             if (avoidTolls) add(""""use_tolls":0""")
             if (avoidHighways) add(""""use_highways":0""")
             if (avoidFerries) add(""""use_ferry":0""")
