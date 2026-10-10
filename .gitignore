@@ -17,6 +17,8 @@ pipeline/data/
 *.osm.pbf
 *.sqlite
 *.tar
+# A 10 KB test tar the app's TileFolderTest reads, written by pipeline/routing/split_tiles.py.
+!core/packs/src/test/resources/routing-sample.tar
 
 .DS_Store
 __pycache__/

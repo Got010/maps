@@ -5,12 +5,21 @@ import app.southbound.core.network.MiniJson
 /** One file in a release, with what a download of it must match. */
 data class ReleaseFile(val name: String, val size: Long, val sha256: String)
 
-data class ReleasePack(val kind: PackKind, val region: String, val file: ReleaseFile)
+/**
+ * A pack in a release. [regions] (southbound-v2.json only) are the basemap regions that need it: a routing pack
+ * of local roads names the regions its tiles cover, a search pack the regions it serves; an empty list is every
+ * phone's (routing-main.tar). Null when the manifest doesn't say, and the pack goes by its kind (see [UpdatePlan]).
+ */
+data class ReleasePack(val kind: PackKind, val region: String, val file: ReleaseFile, val regions: List<String>? = null)
 
 /**
  * `southbound.json`, published with every release by scripts/release-manifest.py:
  * the app version and the data packs, each with its size and SHA-256. The app
  * reads it to decide what to download, then checks every download against it.
+ *
+ * Releases since the four-state packs also publish `southbound-v2.json` ([FILE_NAME_V2], schema 2): every pack
+ * but the one-graph routing-nys.tar, with the regions each routing and search pack serves. This app reads it when
+ * the release has it ([parseV2]); southbound.json stays as older apps know it.
  */
 data class ReleaseManifest(
     val version: String,
@@ -23,13 +32,17 @@ data class ReleaseManifest(
     companion object {
         const val FILE_NAME = "southbound.json"
         const val SCHEMA = 1
+        const val FILE_NAME_V2 = "southbound-v2.json"
+        const val SCHEMA_V2 = 2
 
         /** Biggest file the app will accept: well above the NYC packs, well below a phone's free space. */
         const val MAX_FILE_BYTES = 4L shl 30
 
         private val SHA256 = Regex("[0-9a-f]{64}")
         private val VERSION = Regex("""(\d{1,2})\.(\d{1,2})\.(\d{1,2})""")
-        private val REGION = Regex("[a-z0-9-]{1,32}")
+        // A routing pack is named by the regions its tiles cover ("ct-hudson-li-njn-njs-nyc"): up to 64 characters.
+        private val REGION = Regex("[a-z0-9-]{1,64}")
+        private val REGION_ID = Regex("[a-z0-9]{1,32}")
 
         /**
          * Parses and checks a manifest. Packs of kinds this app doesn't know are
@@ -37,7 +50,12 @@ data class ReleaseManifest(
          *
          * @throws ManifestException when the document is malformed or unsafe.
          */
-        fun parse(json: String): ReleaseManifest {
+        fun parse(json: String): ReleaseManifest = parse(json, SCHEMA)
+
+        /** Parses and checks a southbound-v2.json; see [parse]. */
+        fun parseV2(json: String): ReleaseManifest = parse(json, SCHEMA_V2)
+
+        private fun parse(json: String, expectedSchema: Int): ReleaseManifest {
             val root = try {
                 MiniJson.parse(json)
             } catch (e: MiniJson.JsonException) {
@@ -45,7 +63,7 @@ data class ReleaseManifest(
             } as? Map<*, *> ?: throw ManifestException("not an object")
 
             val schema = (root["schema"] as? Long) ?: throw ManifestException("no schema")
-            if (schema != SCHEMA.toLong()) throw ManifestException("schema $schema; this app reads $SCHEMA")
+            if (schema != expectedSchema.toLong()) throw ManifestException("schema $schema; this file should be $expectedSchema")
             val version = root["version"] as? String ?: throw ManifestException("no version")
             val m = VERSION.matchEntire(version) ?: throw ManifestException("bad version '$version'")
             val (major, minor, patch) = m.destructured
@@ -63,7 +81,10 @@ data class ReleaseManifest(
                 val f = file(p)
                 // The name decides where the file lands, so it must be exactly the expected one.
                 if (f.name != kind.fileName(region)) throw ManifestException("unexpected pack name ${f.name}")
-                ReleasePack(kind, region, f)
+                val regions = (p["regions"] as? List<*>)?.map { r ->
+                    (r as? String)?.takeIf { REGION_ID.matches(it) } ?: throw ManifestException("bad region '$r' for ${f.name}")
+                }
+                ReleasePack(kind, region, f, regions)
             }
             if (packs.distinctBy { it.kind to it.region }.size != packs.size) throw ManifestException("duplicate pack")
             return ReleaseManifest(version, versionCode, app, packs)
@@ -92,9 +113,11 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
         /**
          * The packs the phone should have: a basemap for each region in
          * [basemapRegions], a voice pack for each voice in [voices] (none
-         * unless the user picked one: they're big), and every other kind of
-         * pack the release offers (routing and search are statewide, transit
-         * is NYC), restricted to [wanted] kinds.
+         * unless the user picked one: they're big), a pack that names its
+         * regions (southbound-v2.json's routing and search packs) when one of
+         * them is picked or it names none (routing-main.tar: every phone), and
+         * every other pack the release offers (southbound.json's statewide
+         * routing and search, NYC transit), restricted to [wanted] kinds.
          */
         fun wanted(
             manifest: ReleaseManifest,
@@ -106,7 +129,7 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
                 pack.kind in wanted && when (pack.kind) {
                     PackKind.BASEMAP -> pack.region in basemapRegions
                     PackKind.VOICE -> pack.region in voices
-                    else -> true
+                    else -> pack.regions?.let { it.isEmpty() || it.any { r -> r in basemapRegions } } ?: true
                 }
             }
 
