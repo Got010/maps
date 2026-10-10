@@ -111,7 +111,7 @@ object Regions {
             ),
         ),
         Region(
-            "njs", "Southern New Jersey", Bounds(-75.57, 38.88, -73.89, 40.32), basemap = true, planned = true,
+            "njs", "Southern New Jersey", Bounds(-75.57, 38.88, -73.89, 40.32), basemap = true,
             area = listOf(
                 LonLat(-74.88, 40.32),
                 LonLat(-73.89, 40.32),
@@ -139,7 +139,7 @@ object Regions {
             ),
         ),
         Region(
-            "ct", "Connecticut", Bounds(-73.73, 40.98, -71.78, 42.05), basemap = true, planned = true,
+            "ct", "Connecticut", Bounds(-73.73, 40.98, -71.78, 42.05), basemap = true,
             area = listOf(
                 LonLat(-73.487, 42.05),
                 LonLat(-71.8, 42.02),
@@ -164,7 +164,7 @@ object Regions {
             ),
         ),
         Region(
-            "pae", "Eastern Pennsylvania", Bounds(-77.05, 39.72, -74.68, 42.0), basemap = true, planned = true,
+            "pae", "Eastern Pennsylvania", Bounds(-77.05, 39.72, -74.68, 42.0), basemap = true,
             area = listOf(
                 LonLat(-77.0, 39.722),
                 LonLat(-77.0, 42.0),
@@ -209,7 +209,7 @@ object Regions {
             ),
         ),
         Region(
-            "paw", "Western Pennsylvania", Bounds(-80.52, 39.72, -76.95, 42.27), basemap = true, planned = true,
+            "paw", "Western Pennsylvania", Bounds(-80.52, 39.72, -76.95, 42.27), basemap = true,
             area = listOf(
                 LonLat(-80.519, 39.721),
                 LonLat(-80.519, 41.98),
@@ -220,7 +220,7 @@ object Regions {
             ),
         ),
         Region(
-            "md", "Maryland, Delaware and DC", Bounds(-79.49, 37.88, -74.94, 39.85), basemap = true, planned = true,
+            "md", "Maryland, Delaware and DC", Bounds(-79.49, 37.88, -74.94, 39.85), basemap = true,
             area = listOf(
                 LonLat(-79.477, 39.722),
                 LonLat(-75.788, 39.722),
@@ -275,6 +275,19 @@ object Regions {
 
     /** The regions a basemap can be installed for, in the order the picker shows them; planned ones are left out. */
     val basemaps: List<Region> = all.filter { it.basemap && !it.planned }
+
+    /**
+     * The picker's headings: the basemap regions by state, in [basemaps] order. Maryland's region holds Delaware
+     * and DC too.
+     */
+    val byState: List<Pair<String, List<Region>>> = listOf(
+        "New York" to listOf("nyc", "li", "hudson", "capital", "western"),
+        "New Jersey" to listOf("njn", "njs"),
+        "Connecticut" to listOf("ct"),
+        "Pennsylvania" to listOf("pae", "paw"),
+        "Maryland, Delaware and DC" to listOf("md"),
+    ).map { (state, ids) -> state to ids.mapNotNull { id -> basemaps.firstOrNull { it.id == id } } }
+        .filter { it.second.isNotEmpty() }
 
     fun byId(id: String): Region? = all.firstOrNull { it.id == id }
 

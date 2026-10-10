@@ -92,7 +92,7 @@
     <string name="updates_up_to_date">Everything is up to date.</string>
     <string name="updates_installed">Installed: %1$s</string>
     <string name="updates_packs">Download map data</string>
-    <string name="updates_packs_note">Maps for the regions below, search and directions for New York and northern New Jersey, and NYC transit data from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
+    <string name="updates_packs_note">The map, search and directions for the regions below (main roads come for every state), and NYC transit data, from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
     <string name="updates_app">Install app updates</string>
     <string name="updates_app_note">New versions of Southbound from the same releases, checked to be signed with the same key. Android asks you to confirm the first one; after that Southbound updates itself.</string>
     <string name="updates_allow_install">Allow Southbound to install updates</string>
@@ -105,7 +105,7 @@
     <string name="updates_token_remove">Remove token</string>
     <string name="updates_waiting">Queued: Android starts it once there\'s a connection (Wi-Fi, unless mobile data is allowed). If this stays for more than a minute, close and reopen Southbound.</string>
     <string name="regions_title">Map regions</string>
-    <string name="regions_note">Tick the parts of New York and northern New Jersey you want maps for. Search and directions cover all of it in one download each; transit schedules cover NYC. Unticking a region deletes its map from the phone.</string>
+    <string name="regions_note">Tick the regions you want: each brings its map, search and local streets for directions, and main roads in every state come with any of them, so a trip passes through regions you haven\'t ticked. The place you\'re going needs its region ticked. Transit schedules cover NYC. Unticking a region deletes its map, search and streets from the phone.</string>
     <string name="regions_installed">Installed · %1$d MB</string>
     <string name="regions_pending">Not downloaded yet; comes with the next update check.</string>
     <string name="regions_not_installed">Not on this phone</string>
