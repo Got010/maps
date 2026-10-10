@@ -45,12 +45,15 @@ class AssignmentTest(unittest.TestCase):
 
     def test_packs_are_named_by_the_regions_they_serve(self):
         self.assertEqual("main", st.pack_for(0, ["nyc"]))
-        self.assertEqual("main", st.pack_for(1, []))  # Ohio's main roads too: trips may cross it
+        self.assertEqual("main", st.pack_for(0, []))  # Ohio's main roads too: trips may cross it
+        # Only level 0 is shared: secondary roads go by region like local streets.
+        self.assertEqual("hudson", st.pack_for(1, ["hudson"]))
         self.assertEqual("hudson", st.pack_for(2, ["hudson"]))
         self.assertEqual("hudson-njn-nyc", st.pack_for(2, ["nyc", "hudson", "njn"]))
+        self.assertIsNone(st.pack_for(1, []))
         self.assertIsNone(st.pack_for(2, []))
-        # With only level 0 shared, level 1 goes by region too.
-        self.assertEqual("hudson", st.pack_for(1, ["hudson"], main_levels=(0,)))
+        # As the first test build cut them, levels 0 and 1 shared.
+        self.assertEqual("main", st.pack_for(1, ["hudson"], main_levels=(0, 1)))
 
     def test_local_roads_follow_the_maps(self):
         # Manhattan and the Bronx with Fort Lee across the river: New York City's, the Hudson Valley's and
@@ -97,19 +100,24 @@ class SplitTest(unittest.TestCase):
             index = os.path.join(tmp, "tiles.jsonl")
             result = st.split(tiles, out, regions, log=io.StringIO(), index=index)
 
-            self.assertEqual((2, len(b"highways") + len(b"arterials")), result["main"])
+            self.assertEqual((1, len(b"highways")), result["main"])
             self.assertEqual((1, len(b"buffalo")), result["western"])
             self.assertEqual((1, len(b"ohio")), result[None])
-            # Philadelphia and Camden's tile, once, in the pack for both regions.
+            # Manhattan's 1-degree level 1 tile reaches four regions; Philadelphia and Camden's level 2 tile, once,
+            # in the pack for both regions.
+            arterials = st.pack_for(1, st.regions_for_tile(regions, 1, st.tile_id_at(1, 40.75, -73.98)))
+            self.assertEqual((1, len(b"arterials")), result[arterials])
             self.assertEqual(
-                ["routing-main.tar", "routing-njs-pae.tar", "routing-packs.json", "routing-western.tar"],
+                sorted(["routing-main.tar", f"routing-{arterials}.tar", "routing-njs-pae.tar", "routing-packs.json",
+                        "routing-western.tar"]),
                 sorted(os.listdir(out)),
             )
             with open(os.path.join(out, "routing-packs.json")) as f:
-                self.assertEqual(
-                    {"routing-main.tar": [], "routing-njs-pae.tar": ["njs", "pae"], "routing-western.tar": ["western"]},
-                    json.load(f),
-                )
+                listing = json.load(f)
+            self.assertEqual([], listing["routing-main.tar"])
+            self.assertEqual(["njs", "pae"], listing["routing-njs-pae.tar"])
+            self.assertEqual(["western"], listing["routing-western.tar"])
+            self.assertEqual(arterials.split("-"), listing[f"routing-{arterials}.tar"])
             with open(index) as f:
                 rows = [json.loads(line) for line in f]
             self.assertIn([st.tile_path(2, st.tile_id_at(2, 40.0, -82.0)), 2, 4, []], rows)
