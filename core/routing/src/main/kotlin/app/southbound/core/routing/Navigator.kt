@@ -98,6 +98,22 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         return core.getRoutes(from, waypoints)
     }
 
+    /**
+     * The driving route with distance weighed in ([ShorterRoute]), around the same closures and plate readers as
+     * the last [routes] call, for the preview to offer beside those when it is faster and shorter. Null when not
+     * driving or there is none.
+     */
+    suspend fun shorterRoute(from: UserLocation, waypoints: List<Waypoint>): Route? {
+        if (mode != TravelMode.DRIVE) return null
+        return withContext(Dispatchers.Default) {
+            try {
+                router.routes(from, waypoints, mode, allAvoid(), prefs, useDistance = ShorterRoute.USE_DISTANCE, alternates = false).firstOrNull()
+            } catch (e: RoutingException) {
+                null
+            }
+        }
+    }
+
     /** Closures (plus [extra]) first, then as many camera squares as Valhalla's limit leaves room for. */
     private fun allAvoid(extra: List<List<Pair<Double, Double>>> = emptyList()): List<List<Pair<Double, Double>>> =
         CameraAvoidance.merge(avoid + extra, cameraAvoid)

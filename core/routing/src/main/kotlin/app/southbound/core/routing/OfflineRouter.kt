@@ -49,7 +49,9 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
     /**
      * Routes from [from] through [waypoints], best first, with up to two
      * alternatives when Valhalla finds them. [prefs] are the driver's route options. [avoid] holds polygons (rings of
-     * lon, lat) the route must not cross, e.g. around closures. Blocking:
+     * lon, lat) the route must not cross, e.g. around closures. [useDistance]
+     * weighs distance into the choice and [alternates] false asks for the
+     * best route only (the preview's shorter way, [ShorterRoute]). Blocking:
      * call off the main thread.
      *
      * @throws RoutingException when there is no route, e.g. a destination
@@ -62,11 +64,16 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         avoid: List<List<Pair<Double, Double>>> = emptyList(),
         // Phase 6: tolls, highways, ferries and the vehicle profile.
         prefs: RoutePrefs = RoutePrefs.DEFAULT,
+        useDistance: Double? = null,
+        alternates: Boolean = true,
     ): List<Route> {
         val adapter = adapters.getValue(mode)
         val request = adapter.generateRequest(from, waypoints)
         val body = when (request) {
-            is RouteRequest.HttpPost -> RouteOptions.withExcludePolygons(RouteOptions.withPrefs(request.body.decodeToString(), mode, prefs), avoid)
+            is RouteRequest.HttpPost -> {
+                val withPrefs = RouteOptions.withPrefs(request.body.decodeToString(), mode, prefs, useDistance)
+                RouteOptions.withExcludePolygons(if (alternates) withPrefs else RouteOptions.withoutAlternates(withPrefs), avoid)
+            }
             is RouteRequest.HttpGet -> throw RoutingException("Unexpected GET route request")
         }
         val response = try {

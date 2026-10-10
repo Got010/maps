@@ -104,7 +104,10 @@ the only way a copy leaves.
 ## Driving
 
 Save a place as Home or Work from its card and both appear as one-tap chips in
-the search box. In route preview, Options avoids tolls, highways and ferries
+the search box. Driving routes may include a **Shorter way**: a side street that
+is shorter and faster than the first route, which the router's preference for
+main roads would otherwise leave out (it names the street, e.g. "via Old Temple
+Hill Road"). In route preview, Options avoids tolls, highways and ferries
 and switches to a truck or RV profile with your vehicle's size and weight;
 Add stop builds a trip with several stops, which you can reorder, remove or
 skip while driving. The navigation screen shows the road you're on and your
