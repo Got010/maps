@@ -91,10 +91,15 @@ import app.southbound.core.map.SouthboundMap
 import app.southbound.core.map.gpsUpdates
 import app.southbound.core.map.HeadingFilter
 import app.southbound.core.map.withHeading
+import app.southbound.core.network.NetworkFeature
 import app.southbound.core.packs.ImportedPack
+import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.ReleaseManifest
 import app.southbound.core.packs.RouteRegions
+import app.southbound.core.packs.TripRegions
+import app.southbound.core.packs.UpdatePlan
 import app.southbound.core.packs.Regions
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelModel
@@ -106,7 +111,10 @@ import app.southbound.core.routing.SpeedLimits
 import app.southbound.core.routing.SpeedWarningPolicy
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripStops
+import app.southbound.core.updates.ManifestCache
 import app.southbound.core.updates.UpdateScheduler
+import app.southbound.core.updates.UpdateState
+import app.southbound.core.updates.UpdateStatus
 import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.Shortcut
 import app.southbound.core.search.AlertKind
@@ -140,12 +148,13 @@ import app.southbound.core.weather.Forecasts
 import app.southbound.core.weather.Metar
 import app.southbound.core.weather.RouteWeather
 import app.southbound.core.voice.UtteranceKind
-import app.southbound.feature.directions.MissingRegionWarning
 import app.southbound.feature.directions.RouteOptionsChip
 import app.southbound.feature.directions.RouteOptionsSheet
 import app.southbound.feature.directions.RoutePreviewSheet
 import app.southbound.feature.directions.RoutePreviewState
 import app.southbound.feature.directions.StopsEditor
+import app.southbound.feature.directions.TripFetch
+import app.southbound.feature.directions.TripRegionOffer
 import app.southbound.feature.navigation.FasterRouteOffer
 import app.southbound.feature.navigation.NavigationOverlay
 import app.southbound.feature.navigation.drivingMapBottomCenter
@@ -170,6 +179,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
@@ -316,6 +326,35 @@ internal fun ExploreMap(
     var boards by remember { mutableStateOf<List<StationBoard>>(emptyList()) }
     // A start point picked on the map ("Start here"), e.g. to plan from outside NYC. Null: from GPS.
     var startPlace by remember { mutableStateOf<Place?>(null) }
+    // Back to the route preview that is getting regions for its trip: each new map rebuilds this screen.
+    LaunchedEffect(Unit) {
+        val wait = services.tripWait ?: return@LaunchedEffect
+        if (inTrip || System.currentTimeMillis() - wait.atMs > TRIP_WAIT_MS) {
+            services.tripWait = null
+            return@LaunchedEffect
+        }
+        startPlace = wait.start
+        panel = Panel.Directions(wait.place, wait.mode, stops = wait.stops)
+    }
+
+    // Regions fetched for a trip go once the phone, not navigating, is back in its own regions after being in them
+    // (TripRegions). Looked at about every kilometre, and when a trip starts or ends.
+    val regionSelection = remember { RegionSelection.get(context) }
+    val wantedRegions by regionSelection.regions.collectAsState()
+    val tripRegionIds by regionSelection.tripRegions.collectAsState()
+    val fixCell = location?.let { (it.latitude * 100).roundToInt() to (it.longitude * 100).roundToInt() }
+    LaunchedEffect(fixCell, inTrip, tripRegionIds) {
+        val fix = location ?: return@LaunchedEffect
+        if (tripRegionIds.isEmpty()) return@LaunchedEffect
+        val step = TripRegions.onFix(fix.latitude, fix.longitude, regionSelection.own, tripRegionIds, regionSelection.tripVisited, inTrip)
+        if (step.visited.isNotEmpty()) regionSelection.markVisited(step.visited)
+        if (step.drop.isEmpty()) return@LaunchedEffect
+        regionSelection.dropTrip(step.drop)
+        withContext(Dispatchers.IO) { step.drop.forEach { attempt { services.packStore.delete(PackKind.BASEMAP, it) } } }
+        step.drop.forEach { PackEvents.emitRemoved(PackKind.BASEMAP, it) }
+        // Their search and local roads go in this round: the updater keeps only the wanted regions' packs.
+        UpdateScheduler.checkNow(context, anyNetwork = false)
+    }
 
     // Saved places and recents, kept encrypted on the phone.
     val userData by services.userData.data.collectAsState()
@@ -909,6 +948,7 @@ internal fun ExploreMap(
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         services.voice.guidanceMode = target.mode.guidanceMode()
+        services.tripWait = null
         tripPlan = target
         pausedTrip = null
         // Says "Starting. You'll arrive at about 1:11 PM, 12 miles." before the first turn.
@@ -1055,11 +1095,56 @@ internal fun ExploreMap(
 
     // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
     val home = remember(basemaps) { Regions.boundsOf(basemaps.map { it.region }) }
-    // Phase 6: basemap regions the selected route crosses without the map installed.
+    // Regions the trip needs that aren't on the phone. With no route, the ones at its start, stops and destination
+    // (directions need their local roads); with one, the ones the chosen route crosses without the map.
     val installedRegions = remember(basemaps) { basemaps.map { it.region }.toSet() }
     val selectedRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
-    val missingRegions = remember(selectedRoute, installedRegions) {
-        selectedRoute?.let { RouteRegions.missing(it.geometry.map { p -> p.lat to p.lng }, installedRegions) }.orEmpty()
+    val noRoute = (preview as? RoutePreviewState.Failed)?.reason == RoutePreviewState.Reason.NO_ROUTE
+    val missingRegions = remember(selectedRoute, noRoute, directions, installedRegions) {
+        val target = directions?.takeIf { !it.transit }
+        when {
+            selectedRoute != null -> RouteRegions.missing(selectedRoute.geometry.map { p -> p.lat to p.lng }, installedRegions)
+            noRoute && target != null -> RouteRegions.missing(
+                listOfNotNull(origin()?.let { it.latitude to it.longitude }) + (target.stops + target.place).map { it.lat to it.lon },
+                installedRegions,
+                step = 1,
+            )
+            else -> emptyList()
+        }
+    }
+    // Getting them for the trip ("Get for this trip"): what they add to the download, from the last release list
+    // the updater read, then the update round's progress.
+    val updateState by UpdateStatus.state.collectAsState()
+    val updateQueue by remember { UpdateScheduler.queue(context) }.collectAsState(UpdateScheduler.Queue.IDLE)
+    val networkToggles by services.networkToggles.state.collectAsState()
+    var lastManifest by remember { mutableStateOf<ReleaseManifest?>(null) }
+    LaunchedEffect(missingRegions.isNotEmpty()) {
+        if (missingRegions.isNotEmpty() && lastManifest == null) lastManifest = withContext(Dispatchers.IO) { ManifestCache.load(context) }
+    }
+    val missingIds = missingRegions.map { it.id }.toSet()
+    val requested = wantedRegions.containsAll(missingIds)
+    val busy = updateQueue != UpdateScheduler.Queue.IDLE || updateState is UpdateState.Checking || updateState is UpdateState.Downloading
+    val tripFetch: TripFetch? = when {
+        missingRegions.isEmpty() -> null
+        networkToggles[NetworkFeature.PACK_DOWNLOADS] != true -> TripFetch.Off
+        requested && updateState is UpdateState.Downloading ->
+            (updateState as UpdateState.Downloading).let { TripFetch.Downloading(it.overallDone shr 20, it.overallTotal shr 20) }
+        requested && updateQueue == UpdateScheduler.Queue.WAITING -> TripFetch.Waiting
+        requested && busy -> TripFetch.Working
+        requested && updateState is UpdateState.Failed -> TripFetch.Failed((updateState as UpdateState.Failed).message)
+        // Not asked yet, or asked while another round was running (it took the regions as they were): offer it.
+        else -> TripFetch.Offer(lastManifest?.let { (UpdatePlan.addedBytes(it, wantedRegions - missingIds, missingIds) shr 20).takeIf { mb -> mb > 0 } })
+    }
+    fun getTripRegions(target: Panel.Directions) {
+        regionSelection.addForTrip(missingIds)
+        services.tripWait = ExploreServices.TripWait(target.place, target.mode, target.stops, startPlace, System.currentTimeMillis())
+        UpdateScheduler.checkNow(context, anyNetwork = false)
+    }
+    // Done waiting once the trip routes with nothing missing, or the preview moved on to another place.
+    LaunchedEffect(preview, missingRegions.isEmpty(), directions?.place) {
+        val wait = services.tripWait ?: return@LaunchedEffect
+        val place = directions?.place
+        if ((preview is RoutePreviewState.Ready && missingRegions.isEmpty()) || (place != null && place != wait.place)) services.tripWait = null
     }
     Box(Modifier.fillMaxSize()) {
         if (showRouteOptions) {
@@ -1417,7 +1502,10 @@ internal fun ExploreMap(
                             (preview as? RoutePreviewState.Ready)?.let { preview = it.copy(selected = index) }
                         },
                         onStart = ::startTrip,
-                        onClose = { panel = Panel.PlaceShown(current.place) },
+                        onClose = {
+                            services.tripWait = null
+                            panel = Panel.PlaceShown(current.place)
+                        },
                         startName = startPlace?.name,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -1454,14 +1542,17 @@ internal fun ExploreMap(
                                 }
                             }
                             WeatherOnRouteNote(routeWeather, onOpen = { shownThing = ShownThing.WeatherAlertShown(it.id) })
-                            MissingRegionWarning(
-                                regionNames = missingRegions.map { it.name },
-                                onDownload = {
-                                    val selection = RegionSelection.get(context)
-                                    missingRegions.forEach { selection.set(it.id, true) }
-                                    UpdateScheduler.checkNow(context, anyNetwork = false)
-                                },
-                            )
+                        },
+                        regionOffer = tripFetch?.let { fetch ->
+                            {
+                                TripRegionOffer(
+                                    regionNames = missingRegions.map { it.name },
+                                    needed = noRoute,
+                                    fetch = fetch,
+                                    onGet = { getTripRegions(current) },
+                                    onUseMobileData = { UpdateScheduler.checkNow(context, anyNetwork = true) },
+                                )
+                            }
                         },
                     )
                 }
@@ -1574,6 +1665,8 @@ private const val WEATHER_POLL_MS = 60_000L
 /** A weather alert on the route is said once it is within about ten miles. */
 private const val WEATHER_AHEAD_METERS = 16_000.0
 private const val AUTO_RECENTER_MS = 10_000L
+// A route preview waiting on its trip's regions is reopened after a rebuild for this long after the tap.
+private const val TRIP_WAIT_MS = 6 * 60 * 60 * 1000L
 private const val PARKING_RADIUS_M = 300.0
 private const val FASTER_ROUTE_OFFER_MS = 90_000L
 private const val FASTER_ROUTE_TRY_DETOUR_SECONDS = 120.0

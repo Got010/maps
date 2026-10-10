@@ -134,6 +134,16 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
             }
 
         /**
+         * What adding [added] to the picked [basemapRegions] downloads, in bytes: the packs the regions together
+         * want that the picked ones alone don't (a routing pack two of them share counts once, and not at all if
+         * a picked region has it already).
+         */
+        fun addedBytes(manifest: ReleaseManifest, basemapRegions: Set<String>, added: Set<String>): Long {
+            val now = wanted(manifest, basemapRegions).map { it.file.name }.toSet()
+            return wanted(manifest, basemapRegions + added).filter { it.file.name !in now }.sumOf { it.file.size }
+        }
+
+        /**
          * Packs among [wanted] whose installed copy (keyed by kind and region)
          * is missing or differs by SHA-256 from the release's; and the APK when
          * the release is newer than [installedVersionCode] and [includeApp] is set.
