@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -53,17 +54,27 @@ class ReleaseManifestTest(unittest.TestCase):
             m = release_manifest.manifest(d, "1.2.3", v2=True, regions_json=regions)
         self.assertEqual(2, m["schema"])
         packs = {p["file"]: p for p in m["packs"]}
-        # The one-graph pack can't be mixed into a tile folder, and search-nyc serves no basemap region.
+        # The packs built whole for older apps: the one-graph routing can't be mixed into a tile folder, and
+        # New York's regions have search packs of their own, cut from search-nys.
         self.assertNotIn("routing-nys.tar", packs)
-        self.assertNotIn("search-nyc.sqlite", packs)
+        self.assertNotIn("search-nys.sqlite", packs)
         self.assertEqual([], packs["routing-main.tar"]["regions"])
         self.assertEqual(["hudson", "li", "njn", "nyc"], packs["routing-hudson-li-njn-nyc.tar"]["regions"])
         self.assertEqual(("routing", "hudson-li-njn-nyc"), (packs["routing-hudson-li-njn-nyc.tar"]["kind"],
                                                               packs["routing-hudson-li-njn-nyc.tar"]["region"]))
-        self.assertEqual(["nyc", "li", "hudson", "capital", "western", "njn"], packs["search-nys.sqlite"]["regions"])
+        self.assertEqual(["nyc"], packs["search-nyc.sqlite"]["regions"])
         self.assertEqual(["ct"], packs["search-ct.sqlite"]["regions"])
         self.assertNotIn("regions", packs["basemap-ct.pmtiles"])
         self.assertNotIn("regions", packs["transit-nyc.sqlite"])
+
+    def test_the_release_lists_the_search_packs_cut_from_search_nys(self):
+        # release.yml uploads, carries over and checks NYS_SEARCH_PACKS; split_search.py writes one per region.
+        with open(os.path.join(HERE, "..", "regions.json")) as f:
+            regions = json.load(f)["regions"]
+        cut = [f"search-{name}.sqlite" for name, r in regions.items() if r.get("search_from") == "nys"]
+        with open(os.path.join(HERE, "..", "..", ".github", "workflows", "release.yml")) as f:
+            listed = re.search(r"^  NYS_SEARCH_PACKS: (.+)$", f.read(), re.M).group(1).split()
+        self.assertEqual(cut, listed)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,10 @@
 # Maryland, with Delaware and DC). Builds each planned region's basemap and search pack (OSM only), and the one
 # routing graph for every state cut into routing-main.tar and routing-<region>.tar (pipeline/routing/split.sh),
 # prints sizes, build times and peak memory, and routes real trips on the split packs against the whole graph
-# (pipeline/routing/route_check.py). Publishes nothing; read the job logs. It runs on a pull request that changes
-# this file or the routing split, or from the Actions tab (States test build > Run workflow). It needs the public
+# (pipeline/routing/route_check.py). It also builds New York's search pack and cuts it into one per region, as a
+# release does (pipeline/search/split_search.py). Publishes nothing; read the job logs. It runs on a pull request
+# that changes this file, the routing split or the search split, or from the Actions tab (States test build > Run
+# workflow). It needs the public
 # repository's runners (the graph for every state wants more than a private runner's 7 GB, and the run would eat
 # a private repository's monthly minutes), so in a private repository every job is skipped.
 name: States test build
@@ -17,6 +19,8 @@ on:
       - pipeline/routing/split_tiles.py
       - pipeline/routing/route_check.py
       - pipeline/routing/pack_sizes.py
+      - pipeline/search/split_search.py
+      - pipeline/search/build.sh
 
 permissions: {}
 
@@ -121,3 +125,30 @@ jobs:
                   print(table, e)
           print("states", db.execute("SELECT state, count(*) FROM address_street GROUP BY state").fetchall())
           PY
+
+  # search-nys.sqlite with NYS Address Points and Overture, as release.yml builds it, and the search packs of New
+  # York's regions and northern New Jersey cut from it: sizes and rows per pack in the log.
+  search-nys:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      FREE_SOURCES: 1
+      ADDRESS_POINTS_URL: ${{ vars.ADDRESS_POINTS_URL || 'https://gisdata.ny.gov/GISData/State/Address_Points/SAM_Master_Statewide_Database.gdb.zip' }}
+      ADDRESS_POINTS_LAYER: ${{ vars.ADDRESS_POINTS_LAYER }}
+      OVERTURE: ${{ vars.OVERTURE || '1' }}
+      OVERTURE_RELEASE: ${{ vars.OVERTURE_RELEASE }}
+      OVERTURE_MIN_CONFIDENCE: ${{ vars.OVERTURE_MIN_CONFIDENCE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build search-nys and cut it per region
+        run: |
+          start=$SECONDS
+          make -C pipeline search-nys
+          echo "Built and cut in $(( (SECONDS - start) / 60 )) min"
+          ls -l pipeline/data/out
+          df -h /

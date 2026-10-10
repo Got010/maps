@@ -67,17 +67,22 @@
     },
     {
       "kind": "search",
-      "region": "nys",
-      "file": "search-nys.sqlite",
+      "region": "hudson",
+      "file": "search-hudson.sqlite",
       "size": 3,
       "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
       "regions": [
-        "nyc",
-        "li",
-        "hudson",
-        "capital",
-        "western",
-        "njn"
+        "hudson"
+      ]
+    },
+    {
+      "kind": "search",
+      "region": "nyc",
+      "file": "search-nyc.sqlite",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": [
+        "nyc"
       ]
     },
     {

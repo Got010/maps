@@ -81,6 +81,10 @@ env:
   # (pipeline/routing/split.sh): routing-main.tar and the region packs it lists, whose names come from the graph.
   PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles basemap-njn.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite voice-norman.zip
   STATE_PACKS: basemap-njs.pmtiles basemap-ct.pmtiles basemap-pae.pmtiles basemap-paw.pmtiles basemap-md.pmtiles search-njs.sqlite search-ct.sqlite search-pae.sqlite search-paw.sqlite search-md.sqlite routing-packs.json
+  # Also for southbound-v2.json, and not jobs of their own: the search packs of New York's regions and northern New
+  # Jersey, which the search-nys.sqlite job cuts from it (pipeline/search/split_search.py: one per region whose
+  # "search_from" in regions.json is nys).
+  NYS_SEARCH_PACKS: search-nyc.sqlite search-li.sqlite search-hudson.sqlite search-capital.sqlite search-western.sqlite search-njn.sqlite
   # The Android SDK build-tools that align, sign and verify the release APK, by version, so the signing tools
   # only change in a pull request. The app job's signing rehearsal fails if the runner lacks them.
   BUILD_TOOLS_VERSION: "36.0.0"
@@ -168,7 +172,7 @@ jobs:
           elif ! gh release view "$previous" --json assets --jq '.assets[].name' > assets.txt 2>/dev/null; then
             data=true; reason="$previous has no release"
           else
-            for pack in $PACKS $STATE_PACKS; do
+            for pack in $PACKS $STATE_PACKS $NYS_SEARCH_PACKS; do
               grep -qx "$pack" assets.txt || { data=true; reason="$previous lacks $pack"; }
             done
             # Every routing pack the previous split listed.
@@ -185,7 +189,8 @@ jobs:
             fi
           fi
 
-          # The matrix for the data jobs: one entry per pack (routing-packs.json: the whole split routing build).
+          # The matrix for the data jobs: one entry per pack (routing-packs.json: the whole split routing build;
+          # search-nys.sqlite: that pack and NYS_SEARCH_PACKS).
           packs="$(printf '%s\n' $PACKS $STATE_PACKS | jq -R . | jq -sc .)"
 
           echo "Release $tag; data: $data ($reason)"
@@ -636,7 +641,8 @@ jobs:
           OVERTURE_MIN_CONFIDENCE: ${{ vars.OVERTURE_MIN_CONFIDENCE }}
         run: |
           # basemap-western.pmtiles -> tiles-western; routing-nys.tar -> routing-nys;
-          # voice-norman.zip -> voice-norman; routing-packs.json -> routing-split (every routing-<x>.tar it lists)
+          # voice-norman.zip -> voice-norman; routing-packs.json -> routing-split (every routing-<x>.tar it lists);
+          # search-nys.sqlite -> search-nys, which also cuts NYS_SEARCH_PACKS from it
           if [[ "$PACK" == routing-packs.json ]]; then
             make -C pipeline routing-split
             exit
@@ -662,6 +668,9 @@ jobs:
           files=("$PACK")
           if [[ "$PACK" == routing-packs.json ]]; then
             mapfile -t -O 1 files < <(jq -r 'keys[]' routing-packs.json)
+          elif [[ "$PACK" == search-nys.sqlite ]]; then
+            read -ra cut <<< "$NYS_SEARCH_PACKS"
+            files+=("${cut[@]}")
           fi
           for file in "${files[@]}"; do
             sha256sum "$file" | tee "$file.sha256"
@@ -734,7 +743,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p out
-          for pack in $PACKS $STATE_PACKS; do
+          for pack in $PACKS $STATE_PACKS $NYS_SEARCH_PACKS; do
             gh release download "$PREVIOUS" --repo "$GITHUB_REPOSITORY" --dir out \
               --pattern "$pack" --pattern "$pack.sha256"
           done
@@ -758,7 +767,7 @@ jobs:
       - name: Write the release manifest
         run: |
           (cd out && sha256sum -c ./*.sha256)
-          for pack in $PACKS $STATE_PACKS $(jq -r 'keys[]' out/routing-packs.json); do
+          for pack in $PACKS $STATE_PACKS $NYS_SEARCH_PACKS $(jq -r 'keys[]' out/routing-packs.json); do
             [[ -f "out/$pack" ]] || { echo "::error::The release is missing $pack"; exit 1; }
           done
           # southbound.json for every app so far: only the packs they know (see PACKS).
@@ -782,7 +791,7 @@ jobs:
           else
             data_note="Map data unchanged since $PREVIOUS."
           fi
-          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The packs are also here to share to the app by hand: basemap-<region>.pmtiles (the map, one per region: nyc, li, hudson, capital, western, njn for northern New Jersey), search-nys.sqlite (search, New York and northern New Jersey), routing-nys.tar (directions, New York and northern New Jersey), transit-nyc.sqlite (NYC transit schedules) and voice-norman.zip (an extra built-in voice, downloaded only if picked in Settings > Voice). Coming next (the app doesn't offer them yet): maps and search for southern New Jersey (njs), Connecticut (ct), eastern and western Pennsylvania (pae, paw) and Maryland with Delaware and DC (md), and directions in pieces: routing-main.tar (main roads in every state) plus the routing-<regions>.tar packs of local roads that routing-packs.json lists. $data_note
+          notes="Install southbound-$VERSION.apk once; Southbound then downloads the map data for the regions you pick and later updates by itself (Settings > Updates). The regions: New York City (nyc), Long Island (li), Hudson Valley (hudson), Capital Region and North Country (capital), Central and Western New York (western), northern and southern New Jersey (njn, njs), Connecticut (ct), eastern and western Pennsylvania (pae, paw), and Maryland with Delaware and DC (md). Each has a map, basemap-<region>.pmtiles, and a search pack, search-<region>.sqlite, which can be shared to the app by hand. Directions come in pieces the app fetches and combines itself: routing-main.tar (main roads in every state) plus the routing-<regions>.tar packs of local roads that routing-packs.json lists. Also here: transit-nyc.sqlite (NYC transit schedules), voice-norman.zip (an extra built-in voice, downloaded only if picked in Settings > Voice), and for app versions before the per-region packs search-nys.sqlite and routing-nys.tar (New York and northern New Jersey in one file each). $data_note
 
           Map data © OpenMapTiles © OpenStreetMap contributors, ODbL. Schedules: MTA."
           # Tags made with this token don't start another run, so no loop.
