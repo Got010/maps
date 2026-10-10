@@ -10,15 +10,15 @@ packs and routing-packs.json. For each trip, a phone with the trip's regions is
 made twice, and Valhalla (the pipeline's pinned image, valhalla_service's
 one-shot mode) routes the trip on each and on the whole graph:
 
-  packs  routing-main.tar and every pack naming one of the regions, unpacked
-         into one tile folder, as the app will.
-  L0     only level 0 shared, level 1 and the local roads of the regions (what
-         split_tiles.py --main-levels=0 would make), linked from the tile index.
+  packs    routing-main.tar (level 0) and every pack naming one of the
+           regions, unpacked into one tile folder, as the app will.
+  L0+L1    levels 0 and 1 shared and the regions' local roads, as the first
+           test build cut them, linked from the tile index for comparison.
 
 A trip marked "same" must come out within 5% of the whole graph's length and
 time on the packs; the others only print what happens (a destination whose
 local roads aren't there). Exits 1 when a "same" trip fails or strays on the
-packs; the L0 column only informs.
+packs; the L0+L1 column only informs.
 """
 
 import json
@@ -181,7 +181,7 @@ def main(argv):
     config_for(work_dir, f"/data/{work_rel}/phone", "phone", partial=True)
     folder = os.path.join(work_dir, "phone")
     failed = []
-    print(f"{'trip':<50} {'regions':<12} {'whole km/min':>13}   {'packs':<22} {'L0 shared':<22}")
+    print(f"{'trip':<50} {'regions':<12} {'whole km/min':>13}   {'packs':<22} {'L0+L1 shared':<22}")
     for start, end, regions, same in TRIPS:
         trip = f"{start} -> {end}"
         whole = docker_route(data_dir, f"{work_rel}/whole.json", PLACES[start], PLACES[end])
@@ -192,9 +192,9 @@ def main(argv):
         wl, wt = summary(whole)
         unpack(out_dir, regions, folder)
         packs, strayed = compare(whole, docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end]), same)
-        link(work_dir, regions, folder, (0,))
-        level0, _ = compare(whole, docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end]), same)
-        print(f"{trip:<50} {'+'.join(regions):<12} {wl:7.1f}/{wt:5.0f}   {packs:<22} {level0:<22}")
+        link(work_dir, regions, folder, (0, 1))
+        both, _ = compare(whole, docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end]), same)
+        print(f"{trip:<50} {'+'.join(regions):<12} {wl:7.1f}/{wt:5.0f}   {packs:<22} {both:<22}")
         if strayed:
             failed.append(trip)
     shutil.rmtree(folder, ignore_errors=True)

@@ -2,7 +2,7 @@
 """Cuts a Valhalla tile directory into routing packs, so a phone downloads the
 main roads everywhere and local roads only where it has the map, each tile once.
 
-    split_tiles.py <tiles_dir> <out_dir> [--regions=regions.json] [--main-levels=0,1] [--max-mb=1900]
+    split_tiles.py <tiles_dir> <out_dir> [--regions=regions.json] [--main-levels=0] [--max-mb=1900]
 
 Valhalla keeps its graph in three levels of square tiles, each file named by
 level and tile id (2/000/756/425.gph):
@@ -11,8 +11,9 @@ level and tile id (2/000/756/425.gph):
   level 1, 1-degree tiles: secondary and tertiary roads
   level 2, 0.25-degree tiles: everything else (residential, service, ...)
 
-routing-main.tar gets every tile of the main levels (0 and 1 by default), which
-every phone has. Every other tile goes by the basemap regions of regions.json
+routing-main.tar gets every tile of the main levels (level 0 by default: the
+roads a long trip runs on), which every phone has. Every other tile, secondary
+and tertiary roads and local streets alike, goes by the basemap regions of regions.json
 (planned ones too) it covers: it is sampled on a 9 by 9 grid of points, and each
 point goes to the regions the app would give it (Regions.basemapsAt in
 core/packs: a region whose area holds the point owns it, else every region whose
@@ -38,7 +39,10 @@ import sys
 import tarfile
 
 LEVEL_SIZES = {0: 4.0, 1: 1.0, 2: 0.25}
-MAIN_LEVELS = (0, 1)
+# Level 0 only (owner, October 2026: the leanest packs). The first test build shared levels 0 and 1 (345 MB
+# for every phone); with level 1 going by region, a phone with the Hudson Valley alone saves about 150 MB, and the
+# states test build routes every trip on this layout against the whole graph (route_check.py).
+MAIN_LEVELS = (0,)
 MAIN_PACK = "main"
 PACKS_JSON = "routing-packs.json"
 SAMPLES = 9
@@ -243,7 +247,7 @@ def main(argv=None):
     parser.add_argument("--max-mb", type=float, default=1900, help="fail if a pack would be larger (GitHub's limit is 2 GiB)")
     parser.add_argument("--index", help="write a JSON line per tile here (see pack_sizes.py)")
     parser.add_argument("--main-levels", default=",".join(str(lv) for lv in MAIN_LEVELS),
-                        help="levels every phone gets in routing-main.tar (default 0,1)")
+                        help="levels every phone gets in routing-main.tar (default 0)")
     args = parser.parse_args(argv)
     main_levels = tuple(int(lv) for lv in args.main_levels.split(",") if lv)
     split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb, index=args.index,

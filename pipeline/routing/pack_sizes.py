@@ -6,12 +6,11 @@ tile index (one JSON line per tile: path, level, bytes, regions it covers).
 
 For a few choices of regions it prints the download in MB under:
 
-  per region      routing-main (levels 0 and 1) plus one pack of local roads per region, as the first test
-                  build cut them: a tile on a boundary comes in every region's pack.
-  one copy        routing-main (levels 0 and 1) plus the packs split_tiles.py writes now: tiles grouped by the
-                  regions they cover, so each tile comes once.
-  one copy, L0    the same with only level 0 (motorways, trunk and primary roads) shared, and level 1
-                  (secondary and tertiary) going by region like local roads (split_tiles.py --main-levels=0).
+  per region      levels 0 and 1 shared, plus one pack of local roads per region, as the first test build cut
+                  them: a tile on a boundary comes in every region's pack.
+  one copy        levels 0 and 1 shared, plus tiles grouped by the regions they cover, so each comes once.
+  one copy, L0    what split_tiles.py writes: only level 0 (motorways, trunk and primary roads) shared, and
+                  level 1 (secondary and tertiary) going by region like local roads, each tile once.
 
 Run by the states test build; nothing reads its output but people.
 """
