@@ -75,7 +75,7 @@ sealed interface RoutePreviewState {
      * empty when unknown, which hides the fuel line.
      * [exposure] is how many plate readers and speed cameras each route passes, same order; empty when
      * unknown (no search pack, or not driving). [cameraAvoidIncomplete]: "Avoid plate readers" is on, but the best
-     * route still passes some.
+     * route still passes some. [shorter]: the option added as the shorter way (core/routing ShorterRoute), if any.
      */
     data class Ready(
         val summaries: List<RouteSummary>,
@@ -84,6 +84,7 @@ sealed interface RoutePreviewState {
         val fuelGallons: List<Double> = emptyList(),
         val exposure: List<RouteExposure> = emptyList(),
         val cameraAvoidIncomplete: Boolean = false,
+        val shorter: Int? = null,
     ) : RoutePreviewState
     data class Failed(val reason: Reason) : RoutePreviewState
 
@@ -230,12 +231,15 @@ fun RoutePreviewSheet(
                         } else {
                             null
                         }
+                        // The fastest with traffic, which the shorter way can be though it isn't first.
+                        val fastestIndex = state.summaries.indices.minByOrNull { state.summaries[it].durationSeconds + state.delaySeconds.getOrElse(it) { 0.0 } }
                         state.summaries.forEachIndexed { i, summary ->
                             RouteOption(
                                 summary,
                                 delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
                                 selected = i == state.selected,
-                                fastest = i == 0,
+                                fastest = i == fastestIndex,
+                                shorterWay = i == state.shorter,
                                 rank = i,
                                 fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
                                 leastGas = i == thriftiest,
@@ -355,6 +359,8 @@ private fun RouteOption(
     onClick: () -> Unit,
     /** Plate readers and speed cameras on this route; null (or none of either) hides the line. */
     exposure: RouteExposure? = null,
+    /** The option added as the shorter way, marked so. */
+    shorterWay: Boolean = false,
 ) {
     // The route's line colour on the map. Outside a trip the map follows the system theme.
     val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
@@ -414,6 +420,7 @@ private fun RouteOption(
                     )
                 }
                 exposure?.let { RouteExposureLine(it) }
+                if (shorterWay) ShorterWayBadge()
                 if (leastGas) LeastGasBadge(fastest)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -432,6 +439,23 @@ private fun GasCostLine(dollars: Double) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/** Marks the shorter way: a side street Valhalla's main-road preference left out (core/routing ShorterRoute). */
+@Composable
+private fun ShorterWayBadge() {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Text(
+            stringResource(R.string.directions_shorter_way),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
 }
 
 /** Marks the option that burns the least gas; [alsoFastest] when it is the fastest too. */
