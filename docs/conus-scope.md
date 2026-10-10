@@ -1,8 +1,29 @@
 # Scope: the 48 contiguous states
 
 Owner's ask (October 2026): cover the 48 contiguous states (plus DC) with the features New York has today.
-This is a scoping document, not a plan of record: nothing here is built. Sizes marked *est.* are guesses to
-check with a measured spike before committing to them; the New York numbers are measured (release v0.1.21).
+This is a scoping document, not a plan of record. Sizes marked *est.* are guesses to check with a measured
+spike before committing to them; the New York numbers are measured (release v0.1.21).
+
+## Decided (owner, October 2026)
+
+- **Public repository**, for free Actions minutes (and 4-core, 16 GB runners).
+- **First states: New Jersey (all of it), Connecticut, Pennsylvania and Maryland**, with Delaware and DC: I-95
+  between New Jersey and Maryland runs through Delaware, and DC sits inside Maryland, so New York to Baltimore
+  could not route sensibly without them.
+- **The leanest build for now.** A phone downloads only what its regions need:
+  - Basemaps per region, as in New York: Northern New Jersey now reaches the Delaware River; new are Southern
+    New Jersey, Connecticut, Eastern and Western Pennsylvania (split at 77° W), and Maryland, Delaware and DC.
+  - Routing: one graph for every state, built at once so roads join at every state line, then cut by
+    `pipeline/routing/split_tiles.py` into `routing-main.tar` (Valhalla levels 0 and 1: motorways down to
+    tertiary roads, everywhere) and one `routing-<region>.tar` of local roads (level 2) per basemap region. The
+    phone will unpack the packs it has into one tile folder (`ValhallaConfigFactory.usingTilesDir`, which
+    valhalla-mobile 0.6.3 has).
+  - Search for the new regions from OSM alone (no Overture, no state address files); New York keeps
+    `search-nys`. Live data (511, DOT cameras, weather alerts) stays New York only for now.
+- Phases: (1) pipeline and a test build that measures every pack and routes real trips on the split packs
+  (`.github/workflows/states.yml`); (2) releases ship the new packs under a second manifest, so apps that
+  don't know them never download them; (3) the app reads that manifest, routes from a tile folder, searches
+  several packs and offers the new regions.
 
 ## Where New York stands (the baseline to scale)
 
@@ -71,7 +92,14 @@ Proposed design, to be proven by a spike:
   (see HANDOFF).
 - Gas prices: EIA already publishes by region nationwide.
 
-### 5. Transit
+### 5. Weather
+
+Weather is New York only today. NWS alerts cover every state (one `area=` request per state, or the national
+feed); the radar picture is one image of New York's box and would need a larger box or tiles; the 7-day
+forecast pack samples 432 points over New York, about 15,000 for the lower 48 at the same spacing, so its
+workflow would run much longer.
+
+### 6. Transit
 
 National transit is its own project: hundreds of GTFS feeds (Mobility Database), a RAPTOR pack per metro area,
 realtime per agency. Suggest metro-by-metro after driving works nationally.
@@ -135,6 +163,5 @@ What that means for Southbound, cheapest first:
 
 ## Decisions for the owner
 
-- Public repository (free Actions minutes) or a paid build budget?
-- Which states first after New York?
-- How much phone storage to plan for?
+Answered in October 2026 (see "Decided" above): public repository; New Jersey, Connecticut, Pennsylvania and
+Maryland first; the leanest packs.
