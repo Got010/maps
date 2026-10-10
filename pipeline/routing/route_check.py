@@ -120,11 +120,17 @@ def unpack(out_dir, packs, folder):
             tar.extractall(folder, filter="data")
 
 
-def config_for(work_dir, tile_dir, name):
+def config_for(work_dir, tile_dir, name, partial=False):
+    """A config for the tiles in tile_dir. A phone's partial set (partial) turns Loki's connectivity check off,
+    as the app must: the check colours connected areas by the local-road tiles present, so with the regions
+    between two places missing it calls them "unconnected regions" though the main roads join them (and
+    valhalla-mobile turns it off for any set of tiles that isn't whole)."""
     with open(os.path.join(work_dir, "valhalla.json")) as f:
         config = json.load(f)
     config["mjolnir"]["tile_dir"] = tile_dir
     config["mjolnir"]["tile_extract"] = tile_dir + "/none.tar"
+    if partial:
+        config["loki"]["use_connectivity"] = False
     path = os.path.join(work_dir, f"{name}.json")
     with open(path, "w") as f:
         json.dump(config, f)
@@ -141,7 +147,7 @@ def main(argv):
     for start, end, packs, same in TRIPS:
         folder = os.path.join(work_dir, "phone")
         unpack(out_dir, packs, folder)
-        config_for(work_dir, f"/data/{work_rel}/phone", "phone")
+        config_for(work_dir, f"/data/{work_rel}/phone", "phone", partial=True)
         whole = docker_route(data_dir, f"{work_rel}/whole.json", PLACES[start], PLACES[end])
         phone = docker_route(data_dir, f"{work_rel}/phone.json", PLACES[start], PLACES[end])
         trip = f"{start} -> {end}"

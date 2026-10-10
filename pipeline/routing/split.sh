@@ -32,7 +32,8 @@ if [[ "${FREE_SOURCES:-}" == 1 && "$CLIPPED" == "$DATA_DIR/tmp/"* ]]; then
 fi
 
 echo "==> Splitting into main roads and each region's local roads"
-python3 "$PIPELINE_DIR/routing/split_tiles.py" "$DATA_DIR/$WORK/tiles" "$DATA_DIR/out" --regions="$REGIONS_JSON"
+python3 "$PIPELINE_DIR/routing/split_tiles.py" "$DATA_DIR/$WORK/tiles" "$DATA_DIR/out" --regions="$REGIONS_JSON" \
+  --index="$DATA_DIR/$WORK/tiles.jsonl"
 if [[ "${KEEP_TILES:-}" != 1 ]]; then
   rm -rf "${DATA_DIR:?}/${WORK:?}/tiles"
 fi

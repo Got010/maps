@@ -171,19 +171,26 @@ def write_tar(path, tiles_dir, paths):
     os.replace(tmp, path)
 
 
-def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout):
-    """Writes the packs and returns {pack: (tiles, bytes)} plus the dropped tiles under None."""
+def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None):
+    """Writes the packs and returns {pack: (tiles, bytes)} plus the dropped tiles under None. With index, also
+    writes one JSON line per tile there ([path, level, bytes, packs]) for pack_sizes.py."""
     packs = {MAIN_PACK: []}
     packs.update({name: [] for name in regions})
     dropped = []
     level_bytes = {level: 0 for level in LEVEL_SIZES}
+    lines = []
     for rel, level, tile_id in tiles_in(tiles_dir):
-        level_bytes[level] += os.path.getsize(os.path.join(tiles_dir, rel))
+        size = os.path.getsize(os.path.join(tiles_dir, rel))
+        level_bytes[level] += size
         targets = regions_for_tile(regions, level, tile_id)
         if not targets:
             dropped.append(rel)
         for name in targets:
             packs[name].append(rel)
+        lines.append(json.dumps([rel, level, size, targets]))
+    if index:
+        with open(index, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
     os.makedirs(out_dir, exist_ok=True)
     result = {}
@@ -213,8 +220,9 @@ def main(argv=None):
     parser.add_argument("out_dir")
     parser.add_argument("--regions", default=REGIONS_JSON)
     parser.add_argument("--max-mb", type=float, default=1900, help="fail if a pack would be larger (GitHub's limit is 2 GiB)")
+    parser.add_argument("--index", help="write a JSON line per tile here (see pack_sizes.py)")
     args = parser.parse_args(argv)
-    split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb)
+    split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb, index=args.index)
 
 
 if __name__ == "__main__":
