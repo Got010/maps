@@ -9,6 +9,13 @@
 # (the merged extract doesn't say); regions.json is mounted at /regions.json,
 # next to /search, for it.
 #
+# A region with "osm_only" in regions.json (the planned regions beyond New
+# York) takes its places and addresses from OSM alone: no Overture, no NYS
+# Address Points, whatever the settings below say. "state" names the one state
+# of every address in the region; "default_state" the state of a point outside
+# the outlines search/states.py knows (md: Maryland, with Delaware and DC by
+# outline).
+#
 # Optional settings (environment variables; in GitHub Actions, repository
 # variables of the same names, see release.yml):
 #   ADDRESS_POINTS_URL  NYS Address Points to add to OSM's addresses: a .zip
@@ -53,6 +60,9 @@ OVERTURE_MIN_CONFIDENCE="${OVERTURE_MIN_CONFIDENCE:-0.5}"
 
 clip_extract "$REGION"
 region_bounds "$REGION"
+OSM_ONLY="$(region_field "$REGION" osm_only)"
+REGION_STATE="$(region_field "$REGION" state)"
+DEFAULT_STATE="$(region_field "$REGION" default_state)"
 
 # Downloads $ADDRESS_POINTS_URL and leaves the points as CSV in WGS84, cut to
 # the region, at $DATA_DIR/tmp/address-points-<region>.csv. Converting with
@@ -147,8 +157,16 @@ fetch_address_points() {
 }
 
 ARGS="--bounds=$BOUNDS --max-mb=$SEARCH_MAX_MB"
-if [[ -n "${SEARCH_STATE:-}" ]]; then
+SEARCH_STATE="${SEARCH_STATE:-$REGION_STATE}"
+if [[ -n "$SEARCH_STATE" ]]; then
   ARGS="$ARGS --state=$SEARCH_STATE"
+elif [[ -n "$DEFAULT_STATE" ]]; then
+  ARGS="$ARGS --default-state=$DEFAULT_STATE"
+fi
+if [[ "$OSM_ONLY" == true ]]; then
+  echo "==> $REGION is OSM only: no address points, no Overture"
+  ADDRESS_POINTS_URL=none
+  OVERTURE=0
 fi
 if [[ "${ADDRESS_POINTS_URL:-}" == none ]]; then
   echo "==> ADDRESS_POINTS_URL is none: addresses from OSM only"
@@ -161,10 +179,14 @@ fi
 
 # State DOT traffic cameras for "Avoid DOT cameras" (dot_cameras.py): the
 # whole state's list, fetched here so the phone never asks for it. A failed
-# fetch leaves them out rather than failing the pack.
-if [[ "${DOT_CAMERAS:-1}" == 1 ]]; then
+# fetch leaves them out rather than failing the pack. Only the states
+# dot_cameras.SOURCES lists have one (New York so far).
+CAMERA_STATE="${SEARCH_STATE:-${DEFAULT_STATE:-NY}}"
+DOT_URL="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import dot_cameras; print(dot_cameras.SOURCES.get(sys.argv[2], ""))' "$PIPELINE_DIR/search" "$CAMERA_STATE")"
+if [[ -z "$DOT_URL" ]]; then
+  echo "==> No DOT camera list for $CAMERA_STATE"
+elif [[ "${DOT_CAMERAS:-1}" == 1 ]]; then
   DOT_FILE="$DATA_DIR/tmp/dot-cameras-$REGION.json"
-  DOT_URL="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import dot_cameras; print(dot_cameras.SOURCES["NY"])' "$PIPELINE_DIR/search")"
   echo "==> Fetching DOT cameras $DOT_URL"
   if curl -sSfL --retry 3 --max-time 120 -o "$DOT_FILE" "$DOT_URL" && python3 "$PIPELINE_DIR/search/dot_cameras.py" --check "$DOT_FILE" | tail -1; then
     ARGS="$ARGS --dot-cameras=/data/tmp/$(basename "$DOT_FILE")"
