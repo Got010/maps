@@ -28,9 +28,10 @@ Southbound keeps itself current from its own releases (Settings > Updates):
 
 - **Map data** (on by default): pick your regions on the first screen (or in
   Settings > Updates). On first start, and then daily, Southbound reads the
-  latest release's manifest and downloads a map for each ticked region plus
-  the search and routing data for New York and northern New Jersey and NYC
-  transit, fetching only the
+  latest release's manifest and downloads, for each ticked region, its map,
+  search and local streets for directions, plus main roads for every state
+  (New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC)
+  and NYC transit, fetching only the
   packs that changed, on Wi-Fi unless you allow mobile data. Each download is checked
   against its published SHA-256 before it replaces the old pack, and the map
   switches to it straight away. **Download now** on the first screen fetches
@@ -59,9 +60,11 @@ the APK:
 
 | File | What it adds |
 | --- | --- |
-| `basemap-<region>.pmtiles` | The map itself, one file per region: `nyc` (New York City), `li` (Long Island), `hudson` (Hudson Valley and Catskills), `capital` (Capital Region, Adirondacks and North Country), `western` (Central and Western NY), `njn` (Northern New Jersey: Bergen, Hudson, Essex, Passaic, Morris, Union, Middlesex and nearby). Install any number of them. |
+| `basemap-<region>.pmtiles` | The map itself, one file per region: `nyc` (New York City), `li` (Long Island), `hudson` (Hudson Valley and Catskills), `capital` (Capital Region, Adirondacks and North Country), `western` (Central and Western NY), `njn` (Northern New Jersey, to the Delaware River), `njs` (Southern New Jersey), `ct` (Connecticut), `pae` and `paw` (Eastern and Western Pennsylvania), `md` (Maryland, Delaware and DC). Install any number of them. |
 | `search-nys.sqlite` | Search for places, streets and addresses, New York and northern New Jersey |
-| `routing-nys.tar` | Directions and turn-by-turn navigation, New York and northern New Jersey |
+| `search-<region>.sqlite` | Search for the other states' regions (`njs`, `ct`, `pae`, `paw`, `md`), from OpenStreetMap |
+| `routing-nys.tar` | Directions and turn-by-turn navigation, New York and northern New Jersey, in one file (for app versions before the four states) |
+| `routing-main.tar`, `routing-<regions>.tar` | Directions in pieces: main roads everywhere, and each region's local streets; `routing-packs.json` says which regions each piece serves. The app fetches and combines these itself (Settings > Updates); they can't be loaded by hand. |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 | `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 
