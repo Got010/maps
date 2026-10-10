@@ -117,6 +117,8 @@ fun RoutePreviewSheet(
     // Phase 6: options chip, stops editor and region warning, composed by the caller.
     afterModes: (@Composable () -> Unit)? = null,
     beforeStart: (@Composable () -> Unit)? = null,
+    /** Regions the trip needs that aren't on the phone ([TripRegionOffer]): above Start, or instead of "No route". */
+    regionOffer: (@Composable () -> Unit)? = null,
 ) {
     var collapsed by rememberSaveable { mutableStateOf(false) }
     // How far the finger has dragged the sheet (down is positive), while it is down.
@@ -206,16 +208,21 @@ fun RoutePreviewSheet(
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         Text(stringResource(R.string.directions_finding))
                     }
-                    is RoutePreviewState.Failed -> Text(
-                        stringResource(
-                            when (state.reason) {
-                                RoutePreviewState.Reason.NO_ROUTE -> R.string.directions_no_route
-                                RoutePreviewState.Reason.NO_LOCATION -> R.string.directions_no_location
-                            },
-                        ),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(vertical = 16.dp),
-                    )
+                    is RoutePreviewState.Failed -> if (state.reason == RoutePreviewState.Reason.NO_ROUTE && regionOffer != null) {
+                        // No route because a region at an end of the trip isn't on the phone: the offer says so.
+                        Column(Modifier.padding(vertical = 8.dp)) { regionOffer() }
+                    } else {
+                        Text(
+                            stringResource(
+                                when (state.reason) {
+                                    RoutePreviewState.Reason.NO_ROUTE -> R.string.directions_no_route
+                                    RoutePreviewState.Reason.NO_LOCATION -> R.string.directions_no_location
+                                },
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(vertical = 16.dp),
+                        )
+                    }
                     is RoutePreviewState.Ready -> {
                         // With only one route there is nothing to compare, so no efficiency badge.
                         val thriftiest = if (state.fuelGallons.size == state.summaries.size && state.summaries.size > 1) {
@@ -237,6 +244,7 @@ fun RoutePreviewSheet(
                             )
                         }
                         if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
+                        regionOffer?.invoke()
                         beforeStart?.invoke() // Phase 6
                         Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))

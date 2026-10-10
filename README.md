@@ -1,12 +1,12 @@
 # Southbound
 
-A privacy-first, offline Android maps app for New York State and northern New
-Jersey, the way in and out of the city. It installs only
+A privacy-first, offline Android maps app for New York, New Jersey,
+Connecticut, Pennsylvania, Maryland, Delaware and DC. It installs only
 from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 [CLAUDE.md](CLAUDE.md).
 
-**Status: Phase 3.** Offline maps for all of New York State and northern New
-Jersey in six regional packs, place and address search across both, drive, walk and bike directions
+**Status: Phase 3.** Offline maps, search and directions in eleven regional
+packs across those states (pick the ones you want), drive, walk and bike directions
 with spoken turn-by-turn guidance, and NYC subway, bus, LIRR and Metro-North
 trip planning, all on the phone, plus saved places and recents kept encrypted
 on the phone, speed limits while navigating and 3D buildings. Live transit
@@ -61,8 +61,8 @@ the APK:
 | File | What it adds |
 | --- | --- |
 | `basemap-<region>.pmtiles` | The map itself, one file per region: `nyc` (New York City), `li` (Long Island), `hudson` (Hudson Valley and Catskills), `capital` (Capital Region, Adirondacks and North Country), `western` (Central and Western NY), `njn` (Northern New Jersey, to the Delaware River), `njs` (Southern New Jersey), `ct` (Connecticut), `pae` and `paw` (Eastern and Western Pennsylvania), `md` (Maryland, Delaware and DC). Install any number of them. |
-| `search-nys.sqlite` | Search for places, streets and addresses, New York and northern New Jersey |
-| `search-<region>.sqlite` | Search for the other states' regions (`njs`, `ct`, `pae`, `paw`, `md`), from OpenStreetMap |
+| `search-<region>.sqlite` | Search for places, streets and addresses, one per region (New York's and northern New Jersey's with NYS Address Points and Overture places; the other states' from OpenStreetMap) |
+| `search-nys.sqlite` | Search for all of New York and northern New Jersey in one file (for app versions before the per-region packs) |
 | `routing-nys.tar` | Directions and turn-by-turn navigation, New York and northern New Jersey, in one file (for app versions before the four states) |
 | `routing-main.tar`, `routing-<regions>.tar` | Directions in pieces: main roads everywhere, and each region's local streets; `routing-packs.json` says which regions each piece serves. The app fetches and combines these itself (Settings > Updates); they can't be loaded by hand. |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
@@ -109,8 +109,11 @@ and switches to a truck or RV profile with your vehicle's size and weight;
 Add stop builds a trip with several stops, which you can reorder, remove or
 skip while driving. The navigation screen shows the road you're on and your
 arrival time, and after sunset the map and screen go dark (Settings > Driving).
-If a route crosses a region whose map isn't installed, the preview says so and
-offers to download it. Options can also steer around license plate readers
+If a trip starts, stops or ends in a region that isn't on the phone, or its
+route crosses one, the preview offers **Get for this trip** with the size: that
+region's map, search and directions, downloaded on Wi-Fi (or mobile data, one
+tap) and removed again once you're back in your own regions after the trip.
+Settings > Updates marks such a region, with **Keep** to make it one of yours. Options can also steer around license plate readers
 (Avoid plate readers; routes may be longer), and each driving route shows how
 many plate readers and speed cameras it passes ("3 plate readers · 1 speed
 camera"). Both come from the search pack on the phone, so nothing about the

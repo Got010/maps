@@ -79,6 +79,7 @@ class Updater(context: Context) {
             val manifestText = client.text(checkFeature, manifestAsset)
             val manifest = if (v2) ReleaseManifest.parseV2(manifestText) else ReleaseManifest.parse(manifestText)
             UpdateScheduler.recordCheck(app, manifest.version)
+            if (v2) ManifestCache.save(app, manifestText)
 
             val wantedKinds = if (packsOn) PackKind.entries.toSet() else emptySet()
             val picked = regions.regions.value
@@ -109,14 +110,28 @@ class Updater(context: Context) {
                     // A pack unchanged since the current generation is linked from it, not downloaded again.
                     for (pack in routing) if (!g.keep(pack.file.name, pack.file.sha256)) routingDownloads += pack
                 }
-                val downloads = UpdatePlan(others + routingDownloads, plan.app)
+                // Routing first, its generation in before any map: a region's map arriving means its directions
+                // work too, so a route preview waiting on a trip region can route as soon as the map is there.
+                val downloads = UpdatePlan(routingDownloads + others, plan.app)
                 // A routing pack is unpacked beside its download, then the download goes.
                 requireSpace(downloads.bytes + (routingDownloads.maxOfOrNull { it.file.size } ?: 0L))
                 beforeDownload(downloads)
 
+                fun commitRouting() {
+                    val g = generation ?: return
+                    if (committed) return
+                    val replaced = tiles.current()
+                    g.commit()
+                    committed = true
+                    // A trip may still read the generation just replaced; anything older goes.
+                    tiles.prune(inUse = replaced)
+                    PackEvents.emit(ImportedPack(PackKind.ROUTING, TILES_REGION, g.dir))
+                }
+
                 var overall = 0L
                 val installedNames = ArrayList<String>()
                 for (pack in downloads.packs) {
+                    if (pack !in routingDownloads) commitRouting()
                     val asset = release.asset(pack.file.name) ?: throw IOException("The release is missing ${pack.file.name}")
                     val part = File(packStore.downloadDir.apply { mkdirs() }, "${pack.file.name}.part")
                     try {
@@ -138,14 +153,7 @@ class Updater(context: Context) {
                     overall += pack.file.size
                     installedNames += pack.file.name
                 }
-                generation?.let { g ->
-                    val replaced = tiles.current()
-                    g.commit()
-                    committed = true
-                    // A trip may still read the generation just replaced; anything older goes.
-                    tiles.prune(inUse = replaced)
-                    PackEvents.emit(ImportedPack(PackKind.ROUTING, TILES_REGION, g.dir))
-                }
+                commitRouting()
                 if (v2 && packsOn) dropUnwanted(manifest, picked)
 
                 val apk = plan.app ?: return@withContext publish(UpdateState.Updated(installedNames, null))

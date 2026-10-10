@@ -21,7 +21,7 @@ ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGION
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
+## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys; search-nys also cut into search-<region> for those six), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
 state: $(STATE_PACKS)
 
 ## states: the other states' regions' basemaps and search packs (OSM only), and the split routing packs

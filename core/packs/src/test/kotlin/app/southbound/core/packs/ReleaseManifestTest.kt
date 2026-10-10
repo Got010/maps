@@ -44,9 +44,10 @@ class ReleaseManifestTest {
     fun `reads the v2 manifest with the regions each pack serves`() {
         val m = ReleaseManifest.parseV2(File("src/test/resources/southbound-v2.json").readText())
         assertNull(m.pack(PackKind.ROUTING, "nys")) // the one-graph pack isn't for a tile folder
+        assertNull(m.pack(PackKind.SEARCH, "nys")) // New York's regions have their own, cut from it
         assertEquals(emptyList<String>(), m.pack(PackKind.ROUTING, "main")!!.regions)
         assertEquals(listOf("ct", "hudson", "li", "njn", "njs", "nyc"), m.pack(PackKind.ROUTING, "ct-hudson-li-njn-njs-nyc")!!.regions)
-        assertEquals(listOf("nyc", "li", "hudson", "capital", "western", "njn"), m.pack(PackKind.SEARCH, "nys")!!.regions)
+        assertEquals(listOf("hudson"), m.pack(PackKind.SEARCH, "hudson")!!.regions)
         assertEquals(listOf("ct"), m.pack(PackKind.SEARCH, "ct")!!.regions)
         assertNull(m.pack(PackKind.BASEMAP, "ct")!!.regions)
         assertNull(m.pack(PackKind.TRANSIT, "nyc")!!.regions)
@@ -71,8 +72,13 @@ class ReleaseManifestTest {
             wanted("ct"),
         )
         assertEquals(
-            listOf("routing-ct-hudson-li-njn-njs-nyc.tar", "routing-main.tar", "search-nys.sqlite", "transit-nyc.sqlite"),
+            listOf("routing-ct-hudson-li-njn-njs-nyc.tar", "routing-main.tar", "search-hudson.sqlite", "transit-nyc.sqlite"),
             wanted("hudson"),
+        )
+        assertEquals(
+            listOf("basemap-nyc.pmtiles", "routing-ct-hudson-li-njn-njs-nyc.tar", "routing-main.tar", "search-hudson.sqlite",
+                "search-nyc.sqlite", "transit-nyc.sqlite"),
+            wanted("hudson", "nyc"),
         )
         // A bad region in a pack's list is refused.
         try {

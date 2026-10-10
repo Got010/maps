@@ -4,8 +4,10 @@
 # Builds the region's extract (New York cut to the region, or for nys the whole
 # New York extract merged with northern New Jersey), then indexes its places,
 # streets and addresses with build_search.py, in Docker so the only local
-# requirement is Docker. Releases ship search-nys.sqlite: New York and northern
-# New Jersey in one index. search/states.py tells which state a point is in
+# requirement is Docker. Releases ship search-nys.sqlite (New York and northern
+# New Jersey in one index, for apps before the per-region search packs) and the
+# packs of the regions whose "search_from" is nys, which split_search.py cuts
+# from it in the same container. search/states.py tells which state a point is in
 # (the merged extract doesn't say); regions.json is mounted at /regions.json,
 # next to /search, for it.
 #
@@ -211,6 +213,19 @@ else
 fi
 
 OUTPUT="search-$REGION.sqlite"
+# A pack other regions' own are cut from ("search_from" in regions.json; nys: New York's regions and northern New
+# Jersey): split_search.py writes search-<region>.sqlite for each of them next to it.
+CUT_REGIONS="$(python3 -c 'import json, sys
+regions = json.load(open(sys.argv[1]))["regions"]
+print(" ".join(name for name, r in regions.items() if r.get("search_from") == sys.argv[2]))' "$PIPELINE_DIR/regions.json" "$REGION")"
+SPLIT_STEP=""
+CUT_OUTPUTS=()
+if [[ -n "$CUT_REGIONS" ]]; then
+  for cut in $CUT_REGIONS; do CUT_OUTPUTS+=("search-$cut.sqlite"); done
+  SPLIT_STEP="python /search/split_search.py /data/out/$OUTPUT /data/out --source=$REGION --regions=/regions.json --max-mb=$SEARCH_MAX_MB
+    chown $(id -u):$(id -g) ${CUT_OUTPUTS[*]/#//data/out/}"
+  echo "==> Then cutting it into ${CUT_OUTPUTS[*]}"
+fi
 echo "==> Indexing places, streets and addresses -> $OUTPUT"
 docker run --rm \
   -v "$DATA_DIR:/data" \
@@ -226,6 +241,10 @@ docker run --rm \
     $OVERTURE_STEP
     python /search/build_search.py $CLIPPED_IN_DOCKER /data/out/$OUTPUT $REGION $ARGS
     chown $(id -u):$(id -g) /data/out/$OUTPUT
+    $SPLIT_STEP
   "
 
 report_pack "$DATA_DIR/out/$OUTPUT"
+for cut in "${CUT_OUTPUTS[@]}"; do
+  report_pack "$DATA_DIR/out/$cut"
+done

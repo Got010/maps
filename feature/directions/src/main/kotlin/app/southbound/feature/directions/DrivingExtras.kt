@@ -19,10 +19,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -102,18 +104,87 @@ fun StopsEditor(
     }
 }
 
-/** "Map for X isn't installed" with a Download button, shown when the route leaves the installed regions. */
+/** Where getting a trip's regions is, for [TripRegionOffer]. */
+sealed interface TripFetch {
+    /** Not asked yet: offer them, with what they add to the download when the last release's list says. */
+    data class Offer(val sizeMb: Long?) : TripFetch
+
+    /** Asked; the update round waits for Wi-Fi (the user hasn't allowed mobile data). */
+    data object Waiting : TripFetch
+
+    data class Downloading(val doneMb: Long, val totalMb: Long) : TripFetch
+
+    /** Asked; the round is checking the release or about to start. */
+    data object Working : TripFetch
+
+    data class Failed(val message: String) : TripFetch
+
+    /** Map downloads are turned off in Settings > Updates. */
+    data object Off : TripFetch
+}
+
+/**
+ * Regions a trip needs that aren't on the phone, with one tap to get them for this trip: each one's map, search
+ * and local roads, removed again once the phone is back in its own regions. [needed]: directions can't be found
+ * without them (the start, a stop or the destination is in one), else only the map is missing on the way.
+ */
 @Composable
-fun MissingRegionWarning(regionNames: List<String>, onDownload: () -> Unit, modifier: Modifier = Modifier) {
+fun TripRegionOffer(
+    regionNames: List<String>,
+    needed: Boolean,
+    fetch: TripFetch,
+    onGet: () -> Unit,
+    onUseMobileData: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     if (regionNames.isEmpty()) return
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-        Text(
-            stringResource(R.string.region_missing, regionNames.joinToString(", ")),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(onClick = onDownload) { Text(stringResource(R.string.region_download)) }
+    val names = when (regionNames.size) {
+        1 -> regionNames[0]
+        else -> stringResource(R.string.trip_regions_and, regionNames.dropLast(1).joinToString(", "), regionNames.last())
+    }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+            Text(
+                stringResource(if (needed) R.string.trip_regions_needed else R.string.region_missing, names),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        val small = MaterialTheme.typography.bodySmall
+        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        when (fetch) {
+            is TripFetch.Offer, is TripFetch.Failed -> {
+                if (fetch is TripFetch.Failed) Text(fetch.message, style = small, color = MaterialTheme.colorScheme.error)
+                val size = (fetch as? TripFetch.Offer)?.sizeMb
+                Button(onClick = onGet) {
+                    Text(
+                        when {
+                            fetch is TripFetch.Failed -> stringResource(R.string.trip_regions_retry)
+                            size != null -> stringResource(R.string.trip_regions_get_size, size)
+                            else -> stringResource(R.string.trip_regions_get)
+                        },
+                    )
+                }
+                Text(stringResource(R.string.trip_regions_note), style = small, color = muted)
+            }
+            TripFetch.Waiting -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.trip_regions_waiting, names), style = small, modifier = Modifier.weight(1f))
+                TextButton(onClick = onUseMobileData) { Text(stringResource(R.string.trip_regions_use_mobile)) }
+            }
+            is TripFetch.Downloading -> {
+                Text(stringResource(R.string.trip_regions_downloading, names, fetch.doneMb, fetch.totalMb), style = small)
+                LinearProgressIndicator(
+                    progress = { if (fetch.totalMb > 0) fetch.doneMb.toFloat() / fetch.totalMb else 0f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            TripFetch.Working -> {
+                Text(stringResource(R.string.trip_regions_working, names), style = small)
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            TripFetch.Off -> Text(stringResource(R.string.trip_regions_off), style = small, color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
