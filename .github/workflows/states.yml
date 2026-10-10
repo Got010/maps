@@ -1,0 +1,114 @@
+# Test build of the states beyond New York (owner, October 2026: New Jersey, Connecticut, Pennsylvania and
+# Maryland, with Delaware and DC). Builds each planned region's basemap and search pack (OSM only), and the one
+# routing graph for every state cut into routing-main.tar and routing-<region>.tar (pipeline/routing/split.sh),
+# prints sizes, build times and peak memory, and routes real trips on the split packs against the whole graph
+# (pipeline/routing/route_check.py). Publishes nothing; read the job logs. Run it from the Actions tab (States test
+# build > Run workflow), or it runs when this file or the routing split changes on a branch.
+name: States test build
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - .github/workflows/states.yml
+      - pipeline/routing/split.sh
+      - pipeline/routing/split_tiles.py
+      - pipeline/routing/route_check.py
+
+permissions: {}
+
+concurrency:
+  group: states-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The seven extracts, the merged one, the loose tiles and the packs side by side need room.
+      - name: Free disk space
+        run: |
+          echo "cores $(nproc)"; free -g; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Build the graph and split it
+        env:
+          FREE_SOURCES: 1
+          KEEP_TILES: 1
+        run: |
+          # Peak memory in use on the runner while the graph builds (Valhalla runs in Docker).
+          ( while sleep 10; do free -m | awk '/^Mem:/ {print $3}'; done ) > "$RUNNER_TEMP/mem.txt" &
+          sampler=$!
+          start=$SECONDS
+          make -C pipeline routing-split
+          echo "Built and split in $(( (SECONDS - start) / 60 )) min; peak memory in use $(sort -n "$RUNNER_TEMP/mem.txt" | tail -1) MB"
+          kill "$sampler"
+          du -sh pipeline/data/tmp/valhalla-split-all/tiles/*
+          ls -l pipeline/data/out
+          df -h /
+
+      - name: Route real trips
+        run: make -C pipeline routing-check
+
+  basemaps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [njn, njs, ct, pae, paw, md]
+    env:
+      REGION: ${{ matrix.region }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the basemap
+        run: |
+          start=$SECONDS
+          make -C pipeline "tiles-$REGION"
+          echo "basemap-$REGION.pmtiles built in $(( (SECONDS - start) / 60 )) min"
+          ls -l pipeline/data/out
+
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [njs, ct, pae, paw, md]
+    env:
+      REGION: ${{ matrix.region }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the search pack
+        run: |
+          start=$SECONDS
+          make -C pipeline "search-$REGION"
+          echo "search-$REGION.sqlite built in $(( (SECONDS - start) / 60 )) min"
+          ls -l pipeline/data/out
+          python3 - "pipeline/data/out/search-$REGION.sqlite" <<'PY'
+          import sqlite3, sys
+          db = sqlite3.connect(sys.argv[1])
+          for table in ("feature", "address", "address_street", "landmark"):
+              try:
+                  print(table, db.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+              except sqlite3.Error as e:
+                  print(table, e)
+          print("states", db.execute("SELECT state, count(*) FROM address_street GROUP BY state").fetchall())
+          PY
