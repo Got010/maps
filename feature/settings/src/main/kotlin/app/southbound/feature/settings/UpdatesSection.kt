@@ -43,8 +43,8 @@ import app.southbound.core.updates.UpdateStatus
 
 /**
  * Updates from Southbound's GitHub releases: map data (on by default), the
- * app itself (off until turned on), when to use mobile data, the token a
- * private repository needs, and what the updater is doing now.
+ * app itself (off until turned on), when to use mobile data, an optional
+ * GitHub token, and what the updater is doing now.
  */
 @Composable
 internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretStore) {
@@ -158,7 +158,7 @@ private fun UpdateProgress(state: UpdateState) {
     }
 }
 
-/** A fine-grained token with read-only Contents access, while the repository is private. Stored encrypted. */
+/** An optional GitHub token (the repository is public; one only lifts the rate limit). Stored encrypted. */
 @Composable
 private fun GitHubToken(secrets: SecretStore) {
     var hasToken by remember { mutableStateOf(secrets.has(ApiKey.GITHUB_RELEASES)) }

@@ -41,12 +41,11 @@ Southbound keeps itself current from its own releases (Settings > Updates):
   "Install unknown apps" for Southbound and to confirm the first update. After
   that Southbound is its own installer, so later updates install without a
   prompt (Android 12+).
-- **GitHub token**: while this repository is private, GitHub only shows its
-  releases to a token. Create a fine-grained personal access token (GitHub >
-  Settings > Developer settings > Fine-grained tokens) with access to
-  `StrongHorse44/maps` and the read-only **Contents** permission, and paste it
-  into Settings > Updates. It's stored encrypted and sent only to
-  `api.github.com`. Making the repository public removes this step.
+- **GitHub token**: not needed. The repository is public (October 2026), so
+  GitHub shows its releases to anyone; Obtainium and Settings > Updates work
+  without one. A token pasted into Settings > Updates only lifts GitHub's limit
+  of 60 requests an hour; if an old one from the private days stops working,
+  remove it there.
 
 Requests go to GitHub only and carry nothing about you: no location, search or
 route. With the Network permission revoked the app keeps working from the

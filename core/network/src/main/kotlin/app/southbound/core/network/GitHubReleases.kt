@@ -22,7 +22,7 @@ data class GitHubRelease(val tag: String, val assets: List<ReleaseAsset>) {
  * location, search or route), only which release file is wanted.
  *
  * Redirects are followed by hand so each hop is checked against
- * [isAllowed], and [token] (needed while the repository is private) only ever
+ * [isAllowed], and [token] (optional: the repository is public) only ever
  * goes to the API host, never to the download host GitHub redirects to.
  * Blocking: call off the main thread.
  */
