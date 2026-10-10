@@ -78,15 +78,15 @@ class RowMappingTest(unittest.TestCase):
 
     def test_region_scopes(self):
         self.assertEqual([("NY", (-74.2591, 40.4774, -73.7004, 40.9176))], overture.region_scopes("nyc"))
-        self.assertEqual([("NY", None), ("NJ", (-74.75, 40.3, -73.88, 41.36))], overture.region_scopes("nys"))
-        self.assertEqual([("NJ", (-74.75, 40.3, -73.88, 41.36))], overture.region_scopes("njn"))
+        self.assertEqual([("NY", None), ("NJ", (-75.21, 40.3, -73.88, 41.36))], overture.region_scopes("nys"))
+        self.assertEqual([("NJ", (-75.21, 40.3, -73.88, 41.36))], overture.region_scopes("njn"))
         self.assertIsNone(overture.region_scopes("test"))
 
     def test_rows_outside_the_region_are_dropped(self):
         nys, nyc = overture.region_scopes("nys"), overture.region_scopes("nyc")
         self.assertIsNotNone(self.row("Hoboken Terminal Deli", nys))
         self.assertIsNone(self.row("Hoboken Terminal Deli", nyc))  # NJ isn't in the NYC pack
-        self.assertIsNone(self.row("Phillipsburg Hardware", nys))  # NJ, west of the njn area
+        self.assertIsNotNone(self.row("Phillipsburg Hardware", nys))  # NJ: njn reaches the Delaware River
         self.assertIsNone(self.row("Greenwich Bakery", nys))  # Connecticut
         self.assertIsNone(self.row("No State Shop", nys))  # no state at all
         self.assertIsNotNone(self.row("Nyack Books", nys))  # "New York" spelled out
