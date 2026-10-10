@@ -3,7 +3,7 @@
     <string name="directions_to">To %1$s</string>
     <string name="directions_close">Close directions</string>
     <string name="directions_finding">Finding routes…</string>
-    <string name="directions_no_route">No route found. Both ends must be inside the NYC routing data. If you\'re outside NYC, long-press a place in NYC and tap Start here to plan from there.</string>
+    <string name="directions_no_route">No route found. Directions need the map region at both ends: add the region you\'re going to in Settings > Updates, or check that the place is by a road.</string>
     <string name="directions_from">From %1$s. Navigation starts from your own location, so Start is off; clear the start point on the map to use it.</string>
     <string name="directions_no_location">Waiting for your location. Step outside or near a window.</string>
     <string name="directions_start">Start</string>

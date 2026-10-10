@@ -31,9 +31,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The region picker: one checkbox per basemap region. Ticking a region
- * queues its download; unticking deletes its map from the phone. Shown on
- * the first-run screen and in Settings > Updates.
+ * The region picker: one checkbox per basemap region, under its state's
+ * heading. Ticking a region queues its download; unticking deletes its map
+ * from the phone, and the next update round its directions and search.
+ * Shown on the first-run screen and in Settings > Updates.
  */
 @Composable
 fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: Boolean = true) {
@@ -56,38 +57,50 @@ fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: 
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
-        for (region in Regions.basemaps) {
-            val pack = installed.firstOrNull { it.region == region.id }
-            val checked = region.id in selected
-            ListItem(
-                headlineContent = { Text(region.name) },
-                supportingContent = {
-                    Text(
-                        when {
-                            pack != null -> stringResource(R.string.regions_installed, pack.file.length() shr 20)
-                            checked -> stringResource(R.string.regions_pending)
-                            else -> stringResource(R.string.regions_not_installed)
-                        },
-                    )
-                },
-                trailingContent = {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = { on ->
-                            selection.set(region.id, on)
-                            if (on) {
-                                UpdateScheduler.checkNow(context, anyNetwork = false)
-                            } else {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { packStore.delete(PackKind.BASEMAP, region.id) }
-                                    installed = withContext(Dispatchers.IO) { packStore.installedBasemaps() }
-                                    PackEvents.emitRemoved(PackKind.BASEMAP, region.id)
+        for ((state, regions) in Regions.byState) {
+            // A heading where a state has several regions; a one-region state reads as itself.
+            if (regions.size > 1) {
+                Text(
+                    state,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            for (region in regions) {
+                val pack = installed.firstOrNull { it.region == region.id }
+                val checked = region.id in selected
+                ListItem(
+                    headlineContent = { Text(region.name) },
+                    supportingContent = {
+                        Text(
+                            when {
+                                pack != null -> stringResource(R.string.regions_installed, pack.file.length() shr 20)
+                                checked -> stringResource(R.string.regions_pending)
+                                else -> stringResource(R.string.regions_not_installed)
+                            },
+                        )
+                    },
+                    trailingContent = {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { on ->
+                                selection.set(region.id, on)
+                                if (!on) {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) { packStore.delete(PackKind.BASEMAP, region.id) }
+                                        installed = withContext(Dispatchers.IO) { packStore.installedBasemaps() }
+                                        PackEvents.emitRemoved(PackKind.BASEMAP, region.id)
+                                    }
                                 }
-                            }
-                        },
-                    )
-                },
-            )
+                                // Ticked: its packs download. Unticked: its directions and search go in the same
+                                // round (the updater keeps only the picked regions' packs).
+                                UpdateScheduler.checkNow(context, anyNetwork = false)
+                            },
+                        )
+                    },
+                )
+            }
         }
     }
 }

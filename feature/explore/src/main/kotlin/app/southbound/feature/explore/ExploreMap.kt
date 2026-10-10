@@ -113,8 +113,8 @@ import app.southbound.core.search.AlertKind
 import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
+import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.RouteExposure
-import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.traffic.ClosureAvoidance
 import app.southbound.core.traffic.FasterRoute
@@ -276,7 +276,7 @@ internal fun ExploreMap(
     }
 
     // Packs: search, routing and transit open off the main thread.
-    var searchIndex by remember { mutableStateOf<SearchIndex?>(null) }
+    var searchIndex by remember { mutableStateOf<PlaceSearch?>(null) }
     var navigator by remember { mutableStateOf<Navigator?>(null) }
     var hasRouting by remember { mutableStateOf(false) }
     var transitPack by remember { mutableStateOf<TransitPack?>(null) }

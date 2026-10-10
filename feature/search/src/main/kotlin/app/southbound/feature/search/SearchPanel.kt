@@ -58,7 +58,7 @@ import app.southbound.core.map.Units
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceKind
-import app.southbound.core.search.SearchIndex
+import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.SearchQuery
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.search.SearchResult
@@ -82,7 +82,7 @@ enum class ShortcutSlot { HOME, WORK }
  */
 @Composable
 fun SearchPanel(
-    index: SearchIndex?,
+    index: PlaceSearch?,
     near: LatLon?,
     onPick: (SearchResult) -> Unit,
     onClose: () -> Unit,

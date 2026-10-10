@@ -76,7 +76,7 @@ concurrency:
 env:
   # What a release ships; `make -C pipeline state` builds the same lists. PACKS are the packs every app knows,
   # and the only ones southbound.json lists: an app from before STATE_PACKS takes every routing and search pack
-  # its manifest names. STATE_PACKS are for apps that read southbound-v2.json: the planned regions' basemaps and
+  # its manifest names. STATE_PACKS are for apps that read southbound-v2.json: the other states' regions' basemaps and
   # OSM-only search packs, and routing-packs.json, which stands for the split routing build
   # (pipeline/routing/split.sh): routing-main.tar and the region packs it lists, whose names come from the graph.
   PACKS: basemap-nyc.pmtiles basemap-li.pmtiles basemap-hudson.pmtiles basemap-capital.pmtiles basemap-western.pmtiles basemap-njn.pmtiles routing-nys.tar search-nys.sqlite transit-nyc.sqlite voice-norman.zip
