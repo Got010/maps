@@ -22,7 +22,9 @@ import app.southbound.core.routing.GasPrices
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
 import app.southbound.core.routing.RouteOptionsStore
+import app.southbound.core.routing.TravelMode
 import app.southbound.core.routing.TripBroadcast
+import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.SearchIndex
 import app.southbound.core.search.SearchPacks
@@ -121,6 +123,16 @@ class ExploreServices private constructor(context: Context) {
             if (backup.resume() is ResumeOutcome.Applied) onApplied()
         }
     }
+
+    /**
+     * A route preview getting regions for its trip ("Get for this trip"). Each map that arrives rebuilds the map
+     * screen, which would close the preview; the screen opens this one again instead, until it routes with nothing
+     * missing, is closed or started, or was asked for more than six hours ago.
+     */
+    @Volatile
+    var tripWait: TripWait? = null
+
+    data class TripWait(val place: Place, val mode: TravelMode, val stops: List<Place>, val start: Place?, val atMs: Long)
 
     private var search: Pair<String, PlaceSearch>? = null
     private var transit: Opened<TransitPack>? = null

@@ -105,10 +105,12 @@
     <string name="updates_token_remove">Remove token</string>
     <string name="updates_waiting">Queued: Android starts it once there\'s a connection (Wi-Fi, unless mobile data is allowed). If this stays for more than a minute, close and reopen Southbound.</string>
     <string name="regions_title">Map regions</string>
-    <string name="regions_note">Tick the regions you want: each brings its map, search and local streets for directions, and main roads in every state come with any of them, so a trip passes through regions you haven\'t ticked. The place you\'re going needs its region ticked. Transit schedules cover NYC. Unticking a region deletes its map, search and streets from the phone.</string>
+    <string name="regions_note">Tick the regions you want: each brings its map, search and local streets for directions, and main roads in every state come with any of them, so a trip passes through regions you haven\'t ticked. The place you\'re going needs its region: directions to one you haven\'t ticked offer to get it for that trip. Transit schedules cover NYC. Unticking a region deletes its map, search and streets from the phone.</string>
     <string name="regions_installed">Installed · %1$d MB</string>
     <string name="regions_pending">Not downloaded yet; comes with the next update check.</string>
     <string name="regions_not_installed">Not on this phone</string>
+    <string name="regions_trip">Got for a trip: removed once you\'re back in your own regions.</string>
+    <string name="regions_keep">Keep</string>
     <string name="updates_packs_installed">Installed data</string>
     <string name="updates_packs_none">No data packs installed yet.</string>
     <string name="updates_pack_line">%1$s · %2$d MB · %3$s</string>

@@ -54,7 +54,8 @@ class AndroidBackupStores(
             nightBySunset = driving.nightBySunset.value,
             fuel = FuelChoices(fuelNow.mpg, fuelNow.pricePerGallon, fuelNow.priceSource, fuelNow.region),
             voice = voice.settings.first(),
-            regions = regions.regions.value,
+            // The user's own regions: one got for a trip goes after it, so it isn't one to restore.
+            regions = regions.own,
             allowMobileData = UpdateScheduler.allowMobileData(context),
         )
         // readAll throws if a saved key can't be decrypted, rather than leaving it out of the export.
