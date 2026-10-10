@@ -20,7 +20,7 @@ enum class ApiKey {
      */
     NY_511,
 
-    /** A read-only GitHub token, needed for updates while the repository is private. */
+    /** An optional read-only GitHub token: the repository is public, so it only lifts GitHub's rate limit. */
     GITHUB_RELEASES,
 
     /** A free EIA key (eia.gov/opendata/register.php), for the weekly gas price. */
