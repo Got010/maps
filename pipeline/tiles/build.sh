@@ -8,7 +8,9 @@
 # on the first run and cached in pipeline/data/sources. The njn map holds New
 # Jersey only: the New York side of its box is drawn by the nyc and hudson maps.
 # A region of several extracts (md: Maryland, Delaware and DC) is drawn from
-# them merged (clip_extract), so one map holds all three.
+# them merged (clip_extract), so one map holds all three. Planetiler empties
+# its temp folder when it starts, so it gets one of its own: the merged
+# extract waits in data/tmp.
 #
 # Usage: build.sh <region>      e.g. build.sh nyc, build.sh western
 set -euo pipefail
@@ -40,7 +42,7 @@ docker run --rm \
   --osm_path="$EXTRACT_IN_DOCKER" \
   --download \
   --download_dir=/data/sources \
-  --tmpdir=/data/tmp \
+  --tmpdir="/data/tmp/planetiler-$REGION" \
   --nodemap_storage=mmap \
   --bounds="$BOUNDS" \
   --languages=en \

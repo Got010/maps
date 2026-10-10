@@ -175,7 +175,11 @@ fresh_against() {
 #     plus northern New Jersey is roughly 0.7 to 1 GB) and sits next to
 #     them. Geofabrik extracts are sorted, which merge requires. An object
 #     that both extracts carry (a road crossing the state line) is written
-#     once when the versions match.
+#     once when the versions match; when one extract is a day newer, merge
+#     keeps both versions, which pyosmium's area builder and Valhalla read as
+#     a road given twice ("Way ID twice in input", seen merging Maryland,
+#     Delaware and DC). `osmium time-filter` (streaming, no time given: now)
+#     then keeps only the newest version of each object.
 #   - FREE_SOURCES=1 (release.yml sets it) deletes the inputs once the merge
 #     is done, since a pack job builds only this region.
 # The result is reused until a source changes.
@@ -239,7 +243,10 @@ clip_extract() {
     merge_inputs+=" /data/$host"
   done
   echo "==> Merging ${sources[*]} -> $(basename "$CLIPPED")"
-  osmium_run "${script}osmium merge --overwrite -o $CLIPPED_IN_DOCKER$merge_inputs" "$CLIPPED_IN_DOCKER" "${outputs[@]}"
+  local merged="/data/tmp/$region.merged.osm.pbf"
+  osmium_run "${script}osmium merge --overwrite -o $merged$merge_inputs
+    osmium time-filter --overwrite -o $CLIPPED_IN_DOCKER $merged
+    rm -f $merged" "$CLIPPED_IN_DOCKER" "${outputs[@]}"
   # The cut copies were only inputs to the merge.
   rm -f "${parts[@]}"
   if [[ "${FREE_SOURCES:-}" == 1 ]]; then
