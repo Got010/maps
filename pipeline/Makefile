@@ -5,21 +5,34 @@
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
 
-REGIONS := nyc li hudson capital western njn nys
+REGIONS := nyc li hudson capital western njn njs ct pae paw md nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
+# Built by the pipeline, not offered by the app yet ("planned" in regions.json).
+PLANNED_REGIONS := njs ct pae paw md
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
 STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS)
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
-.PHONY: nyc state release $(ALL_PACKS) push-nyc styles glyphs test clean
+.PHONY: nyc state states routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
 
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
 ## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys), NYC transit, voice packs
 state: $(STATE_PACKS)
+
+## states: the planned regions' basemaps and search packs (OSM only), and the split routing packs
+states: $(addprefix tiles-,$(PLANNED_REGIONS)) $(addprefix search-,$(PLANNED_REGIONS)) routing-split
+
+## routing-split: one graph for every state, cut into routing-main.tar and routing-<region>.tar (routing/split.sh)
+routing-split:
+	routing/split.sh all
+
+## routing-check: route real trips on the split packs and on the whole graph (after KEEP_TILES=1 make routing-split)
+routing-check:
+	python3 routing/route_check.py data/tmp/valhalla-split-all data/out
 
 $(addprefix tiles-,$(REGIONS)): tiles-%:
 	tiles/build.sh $*
@@ -42,6 +55,7 @@ test:
 	python3 -m unittest discover -s transit/tests
 	python3 -m unittest discover -s tests
 	python3 -m unittest discover -s weather/tests
+	python3 -m unittest discover -s routing/tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
