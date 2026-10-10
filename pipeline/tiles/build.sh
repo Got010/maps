@@ -7,6 +7,10 @@
 # Water polygons and Natural Earth data are fetched by Planetiler's --download
 # on the first run and cached in pipeline/data/sources. The njn map holds New
 # Jersey only: the New York side of its box is drawn by the nyc and hudson maps.
+# A region of several extracts (md: Maryland, Delaware and DC) is drawn from
+# them merged (clip_extract), so one map holds all three. Planetiler empties
+# its temp folder when it starts, so it gets one of its own: the merged
+# extract waits in data/tmp.
 #
 # Usage: build.sh <region>      e.g. build.sh nyc, build.sh western
 set -euo pipefail
@@ -20,7 +24,13 @@ PLANETILER_IMAGE="${PLANETILER_IMAGE:-ghcr.io/onthegomap/planetiler:0.10.2@sha25
 PLANETILER_HEAP="${PLANETILER_HEAP:-4g}"
 
 region_bounds "$REGION"
-primary_extract "$REGION"
+if (( $(region_sources "$REGION" | wc -l) > 1 )); then
+  clip_extract "$REGION"
+  EXTRACT_IN_DOCKER="$CLIPPED_IN_DOCKER"
+else
+  primary_extract "$REGION"
+  EXTRACT_IN_DOCKER="/data/sources/$(basename "$EXTRACT")"
+fi
 
 OUTPUT="basemap-$REGION.pmtiles"
 echo "==> Planetiler ($PLANETILER_IMAGE) -> $OUTPUT ($BOUNDS)"
@@ -29,10 +39,10 @@ docker run --rm \
   -e JAVA_TOOL_OPTIONS="-Xmx$PLANETILER_HEAP" \
   -v "$DATA_DIR:/data" \
   "$PLANETILER_IMAGE" \
-  --osm_path="/data/sources/$(basename "$EXTRACT")" \
+  --osm_path="$EXTRACT_IN_DOCKER" \
   --download \
   --download_dir=/data/sources \
-  --tmpdir=/data/tmp \
+  --tmpdir="/data/tmp/planetiler-$REGION" \
   --nodemap_storage=mmap \
   --bounds="$BOUNDS" \
   --languages=en \

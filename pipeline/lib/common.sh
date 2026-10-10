@@ -8,12 +8,14 @@
 #                               the basemap builder reads)
 #   clip_extract nyc         -> sets CLIPPED (host path) and CLIPPED_IN_DOCKER
 #                               (the same file under the /data mount)
+#   region_field md osm_only -> prints a field of the region ("" when unset)
 #   report_pack <file>       -> prints size and SHA-256
 #
-# Regions come from pipeline/regions.json: the basemap regions and "nys", the
-# routing and search region (New York plus northern New Jersey). A region says
-# which Geofabrik extracts it is built from in its optional "sources" map
-# (see region_sources); the default is the New York extract cut to its bounds.
+# Regions come from pipeline/regions.json: the basemap regions, "nys", the
+# routing and search region (New York plus northern New Jersey), and "all",
+# every state at once for the split routing build. A region says which
+# Geofabrik extracts it is built from in its optional "sources" map (see
+# region_sources); the default is the New York extract cut to its bounds.
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${DATA_DIR:-$PIPELINE_DIR/data}"
@@ -63,14 +65,30 @@ sha256_of() {
   if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
 }
 
-# Downloads a Geofabrik extract by source name (new-york, new-jersey) into
+# A region's field from regions.json, printed as is (JSON true prints "true");
+# empty when the region doesn't have it.
+region_field() {
+  python3 - "$REGIONS_JSON" "$1" "$2" <<'PY'
+import json, sys
+regions = json.load(open(sys.argv[1]))["regions"]
+region = regions.get(sys.argv[2])
+if region is None:
+    sys.exit(2)
+value = region.get(sys.argv[3])
+if value is not None:
+    print(json.dumps(value) if isinstance(value, bool) else value)
+PY
+}
+
+# Downloads a Geofabrik extract by source name (new-york, pennsylvania, ...) into
 # sources/<name>-latest.osm.pbf and verifies it against its .md5. Sets
 # SOURCE_FILE.
 fetch_source() {
   local name="$1" url
   case "$name" in
-    new-york | new-jersey) url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
-    *) echo "Unknown source '$name'. Known: new-york, new-jersey." >&2; exit 2 ;;
+    new-york | new-jersey | connecticut | pennsylvania | maryland | delaware | district-of-columbia)
+      url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
+    *) echo "Unknown source '$name'. Known: new-york, new-jersey, connecticut, pennsylvania, maryland, delaware, district-of-columbia." >&2; exit 2 ;;
   esac
   SOURCE_FILE="$DATA_DIR/sources/$name-latest.osm.pbf"
   echo "==> Fetching $url"
@@ -109,7 +127,8 @@ PY
 }
 
 # Sets EXTRACT to the first extract a region is built from, downloaded and
-# verified. The basemap builder gives it to Planetiler with --bounds.
+# verified. The basemap builder gives it to Planetiler with --bounds when the
+# region has one source (a region of several, md, goes through clip_extract).
 primary_extract() {
   local lines source clip
   lines="$(region_sources "$1")" || { echo "Unknown region '$1'. See pipeline/regions.json." >&2; exit 2; }
@@ -156,7 +175,11 @@ fresh_against() {
 #     plus northern New Jersey is roughly 0.7 to 1 GB) and sits next to
 #     them. Geofabrik extracts are sorted, which merge requires. An object
 #     that both extracts carry (a road crossing the state line) is written
-#     once when the versions match.
+#     once when the versions match; when one extract is a day newer, merge
+#     keeps both versions, which pyosmium's area builder and Valhalla read as
+#     a road given twice ("Way ID twice in input", seen merging Maryland,
+#     Delaware and DC). `osmium time-filter` (streaming, no time given: now)
+#     then keeps only the newest version of each object.
 #   - FREE_SOURCES=1 (release.yml sets it) deletes the inputs once the merge
 #     is done, since a pack job builds only this region.
 # The result is reused until a source changes.
@@ -220,7 +243,10 @@ clip_extract() {
     merge_inputs+=" /data/$host"
   done
   echo "==> Merging ${sources[*]} -> $(basename "$CLIPPED")"
-  osmium_run "${script}osmium merge --overwrite -o $CLIPPED_IN_DOCKER$merge_inputs" "$CLIPPED_IN_DOCKER" "${outputs[@]}"
+  local merged="/data/tmp/$region.merged.osm.pbf"
+  osmium_run "${script}osmium merge --overwrite -o $merged$merge_inputs
+    osmium time-filter --overwrite -o $CLIPPED_IN_DOCKER $merged
+    rm -f $merged" "$CLIPPED_IN_DOCKER" "${outputs[@]}"
   # The cut copies were only inputs to the merge.
   rm -f "${parts[@]}"
   if [[ "${FREE_SOURCES:-}" == 1 ]]; then
