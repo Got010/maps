@@ -10,7 +10,7 @@ import app.southbound.core.search.LatLon
 import app.southbound.core.search.RouteAlerts
 import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
-import app.southbound.core.search.SearchIndex
+import app.southbound.core.search.PlaceSearch
 import kotlinx.coroutines.CancellationException
 import uniffi.ferrostar.Route
 import uniffi.ferrostar.UserLocation
@@ -26,7 +26,7 @@ internal object PlateReaders {
     private const val ID_PREFIX = "alpr:"
 
     /** Every plate reader in the pack, as map dots. Empty for a pack without landmarks. */
-    fun pins(index: SearchIndex): List<CameraPin> =
+    fun pins(index: PlaceSearch): List<CameraPin> =
         index.alprCameras().map { CameraPin("$ID_PREFIX${it.id}", MapPoint(it.lat, it.lon), it.name) }
 
     /**
@@ -35,7 +35,7 @@ internal object PlateReaders {
      * option steers around plate readers alone, and every one met on the route whichever way it faces.
      * Blocking: call off the main thread.
      */
-    fun exposure(index: SearchIndex, routes: List<Route>): List<RouteExposure> = routes.map { route ->
+    fun exposure(index: PlaceSearch, routes: List<Route>): List<RouteExposure> = routes.map { route ->
         val line = route.line()
         RouteAlerts.exposure(
             line,
@@ -61,7 +61,7 @@ internal object PlateReaders {
      */
     suspend fun avoid(
         nav: Navigator,
-        index: SearchIndex,
+        index: PlaceSearch,
         from: UserLocation,
         waypoints: List<Waypoint>,
         mode: TravelMode,
@@ -110,7 +110,7 @@ internal object PlateReaders {
     }
 
     /** Landmarks of [category] (plate readers by default) in small boxes along [line], grown to reach [withinMeters] off it. */
-    private fun near(index: SearchIndex, line: RouteLine, withinMeters: Double, category: String = Landmark.ALPR_CAMERA): List<Landmark> =
+    private fun near(index: PlaceSearch, line: RouteLine, withinMeters: Double, category: String = Landmark.ALPR_CAMERA): List<Landmark> =
         line.boxes(padMeters = withinMeters + 20.0)
             .flatMap { box -> index.landmarks(box, category) }
             .distinctBy { it.id }
