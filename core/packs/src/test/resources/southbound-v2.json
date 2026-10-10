@@ -1,0 +1,98 @@
+{
+  "schema": 2,
+  "version": "0.1.1",
+  "versionCode": 101,
+  "app": {
+    "file": "southbound-0.1.1.apk",
+    "size": 3,
+    "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  },
+  "packs": [
+    {
+      "kind": "basemap",
+      "region": "ct",
+      "file": "basemap-ct.pmtiles",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    },
+    {
+      "kind": "basemap",
+      "region": "nyc",
+      "file": "basemap-nyc.pmtiles",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    },
+    {
+      "kind": "routing",
+      "region": "ct-hudson-li-njn-njs-nyc",
+      "file": "routing-ct-hudson-li-njn-njs-nyc.tar",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": [
+        "ct",
+        "hudson",
+        "li",
+        "njn",
+        "njs",
+        "nyc"
+      ]
+    },
+    {
+      "kind": "routing",
+      "region": "ct",
+      "file": "routing-ct.tar",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": [
+        "ct"
+      ]
+    },
+    {
+      "kind": "routing",
+      "region": "main",
+      "file": "routing-main.tar",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": []
+    },
+    {
+      "kind": "search",
+      "region": "ct",
+      "file": "search-ct.sqlite",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": [
+        "ct"
+      ]
+    },
+    {
+      "kind": "search",
+      "region": "nys",
+      "file": "search-nys.sqlite",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "regions": [
+        "nyc",
+        "li",
+        "hudson",
+        "capital",
+        "western",
+        "njn"
+      ]
+    },
+    {
+      "kind": "transit",
+      "region": "nyc",
+      "file": "transit-nyc.sqlite",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    },
+    {
+      "kind": "voice",
+      "region": "norman",
+      "file": "voice-norman.zip",
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    }
+  ]
+}
