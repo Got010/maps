@@ -19,6 +19,7 @@ class RegionsTest {
             val expected = regions[region.id] as Map<*, *>
             assertEquals(region.id, expected["name"], region.name)
             assertEquals(region.id, expected["basemap"], region.basemap)
+            assertEquals(region.id, expected["planned"] ?: false, region.planned)
             val bounds = (expected["bounds"] as List<*>).map { (it as Number).toDouble() }
             assertEquals(region.id, bounds, listOf(region.bounds.minLon, region.bounds.minLat, region.bounds.maxLon, region.bounds.maxLat))
             val area = (expected["area"] as List<*>?).orEmpty().map { p -> (p as List<*>).map { (it as Number).toDouble() } }
@@ -29,9 +30,26 @@ class RegionsTest {
     @Test
     fun `statewide is not a basemap region`() {
         assertTrue(Regions.basemaps.none { it.id == Regions.STATEWIDE })
+        assertTrue(Regions.basemaps.none { it.id == "all" })
         assertEquals(6, Regions.basemaps.size)
         assertEquals("New York and Northern New Jersey", Regions.nameOf("nys"))
         assertEquals("custom", Regions.nameOf("custom"))
+    }
+
+    /** The states beyond New York are built but not offered until their packs are in a release. */
+    @Test
+    fun `planned regions stay out of the picker`() {
+        assertEquals(listOf("njs", "ct", "pae", "paw", "md"), Regions.all.filter { it.planned }.map { it.id })
+        assertTrue(Regions.basemaps.none { it.planned })
+        assertNull(Regions.basemapAt(39.9526, -75.1636)) // Philadelphia
+        assertEquals("Connecticut", Regions.nameOf("ct"))
+    }
+
+    @Test
+    fun `northern new jersey reaches the delaware`() {
+        assertEquals("njn", Regions.basemapAt(40.6937, -75.1902)?.id) // Phillipsburg
+        assertEquals("njn", Regions.basemapAt(41.0582, -74.7527)?.id) // Newton
+        assertNull(Regions.basemapAt(40.6884, -75.2207)) // Easton, PA, across the river
     }
 
     @Test
