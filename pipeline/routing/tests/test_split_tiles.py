@@ -1,6 +1,7 @@
 """Tests for split_tiles.py. Run: python3 -m unittest discover -s pipeline/routing/tests"""
 
 import io
+import json
 import os
 import sys
 import tarfile
@@ -42,10 +43,17 @@ class AssignmentTest(unittest.TestCase):
     def packs_at(self, lat, lon, level=2):
         return st.regions_for_tile(self.regions, level, st.tile_id_at(level, lat, lon))
 
-    def test_main_levels_go_to_main(self):
-        self.assertEqual(["main"], self.packs_at(40.7580, -73.9855, level=0))
-        self.assertEqual(["main"], self.packs_at(39.9526, -75.1636, level=1))
-        self.assertEqual(["main"], self.packs_at(40.0, -82.0, level=0))  # Ohio: still a main road tile
+    def test_packs_are_named_by_the_regions_they_serve(self):
+        self.assertEqual("main", st.pack_for(0, ["nyc"]))
+        self.assertEqual("main", st.pack_for(0, []))  # Ohio's main roads too: trips may cross it
+        # Only level 0 is shared: secondary roads go by region like local streets.
+        self.assertEqual("hudson", st.pack_for(1, ["hudson"]))
+        self.assertEqual("hudson", st.pack_for(2, ["hudson"]))
+        self.assertEqual("hudson-njn-nyc", st.pack_for(2, ["nyc", "hudson", "njn"]))
+        self.assertIsNone(st.pack_for(1, []))
+        self.assertIsNone(st.pack_for(2, []))
+        # As the first test build cut them, levels 0 and 1 shared.
+        self.assertEqual("main", st.pack_for(1, ["hudson"], main_levels=(0, 1)))
 
     def test_local_roads_follow_the_maps(self):
         # Manhattan and the Bronx with Fort Lee across the river: New York City's, the Hudson Valley's and
@@ -89,16 +97,31 @@ class SplitTest(unittest.TestCase):
                     f.write(data)
             with open(os.path.join(tiles, "valhalla.json"), "w") as f:
                 f.write("{}")
-            result = st.split(tiles, out, regions, log=io.StringIO())
+            index = os.path.join(tmp, "tiles.jsonl")
+            result = st.split(tiles, out, regions, log=io.StringIO(), index=index)
 
-            self.assertEqual((2, len(b"highways") + len(b"arterials")), result["main"])
+            self.assertEqual((1, len(b"highways")), result["main"])
             self.assertEqual((1, len(b"buffalo")), result["western"])
             self.assertEqual((1, len(b"ohio")), result[None])
+            # Manhattan's 1-degree level 1 tile reaches four regions; Philadelphia and Camden's level 2 tile, once,
+            # in the pack for both regions.
+            arterials = st.pack_for(1, st.regions_for_tile(regions, 1, st.tile_id_at(1, 40.75, -73.98)))
+            self.assertEqual((1, len(b"arterials")), result[arterials])
             self.assertEqual(
-                ["routing-main.tar", "routing-njs.tar", "routing-pae.tar", "routing-western.tar"],
+                sorted(["routing-main.tar", f"routing-{arterials}.tar", "routing-njs-pae.tar", "routing-packs.json",
+                        "routing-western.tar"]),
                 sorted(os.listdir(out)),
             )
-            with tarfile.open(os.path.join(out, "routing-pae.tar")) as tar:
+            with open(os.path.join(out, "routing-packs.json")) as f:
+                listing = json.load(f)
+            self.assertEqual([], listing["routing-main.tar"])
+            self.assertEqual(["njs", "pae"], listing["routing-njs-pae.tar"])
+            self.assertEqual(["western"], listing["routing-western.tar"])
+            self.assertEqual(arterials.split("-"), listing[f"routing-{arterials}.tar"])
+            with open(index) as f:
+                rows = [json.loads(line) for line in f]
+            self.assertIn([st.tile_path(2, st.tile_id_at(2, 40.0, -82.0)), 2, 4, []], rows)
+            with tarfile.open(os.path.join(out, "routing-njs-pae.tar")) as tar:
                 (member,) = tar.getmembers()
                 self.assertEqual(st.tile_path(2, st.tile_id_at(2, 39.9526, -75.1636)), member.name)
                 self.assertEqual(b"philadelphia", tar.extractfile(member).read())
@@ -106,9 +129,11 @@ class SplitTest(unittest.TestCase):
             with open(os.path.join(out, "routing-main.tar"), "rb") as f:
                 self.assertEqual(b"ustar", f.read(262)[257:262])
             # The same tiles give the same file.
-            first = open(os.path.join(out, "routing-main.tar"), "rb").read()
+            with open(os.path.join(out, "routing-main.tar"), "rb") as f:
+                first = f.read()
             st.split(tiles, out, regions, log=io.StringIO())
-            self.assertEqual(first, open(os.path.join(out, "routing-main.tar"), "rb").read())
+            with open(os.path.join(out, "routing-main.tar"), "rb") as f:
+                self.assertEqual(first, f.read())
 
     def test_a_pack_over_the_limit_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

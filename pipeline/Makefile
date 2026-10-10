@@ -12,7 +12,8 @@ PLANNED_REGIONS := njs ct pae paw md
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
-STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS)
+STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS) \
+	$(addprefix tiles-,$(PLANNED_REGIONS)) $(addprefix search-,$(PLANNED_REGIONS)) routing-split
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
 .PHONY: nyc state states routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
@@ -20,7 +21,7 @@ ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGION
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys), NYC transit, voice packs
+## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys), NYC transit, voice packs, and the planned regions' basemaps, search packs and the split routing packs
 state: $(STATE_PACKS)
 
 ## states: the planned regions' basemaps and search packs (OSM only), and the split routing packs
