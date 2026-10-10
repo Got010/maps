@@ -14,7 +14,7 @@ import java.io.File
  * needs FTS5 with the trigram tokenizer, which older Android versions lack.
  * Nothing here touches the network.
  */
-class SearchIndex private constructor(private val connection: SQLiteConnection) : Closeable {
+class SearchIndex private constructor(private val connection: SQLiteConnection) : PlaceSearch {
 
     /**
      * Up to [limit] results for [raw], best first. With [near], closer
@@ -25,19 +25,24 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * guess from the nearest numbers (an approximate result), and the
      * streets themselves.
      */
-    fun search(raw: String, near: LatLon? = null, limit: Int = 20): List<SearchResult> {
+    override fun search(raw: String, near: LatLon?, limit: Int): List<SearchResult> =
+        searchScored(raw, near, limit).map { it.result }
+
+    /** [search] with each result's score, so results from several packs can be merged ([SearchPacks]). */
+    fun searchScored(raw: String, near: LatLon? = null, limit: Int = 20): List<ScoredResult> {
         val query = SearchQuery.parse(raw)
         if (query.isEmpty) return emptyList()
         val address = AddressQuery.parse(raw)
         val (candidates, addresses) = synchronized(connection) {
             candidates(query, near) to (address?.let { addressResults(it, near) } ?: emptyList())
         }
-        val ranked = SearchRanking.rank(query, candidates, near, limit, addresses)
+        val ranked = SearchRanking.rankScored(query, candidates, near, limit, addresses)
         if (!query.asksWeather) return ranked
         // "weather albany": the towns and cities of that name first, however far, then everything else.
         val towns = synchronized(connection) { candidates(query, null, PlaceKind.LOCALITY) }
-        val first = SearchRanking.rank(query, towns, near, limit, pointsPerKm = SearchRanking.TOWN_POINTS_PER_KM)
-        return (first + ranked).distinctBy { it.place.id }.take(limit)
+        val first = SearchRanking.rankScored(query, towns, near, limit, pointsPerKm = SearchRanking.TOWN_POINTS_PER_KM)
+            .map { it.copy(score = it.score + TOWN_FIRST) }
+        return (first + ranked).distinctBy { it.result.place.id }.take(limit)
     }
 
     /**
@@ -45,7 +50,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * row, or an Overture place (id from [OVERTURE_ID_BASE] up). An address
      * result (id from [ADDRESS_ID_BASE] up) gives null.
      */
-    fun place(id: Long): Place? = when {
+    override fun place(id: Long): Place? = when {
         id >= OVERTURE_ID_BASE -> if (!hasOverture) null else synchronized(connection) {
             connection.prepare("SELECT $OVERTURE_COLUMNS FROM overture_place o WHERE o.rowid = ?").use { stmt ->
                 stmt.bindLong(1, id - OVERTURE_ID_BASE)
@@ -105,7 +110,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * [RouteAlerts]). Empty for an older pack without the table. OSM only:
      * Overture places never become landmarks.
      */
-    fun landmarks(box: NearbyBox, limit: Int = LANDMARK_LIMIT): List<Landmark> {
+    override fun landmarks(box: NearbyBox, limit: Int): List<Landmark> {
         if (!hasLandmarks) return emptyList()
         return synchronized(connection) {
             connection.prepare(
@@ -129,7 +134,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * direction when the pack has one (else null). Empty for an older pack
      * without the table.
      */
-    fun landmarks(box: NearbyBox, category: String, limit: Int = LANDMARK_LIMIT): List<Landmark> {
+    override fun landmarks(box: NearbyBox, category: String, limit: Int): List<Landmark> {
         if (!hasLandmarks) return emptyList()
         return synchronized(connection) {
             connection.prepare(
@@ -152,7 +157,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * Empty for an older pack without the landmark table; on any read error
      * too, since the map is fine without them.
      */
-    fun alprCameras(limit: Int = ALPR_LIMIT): List<Landmark> {
+    override fun alprCameras(limit: Int): List<Landmark> {
         if (!hasLandmarks) return emptyList()
         return try {
             synchronized(connection) {
@@ -173,7 +178,7 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
      * [radiusMeters] of ([lat], [lon]), nearest first. For "Parking nearby" on
      * the arrival card. Only named places are in the pack; OSM's only.
      */
-    fun nearby(category: String, lat: Double, lon: Double, radiusMeters: Double, limit: Int = 5): List<SearchResult> {
+    override fun nearby(category: String, lat: Double, lon: Double, radiusMeters: Double, limit: Int): List<SearchResult> {
         val center = LatLon(lat, lon)
         val box = NearbyBox.around(center, radiusMeters / 1000)
         val found = synchronized(connection) {
@@ -528,11 +533,8 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         const val OVERTURE_ID_BASE = 1L shl 42
         private const val NEARBY_ROW_LIMIT = 200
 
-        /** Per box; a 2 km piece of route in Midtown has a few hundred. */
-        private const val LANDMARK_LIMIT = 5_000
-
-        /** Plate readers for the whole pack; far more than NYS has mapped today. */
-        private const val ALPR_LIMIT = 50_000
+        /** A weather search's towns come before everything else, here and merged with other packs'. */
+        private const val TOWN_FIRST = 1_000_000.0
 
         /** How far "nearby" reaches when picking local candidates. */
         private const val NEARBY_KM = 15.0
