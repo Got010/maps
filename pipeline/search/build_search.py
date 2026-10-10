@@ -66,7 +66,7 @@ import time
 import osmium
 
 from normalize import house_number_key, normalize
-from states import state_at
+from states import DEFAULT_STATE, state_at
 
 APPLICATION_ID = 0x53425331  # "SBS1", matches PackKind.SEARCH_APPLICATION_ID
 # 2: address_street, address_street_fts and address tables, and streets carry
@@ -591,9 +591,10 @@ class Collector:
         self.add(STREET, name, lat, lon, importance, osm_ref, tags, category="street")
 
 
-def state_finder(override=None):
+def state_finder(override=None, default=None):
     """(lat, lon) -> two-letter state: override if given, else states.state_at
-    (NJ inside the northern New Jersey area, NY elsewhere), cached per ~500 m."""
+    (NJ inside the northern New Jersey area, DE and DC inside theirs, `default`
+    or NY elsewhere), cached per ~500 m."""
     if override:
         return lambda lat, lon: override
     cache = {}
@@ -601,7 +602,7 @@ def state_finder(override=None):
     def find(lat, lon):
         key = (round(lat / LocalityFinder.CACHE_CELL), round(lon / LocalityFinder.CACHE_CELL))
         if key not in cache:
-            cache[key] = state_at(lat, lon)
+            cache[key] = state_at(lat, lon, default or DEFAULT_STATE)
         return cache[key]
 
     return find
@@ -727,10 +728,11 @@ def way_start(way):
 
 
 def build(pbf, output, region, state=None, address_points=None, bounds=None, max_mb=None, overture=None,
-          overture_max_mb=None, dot_cameras=None):
+          overture_max_mb=None, dot_cameras=None, default_state=None):
     """Builds the pack; returns the row counts per kind (ADDRESS counts the
     address table). Addresses and streets without addr:state are in `state`
-    if given, else wherever states.state_at puts them. overture is a staging
+    if given, else wherever states.state_at puts them (`default_state`, or New
+    York, outside every state outline). overture is a staging
     CSV from overture.py fetch: its places go into their own tables (see
     overture.py). Fails if the file ends up larger than max_mb, or the
     Overture tables alone larger than overture_max_mb. dot_cameras is a
@@ -795,7 +797,7 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
         attribution += "; " + overture_places.ATTRIBUTION
 
     finder = LocalityFinder(collector.localities)
-    state_of = state_finder(state)
+    state_of = state_finder(state, default_state)
     street_towns(db, finder, state_of)
     written, address_streets, duplicates = finish_addresses(db, finder, state_of)
     collector.counts[ADDRESS] = written
@@ -867,6 +869,9 @@ def main():
     parser.add_argument("--state",
                         help="two-letter state for every address that doesn't say"
                              " (default: by location, see states.py)")
+    parser.add_argument("--default-state",
+                        help="two-letter state of an address that doesn't say and lies in no state outline"
+                             " of states.py (default NY)")
     parser.add_argument("--address-points", help="NYS Address Points as CSV or GeoJSON (see addresses.py)")
     parser.add_argument("--bounds", type=parse_bounds,
                         help="minlon,minlat,maxlon,maxlat: keep only address points inside")
@@ -877,7 +882,8 @@ def main():
     args = parser.parse_args()
     build(args.pbf, args.output, args.region, state=args.state.upper() if args.state else None,
           address_points=args.address_points, bounds=args.bounds, max_mb=args.max_mb,
-          overture=args.overture, overture_max_mb=args.overture_max_mb, dot_cameras=args.dot_cameras)
+          overture=args.overture, overture_max_mb=args.overture_max_mb, dot_cameras=args.dot_cameras,
+          default_state=args.default_state.upper() if args.default_state else None)
 
 
 if __name__ == "__main__":
