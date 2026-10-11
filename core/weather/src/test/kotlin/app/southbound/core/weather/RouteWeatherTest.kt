@@ -19,8 +19,32 @@ class RouteWeatherTest {
         listOf(GeoPoint(south, west), GeoPoint(south, west + size), GeoPoint(south + size, west + size), GeoPoint(south + size, west))
 
     private fun alert(id: String, polygons: List<Ring> = emptyList(), zones: List<String> = emptyList(), ends: Long? = null,
-        severity: AlertSeverity = AlertSeverity.MODERATE) =
-        WeatherAlert(id, "Winter Storm Warning", null, severity, null, "Albany", null, null, null, ends, null, polygons, zones)
+        severity: AlertSeverity = AlertSeverity.MODERATE, onset: Long? = null) =
+        WeatherAlert(id, "Winter Storm Warning", null, severity, null, "Albany", null, null, onset, ends, null, polygons, zones)
+
+    private val hour = 3_600_000L
+
+    @Test
+    fun `an alert counts only while it is in effect when the driver gets there`() {
+        // A square from about 8.2 to 9.8 km along the route; at one second a metre the driver is in it about 2.3 to 2.7 hours on.
+        val area = listOf(square(42.69, -73.90, 0.02))
+        val now = 1_000_000_000L
+        fun found(vararg alerts: WeatherAlert) = RouteWeather.alongRoute(east, alerts.toList(), emptyMap(), now, secondsPerMeter = 1.0)
+
+        // Ends an hour from now, long before the driver gets there: gone. Without a pace it still counts, as before.
+        val endsSoon = alert("endsSoon", area, ends = now + hour)
+        assertTrue(found(endsSoon).isEmpty())
+        assertEquals(1, RouteWeather.alongRoute(east, listOf(endsSoon), emptyMap(), now).size)
+        // Ends two hours from now, within the half hour a trip may run early: still counts.
+        assertEquals(listOf("endsLater"), found(alert("endsLater", area, ends = now + 2 * hour)).map { it.alert.id })
+        // Begins five hours from now, well after the driver has passed: left out.
+        assertTrue(found(alert("tonight", area, onset = now + 5 * hour)).isEmpty())
+        // Begins while the driver is about there: counts, saying when.
+        val soon = found(alert("soon", area, onset = now + 2 * hour + 30 * 60_000L)).single()
+        assertEquals(now + 2 * hour + 30 * 60_000L, soon.startsAt)
+        // Already under way: no "from".
+        assertNull(found(alert("now", area, onset = now - hour)).single().startsAt)
+    }
 
     @Test
     fun `an area the route crosses is found with where it starts, even between two far points`() {
