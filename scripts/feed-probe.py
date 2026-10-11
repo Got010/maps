@@ -1747,6 +1747,67 @@ def dot_midwest_8():
         print(f"   {path}1: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:600].replace("\n", " "))
 
 
+def dot_midwest_9():
+    """Ninth round: the CARS map query at higher zooms (do the clusters open up?), every event slug in one request,
+    the dashboard with a priority; Mi Drive's details for real ids."""
+    from collections import Counter
+    query = ('{"query":"query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri '
+             'features { id geometry properties } __typename } error { message type } } }",'
+             '"variables":{"input":{"north":%s,"south":%s,"east":%s,"west":%s,"zoom":%d,"layerSlugs":["incidents","closures","construction","roadReports"],"nonClusterableUris":["dashboard"]}}}')
+    for state, site, box in (("Indiana", "https://511in.org", (41.8, 37.7, -84.7, -88.2)), ("Minnesota", "https://511mn.org", (49.5, 43.4, -89.4, -97.3)),
+                             ("Iowa", "https://511ia.org", (43.6, 40.3, -90.0, -96.7)), ("Nebraska", "https://511.nebraska.gov", (43.1, 39.9, -95.2, -104.2)),
+                             ("Kansas", "https://www.kandrive.gov", (40.1, 36.9, -94.5, -102.2))):
+        head(f"{state}: clusters by zoom")
+        gql = site + "/api/graphql"
+        n, s_, e, w = box
+        for zoom in (7, 10, 12, 14, 16):
+            status, h, doc, text = _post_json(gql, query % (n, s_, e, w, zoom), headers={"Referer": site + "/", "Origin": site}, limit=60_000_000)
+            data = (doc or {}).get("data") if isinstance(doc, dict) else None
+            mf = ((data or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(data, dict) else None
+            if not isinstance(mf, list):
+                print(f"   zoom {zoom}: status {status} bytes {len(text)}:", text[:300].replace("\n", " "))
+                continue
+            types = Counter(m.get("__typename") for m in mf)
+            points = sum(1 for m in mf for f in (m.get("features") or []) if ((f.get("geometry") or {}).get("type") == "Point"))
+            print(f"   zoom {zoom}: {len(mf)} map features, {len(text)} bytes; types {types.most_common(4)}; points {points}")
+            if zoom == 14 and mf:
+                cl = next((m for m in mf if m.get("__typename") == "Cluster"), None)
+                if cl:
+                    print("   a cluster:", json.dumps(cl)[:1200])
+                icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf if m.get("__typename") == "Event" for f in (m.get("features") or []))
+                print("   event icons:", icons.most_common(20))
+                tips = [m.get("tooltip") for m in mf if m.get("__typename") == "Event"][:12]
+                print("   tooltips:", json.dumps(tips)[:2500])
+        for name, q in (("dashboard priority 10", '{"query":"query Dashboard($layerSlugs: [String!]!, $maxPriority: Int) { dashboardQuery { collections(layerSlugs: $layerSlugs, maxPriority: $maxPriority) { uri title cityReference bbox icon color __typename ... on Event { description priority isWazeEvent lastUpdated { timestamp timezone } beginTime { timestamp timezone } } } } }","variables":{"layerSlugs":["incidents","closures","construction","roadReports"],"maxPriority":10}}'),
+                        ("dashboard no filter", '{"query":"{ dashboardQuery { collections(layerSlugs: [\\"incidents\\",\\"closures\\",\\"construction\\",\\"roadReports\\",\\"future\\"]) { uri title bbox icon __typename } } }"}')):
+            status, h, doc, text = _post_json(gql, q, headers={"Referer": site + "/", "Origin": site}, limit=20_000_000)
+            print(f"   {name}: status {status} bytes {len(text)}:", text[:600].replace("\n", " "))
+
+    head("Michigan: Mi Drive details for real ids")
+    base = "https://mdotjboss.state.mi.us/MiDrive/"
+    hdr = {**BROWSER, "Accept": "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"}
+    for path in ("camera/getCameraInformation/1129", "camera/getCameraInformation/2113", "dms/getDMSInfo/3067", "dms/getDMSInfo/17624",
+                 "construction/getConstructionInformation/ETX-21385", "construction/getConstructionInformation/ETX-21250", "incidents/AllForMap"):
+        status, _, h, body = get(base + path, headers=hdr, limit=4_000_000)
+        print(f"   {path}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:2500].replace("\n", " "))
+    status, _, h, body = get(base + "camera/AllForMap", headers=hdr, limit=4_000_000)
+    doc = _json(body)
+    if isinstance(doc, list):
+        print("   camera icons:", Counter(r.get("icon") for r in doc).most_common(5), "links:", Counter(bool(r.get("link")) for r in doc), "orientations:", Counter(r.get("orientation") for r in doc).most_common(6))
+        for r in doc:
+            if r.get("link"):
+                print("   camera with link:", json.dumps(r)[:600])
+                break
+    status, _, h, body = get(base + "construction/AllForMap", headers=hdr, limit=8_000_000)
+    doc = _json(body)
+    if isinstance(doc, list):
+        print("   construction icons:", Counter(r.get("icon") for r in doc).most_common(8), "active:", Counter(r.get("active") for r in doc))
+        print("   titles:", Counter(r.get("title", "").split(":")[-1].strip() for r in doc).most_common(15))
+    for url in ("https://mdotnetpublic.state.mi.us/drive/images/inc_red_18px.png", "https://mdotjboss.state.mi.us/MiDrive/camera/image/1129", "https://mdotjboss.state.mi.us/MiDrive/camera/1129/image"):
+        status, ctype, body = _raw(url)
+        print(f"   {url}: status {status} type {ctype} bytes {len(body)}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1755,7 +1816,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
             "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5,
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
-            "dot-midwest-8": dot_midwest_8}
+            "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9}
 
 
 class Timeout(Exception):
