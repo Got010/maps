@@ -972,11 +972,76 @@ def hls_frames():
             print(f"   segment {seg}: status {status} type {ctype} bytes {len(body)} mpeg-ts {body[:1] == b'G'} mp4 {body[4:8] in (b'ftyp', b'moof', b'styp')}")
 
 
+# The Midwest's 511s (owner, October 2026: "the entire midwest states, same features as all other states").
+# Most are IBI Group's platform like 511PA and CTroads; the probe tells which, and what their layers are called.
+MIDWEST_IBI = {
+    "Indiana": "https://511in.org", "Wisconsin": "https://511wi.gov", "Minnesota": "https://511mn.org", "Iowa": "https://511ia.org",
+    "North Dakota": "https://travel.dot.nd.gov", "South Dakota": "https://sd511.org", "Nebraska": "https://511.nebraska.gov",
+    "Kansas": "https://www.kandrive.gov",
+}
+
+
+def dot_midwest_ibi():
+    for state, site in MIDWEST_IBI.items():
+        head(f"{state}: {site} (IBI platform?)")
+        try:
+            status, final, headers, page = get(site + "/", limit=2_000_000)
+            print(f"   home: status {status} final {final} type {headers.get('Content-Type')} bytes {len(page)}; ibi marks:",
+                  [m for m in ("mapIcons", "List/GetData", "Generated/Content", "ibigroup", "Iteris", "CARS", "castlerock", "one.network") if m.lower() in page.lower()])
+            ibi_layers(final.rstrip("/") if status == 200 else site,
+                       layers=("Cameras", "Incidents", "Closures", "Construction", "ActiveRoadwork", "MessageSigns", "WinterRoadConditions",
+                               "RoadConditions", "Events", "Alerts", "Crashes", "MajorRouteClosure", "OtherRouteIncident"))
+        except Exception as e:
+            print("   failed:", repr(e)[:200])
+
+
+MIDWEST_OTHER = {
+    "Ohio": ("https://ohgo.com/", ["https://publicapi.ohgo.com/api/v1/incidents", "https://publicapi.ohgo.com/api/v1/cameras",
+                                   "https://ohgo.com/api/v1/incidents", "https://ohgo.com/Services/MapDataService.svc/GetIncidents"]),
+    "Illinois": ("https://www.travelmidwest.com/lmiga/home.jsp", ["https://www.travelmidwest.com/lmiga/incidentReport.jsp",
+                                                                 "https://www.travelmidwest.com/lmiga/cameraReport.jsp",
+                                                                 "https://www.travelmidwest.com/lmiga/dmsReport.jsp",
+                                                                 "https://www.travelmidwest.com/lmiga/xml/incidentReport.xml",
+                                                                 "https://www.gettingaroundillinois.com/"]),
+    "Michigan": ("https://mdotjboss.state.mi.us/MiDrive/map", ["https://mdotjboss.state.mi.us/MiDrive/map/getIncidents",
+                                                               "https://mdotjboss.state.mi.us/MiDrive/map/getCameras",
+                                                               "https://mdotjboss.state.mi.us/MiDrive/map/getDms",
+                                                               "https://mdotjboss.state.mi.us/MiDrive/map/getCCTV"]),
+    "Missouri": ("https://traveler.modot.org/map/", ["https://traveler.modot.org/map/incidents.json", "https://traveler.modot.org/map/cameras.json",
+                                                    "https://traveler.modot.org/map/data/incidents.json"]),
+}
+
+
+def dot_midwest_other():
+    for state, (home, tries) in MIDWEST_OTHER.items():
+        head(f"{state}: {home}")
+        try:
+            status, final, headers, page = get(home, headers=BROWSER, limit=4_000_000)
+            print(f"   home: status {status} final {final} type {headers.get('Content-Type')} bytes {len(page)}")
+            feeds = sorted(set(re.findall(r"""https?://[^\s"'<>]+(?:json|xml|geojson|\.svc/[A-Za-z]+|/api/[A-Za-z0-9/._-]+)""", page)))
+            print("   feeds named on the page:", feeds[:40])
+            print("   relative paths that look like data:", sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:json|xml|api|data|map/get|Service)[A-Za-z0-9_./?=&-]*)["']""", page)))[:40])
+            for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:12]:
+                src = urllib.parse.urljoin(final, src)
+                if any(x in src for x in ("jquery", "bootstrap", "google", "gtag", "polyfill", "leaflet.js", "mapbox")):
+                    continue
+                _, _, _, js = get(src, headers=BROWSER, limit=6_000_000)
+                hits = sorted(set(re.findall(r"""["'](/?[A-Za-z0-9_./-]*(?:json|api/|data/|map/get|getIncidents|getCameras|GetData|mapIcons)[A-Za-z0-9_./?=&{}-]*)["']""", js)))
+                if hits:
+                    print(f"   {src[-70:]}: {hits[:30]}")
+            for url in tries:
+                status, _, headers, body = get(url, headers={**BROWSER, "Accept": "application/json, */*"}, limit=3_000_000)
+                print(f"   {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}:", body[:600].replace("\n", " "))
+        except Exception as e:
+            print("   failed:", repr(e)[:200])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
-            "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames}
+            "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
+            "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other}
 
 
 class Timeout(Exception):
