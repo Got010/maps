@@ -795,6 +795,10 @@
   },
   "hosts": [
     {
+      "value": ".dot.state.oh.us",
+      "note": "ODOT's camera image servers: core/traffic Ohgo.kt keeps a camera's snapshot link only on hosts ending in this (and the OHGO suffixes); fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
       "value": ".dot.wi.gov",
       "note": "WisDOT's camera stream servers (cctv1.dot.wi.gov and the like): core/traffic Ibi511.kt keeps a 511WI camera's https playlist link (https://cctv<n>.dot.wi.gov/rtplive/<camera>/playlist.m3u8) only when its host ends in this suffix. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511WI (Settings > Live data, off by default)."
     },
@@ -809,6 +813,14 @@
     {
       "value": ".mapbox.com",
       "note": "Suffix literal in org/maplibre/android/http/NativeHttpRequest (MapLibre Native's HTTP request class; Mapbox host checks inherited from its Mapbox lineage, like mapbox.com). Not contacted by app code: the style is bundled and tiles are pmtiles://file://. Every request in the app's own code still goes through core/network NetworkGate; MapLibre's own client is not behind it and is unused."
+    },
+    {
+      "value": ".ohgo.com",
+      "note": "OHGO's camera snapshots: core/traffic Ohgo.kt keeps a camera's snapshot link (largeUrl, smallUrl) only on ODOT's and OHGO's own hosts, this suffix among them (the API's document names no host; checked on the phone); the camera card fetches it through NetworkGate.get. The link names the camera, never the viewer; the key is not sent with it. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
+      "value": ".ohio.gov",
+      "note": "Ohio's state servers, for an ODOT camera snapshot hosted there: core/traffic Ohgo.kt follows a camera's snapshot link only on this and the other ODOT suffixes; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
     },
     {
       "value": ".sha.maryland.gov",
@@ -987,6 +999,10 @@
       "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around every covered state in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
+      "value": "https://publicapi.ohgo.com",
+      "note": "Ohio's OHGO API (ODOT): core/traffic Ohgo.kt fetches /api/v1/incidents, construction, cameras and digital-signs whole (page-all), the same data OHGO's own site shows, with the user's own free key (Settings > Live data > OHGO key, stored encrypted, sent to this host only, as the api-key query parameter the API documents) and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://sd.cdn.iteris-atis.com",
       "note": "South Dakota's SD511 (Iteris) CDN: core/traffic SouthDakota.kt fetches the GeoJSON files its own map reads, /geojson/icons/metadata/icons.road-work, incidents-accidents, restriction, obstructions and scheduled-events (the events) and icons.cameras and icons.rwis (camera sites), the whole state every time, no key and nothing about the user's location, search or route; a camera's still (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) is kept only on this host and fetched through NetworkGate.get when its card opens. Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
@@ -1037,6 +1053,10 @@
     {
       "value": "public.carsprogram.org",
       "note": "The CARS platform's camera stills (Indiana's video previews, Minnesota's stills, https://public.carsprogram.org/cameras/<state>/<camera>): core/traffic CarsStates.kt keeps a camera's still only on each state's own hosts (CarsStates.Site.stillHosts); the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by the state's toggle (NetworkFeature.TRAFFIC_511IN, TRAFFIC_511MN; Settings > Live data, off by default)."
+    },
+    {
+      "value": "publicapi.ohgo.com",
+      "note": "Text only: the Settings > Live data note for OHGO (feature/settings strings.xml, live_ohgo_note) names where the owner registers for a key and where the key is sent. Requests go to https://publicapi.ohgo.com (see that entry)."
     },
     {
       "value": "tcp://*:8002",

@@ -70,7 +70,7 @@ class SouthboundBundleTest {
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
             """{"app":"southbound","schema":6,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":70}""",
+                """"api_keys":3,"settings":71}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -161,9 +161,9 @@ class SouthboundBundleTest {
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":6", "\"schema\":1")
-                .replace("\"settings\":70", "\"settings\":54")
+                .replace("\"settings\":71", "\"settings\":54")
                 .replace("\"avoid_dot_cameras\":true,", "")
-                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true", "")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true,\"TRAFFIC_OHGO\":true", "")
             one[name] = t.toByteArray()
         }
         val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
@@ -186,8 +186,8 @@ class SouthboundBundleTest {
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":6", "\"schema\":2")
-                .replace("\"settings\":70", "\"settings\":55")
-                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true", "")
+                .replace("\"settings\":71", "\"settings\":55")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true,\"TRAFFIC_OHGO\":true", "")
             two[name] = t.toByteArray()
         }
         val bytes = raw(*two.map { it.key to it.value }.toTypedArray(), schema = 2)
@@ -204,8 +204,8 @@ class SouthboundBundleTest {
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":6", "\"schema\":3")
-                .replace("\"settings\":70", "\"settings\":56")
-                .replace(",\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true", "")
+                .replace("\"settings\":71", "\"settings\":56")
+                .replace(",\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true,\"TRAFFIC_OHGO\":true", "")
             three[name] = t.toByteArray()
         }
         val bytes = raw(*three.map { it.key to it.value }.toTypedArray(), schema = 3)
@@ -224,8 +224,8 @@ class SouthboundBundleTest {
         for ((name, bytes) in five) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":6", "\"schema\":4")
-                .replace("\"settings\":70", "\"settings\":58")
-                .replace(",\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true", "")
+                .replace("\"settings\":71", "\"settings\":58")
+                .replace(",\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true,\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true,\"TRAFFIC_OHGO\":true", "")
             four[name] = t.toByteArray()
         }
         val bytes = raw(*four.map { it.key to it.value }.toTypedArray(), schema = 4)
@@ -234,7 +234,7 @@ class SouthboundBundleTest {
         val expected = Samples.data().settings
         val newest = listOf(NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT, NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST,
             NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
-            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE)
+            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO)
             .associateWith { false }
         assertEquals(expected.copy(network = expected.network + newest), data.settings)
         assertEquals(Samples.data().userData, data.userData)
@@ -248,8 +248,8 @@ class SouthboundBundleTest {
         for ((name, bytes) in six) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":6", "\"schema\":5")
-                .replace("\"settings\":70", "\"settings\":60")
-                .replace(",\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true", "")
+                .replace("\"settings\":71", "\"settings\":60")
+                .replace(",\"TRAFFIC_511WI\":true,\"TRAFFIC_TRAVEL_MIDWEST\":true,\"TRAFFIC_NDDOT\":true,\"TRAFFIC_SD511\":true,\"TRAFFIC_511IN\":true,\"TRAFFIC_511MN\":true,\"TRAFFIC_511IA\":true,\"TRAFFIC_511NE\":true,\"TRAFFIC_KANDRIVE\":true,\"TRAFFIC_MIDRIVE\":true,\"TRAFFIC_OHGO\":true", "")
             five[name] = t.toByteArray()
         }
         val bytes = raw(*five.map { it.key to it.value }.toTypedArray(), schema = 5)
@@ -257,7 +257,7 @@ class SouthboundBundleTest {
         val data = SouthboundBundle.decode(read(bytes))
         val expected = Samples.data().settings
         val newest = listOf(NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
-            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE)
+            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO)
             .associateWith { false }
         assertEquals(expected.copy(network = expected.network + newest), data.settings)
         assertEquals(Samples.data().userData, data.userData)
@@ -267,7 +267,7 @@ class SouthboundBundleTest {
     private fun newerOff(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
         (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT,
                 NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
-            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE) + also)
+            NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO) + also)
             .associateWith { false }
 
     @Test
@@ -332,7 +332,7 @@ class SouthboundBundleTest {
     fun `manifest must match the contents`() {
         refuses(mutated("manifest.json", "\"saved_places\":3", "\"saved_places\":4"))
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
-        refuses(mutated("manifest.json", "\"settings\":70", "\"settings\":61"))
+        refuses(mutated("manifest.json", "\"settings\":71", "\"settings\":61"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
         refuses(mutated("manifest.json", "\"schema\":6", "\"schema\":7"))
         // Older settings have no avoid_dot_cameras, weather, 511PA, CTroads, CHART, DelDOT, 511WI or Travel Midwest toggle, so these settings don't fit an older manifest.
@@ -342,7 +342,7 @@ class SouthboundBundleTest {
         refuses(mutated("manifest.json", "\"schema\":6", "\"schema\":2"))
         refuses(mutated("manifest.json", "\"schema\":6", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
-        refuses(mutated("manifest.json", ",\"settings\":70", ""))
+        refuses(mutated("manifest.json", ",\"settings\":71", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
     }
 
@@ -540,12 +540,12 @@ class SouthboundBundleTest {
     fun `schema 6 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
-        assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA"), ApiKey.entries.map { it.name })
+        assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA", "OHGO"), ApiKey.entries.map { it.name })
         assertEquals(
             listOf(
                 "PACK_DOWNLOADS", "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME",
                 "TRANSIT_BUS_TIME", "GAS_PRICES", "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS", "TRAFFIC_CHART_MD", "TRAFFIC_DELDOT", "TRAFFIC_511WI", "TRAFFIC_TRAVEL_MIDWEST",
-                "TRAFFIC_NDDOT", "TRAFFIC_SD511", "TRAFFIC_511IN", "TRAFFIC_511MN", "TRAFFIC_511IA", "TRAFFIC_511NE", "TRAFFIC_KANDRIVE", "TRAFFIC_MIDRIVE",
+                "TRAFFIC_NDDOT", "TRAFFIC_SD511", "TRAFFIC_511IN", "TRAFFIC_511MN", "TRAFFIC_511IA", "TRAFFIC_511NE", "TRAFFIC_KANDRIVE", "TRAFFIC_MIDRIVE", "TRAFFIC_OHGO",
             ),
             NetworkFeature.entries.map { it.name },
         )
@@ -555,7 +555,7 @@ class SouthboundBundleTest {
         assertEquals(12, fields(RoutePrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.WalkPrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.BikePrefs::class.java))
-        assertEquals(70, SettingsEntry.count(Samples.settings()))
+        assertEquals(71, SettingsEntry.count(Samples.settings()))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
         assertEquals(1L..6L, SouthboundBundle.SCHEMA_RANGE)
     }

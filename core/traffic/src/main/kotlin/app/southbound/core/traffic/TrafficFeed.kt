@@ -1,5 +1,6 @@
 package app.southbound.core.traffic
 
+import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
@@ -29,6 +30,8 @@ class TrafficFeed(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Travel Midwest's files answer only a POST; the same rules as [fetch] (the gate's, tests stand in). */
     private val post: (NetworkFeature, String, ByteArray) -> ByteArray = { feature, url, body -> gate.post(feature, url, body) },
+    /** The user's API keys (SecretStore), for the one feed that wants one (Ohio's OHGO); none by default. */
+    private val apiKey: (ApiKey) -> String? = { null },
     private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
 ) {
     private val mutex = Mutex()
@@ -51,6 +54,7 @@ class TrafficFeed(
             NorthDakota.Client { url -> fetch(TrafficSource.ND_DOT.feature, url) },
             SouthDakota.Client { url -> fetch(TrafficSource.SD_511.feature, url) },
             MiDrive.Client { url -> fetch(TrafficSource.MI_DRIVE.feature, url) },
+            Ohgo.Client({ url -> fetch(TrafficSource.OH_OHGO.feature, url) }) { apiKey(ApiKey.OHGO) },
         ) + CarsStates.SITES.map { site ->
             CarsStates.Client(site, { url -> fetch(site.source.feature, url) }) { url, body -> post(site.source.feature, url, body) }
         }

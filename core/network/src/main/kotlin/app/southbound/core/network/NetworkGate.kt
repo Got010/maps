@@ -68,6 +68,9 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Michigan's Mi Drive (MDOT): incidents, work zones and cameras, the whole state. */
     TRAFFIC_MIDRIVE(enabledByDefault = false),
+
+    /** Ohio's OHGO (ODOT), with the user's own key: incidents, construction, cameras and message signs, the whole state. */
+    TRAFFIC_OHGO(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 70), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 71), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -338,7 +338,7 @@ class BackupServiceTest {
                 "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME", "TRANSIT_BUS_TIME", "GAS_PRICES",
                 "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS", "TRAFFIC_CHART_MD", "TRAFFIC_DELDOT", "TRAFFIC_511WI", "TRAFFIC_TRAVEL_MIDWEST",
                 "TRAFFIC_NDDOT", "TRAFFIC_SD511",
-                "TRAFFIC_511IN", "TRAFFIC_511MN", "TRAFFIC_511IA", "TRAFFIC_511NE", "TRAFFIC_KANDRIVE", "TRAFFIC_MIDRIVE",
+                "TRAFFIC_511IN", "TRAFFIC_511MN", "TRAFFIC_511IA", "TRAFFIC_511NE", "TRAFFIC_KANDRIVE", "TRAFFIC_MIDRIVE", "TRAFFIC_OHGO",
             ),
             outcome.turnedOn.map { it.name },
         )
@@ -351,9 +351,9 @@ class BackupServiceTest {
         // A kept import says the same before it lands.
         val c = device("c")
         c.stores.failApply = true
-        assertEquals(22, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
+        assertEquals(23, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
         c.stores.failApply = false
-        assertEquals(22, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
+        assertEquals(23, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
     }
 
     @Test

@@ -22,8 +22,8 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 |---|---|
 | `manifest.json` | `{"app":"southbound","schema":6,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n}`. Always first. The importer checks every count against what the other entries hold. |
 | `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`. A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
-| `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`. The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
-| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 23 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, and schema 5 had 13, without the ten Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_MIDRIVE`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
+| `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`, `OHGO` (schema 6). The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
+| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 24 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, and schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
 
 ## Import rules
 
@@ -92,11 +92,12 @@ the importer then declares the range it supports and needs a tested migration fo
 - **5** (October 2026): the `network` group gained `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT` (Settings > Live data >
   Incidents and closures in Maryland, in Delaware). A schema 1 to 4 bundle is read with its own fields exactly and
   imports with both off.
-- **6** (October 2026): the `network` group gained the ten Midwest toggles `TRAFFIC_511WI`, `TRAFFIC_TRAVEL_MIDWEST`,
+- **6** (October 2026): the `network` group gained the eleven Midwest toggles `TRAFFIC_511WI`, `TRAFFIC_TRAVEL_MIDWEST`,
   `TRAFFIC_NDDOT`, `TRAFFIC_SD511`, `TRAFFIC_511IN`, `TRAFFIC_511MN`, `TRAFFIC_511IA`, `TRAFFIC_511NE`,
-  `TRAFFIC_KANDRIVE` and `TRAFFIC_MIDRIVE` (Settings > Live data > Incidents and closures in Wisconsin, Illinois,
-  North Dakota, South Dakota, Indiana, Minnesota, Iowa, Nebraska, Kansas, Michigan). A schema 1 to 5 bundle is read
-  with its own fields exactly and imports with all ten off. Exports are written as schema 6.
+  `TRAFFIC_KANDRIVE`, `TRAFFIC_MIDRIVE` and `TRAFFIC_OHGO` (Settings > Live data > Incidents and closures in
+  Wisconsin, Illinois, North Dakota, South Dakota, Indiana, Minnesota, Iowa, Nebraska, Kansas, Michigan, Ohio), and
+  `api-keys.json` the `OHGO` key. A schema 1 to 5 bundle is read with its own fields exactly and imports with all
+  eleven off. Exports are written as schema 6.
 
 ## Checking an export from Termux
 
