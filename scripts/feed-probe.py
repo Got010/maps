@@ -1904,6 +1904,47 @@ def app_requests():
         print(f"   {state}: no list ({why})")
 
 
+def iowa_slugs():
+    """511IA answers the app's events query (incidents, closures, construction, roadReports) with nothing, while
+    Travel Midwest carries Iowa CARS road work: read the layer names Iowa's own bundle defines and try each one."""
+    head("Iowa: the layer names its own map uses")
+    candidates = set()
+    for site in ("https://511ia.org", "https://511in.org"):
+        status, final, _, page = get(site + "/", headers=BROWSER, limit=2_000_000)
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:15]:
+            if "google" in src:
+                continue
+            _, _, _, js = get(urllib.parse.urljoin(final, src), headers=BROWSER, limit=15_000_000)
+            pairs = re.findall(r'([A-Z][A-Z0-9_]{2,40}):"([a-z][A-Za-z0-9]{2,40})"', js)
+            slugs = sorted(set(v for k, v in pairs if any(w in k for w in ("EVENT", "CLOSURE", "CONSTRUCTION", "INCIDENT", "ROAD", "WORK", "REPORT", "LAYER", "WINTER", "TRAFFIC", "FUTURE", "WEATHER", "TRUCK", "DELAY", "RESTRICT", "SPECIAL", "PLANNED", "ALERT", "CRASH"))))
+            for m in re.finditer(r"layerSlugs:\[([^\]]{1,200})\]", js):
+                print(f"   {site} {src[-40:]} layerSlugs: {m.group(1)[:200]}")
+            if slugs:
+                print(f"   {site} {src[-40:]} enum slugs: {slugs[:120]}")
+            if site.endswith("511ia.org"):
+                candidates.update(slugs)
+                candidates.update(re.findall(r'layerSlugs:\["([a-zA-Z]+)"', js))
+    query = ("query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri "
+             "features { id geometry properties } __typename } error { message type } } }")
+    from collections import Counter
+    for slug in sorted(candidates)[:80]:
+        body = json.dumps({"query": query, "variables": {"input": {"north": 43.6, "south": 40.3, "east": -90.0, "west": -96.7, "zoom": 14,
+                           "layerSlugs": [slug], "nonClusterableUris": ["dashboard"]}}}, separators=(",", ":")).encode()
+        status, _, h, text = get("https://511ia.org/api/graphql", headers={**BROWSER, "Content-Type": "application/json", "Accept": "application/json"},
+                                 method="POST", data=body, limit=30_000_000)
+        doc = _json(text)
+        mf = (((doc or {}).get("data") or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(doc, dict) else None
+        if not isinstance(mf, list):
+            print(f"   {slug}: status {status}:", text[:160].replace("\n", " "))
+            continue
+        types = Counter(m.get("__typename") for m in mf)
+        icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf for f in (m.get("features") or []) if m.get("__typename") == "Event")
+        print(f"   {slug}: {len(mf)} features; types {types.most_common(3)}; icons {icons.most_common(5)}")
+        tips = [m.get("tooltip") for m in mf if m.get("__typename") == "Event"][:3]
+        if tips:
+            print(f"     tooltips: {json.dumps(tips)[:500]}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1914,7 +1955,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
             "dot-midwest-10": dot_midwest_10,
-            "app-requests": app_requests}
+            "app-requests": app_requests, "iowa-slugs": iowa_slugs}
 
 
 class Timeout(Exception):

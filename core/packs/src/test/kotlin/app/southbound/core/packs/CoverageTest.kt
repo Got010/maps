@@ -84,6 +84,7 @@ class CoverageTest {
             listOf(
                 "No traffic feed: New Jersey, DC and Missouri.",
                 "Traffic only with your own key: Ohio.",
+                "Cameras and signs but no incidents or closures: Iowa.",
                 "No avoiding DOT cameras: New Jersey, DC, Ohio and Missouri.",
                 "No message signs: Michigan, North Dakota and South Dakota.",
                 "Traffic speeds and transit: New York City only.",
@@ -96,6 +97,11 @@ class CoverageTest {
         assertEquals("Traffic needs your free OHGO key (Settings > Live data)", Coverage.pickerNote("Ohio"))
         assertEquals(null, Coverage.pickerNote("Pennsylvania"))
         assertEquals(null, Coverage.pickerNote("Michigan"))
+        assertEquals("No incidents or closures yet; cameras and signs only (Settings > What each state has)", Coverage.pickerNote("Iowa"))
+        assertEquals(
+            listOf("Traffic from 511IA.", "No incidents and closures: 511IA answers the app's events query with none (checked October 2026; its cameras and signs come through)."),
+            Coverage.lines(Coverage.of("IA")!!),
+        )
     }
 
     private fun pipelineDir(): File {
