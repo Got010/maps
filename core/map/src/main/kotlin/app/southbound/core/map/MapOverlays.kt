@@ -36,12 +36,12 @@ data class IncidentPin(val id: String, val point: MapPoint, val kind: String, va
 data class CameraPin(val id: String, val point: MapPoint, val name: String? = null)
 
 /**
- * A 511NY traffic camera, drawn with the traffic layer. [id] comes back from
+ * A state 511 traffic camera, drawn with the traffic layer. [id] comes back from
  * a tap; [offline] cameras are drawn grey.
  */
 data class TrafficCameraPin(val id: String, val point: MapPoint, val offline: Boolean = false)
 
-/** A 511NY variable message sign, drawn with the traffic layer. [id] comes back from a tap. */
+/** A state 511 variable message sign, drawn with the traffic layer. [id] comes back from a tap. */
 data class MessageSignPin(val id: String, val point: MapPoint)
 
 /**

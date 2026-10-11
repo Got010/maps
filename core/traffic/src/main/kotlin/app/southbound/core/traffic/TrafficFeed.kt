@@ -20,7 +20,8 @@ import java.util.Collections
  * keeps the latest [TrafficSnapshot]. Each feed is cached for its own
  * interval (HANDOFF: 511NY every 2-5 minutes, NYC DOT every 1-2), so the map
  * and navigation can ask as often as they like. Requests carry no location,
- * search or route and always fetch the whole state or city.
+ * search or route and always fetch the whole state or city. The other states'
+ * 511s (511PA, CTroads: [Ibi511]) come in beside 511NY, each under its own toggle.
  */
 class TrafficFeed(
     private val gate: NetworkGate,
@@ -37,6 +38,12 @@ class TrafficFeed(
     // 511NY's collections with the hash each was fetched at: an unchanged hash skips the download.
     private val eventLayers = HashMap<FiveElevenNyCars.EventLayer, Hashed<List<Incident>>>()
     private var signsHashed: Hashed<List<MessageSign>>? = null
+
+    // The IBI-built 511s, by source: their events, cameras and signs as last fetched.
+    private val ibi = Ibi511.SITES.map { site -> Ibi511Client(site) { url -> fetch(site.source.feature, url) } }
+    private val ibiEvents = HashMap<TrafficSource, Cached<List<Incident>>>()
+    private val ibiCameras = HashMap<TrafficSource, Cached<List<TrafficCamera>>>()
+    private val ibiSigns = HashMap<TrafficSource, Cached<List<MessageSign>>>()
     private val _snapshot = MutableStateFlow(TrafficSnapshot.EMPTY)
 
     /** The latest result, for screens that only want to watch. */
@@ -44,19 +51,22 @@ class TrafficFeed(
 
     /** True when at least one traffic feed is turned on, so the layer button is worth showing. */
     val isEnabled: Boolean
-        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY) || gate.isAllowed(NetworkFeature.TRAFFIC_NYC_DOT)
+        get() = hasIncidents || gate.isAllowed(NetworkFeature.TRAFFIC_NYC_DOT)
 
-    /** 511NY is on. Its feeds need no key since its October 2026 move (see [FiveElevenNyCars]). */
+    /**
+     * Some state's 511 is on (511NY, 511PA, CTroads), so there are incidents to draw, steer around and speak. None
+     * needs a key (511NY since its October 2026 move, see [FiveElevenNyCars]; the others see [Ibi511]).
+     */
     val hasIncidents: Boolean
-        get() = gate.isAllowed(NetworkFeature.TRAFFIC_511NY)
+        get() = TrafficSource.entries.any { gate.isAllowed(it.feature) }
 
     /**
      * Fetches whatever is stale among the feeds that are on and returns the
      * combined snapshot. Off feeds contribute nothing; a feed that fails keeps
      * its last good data and adds an error. Suspends on IO.
      *
-     * [mapExtras] also fetches 511NY's camera list (daily) and message signs
-     * (every few minutes), for the map's traffic layer; without it the last
+     * [mapExtras] also fetches the state 511s' camera lists (daily) and message
+     * signs (every few minutes), for the map's traffic layer; without it the last
      * ones fetched are kept but nothing is requested for them.
      */
     suspend fun refresh(force: Boolean = false, mapExtras: Boolean = false): TrafficSnapshot = mutex.withLock {
@@ -64,9 +74,10 @@ class TrafficFeed(
         // The feeds load side by side, possibly on several threads.
         val errors: MutableList<String> = Collections.synchronizedList(ArrayList())
         val extraErrors: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val ny511 = gate.isAllowed(NetworkFeature.TRAFFIC_511NY)
         coroutineScope {
             val incidentsJob = async {
-                if (!hasIncidents) {
+                if (!ny511) {
                     incidents = null
                     null
                 } else if (!force && incidents?.fresh(now, INCIDENTS_TTL_MILLIS) == true) {
@@ -93,7 +104,7 @@ class TrafficFeed(
             // Cameras and signs: the same 511NY toggle, the whole state each time.
             val camerasJob = async {
                 when {
-                    !hasIncidents -> null
+                    !ny511 -> null
                     !mapExtras || (!force && cameras?.fresh(now, CAMERAS_TTL_MILLIS) == true) -> cameras
                     else -> load(now, cameras, extraErrors, "511NY cameras") {
                         FiveElevenNyCars.parseCameras(fetch(NetworkFeature.TRAFFIC_511NY, FiveElevenNyCars.CAMERAS_URL).decodeToString())
@@ -102,7 +113,7 @@ class TrafficFeed(
             }
             val signsJob = async {
                 when {
-                    !hasIncidents -> null
+                    !ny511 -> null
                     !mapExtras || (!force && signs?.fresh(now, SIGNS_TTL_MILLIS) == true) -> signs
                     else -> load(now, signs, extraErrors, "511NY signs") {
                         sameOrFetch(signsHashed, FiveElevenNyCars.SIGNS_HASH_URL) {
@@ -111,21 +122,56 @@ class TrafficFeed(
                     }
                 }
             }
+            // 511PA and CTroads: the same three, each site under its own toggle.
+            val ibiJobs = ibi.map { client ->
+                val source = client.site.source
+                val on = gate.isAllowed(source.feature)
+                val eventsJob = async {
+                    val had = ibiEvents[source]
+                    when {
+                        !on -> null
+                        !force && had?.fresh(now, INCIDENTS_TTL_MILLIS) == true -> had
+                        else -> load(now, had, errors, source.label) { client.events(now) }
+                    }
+                }
+                val camerasOf = async {
+                    val had = ibiCameras[source]
+                    when {
+                        !on -> null
+                        !mapExtras || (!force && had?.fresh(now, CAMERAS_TTL_MILLIS) == true) -> had
+                        else -> load(now, had, extraErrors, "${source.label} cameras") { client.cameras() }
+                    }
+                }
+                val signsOf = async {
+                    val had = ibiSigns[source]
+                    when {
+                        !on -> null
+                        !mapExtras || (!force && had?.fresh(now, IBI_SIGNS_TTL_MILLIS) == true) -> had
+                        else -> load(now, had, extraErrors, "${source.label} signs") { client.signs() }
+                    }
+                }
+                Triple(source, eventsJob, camerasOf to signsOf)
+            }
             incidents = incidentsJob.await()
             speeds = speedsJob.await()
             cameras = camerasJob.await()
             signs = signsJob.await()
+            for ((source, eventsJob, extras) in ibiJobs) {
+                ibiEvents.putOrRemove(source, eventsJob.await())
+                ibiCameras.putOrRemove(source, extras.first.await())
+                ibiSigns.putOrRemove(source, extras.second.await())
+            }
         }
-        // An outage fails all three 511NY requests alike: say it once.
+        // An outage fails all of a 511's requests alike: say it once, as the 511's own error.
         val mainErrors = errors.toList()
         val shownErrors = mainErrors + extraErrors.toList().filterNot { extra ->
-            mainErrors.any { it.substringAfter(": ") == extra.substringAfter(": ") }
+            mainErrors.any { extra.startsWith(it.substringBefore(": ")) && it.substringAfter(": ") == extra.substringAfter(": ") }
         }
         TrafficSnapshot(
-            incidents = incidents?.value.orEmpty(),
+            incidents = incidents?.value.orEmpty() + ibi.flatMap { ibiEvents[it.site.source]?.value.orEmpty() },
             speeds = speeds?.value.orEmpty(),
-            cameras = cameras?.value.orEmpty(),
-            signs = signs?.value.orEmpty(),
+            cameras = cameras?.value.orEmpty() + ibi.flatMap { ibiCameras[it.site.source]?.value.orEmpty() },
+            signs = signs?.value.orEmpty() + ibi.flatMap { ibiSigns[it.site.source]?.value.orEmpty() },
             fetchedAt = now,
             errors = shownErrors,
             speedsStale = speedsStale && speeds != null,
@@ -183,6 +229,10 @@ class TrafficFeed(
         fun fresh(now: Long, ttl: Long) = now - fetchedAt < ttl
     }
 
+    private fun <K, V> HashMap<K, V>.putOrRemove(key: K, value: V?) {
+        if (value == null) remove(key) else put(key, value)
+    }
+
     companion object {
         /** Closures first, so an event in two layers keeps the closure's kind. */
         private val EVENT_LAYERS = listOf(
@@ -199,5 +249,11 @@ class TrafficFeed(
 
         /** What signs say changes with the traffic. */
         const val SIGNS_TTL_MILLIS = 5 * 60_000L
+
+        /**
+         * 511PA's and CTroads' signs come as list pages with nothing to say they haven't changed (511PA's 1,170 are 12
+         * pages and the icons, about 0.6 MB), so less often than 511NY's.
+         */
+        const val IBI_SIGNS_TTL_MILLIS = 10 * 60_000L
     }
 }

@@ -1,5 +1,6 @@
 package app.southbound.core.traffic
 
+import app.southbound.core.network.NetworkFeature
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sqrt
@@ -18,7 +19,17 @@ enum class IncidentKind {
     OTHER,
 }
 
-/** One 511NY event: a crash, closure, work zone or special event, at a point. */
+/**
+ * Whose feed a traffic item comes from: each state's 511, behind its own toggle ([feature]). [label] names it on
+ * cards ("511PA traffic camera"); [idPrefix] keeps ids from two feeds apart (511NY's stay as they were).
+ */
+enum class TrafficSource(val label: String, val feature: NetworkFeature, val idPrefix: String) {
+    NY_511("511NY", NetworkFeature.TRAFFIC_511NY, ""),
+    PA_511("511PA", NetworkFeature.TRAFFIC_511PA, "pa:"),
+    CT_ROADS("CTroads", NetworkFeature.TRAFFIC_CTROADS, "ct:"),
+}
+
+/** One state 511 event: a crash, closure, work zone or special event, at a point. */
 data class Incident(
     val id: String,
     val kind: IncidentKind,
@@ -34,6 +45,7 @@ data class Incident(
     val lanesStatus: String?,
     /** POSIX millis of the feed's last update to this event, or null. */
     val updatedAt: Long?,
+    val source: TrafficSource = TrafficSource.NY_511,
 ) {
     /** A closure proper, or any event that shuts every lane. */
     val isClosure: Boolean
@@ -62,7 +74,7 @@ data class SpeedLink(
 }
 
 /**
- * A 511NY traffic camera. [imageUrl] is its still (a JPEG 511NY refreshes
+ * A state 511 traffic camera. [imageUrl] is its still (a JPEG the 511 refreshes
  * every minute or two); it names the camera, never the viewer. A [disabled]
  * camera is still listed, but its image is a placeholder or missing.
  */
@@ -78,13 +90,14 @@ data class TrafficCamera(
     val direction: String?,
     /** Turned off or blocked by its operator; no live image. */
     val disabled: Boolean,
+    val source: TrafficSource = TrafficSource.NY_511,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
     val hasImage: Boolean get() = !disabled && !imageUrl.isNullOrBlank()
 }
 
 /**
- * A 511NY variable message sign by the road. [lines] is what it shows right
+ * A state 511 variable message sign by the road. [lines] is what it shows right
  * now, top to bottom; an empty string marks a page break between the pages
  * a sign flips through. Blank when the sign shows nothing.
  */
@@ -98,6 +111,7 @@ data class MessageSign(
     val direction: String?,
     /** POSIX millis of the feed's last update to the message, or null. */
     val updatedAt: Long? = null,
+    val source: TrafficSource = TrafficSource.NY_511,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
     val isBlank: Boolean get() = lines.all { it.isBlank() }
@@ -107,9 +121,9 @@ data class MessageSign(
 data class TrafficSnapshot(
     val incidents: List<Incident> = emptyList(),
     val speeds: List<SpeedLink> = emptyList(),
-    /** 511NY traffic cameras, statewide; fetched with the 511NY key, refreshed daily. */
+    /** The state 511s' traffic cameras, each state whole; refreshed daily. */
     val cameras: List<TrafficCamera> = emptyList(),
-    /** 511NY message signs and what they say; refreshed every few minutes. */
+    /** The state 511s' message signs and what they say; refreshed every few minutes. */
     val signs: List<MessageSign> = emptyList(),
     /** POSIX millis. */
     val fetchedAt: Long = 0,

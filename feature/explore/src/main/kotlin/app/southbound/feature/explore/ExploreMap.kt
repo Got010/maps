@@ -511,7 +511,7 @@ internal fun ExploreMap(
             Waypoint(GeographicCoordinate(it.lat, it.lon), WaypointKind.BREAK)
         }
         nav.prefs = routePrefs
-        // Steer around 511NY closures near the trip, when that feed is on.
+        // Steer around the state 511s' closures near the trip, when a 511 feed is on.
         // Any traffic feed that is on is fetched (cached for its interval) so options can show their delay.
         val snapshot = if (services.traffic.isEnabled) withContext(Dispatchers.IO) { attempt { services.traffic.refresh() } } else null
         val avoid = if (services.traffic.hasIncidents) {
@@ -659,7 +659,7 @@ internal fun ExploreMap(
     LaunchedEffect(trafficVisible, inTrip, trafficOn) {
         if (!trafficOn || !(trafficVisible || inTrip)) return@LaunchedEffect
         while (true) {
-            // With the layer shown, 511NY's cameras (daily) and message signs (every 5 min) come too.
+            // With the layer shown, the 511s' cameras (daily) and message signs (every 5 or 10 min) come too.
             withContext(Dispatchers.IO) { attempt { services.traffic.refresh(mapExtras = trafficVisible) } }
             delay(TRAFFIC_POLL_MS)
         }
@@ -741,8 +741,8 @@ internal fun ExploreMap(
     }
     LaunchedEffect(directions, inTrip) { if (directions == null && !inTrip) routeIncidents = emptyList() }
 
-    // Police activity ahead (511NY events), said once each when it is within about a mile on what is left of
-    // the route and on our side of the road. Needs the 511NY feed on; the poll above runs during any trip,
+    // Police activity ahead (state 511 events), said once each when it is within about a mile on what is left of
+    // the route and on our side of the road. Needs a 511 feed on; the poll above runs during any trip,
     // so this works with the traffic layer hidden. The voice policy applies the traffic-alert toggle and chime.
     val policeSpoken = stringResource(R.string.explore_police_spoken)
     val policeSpokenNoRoad = stringResource(R.string.explore_police_spoken_no_road)
@@ -764,7 +764,7 @@ internal fun ExploreMap(
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, if (road != null) policeSpoken.format(road) else policeSpokenNoRoad)
     }
 
-    // Crashes, roadwork and lane closures ahead (511NY events), said once each within about two miles on what
+    // Crashes, roadwork and lane closures ahead (state 511 events), said once each within about two miles on what
     // is left of a driving route, on our side of the road, with the distance and the lanes when the feed gives
     // them: "Crash ahead on I-87 in 1.8 miles. Right lane closed." A work zone made of several events in a row
     // is said once. Closures and police have their own lines above.
@@ -1006,7 +1006,7 @@ internal fun ExploreMap(
     }
 
     val baseTrafficOverlay = if (trafficVisible && trafficOn) traffic.toOverlay() else TrafficOverlay.NONE
-    // Phase 8: 511NY cameras and signs with the traffic layer. Remembered per list, so the map only
+    // Phase 8: the state 511s' cameras and signs with the traffic layer. Remembered per list, so the map only
     // re-sends them when the feed brings a new one. Blank signs say nothing, so they aren't drawn.
     val trafficCameraPins = remember(traffic.cameras) {
         traffic.cameras.map { TrafficCameraPin(it.id, MapPoint(it.lat, it.lon), offline = !it.hasImage) }
@@ -1585,7 +1585,7 @@ internal fun ExploreMap(
             is ShownThing.IncidentShown -> IncidentCard(shown.incident, onClose = { shownThing = null }, modifier = cardModifier)
             // The tap-to-read card for a plate-reader dot.
             is ShownThing.PlateReader -> CameraCard(shown.pin, onClose = { shownThing = null }, modifier = cardModifier)
-            // Phase 8: a 511NY camera's still, or what a message sign says. Gone from the feed: no card.
+            // Phase 8: a 511 camera's still, or what a message sign says. Gone from the feed: no card.
             is ShownThing.TrafficCam -> traffic.cameras.firstOrNull { it.id == shown.id }?.let { camera ->
                 TrafficCameraCard(camera, services.networkGate, onClose = { shownThing = null }, modifier = cardModifier)
             }
@@ -1762,7 +1762,7 @@ private fun WeatherButton(shown: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** What a tapped incident pin says: road, direction, what happened, when 511NY last updated it. */
+/** What a tapped incident pin says: road, direction, what happened, and which 511 updated it when. */
 @Composable
 private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modifier) {
     Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
@@ -1782,6 +1782,7 @@ private fun IncidentCard(incident: Incident, onClose: () -> Unit, modifier: Modi
             }
             Text(incident.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
             val details = listOfNotNull(
+                incident.source.label,
                 incident.lanesStatus,
                 incident.severity?.let { stringResource(R.string.explore_incident_severity, it) },
                 incident.updatedAt?.let {

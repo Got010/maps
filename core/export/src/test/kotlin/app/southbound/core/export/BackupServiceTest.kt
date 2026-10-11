@@ -336,7 +336,7 @@ class BackupServiceTest {
         assertEquals(
             listOf(
                 "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME", "TRANSIT_BUS_TIME", "GAS_PRICES",
-                "WEATHER",
+                "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS",
             ),
             outcome.turnedOn.map { it.name },
         )

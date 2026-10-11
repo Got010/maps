@@ -26,6 +26,12 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** National Weather Service alerts, NOAA radar, current weather and the forecast pack, for every covered state. */
     WEATHER(enabledByDefault = false),
+
+    /** Pennsylvania's 511 (511PA, PennDOT): incidents, closures, roadwork, cameras and message signs, the whole state. */
+    TRAFFIC_511PA(enabledByDefault = false),
+
+    /** Connecticut's 511 (CTroads, CTDOT): the same for Connecticut. */
+    TRAFFIC_CTROADS(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {
