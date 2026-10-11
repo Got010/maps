@@ -282,14 +282,15 @@ class SouthboundBundleTest {
     fun `manifest must match the contents`() {
         refuses(mutated("manifest.json", "\"saved_places\":3", "\"saved_places\":4"))
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
-        refuses(mutated("manifest.json", "\"settings\":56", "\"settings\":55"))
+        refuses(mutated("manifest.json", "\"settings\":58", "\"settings\":57"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
-        refuses(mutated("manifest.json", "\"schema\":3", "\"schema\":4"))
-        // Older settings have no avoid_dot_cameras or weather toggle, so these settings don't fit an older manifest.
-        refuses(mutated("manifest.json", "\"schema\":3", "\"schema\":2"))
-        refuses(mutated("manifest.json", "\"schema\":3", "\"schema\":1"))
+        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":5"))
+        // Older settings have no avoid_dot_cameras, weather, 511PA or CTroads toggle, so these settings don't fit an older manifest.
+        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":3"))
+        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":2"))
+        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
-        refuses(mutated("manifest.json", ",\"settings\":56", ""))
+        refuses(mutated("manifest.json", ",\"settings\":58", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
     }
 
