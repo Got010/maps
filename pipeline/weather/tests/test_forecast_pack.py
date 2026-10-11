@@ -50,13 +50,15 @@ class ForecastPackTest(unittest.TestCase):
             (42.65, -73.76),  # Albany
             (42.36, -71.06),  # Boston: no region
             (39.40, -78.90),  # West Virginia, inside Maryland's box but not its area
-            (40.00, -81.00),  # Ohio: planned, not offered yet
+            (40.00, -81.00),  # Ohio: offered since v0.1.38
+            (46.00, -110.00),  # Montana: no region
         ], regions)
-        self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76)], kept)
-        # The offered regions' box is the east's, whatever planned regions "all" has grown by, so the points stay put.
-        self.assertEqual((-80.52, 37.88, -71.75, 45.02), fp.offered_box(regions))
+        self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76), (40.00, -81.00)], kept)
+        # The offered regions' box: every covered state since the Midwest's regions were offered (October 2026; the east's
+        # alone was (-80.52, 37.88, -71.75, 45.02) with 477 points).
+        self.assertEqual((-104.07, 35.98, -71.75, 49.38), fp.offered_box(regions))
         pts = fp.covered(fp.lattice(fp.offered_box(regions)), regions)
-        self.assertEqual(477, len(pts))
+        self.assertEqual(3097, len(pts))
 
     def test_icon_codes(self):
         self.assertEqual("skc", fp.icon_code("https://api.weather.gov/icons/land/day/skc?size=medium"))
