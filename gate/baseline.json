@@ -831,6 +831,22 @@
       "note": "KDOT's Skyline camera servers (kdot-sfs2.us-east-1.skyvdn.com and the like): core/traffic CarsStates.kt keeps a Kansas camera's still on a host ending in this; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
     },
     {
+      "value": "511.nebraska.gov",
+      "note": "Text only: the Settings > Live data note for Nebraska 511 (feature/settings strings.xml, live_511ne_note) names the site whose lists and map query are read. Requests go to https://511.nebraska.gov and https://netg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511ia.org",
+      "note": "Text only: the Settings > Live data note for 511IA (feature/settings strings.xml, live_511ia_note) names the site whose lists and map query are read. Requests go to https://511ia.org and https://iatg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511in.org",
+      "note": "Text only: the Settings > Live data note for 511IN (feature/settings strings.xml, live_511in_note) names the site whose lists and map query are read. Requests go to https://511in.org and https://intg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511mn.org",
+      "note": "Text only: the Settings > Live data note for 511MN (feature/settings strings.xml, live_511mn_note) names the site whose lists and map query are read. Requests go to https://511mn.org and https://mntg.carsprogram.org (see that entry)."
+    },
+    {
       "value": "511ny.org",
       "note": "Text only: the Settings > Live data note for 511NY (feature/settings strings.xml, live_511_note) names the site whose feeds are read. Not contacted: since 511NY's October 2026 move the app reads api-511x-nysdot.carsprogram.org (see that entry)."
     },
@@ -1031,6 +1047,10 @@
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
+      "value": "kandrive.gov",
+      "note": "Text only: the Settings > Live data note for KanDrive (feature/settings strings.xml, live_kandrive_note) names the site whose lists and map query are read. Requests go to https://www.kandrive.gov and https://kstg.carsprogram.org (see that entry)."
+    },
+    {
       "value": "kscam.carsprogram.org",
       "note": "KDOT's RWIS camera stills on the CARS platform (https://kscam.carsprogram.org/KDOT_<id>_IMAGE001.JPG): core/traffic CarsStates.kt keeps a Kansas camera's still only on KDOT's hosts, this one among them; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
     },
@@ -1057,6 +1077,10 @@
     {
       "value": "publicapi.ohgo.com",
       "note": "Text only: the Settings > Live data note for OHGO (feature/settings strings.xml, live_ohgo_note) names where the owner registers for a key and where the key is sent. Requests go to https://publicapi.ohgo.com (see that entry)."
+    },
+    {
+      "value": "sd.cdn.iteris-atis.com",
+      "note": "SD511's CDN as a bare host: core/traffic SouthDakota.kt compares a camera's still link against it (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) and follows only matches, through NetworkGate.get when the card opens. Requests go to https://sd.cdn.iteris-atis.com (see that entry). Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
       "value": "tcp://*:8002",
