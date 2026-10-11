@@ -938,11 +938,45 @@ def nj_config():
         print(f"   {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}:", body[:1500].replace("\n", " "))
 
 
+def hls_frames():
+    head("Camera video (CHART, DelDOT): master playlist, media playlist, one segment")
+    import urllib.parse as up
+
+    def lines(url):
+        status, final, headers, body = get(url, limit=2_000_000)
+        print(f"   {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}")
+        print("     ", body[:600].replace("\n", " | "))
+        return final, [l.strip() for l in body.splitlines() if l.strip()]
+
+    urls = []
+    status, d = try_json("https://chartexp1.sha.maryland.gov/CHARTExportClientService/getCameraMapDataJSON.do", sample=100)
+    rows = (d or {}).get("data") or [] if isinstance(d, dict) else []
+    for r in [r for r in rows if r.get("opStatus") == "OK"][:2]:
+        urls.append(f"https://{r.get('cctvIp')}/rtplive/{r.get('id')}/playlist.m3u8")
+    status, d = try_json("https://tmc.deldot.gov/json/videocamera.json", sample=100)
+    rows = (d or {}).get("videoCameras") or [] if isinstance(d, dict) else []
+    for r in [r for r in rows if r.get("enabled")][:2]:
+        urls.append((r.get("urls") or {}).get("m3u8s"))
+    for url in [u for u in urls if u]:
+        final, ls = lines(url)
+        variants = [l for l in ls if not l.startswith("#")]
+        if not variants:
+            continue
+        media = up.urljoin(final, variants[0])
+        if any("EXT-X-STREAM-INF" in l for l in ls):
+            final, ls = lines(media)
+        segs = [l for l in ls if not l.startswith("#")]
+        if segs:
+            seg = up.urljoin(final, segs[-1])
+            status, ctype, body = _raw(seg)
+            print(f"   segment {seg}: status {status} type {ctype} bytes {len(body)} mpeg-ts {body[:1] == b'G'} mp4 {body[4:8] in (b'ftyp', b'moof', b'styp')}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
-            "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config}
+            "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames}
 
 
 class Timeout(Exception):
