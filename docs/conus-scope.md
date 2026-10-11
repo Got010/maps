@@ -31,7 +31,7 @@ spike before committing to them; the New York numbers are measured (release v0.1
   and Kansas, by the same phases. Fifteen regions (outlines from Natural Earth's 10 m state lines simplified to
   about a kilometre): one a state, and Ohio, Illinois and Michigan halved (`ohn`/`ohs`, `iln`/`ils`,
   `mis`/`miu`), since whole they measured 0.8 to 1 GB of map and local roads against Pennsylvania's halves at
-  about 370 MB; marked `planned` until their packs ship. The one routing graph covers every state (3.8 GB of
+  about 370 MB; marked `planned` until their packs shipped (v0.1.38, October 2026); offered since. The one routing graph covers every state (3.8 GB of
   OSM; 48 minutes and 6.2 GB of memory on a 16 GB runner). Main roads go by group: `routing-main.tar` stays the
   east's (119 MB), `routing-main-midwest.tar` and a seam pack join it on a phone with a Midwest region or a trip
   there, instead of one 301 MB pack for every phone. Then the app offers the regions, weather adds the states
