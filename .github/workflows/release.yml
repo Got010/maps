@@ -8,6 +8,8 @@
 # Packs are rebuilt only when needed (pipeline or its pip lock changed, the monthly run, or
 # Run workflow with "Rebuild data"); otherwise the new release carries the
 # packs from the previous one, so the app and its data always ship together.
+# pipeline/styles and pipeline/weather don't count: the styles ship inside the
+# APK, and the forecast pack has its own workflow (weather.yml).
 #
 # The release is created as a draft first and every job uploads its files to
 # it directly: the statewide packs run to a couple of gigabytes, more than a
@@ -184,7 +186,9 @@ jobs:
             fi
             # The pip lock lives under .github/ (ci.yml installs it too) but is a pipeline input: the search
             # container installs from it, so a lock change rebuilds the packs like a change under pipeline/.
-            if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles' .github/pipeline-requirements.txt; then :; else
+            # pipeline/weather builds the forecast pack in weather.yml, never a release pack: a change there alone
+            # rebuilt every pack (v0.1.33, about 40 minutes for search-nys.sqlite).
+            if git diff --quiet "$previous" HEAD -- pipeline ':(exclude)pipeline/styles' ':(exclude)pipeline/weather' .github/pipeline-requirements.txt; then :; else
               data=true; reason="pipeline or its pip lock changed since $previous"
             fi
           fi
