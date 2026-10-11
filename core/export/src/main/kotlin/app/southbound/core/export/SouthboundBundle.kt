@@ -15,8 +15,8 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 2 (schema 1 is still
- * read). The entries, in
+ * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 4 (schemas 1 to 3 are
+ * still read). The entries, in
  * this order and all required: [MANIFEST], [PLACES], [API_KEYS], [SETTINGS]. docs/EXPORT.md lists what each holds.
  * The bundle is sealed with the passphrase alone, so it opens on a phone that has none of this phone's Keystore keys.
  *
@@ -27,10 +27,11 @@ import java.util.TimeZone
  * Schema 1 is these four entries; a new entry, a new ApiKey or NetworkFeature, or a change to any entry's format
  * bumps it, and the importer then declares the range it supports (with a tested migration for the older ones).
  * Schema 2 (October 2026) added the route setting `avoid_dot_cameras`; a schema 1 bundle imports with it off.
+ * Schema 3 added the `WEATHER` toggle, schema 4 `TRAFFIC_511PA` and `TRAFFIC_CTROADS`; an older bundle imports with them off.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 3L
+    const val SCHEMA = 4L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */
