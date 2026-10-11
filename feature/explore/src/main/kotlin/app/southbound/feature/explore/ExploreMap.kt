@@ -809,7 +809,8 @@ internal fun ExploreMap(
 
     // Weather alerts the route passes through: listed under the route preview, drawn on the map, and on a trip
     // said once each (warnings, watches and moderate advisories) within about ten miles, or at once if already in
-    // one. Worked out on the phone from the whole-state alerts; the route is never sent.
+    // one. Only those in effect when the driver should get there, from the route's own time (one that begins later
+    // says when). Worked out on the phone from the covered states' alerts; the route is never sent.
     var routeWeather by remember { mutableStateOf<List<AlertOnRoute>>(emptyList()) }
     val previewWeatherRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
     LaunchedEffect(weather, weatherOn, inTrip, navState.routeGeometry.size, tripProgressBucket, previewWeatherRoute) {
@@ -824,14 +825,23 @@ internal fun ExploreMap(
         }
         val here = navigating?.snappedUserLocation?.coordinates
         val snapshot = weather
+        // Seconds a metre: what is left of the trip, or the previewed route's own time over its length.
+        val pace = when {
+            navigating != null -> navigating.progress.durationRemaining / navigating.progress.distanceRemaining
+            previewWeatherRoute != null -> RouteSummary.of(previewWeatherRoute).durationSeconds / previewWeatherRoute.distance
+            else -> 0.0
+        }
         routeWeather = withContext(Dispatchers.Default) {
             val line = geometry.map { GeoPoint(it.lat, it.lng) }
             val ahead = if (here != null) RouteTraffic.remaining(line, GeoPoint(here.lat, here.lng)) else line
-            RouteWeather.alongRoute(ahead, snapshot.alerts, snapshot.areas, System.currentTimeMillis())
+            RouteWeather.alongRoute(ahead, snapshot.alerts, snapshot.areas, System.currentTimeMillis(), pace)
         }
     }
     val weatherHereSpoken = stringResource(R.string.explore_weather_here_spoken)
     val weatherAheadSpoken = stringResource(R.string.explore_weather_ahead_spoken)
+    val weatherHereFromSpoken = stringResource(R.string.explore_weather_here_from_spoken)
+    val weatherAheadFromSpoken = stringResource(R.string.explore_weather_ahead_from_spoken)
+    val spokenContext = LocalContext.current
     val announcedWeather = remember { mutableSetOf<String>() }
     LaunchedEffect(inTrip) { if (!inTrip) announcedWeather.clear() }
     LaunchedEffect(routeWeather, inTrip) {
@@ -839,10 +849,12 @@ internal fun ExploreMap(
         val next = routeWeather.firstOrNull { it.alert.id !in announcedWeather && it.alert.severity.spoken && it.metersAhead <= WEATHER_AHEAD_METERS }
             ?: return@LaunchedEffect
         announcedWeather += next.alert.id
-        val text = if (next.metersAhead < 100) {
-            weatherHereSpoken.format(next.alert.event)
-        } else {
-            weatherAheadSpoken.format(next.alert.event, SpokenUnits.distance(next.metersAhead))
+        val from = next.startsAt?.let { android.text.format.DateFormat.getTimeFormat(spokenContext).format(java.util.Date(it)) }
+        val text = when {
+            next.metersAhead < 100 && from != null -> weatherHereFromSpoken.format(next.alert.event, from)
+            next.metersAhead < 100 -> weatherHereSpoken.format(next.alert.event)
+            from != null -> weatherAheadFromSpoken.format(next.alert.event, SpokenUnits.distance(next.metersAhead), from)
+            else -> weatherAheadSpoken.format(next.alert.event, SpokenUnits.distance(next.metersAhead))
         }
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, text)
     }
