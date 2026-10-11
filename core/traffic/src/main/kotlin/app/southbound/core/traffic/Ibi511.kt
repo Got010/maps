@@ -83,7 +83,8 @@ object Ibi511 {
         "https://511wi.gov",
         listOf(
             EventLayer("Incidents", "Incidents", null),
-            EventLayer("Closures", "Closures", IncidentKind.CLOSURE),
+            // The Closures list's rows (WZDx "Roadwork Closure", isFullClosure) draw as the ConstructionClosures icons.
+            EventLayer("ConstructionClosures", "Closures", IncidentKind.CLOSURE),
             // "traffic" holds every event; its "Roadwork Closure" rows are marked isFullClosure, so they come out closures.
             EventLayer("Construction", "traffic", IncidentKind.ROADWORK),
         ),

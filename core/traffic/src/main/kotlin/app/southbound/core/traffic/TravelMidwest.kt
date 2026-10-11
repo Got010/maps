@@ -46,7 +46,10 @@ object TravelMidwest {
      */
     fun parseIncidents(json: String): List<Incident> = features(json).mapNotNull { incident(it, roadwork = false) }
 
-    /** The road work, the same shape with the work zone's polylines beside its point; `a` marks one under way. */
+    /**
+     * The road work (708 features on 2026-10-11, 266 of them Illinois'), the same shape with the work zone's encoded
+     * polylines beside its point; `a` marks one under way, `lanes` full (135 that day) shuts the road.
+     */
     fun parseConstruction(json: String): List<Incident> = features(json).mapNotNull { incident(it, roadwork = true) }
 
     /** The cameras: one per site, its first snapshot as the still. */
@@ -103,7 +106,8 @@ object TravelMidwest {
             location = at,
             severity = p.text("sev"),
             lanesStatus = if (kind == IncidentKind.CLOSURE) "All lanes closed" else lanes,
-            updatedAt = (p.text("start") ?: p.text("time"))?.let(::whenMillis),
+            // An incident's start; road work's last update (its `time` is the whole span, "9/29/25 9:00 AM to 10/23/26 3:00 PM").
+            updatedAt = (p.text("lstUpd") ?: p.text("start") ?: p.text("time")?.substringBefore(" to "))?.let(::whenMillis),
             source = TrafficSource.IL_TRAVEL_MIDWEST,
         )
     }

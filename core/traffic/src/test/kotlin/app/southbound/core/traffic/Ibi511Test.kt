@@ -122,13 +122,13 @@ class Ibi511Test {
 
     /**
      * 511WI: the rows the probe printed on 2026-10-11 (a camera with a still and a video stream, a sign, a roadwork row
-     * and a "Roadwork Closure" row marked isFullClosure). The closure's icon stands in: its layer was empty that day.
+     * and a "Roadwork Closure" row marked isFullClosure). The closure's icon is real too (the sixth round found the Closures rows drawn as ConstructionClosures icons).
      */
     @Test
     fun `511WI reads as 511PA does, with camera video on its own servers`() {
         val icons = mapOf(
-            "Construction" to icons("566011" to (43.0337705435589 to -87.969008234053), "566098" to (44.52 to -88.02)),
-            "Closures" to icons("566098" to (44.52 to -88.02)),
+            "Construction" to icons("566011" to (43.0337705435589 to -87.969008234053), "566098" to (44.349897010949 to -88.1913438409978)),
+            "ConstructionClosures" to icons("566098" to (44.349897010949 to -88.1913438409978)),
             "MessageSigns" to icons("ATMS_DMS--1" to (42.99461 to -88.03796)),
         )
         val lists = mapOf(
