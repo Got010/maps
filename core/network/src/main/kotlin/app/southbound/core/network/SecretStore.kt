@@ -25,6 +25,9 @@ enum class ApiKey {
 
     /** A free EIA key (eia.gov/opendata/register.php), for the weekly gas price. */
     EIA,
+
+    /** A free OHGO key (publicapi.ohgo.com/docs/registration), for Ohio's traffic (core/traffic Ohgo). */
+    OHGO,
 }
 
 /**

@@ -1376,13 +1376,480 @@ def dot_midwest_4():
                 print("    ", body[:700].replace("\n", " | "))
 
 
+def dot_midwest_5():
+    """Fifth round: the CARS services by name (events_v1, cameras_v1, signs_v1, the WZDx feed), South Dakota's inline
+    layer code, Michigan's and Missouri's inline page code, North Dakota's ArcGIS layers."""
+    for state, site, tg, st in (("Indiana", "https://511in.org", "intg", "in"), ("Minnesota", "https://511mn.org", "mntg", "mn"),
+                                ("Iowa", "https://511ia.org", "iatg", "ia"), ("Nebraska", "https://511.nebraska.gov", "netg", "ne"),
+                                ("Kansas", "https://www.kandrive.gov", "kstg", "ks")):
+        head(f"{state}: CARS services")
+        try:
+            status, final, _, page = get(site + "/", limit=2_000_000)
+            for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:12]:
+                if "google" in src:
+                    continue
+                src = urllib.parse.urljoin(final, src)
+                _, _, _, js = get(src, limit=12_000_000)
+                i = js.find("signs_v1")
+                if i >= 0:
+                    print("   config ...", js[max(0, i - 900):i + 500].replace("\n", " "), "...")
+                for m in list(re.finditer(r"""_v1/api[A-Za-z0-9_/${}.-]{0,60}""", js))[:40]:
+                    pass
+                print("   service paths:", sorted(set(re.findall(r"""[a-z-]+_v1/api[A-Za-z0-9_/.-]{0,50}""", js)))[:40])
+                print("   graphql/rest:", sorted(set(re.findall(r"""/api/(?:graphql|v1)[A-Za-z0-9_/.-]{0,40}""", js)))[:20])
+            base = f"https://{tg}.carsprogram.org"
+            for path in ("/events_v1/api", "/events_v1/api/events", "/events_v1/api/map-features", "/cameras_v1/api", "/cameras_v1/api/cameras",
+                         "/signs_v1/api", "/signs_v1/api/signs", "/rest-areas_v1/api", "/traveltimes_v1/api/travel-times", "/api/graphql"):
+                status, _, h, body = get(base + path, headers={"Accept": "application/json, */*", "Referer": site + "/", "Origin": site}, limit=20_000_000)
+                print(f"   {base + path}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:400].replace("\n", " "))
+            for url in (f"https://{st}.carsprogram.org/carsapi_v1/api/wzdx", f"https://{tg}.carsprogram.org/carsapi_v1/api/wzdx"):
+                status, _, h, body = get(url, headers={"Accept": "application/json"}, limit=40_000_000)
+                print(f"   WZDx {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:700].replace("\n", " "))
+        except Exception as e:
+            print("   failed:", repr(e)[:200])
+
+    head("South Dakota: the page's own layer code")
+    status, final, _, page = get("https://www.sd511.org/", headers=BROWSER, limit=4_000_000)
+    for m in list(re.finditer(r"geojson|cdn\.iteris-atis\.com|aggregator\.iteris", page))[:40]:
+        print("   ...", page[max(0, m.start() - 160):m.start() + 160].replace("\n", " "), "...")
+    print("   urls:", sorted(set(u for u in re.findall(r"""https?://[^"' <>]+""", page) if "iteris" in u or "geojson" in u or "json" in u))[:40])
+    for url in ("https://sd.cdn.iteris-atis.com/geojson/", "https://sd.cdn.iteris-atis.com/geojson/incidents.geojson", "https://sd.cdn.iteris-atis.com/geojson/events.geojson",
+                "https://sd.cdn.iteris-atis.com/geojson/cameras.geojson", "https://sd.cdn.iteris-atis.com/geojson/dms.geojson",
+                "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.json", "https://sd.cdn.iteris-atis.com/geojson/road_conditions.geojson"):
+        status, _, h, body = get(url, headers=BROWSER, limit=20_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+
+    head("Michigan: Mi Drive's inline page code")
+    status, _, _, page = get("https://mdotjboss.state.mi.us/MiDrive/map", headers=BROWSER, limit=4_000_000)
+    for block in re.findall(r"<script(?![^>]*src)[^>]*>(.*?)</script>", page, flags=re.S)[:10]:
+        lines = [l.strip() for l in block.splitlines() if re.search(r"[Uu]rl|api|server|\.json|Layer\(", l)]
+        print("   inline:", lines[:40])
+    print("   quoted relative paths:", sorted(set(re.findall(r"""["']([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./?=&-]+)["']""", page)))[:40])
+    for path in ("public/api/incident/all", "public/api/incidents/all", "public/api/camera/all", "public/api/cameras/all", "public/api/dms/all",
+                 "public/api/construction/all", "public/api/incident", "public/api/camera", "public/api/event/all", "public/page/incidents",
+                 "camera/favoriteCameras/", "public/api/truckparking/all", "public/api/speed/all"):
+        url = "https://mdotjboss.state.mi.us/MiDrive/" + path
+        status, _, h, body = get(url, headers={**BROWSER, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}, limit=20_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+
+    head("Missouri: traveler.modot.org inline code")
+    for url in ("https://traveler.modot.org/map/", "https://traveler.modot.org/mapv3/index.html"):
+        status, _, _, page = get(url, headers=BROWSER, limit=4_000_000)
+        blocks = re.findall(r"<script(?![^>]*src)[^>]*>(.*?)</script>", page, flags=re.S)
+        print(f"   {url}: {len(blocks)} inline scripts, {sum(len(b) for b in blocks)} bytes")
+        for block in blocks[:6]:
+            hits = sorted(set(re.findall(r"""["']([A-Za-z0-9_][A-Za-z0-9_./-]*(?:/|\.json|\.js|Server)[A-Za-z0-9_./?=&-]*)["']""", block)))
+            print("     strings:", hits[:50])
+            for m in list(re.finditer(r"""(?:url|URL|Url)\s*[:=]\s*["'`]([^"'`]+)["'`]""", block))[:20]:
+                print("     url:", m.group(1)[:150])
+        print("   iframes/links:", re.findall(r'<(?:iframe|link|a)[^>]+(?:src|href)="([^"]+)"', page)[:20])
+
+    head("North Dakota: rcrs_dynamic layers")
+    base = "https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic/MapServer"
+    for layer in (5, 37, 7, 41, 21, 22, 31, 32):
+        url = f"{base}/{layer}/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson"
+        status, _, h, body = get(url, headers=BROWSER, limit=30_000_000)
+        print(f"   layer {layer}: status {status} type {h.get('Content-Type')} bytes {len(body)}")
+        try:
+            doc = json.loads(body)
+            feats = doc.get("features", [])
+            from collections import Counter
+            print("   features:", len(feats), "geometry:", Counter((f.get("geometry") or {}).get("type") for f in feats).most_common(3))
+            if feats:
+                print("   keys:", list((feats[0].get("properties") or {}).keys())[:40])
+                for f in feats[:2]:
+                    print("   feature:", json.dumps(f)[:1200])
+        except ValueError:
+            print("    ", body[:400].replace("\n", " "))
+
+
+def _post_json(url, body, headers=None, limit=20_000_000):
+    """POST a JSON body; (status, headers, parsed or None, text)."""
+    status, _, h, text = get(url, headers={**BROWSER, "Accept": "application/json", "Content-Type": "application/json", **(headers or {})},
+                             method="POST", data=body.encode(), limit=limit)
+    return status, h, _json(text), text
+
+
+def _values(features, key, limit=12):
+    from collections import Counter
+    return Counter(str((f.get("properties") or {}).get(key)) for f in features).most_common(limit)
+
+
+def dot_midwest_6():
+    """Sixth round: Travel Midwest's whole feature shapes (fixtures for core/traffic TravelMidwest), 511WI's closure
+    icons, North Dakota's work zone and alert properties, South Dakota's CDN files by their real names."""
+    head("Illinois: Travel Midwest features in full")
+    base = "https://travelmidwest.com/lmiga/"
+    for path in ("incidentMap.json", "constructionMap.json?type=lines", "cameraMap.json", "dmsMap.json"):
+        status, h, doc, text = _post_json(base + path, "{}", headers={"Referer": "https://travelmidwest.com/"})
+        feats = doc.get("features", []) if isinstance(doc, dict) else []
+        print(f"   {path}: status {status} bytes {len(text)} top keys {list(doc)[:8] if isinstance(doc, dict) else type(doc).__name__} features {len(feats)}")
+        if not feats:
+            print("    ", text[:600].replace("\n", " "))
+            continue
+        from collections import Counter
+        print("   id prefixes:", Counter((f.get("properties") or {}).get("id", "?")[:8].split("-")[0] for f in feats).most_common(12))
+        print("   agencies:", Counter((f.get("properties") or {}).get("id", "?").split("-")[1] if "-" in (f.get("properties") or {}).get("id", "") else "?" for f in feats).most_common(16))
+        print("   geometry:", Counter((f.get("geometry") or {}).get("type") for f in feats).most_common(4),
+              "inner:", Counter(g.get("type") for f in feats for g in ((f.get("geometry") or {}).get("geometries") or [])).most_common(4))
+        for key in ("desc", "stat", "lanes", "src", "closure", "sev", "dur", "ev", "biDir", "locDir", "dis", "video", "extOff", "a", "idotDistrict"):
+            if any(key in (f.get("properties") or {}) for f in feats):
+                print(f"   {key}:", _values(feats, key))
+        # Whole features, the first three and the first three from other states, for fixtures.
+        shown = 0
+        for f in feats[:3]:
+            print("   feature:", json.dumps(f)[:3000])
+        for f in feats:
+            pid = (f.get("properties") or {}).get("id", "")
+            if not pid.startswith("IL-"):
+                print("   other-state feature:", json.dumps(f)[:1500])
+                shown += 1
+                if shown >= 2:
+                    break
+        if "incident" in path or "construction" in path:
+            closures = [f for f in feats if "all lanes" in str((f.get("properties") or {}).get("closure", "")).lower() or (f.get("properties") or {}).get("lanes") == "full"]
+            print(f"   closures by wording: {len(closures)}")
+            for f in closures[:3]:
+                print("   closure:", json.dumps(f.get("properties"))[:800])
+    # Without a Content-Type, and a GET, for the reader's request shape; a still and a sign image.
+    status, _, h, text = get(base + "incidentMap.json", headers={**BROWSER, "Accept": "application/json"}, method="POST", data=b"", limit=2_000_000)
+    print(f"   POST without body or type: status {status} type {h.get('Content-Type')} bytes {len(text)}")
+    status, _, h, text = get(base + "incidentMap.json", headers={"User-Agent": UA, "Accept": "application/json", "Content-Type": "application/json"},
+                             method="POST", data=b"{}", limit=2_000_000)
+    print(f"   POST with the app's own User-Agent: status {status} type {h.get('Content-Type')} bytes {len(text)}")
+    status, ctype, body = _raw("https://cctv.travelmidwest.com/snapshots/IL-ISTHA_1_Will_SEB_I-355-CASH_4157660_-8800050_1_S.jpg")
+    print(f"   snapshot: status {status} type {ctype} bytes {len(body)} jpeg {body[:3] == b'\xff\xd8\xff'}")
+    status, ctype, body = _raw("https://travelmidwest.com/lmiga/messageSign?id=IL-TESTTSC-KE-IRIVINGPK&small=true")
+    print(f"   sign image: status {status} type {ctype} bytes {len(body)}")
+
+    head("Wisconsin: which icon layer carries the closures")
+    site = "https://511wi.gov"
+    for layer in ("Closures", "ConstructionClosures", "Construction", "RoadworkClosures", "Roadwork", "Incidents", "Alerts", "WinterRoadConditions", "SpecialEvents", "RestAreas"):
+        status, d = try_json(f"{site}/map/mapIcons/{layer}", sample=300)
+        items = d.get("item2") if isinstance(d, dict) and isinstance(d.get("item2"), list) else None
+        print(f"   mapIcons {layer}: status {status} items {len(items) if items is not None else '?'}", json.dumps(items[0])[:300] if items else "")
+    rows, total = _ibi_rows(site, "Closures", limit=5)
+    from collections import Counter
+    print(f"   Closures list: {len(rows)} of {total}; layerName {Counter(r.get('layerName') for r in rows).most_common(6)}; type {Counter(r.get('type') for r in rows).most_common(6)}")
+    print("   first closure row:", json.dumps(rows[0])[:1200] if rows else None)
+    ids = {str(r.get("DT_RowId") or r.get("id")) for r in rows}
+    for layer in ("Construction", "ConstructionClosures", "Closures"):
+        status, d = try_json(f"{site}/map/mapIcons/{layer}", sample=0)
+        items = d.get("item2") if isinstance(d, dict) and isinstance(d.get("item2"), list) else []
+        icon_ids = {str(i.get("itemId")) for i in items}
+        print(f"   closure rows with an icon in {layer}: {len(ids & icon_ids)} of {len(ids)}")
+    rows, total = _ibi_rows(site, "traffic", limit=3)
+    print(f"   traffic list: {len(rows)} of {total}; type {Counter(r.get('type') for r in rows).most_common(6)}; layerName {Counter(r.get('layerName') for r in rows).most_common(6)}")
+    for r in rows[:2]:
+        print("   traffic row:", json.dumps(r)[:1200])
+
+    head("North Dakota: work zones, alerts and cameras in full")
+    base = "https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic/MapServer"
+    status, _, _, body = get(base + "?f=json", headers=BROWSER, limit=2_000_000)
+    doc = _json(body)
+    if isinstance(doc, dict):
+        print("   layers:", [(l.get("id"), l.get("name"), l.get("geometryType")) for l in doc.get("layers", [])])
+    for layer, label in ((7, "Alerts"), (21, "Work zone points"), (22, "Work zone lines"), (41, "Travel alerts"), (37, "Video cameras"), (10, "Wind")):
+        url = f"{base}/{layer}/query?where=1%3D1&outFields=*&returnGeometry=false&f=json"
+        status, _, h, body = get(url, headers=BROWSER, limit=30_000_000)
+        doc = _json(body)
+        feats = doc.get("features", []) if isinstance(doc, dict) else []
+        print(f"   layer {layer} {label}: status {status} features {len(feats)} fields {[f.get('name') for f in (doc.get('fields') or [])][:40] if isinstance(doc, dict) else None}")
+        for f in feats[:4]:
+            print("   attributes:", json.dumps(f.get("attributes"))[:1400])
+        if feats:
+            for key in ("WorkType", "Active", "LaneReduction", "DelayDesc", "ConditionDesc", "MapIconDesc", "Type", "TravelSpeedsDesc", "DataProvider"):
+                if key in (feats[0].get("attributes") or {}):
+                    print(f"   {key}:", Counter(str((f.get('attributes') or {}).get(key)) for f in feats).most_common(10))
+    status, ctype, body = _raw("https://www.dot.nd.gov/travel-info/cameras/capitalnw00001.jpg")
+    print(f"   camera still: status {status} type {ctype} bytes {len(body)} jpeg {body[:3] == b'\xff\xd8\xff'}")
+    for layer in (31, 32):
+        url = f"{base}/{layer}/query?where=1%3D1&outFields=ConditionDesc,CondDesc,ConditionCategory,TravelSpeeds,Comment,HwyDesc,Direction,EffectiveUntil&returnGeometry=false&f=json"
+        status, _, _, body = get(url, headers=BROWSER, limit=30_000_000)
+        doc = _json(body)
+        feats = doc.get("features", []) if isinstance(doc, dict) else []
+        print(f"   layer {layer} road conditions: {len(feats)};", "ConditionDesc", Counter(str((f.get('attributes') or {}).get('ConditionDesc')) for f in feats).most_common(8),
+              "category", Counter(str((f.get('attributes') or {}).get('ConditionCategory')) for f in feats).most_common(6))
+        for f in feats[:2]:
+            print("   attributes:", json.dumps(f.get("attributes"))[:600])
+
+    head("South Dakota: the CDN's GeoJSON by the page's names")
+    meta = "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/"
+    for name in ("active_jurisdictions.geojson", "icons.road-work.geojson", "icons.incidents-accidents.geojson", "icons.restriction.geojson",
+                 "icons.disturbances.geojson", "icons.obstructions.geojson", "icons.scheduled-events.geojson", "icons.cameras.geojson", "icons.rwis.geojson",
+                 "icons.road-conditions.geojson", "icons.disasters.geojson"):
+        for headers in ({**BROWSER, "Referer": "https://www.sd511.org/", "Origin": "https://www.sd511.org"}, {"User-Agent": UA}):
+            status, _, h, body = get(meta + name, headers=headers, limit=20_000_000)
+            print(f"   {name} ({'browser' if 'Referer' in headers else 'app'}): status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:500].replace("\n", " "))
+            if status == 200:
+                doc = _json(body)
+                feats = doc.get("features", []) if isinstance(doc, dict) else []
+                print(f"   features {len(feats)}; keys {list((feats[0].get('properties') or {}).keys())[:30] if feats else None}")
+                for f in feats[:2]:
+                    print("   feature:", json.dumps(f)[:1200])
+                break
+    status, final, _, page = get("https://www.sd511.org/", headers=BROWSER, limit=4_000_000)
+    for m in list(re.finditer(r"""(?:cdnLink|cdn_metadata)\s*\+\s*["']([^"']+)["']""", page))[:40]:
+        print("   cdn path:", m.group(1))
+    for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:30]:
+        if any(x in src for x in ("jquery", "bootstrap", "google", "x2js", "leaflet", "openlayers", "ol.js")):
+            continue
+        src = urllib.parse.urljoin(final, src)
+        _, _, _, js = get(src, headers=BROWSER, limit=6_000_000)
+        hits = sorted(set(re.findall(r"""(?:cdnLink|cdn_metadata|cdn_geo)\s*\+\s*["']([^"']+)["']""", js)))
+        urls = sorted(set(u for u in re.findall(r"""https?://[^"' <>]+""", js) if "iteris" in u))
+        if hits or urls:
+            print(f"   {src[-60:]}: paths {hits[:30]} urls {urls[:20]}")
+
+
+def dot_midwest_7():
+    """Seventh round: the CARS sites' GraphQL (events), one camera and one sign in full from each; Michigan's and
+    Missouri's script files, for the feeds their maps read."""
+    for state, site, tg in (("Indiana", "https://511in.org", "intg"), ("Minnesota", "https://511mn.org", "mntg"), ("Iowa", "https://511ia.org", "iatg"),
+                            ("Nebraska", "https://511.nebraska.gov", "netg"), ("Kansas", "https://www.kandrive.gov", "kstg")):
+        head(f"{state}: GraphQL at the site, cameras and signs in full")
+        gql = site + "/api/graphql"
+        status, _, h, body = get(gql, headers=BROWSER, limit=2_000_000)
+        print(f"   GET {gql}: status {status} type {h.get('Content-Type')}:", body[:300].replace("\n", " "))
+        for name, query in (("query type", '{"query":"{ __schema { queryType { fields { name args { name type { name kind ofType { name } } } } } } }"}'),
+                            ("MapFeaturesArgs", '{"query":"{ __type(name: \\"MapFeaturesArgs\\") { inputFields { name type { name kind ofType { name kind ofType { name kind ofType { name } } } } } } }"}'),
+                            ("LayerSlug", '{"query":"{ __type(name: \\"LayerSlug\\") { enumValues { name } } }"}'),
+                            ("features", '{"query":"query ($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri features { id geometry properties } } } }","variables":{"input":{"north":49.5,"south":36,"east":-84,"west":-104.5,"zoom":7,"layerSlugs":["normalEvents"],"nonClusterableUris":["dashboard"]}}}'),
+                            ("features by name", '{"query":"query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri features { id geometry properties } __typename } error { message type } } }","variables":{"input":{"north":49.5,"south":36,"east":-84,"west":-104.5,"zoom":7,"layerSlugs":["normalEvents","closures"],"nonClusterableUris":["dashboard"]}}}')):
+            status, h, doc, text = _post_json(gql, query, headers={"Referer": site + "/", "Origin": site})
+            print(f"   POST {name}: status {status} type {h.get('Content-Type')} bytes {len(text)}:", text[:1500].replace("\n", " "))
+        if state == "Indiana":
+            # The bundle's own GraphQL documents and layer names, once.
+            status, final, _, page = get(site + "/", limit=2_000_000)
+            for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:12]:
+                if "google" in src:
+                    continue
+                _, _, _, js = get(urllib.parse.urljoin(final, src), limit=12_000_000)
+                for m in list(re.finditer(r"mapFeaturesQuery|MapFeaturesArgs|layerSlugs", js))[:6]:
+                    print(f"   {src[-40:]} ...", js[max(0, m.start() - 700):m.start() + 900].replace("\n", " "), "...")
+                slugs = sorted(set(re.findall(r"""["']([a-zA-Z]+(?:Events|Closures|Cameras|Signs|Conditions|Plows|Restrictions|Areas|Zones|Alerts|Stations))["']""", js)))
+                if slugs:
+                    print("   slug-like strings:", slugs[:80])
+        base = f"https://{tg}.carsprogram.org"
+        for path in ("/cameras_v1/api/cameras", "/signs_v1/api/signs"):
+            status, _, h, body = get(base + path, headers={"Accept": "application/json", "Referer": site + "/", "Origin": site}, limit=20_000_000)
+            doc = _json(body)
+            rows = doc if isinstance(doc, list) else []
+            print(f"   {path}: status {status} rows {len(rows)} keys {list(rows[0].keys())[:30] if rows else None}")
+            for r in rows[:2]:
+                print("   row:", json.dumps(r)[:2500])
+            if rows and "signs" in path:
+                from collections import Counter
+                print("   status:", Counter(r.get("status") for r in rows).most_common(8), "agencies:", Counter(r.get("agencyName") for r in rows).most_common(8))
+            if rows and "cameras" in path:
+                from collections import Counter
+                views = [v for r in rows for v in (r.get("views") or [])]
+                print(f"   views {len(views)}; view keys {list(views[0].keys())[:20] if views else None}; owners", Counter((r.get("cameraOwner") or {}).get("name") for r in rows).most_common(8))
+                hosts = Counter(urllib.parse.urlsplit(v.get("url") or "").netloc for v in views).most_common(6)
+                print("   view url hosts:", hosts)
+                for key in ("url", "imageUrl", "stillUrl", "thumbnailUrl", "videoUrl"):
+                    vals = [v.get(key) for v in views if v.get(key)]
+                    if vals:
+                        print(f"   view {key}: {len(vals)} e.g. {vals[0][:160]}")
+                for v in views[:3]:
+                    url = v.get("url") or ""
+                    if url.startswith("https://") and not url.endswith(".m3u8"):
+                        status, ctype, body = _raw(url)
+                        print(f"   view fetch: status {status} type {ctype} bytes {len(body)} jpeg {body[:3] == b'\xff\xd8\xff'}")
+
+    head("Michigan: Mi Drive's scripts")
+    status, final, _, page = get("https://mdotjboss.state.mi.us/MiDrive/map", headers=BROWSER, limit=4_000_000)
+    srcs = re.findall(r'<script[^>]+src="([^"]+)"', page)
+    print("   scripts:", srcs[:40])
+    for src in srcs[:40]:
+        if any(x in src for x in ("jquery", "bootstrap", "google", "gtag", "arcgis", "dojo", "esri")):
+            continue
+        src = urllib.parse.urljoin(final, src)
+        status, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+        calls = sorted(set(re.findall(r"""(?:url|URL)\s*[:=]\s*["'`]([^"'`]{3,120})["'`]""", js)))
+        gets = [js[m.start():m.start() + 200].replace("\n", " ") for m in list(re.finditer(r"\.(?:getJSON|ajax|get|post|fetch)\(", js))[:10]]
+        paths = sorted(set(re.findall(r"""["']((?:/MiDrive/|public/|api/|rest/)[A-Za-z0-9_./?=&{}-]{2,100})["']""", js)))
+        print(f"   {src[-70:]}: status {status} bytes {len(js)}; urls {calls[:40]}; paths {paths[:40]}")
+        for g in gets[:6]:
+            print("     call:", g)
+
+    head("Missouri: traveler.modot.org scripts")
+    for url in ("https://traveler.modot.org/map/", "https://traveler.modot.org/mapv3/index.html"):
+        status, final, _, page = get(url, headers=BROWSER, limit=4_000_000)
+        srcs = re.findall(r'<script[^>]+src="([^"]+)"', page)
+        print(f"   {url}: scripts {srcs[:40]}")
+        for src in srcs[:40]:
+            if any(x in src for x in ("ruxit", "jquery", "bootstrap", "google", "js.arcgis.com", "video-js", "video.min")):
+                continue
+            src = urllib.parse.urljoin(final, src)
+            status, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+            urls = sorted(set(u for u in re.findall(r"""https?://[^"' <>\\]+""", js) if not any(x in u for x in ("w3.org", "arcgis.com/", "esri.com", "googleapis"))))
+            rel = sorted(set(re.findall(r"""["']([A-Za-z0-9_][A-Za-z0-9_./-]*(?:rest/services|/api/|\.json|\.ashx|\.aspx|\.php|Server)[A-Za-z0-9_./?=&-]*)["']""", js)))
+            print(f"   {src[-70:]}: status {status} bytes {len(js)}; urls {urls[:40]}; paths {rel[:40]}")
+
+
+def dot_midwest_8():
+    """Eighth round: which layer slugs the CARS sites' mapFeaturesQuery answers (one at a time), what an Event
+    carries, and the dashboard's collections; Mi Drive's AllForMap feeds."""
+    gql_features = ('{"query":"query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri '
+                    'features { id geometry properties } __typename } error { message type } } }",'
+                    '"variables":{"input":{"north":49.5,"south":36,"east":-84,"west":-104.5,"zoom":7,"layerSlugs":[%s],"nonClusterableUris":["dashboard"]}}}')
+    slugs = ("incidents", "closures", "construction", "future", "normalEvents", "roadwork", "events", "roadReports", "unplannedEvents",
+             "plannedEvents", "incident", "closure", "roadConditions", "WazeAlerts", "weatherWarningsAreaEvents", "electronicSigns", "normalCameras")
+    for state, site in (("Indiana", "https://511in.org"), ("Minnesota", "https://511mn.org"), ("Iowa", "https://511ia.org"),
+                        ("Nebraska", "https://511.nebraska.gov"), ("Kansas", "https://www.kandrive.gov")):
+        head(f"{state}: layer slugs one at a time")
+        gql = site + "/api/graphql"
+        from collections import Counter
+        for slug in slugs:
+            status, h, doc, text = _post_json(gql, gql_features % json.dumps(slug), headers={"Referer": site + "/", "Origin": site})
+            data = (doc or {}).get("data") if isinstance(doc, dict) else None
+            mf = ((data or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(data, dict) else None
+            if not isinstance(mf, list):
+                print(f"   {slug}: status {status} bytes {len(text)}:", text[:300].replace("\n", " "))
+                continue
+            icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf for f in (m.get("features") or []))
+            types = Counter(m.get("__typename") for m in mf)
+            uris = Counter((m.get("uri") or "").split("/")[0] for m in mf)
+            print(f"   {slug}: {len(mf)} map features, {len(text)} bytes; types {types.most_common(4)}; uri kinds {uris.most_common(4)}; icons {icons.most_common(6)}")
+            if mf and slug in ("incidents", "closures", "construction", "future", "normalEvents", "roadwork", "events"):
+                print("   first:", json.dumps(mf[0])[:1500])
+        # What an Event carries, on the map features and in the dashboard's collections.
+        for name, query in (
+            ("event fields", gql_features.replace("features { id geometry properties } __typename", "features { id geometry properties } __typename ... on Event { title description priority isWazeEvent cityReference color icon agencyAttribution { agencyName } lastUpdated { timestamp timezone } beginTime { timestamp timezone } endTime { timestamp timezone } }") % '"closures","incidents","construction","normalEvents"'),
+            ("dashboard collections", '{"query":"query Dashboard($layerSlugs: [String!]!) { dashboardQuery { collections(layerSlugs: $layerSlugs) { uri title cityReference bbox icon color __typename ... on Event { description priority isWazeEvent agencyAttribution { agencyName } lastUpdated { timestamp timezone } beginTime { timestamp timezone } } } } }","variables":{"layerSlugs":["closures","incidents","construction","normalEvents"]}}'),
+            ("event query", '{"query":"query Event($eventId: ID!) { eventQuery(eventId: $eventId) { event { uri title description bbox features { id geometry properties } } error { type message } } }","variables":{"eventId":"CARSx-43373"}}'),
+        ):
+            status, h, doc, text = _post_json(gql, query, headers={"Referer": site + "/", "Origin": site})
+            print(f"   {name}: status {status} bytes {len(text)}:", text[:2500].replace("\n", " "))
+
+    head("Michigan: Mi Drive's AllForMap feeds")
+    base = "https://mdotjboss.state.mi.us/MiDrive/"
+    for path in ("camera/AllForMap", "construction/AllForMap", "dms/AllForMap", "incidents/AllForMap", "incidents/AllForPage", "plows/AllForMap",
+                 "tollBridges/allForMap"):
+        for headers in ({**BROWSER, "Accept": "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"},
+                        {"User-Agent": UA, "Accept": "application/json"}):
+            status, _, h, body = get(base + path, headers=headers, limit=30_000_000)
+            label = "browser" if "Referer" in headers else "app"
+            print(f"   {path} ({label}): status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+            doc = _json(body)
+            rows = doc if isinstance(doc, list) else (doc.get("data") or doc.get("features") or doc.get("items")) if isinstance(doc, dict) else None
+            if isinstance(doc, dict):
+                print("   top keys:", list(doc)[:12])
+            if isinstance(rows, list):
+                print(f"   rows {len(rows)}; keys {list(rows[0].keys())[:40] if rows and isinstance(rows[0], dict) else None}")
+                for r in rows[:3]:
+                    print("   row:", json.dumps(r)[:1500])
+            if status == 200:
+                break
+    for path in ("camera/getCameraInformation/", "dms/getDMSInfo/", "construction/getConstructionInformation/"):
+        status, _, h, body = get(base + path + "1", headers={**BROWSER, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"}, limit=2_000_000)
+        print(f"   {path}1: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:600].replace("\n", " "))
+
+
+def dot_midwest_9():
+    """Ninth round: the CARS map query at higher zooms (do the clusters open up?), every event slug in one request,
+    the dashboard with a priority; Mi Drive's details for real ids."""
+    from collections import Counter
+    query = ('{"query":"query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri '
+             'features { id geometry properties } __typename } error { message type } } }",'
+             '"variables":{"input":{"north":%s,"south":%s,"east":%s,"west":%s,"zoom":%d,"layerSlugs":["incidents","closures","construction","roadReports"],"nonClusterableUris":["dashboard"]}}}')
+    for state, site, box in (("Indiana", "https://511in.org", (41.8, 37.7, -84.7, -88.2)), ("Minnesota", "https://511mn.org", (49.5, 43.4, -89.4, -97.3)),
+                             ("Iowa", "https://511ia.org", (43.6, 40.3, -90.0, -96.7)), ("Nebraska", "https://511.nebraska.gov", (43.1, 39.9, -95.2, -104.2)),
+                             ("Kansas", "https://www.kandrive.gov", (40.1, 36.9, -94.5, -102.2))):
+        head(f"{state}: clusters by zoom")
+        gql = site + "/api/graphql"
+        n, s_, e, w = box
+        for zoom in (7, 10, 12, 14, 16):
+            status, h, doc, text = _post_json(gql, query % (n, s_, e, w, zoom), headers={"Referer": site + "/", "Origin": site}, limit=60_000_000)
+            data = (doc or {}).get("data") if isinstance(doc, dict) else None
+            mf = ((data or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(data, dict) else None
+            if not isinstance(mf, list):
+                print(f"   zoom {zoom}: status {status} bytes {len(text)}:", text[:300].replace("\n", " "))
+                continue
+            types = Counter(m.get("__typename") for m in mf)
+            points = sum(1 for m in mf for f in (m.get("features") or []) if ((f.get("geometry") or {}).get("type") == "Point"))
+            print(f"   zoom {zoom}: {len(mf)} map features, {len(text)} bytes; types {types.most_common(4)}; points {points}")
+            if zoom == 14 and mf:
+                cl = next((m for m in mf if m.get("__typename") == "Cluster"), None)
+                if cl:
+                    print("   a cluster:", json.dumps(cl)[:1200])
+                icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf if m.get("__typename") == "Event" for f in (m.get("features") or []))
+                print("   event icons:", icons.most_common(20))
+                tips = [m.get("tooltip") for m in mf if m.get("__typename") == "Event"][:12]
+                print("   tooltips:", json.dumps(tips)[:2500])
+        for name, q in (("dashboard priority 10", '{"query":"query Dashboard($layerSlugs: [String!]!, $maxPriority: Int) { dashboardQuery { collections(layerSlugs: $layerSlugs, maxPriority: $maxPriority) { uri title cityReference bbox icon color __typename ... on Event { description priority isWazeEvent lastUpdated { timestamp timezone } beginTime { timestamp timezone } } } } }","variables":{"layerSlugs":["incidents","closures","construction","roadReports"],"maxPriority":10}}'),
+                        ("dashboard no filter", '{"query":"{ dashboardQuery { collections(layerSlugs: [\\"incidents\\",\\"closures\\",\\"construction\\",\\"roadReports\\",\\"future\\"]) { uri title bbox icon __typename } } }"}')):
+            status, h, doc, text = _post_json(gql, q, headers={"Referer": site + "/", "Origin": site}, limit=20_000_000)
+            print(f"   {name}: status {status} bytes {len(text)}:", text[:600].replace("\n", " "))
+
+    head("Michigan: Mi Drive details for real ids")
+    base = "https://mdotjboss.state.mi.us/MiDrive/"
+    hdr = {**BROWSER, "Accept": "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"}
+    for path in ("camera/getCameraInformation/1129", "camera/getCameraInformation/2113", "dms/getDMSInfo/3067", "dms/getDMSInfo/17624",
+                 "construction/getConstructionInformation/ETX-21385", "construction/getConstructionInformation/ETX-21250", "incidents/AllForMap"):
+        status, _, h, body = get(base + path, headers=hdr, limit=4_000_000)
+        print(f"   {path}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:2500].replace("\n", " "))
+    status, _, h, body = get(base + "camera/AllForMap", headers=hdr, limit=4_000_000)
+    doc = _json(body)
+    if isinstance(doc, list):
+        print("   camera icons:", Counter(r.get("icon") for r in doc).most_common(5), "links:", Counter(bool(r.get("link")) for r in doc), "orientations:", Counter(r.get("orientation") for r in doc).most_common(6))
+        for r in doc:
+            if r.get("link"):
+                print("   camera with link:", json.dumps(r)[:600])
+                break
+    status, _, h, body = get(base + "construction/AllForMap", headers=hdr, limit=8_000_000)
+    doc = _json(body)
+    if isinstance(doc, list):
+        print("   construction icons:", Counter(r.get("icon") for r in doc).most_common(8), "active:", Counter(r.get("active") for r in doc))
+        print("   titles:", Counter(r.get("title", "").split(":")[-1].strip() for r in doc).most_common(15))
+    for url in ("https://mdotnetpublic.state.mi.us/drive/images/inc_red_18px.png", "https://mdotjboss.state.mi.us/MiDrive/camera/image/1129", "https://mdotjboss.state.mi.us/MiDrive/camera/1129/image"):
+        status, ctype, body = _raw(url)
+        print(f"   {url}: status {status} type {ctype} bytes {len(body)}")
+
+
+def dot_midwest_10():
+    """Tenth round: OHGO's swagger definitions in full (Ohio's reader is written against them: the API wants a key
+    the owner enters in Settings, so the probe sees no data), and the docs pages' words on the key and the result shape."""
+    head("Ohio: OHGO swagger definitions")
+    status, _, h, body = get("https://publicapi.ohgo.com/docs/v1/swagger.json", headers=BROWSER, limit=4_000_000)
+    print(f"   spec: status {status} bytes {len(body)}")
+    doc = _json(body)
+    if isinstance(doc, dict):
+        print("   host/basePath:", doc.get("host"), doc.get("basePath"), doc.get("servers"), "security:", json.dumps(doc.get("securityDefinitions") or doc.get("components", {}).get("securitySchemes"))[:600])
+        defs = doc.get("definitions") or doc.get("components", {}).get("schemas", {})
+        for name in ("Camera", "CameraView", "CameraApiResult", "Construction", "ConstructionWorkZone", "ConstructionDetour", "Incident", "IncidentApiResult",
+                     "DigitalSign", "DigitalSignApiResult", "Link", "DangerousSlowdown", "TravelDelay", "Location", "Geometry"):
+            sc = defs.get(name)
+            if sc is None:
+                print(f"   {name}: (no definition)")
+                continue
+            print(f"   {name}:", json.dumps(sc)[:3000])
+        for path in ("/api/v1/cameras", "/api/v1/incidents", "/api/v1/construction", "/api/v1/digital-signs"):
+            op = (doc.get("paths", {}).get(path) or {}).get("get") or {}
+            print(f"   GET {path}: params", json.dumps([{k: p.get(k) for k in ("name", "in", "type", "required", "description", "enum")} for p in op.get("parameters", [])])[:2500])
+            print(f"   GET {path}: responses", json.dumps(op.get("responses"))[:600], "| description:", (op.get("description") or op.get("summary") or "")[:600].replace("\n", " "))
+        print("   all definitions:", sorted(defs.keys()))
+    for page in ("/docs/api-key", "/docs/registration", "/docs/v1/query-params", "/docs/v1/filters", "/docs/v1/api-results", "/docs/cache", "/docs/v1/incidents",
+                 "/docs/v1/construction", "/docs/v1/digital-signs", "/docs/v1/cameras", "/docs/terms-of-use"):
+        status, _, h, body = get("https://publicapi.ohgo.com" + page, headers=BROWSER, limit=2_000_000)
+        print(f"   {page}: status {status} bytes {len(body)}:", text_of(body)[:1800].replace("\n", " | "))
+    # Without a key: the error shape and headers (the app shows this when the key is missing or wrong).
+    for url in ("https://publicapi.ohgo.com/api/v1/cameras?page-size=1", "https://publicapi.ohgo.com/api/v1/incidents?page-all=true"):
+        status, _, h, body = get(url, headers={"User-Agent": UA, "Accept": "application/json"}, limit=200_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} headers {dict((k, v) for k, v in h.items() if k.lower() in ('www-authenticate', 'cache-control', 'x-ratelimit-limit'))}:", body[:400].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
             "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
-            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4}
+            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5,
+            "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
+            "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
+            "dot-midwest-10": dot_midwest_10}
 
 
 class Timeout(Exception):

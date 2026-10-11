@@ -795,6 +795,14 @@
   },
   "hosts": [
     {
+      "value": ".dot.state.oh.us",
+      "note": "ODOT's camera image servers: core/traffic Ohgo.kt keeps a camera's snapshot link only on hosts ending in this (and the OHGO suffixes); fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
+      "value": ".dot.wi.gov",
+      "note": "WisDOT's camera stream servers (cctv1.dot.wi.gov and the like): core/traffic Ibi511.kt keeps a 511WI camera's https playlist link (https://cctv<n>.dot.wi.gov/rtplive/<camera>/playlist.m3u8) only when its host ends in this suffix. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511WI (Settings > Live data, off by default)."
+    },
+    {
       "value": ".githubusercontent.com",
       "note": "core/network GitHubReleases.isAllowed accepts any https host ending .githubusercontent.com (where GitHub redirects release asset downloads, e.g. objects.githubusercontent.com), checked on every redirect hop. Used for map pack downloads (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default); every such request runs inside NetworkGate.request(feature), so the feature toggle gates it. The token goes to api.github.com only, never to this host. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
@@ -807,8 +815,36 @@
       "note": "Suffix literal in org/maplibre/android/http/NativeHttpRequest (MapLibre Native's HTTP request class; Mapbox host checks inherited from its Mapbox lineage, like mapbox.com). Not contacted by app code: the style is bundled and tiles are pmtiles://file://. Every request in the app's own code still goes through core/network NetworkGate; MapLibre's own client is not behind it and is unused."
     },
     {
+      "value": ".ohgo.com",
+      "note": "OHGO's camera snapshots: core/traffic Ohgo.kt keeps a camera's snapshot link (largeUrl, smallUrl) only on ODOT's and OHGO's own hosts, this suffix among them (the API's document names no host; checked on the phone); the camera card fetches it through NetworkGate.get. The link names the camera, never the viewer; the key is not sent with it. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
+      "value": ".ohio.gov",
+      "note": "Ohio's state servers, for an ODOT camera snapshot hosted there: core/traffic Ohgo.kt follows a camera's snapshot link only on this and the other ODOT suffixes; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
       "value": ".sha.maryland.gov",
       "note": "CHART's camera stream servers (strmr5.sha.maryland.gov, a camera's cctvIp): core/traffic MarylandChart.kt follows a camera's stream only on a host one label under this suffix, https://<host>/rtplive/<camera id>/playlist.m3u8. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_CHART_MD (Settings > Live data, off by default)."
+    },
+    {
+      "value": ".skyvdn.com",
+      "note": "KDOT's Skyline camera servers (kdot-sfs2.us-east-1.skyvdn.com and the like): core/traffic CarsStates.kt keeps a Kansas camera's still on a host ending in this; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "511.nebraska.gov",
+      "note": "Text only: the Settings > Live data note for Nebraska 511 (feature/settings strings.xml, live_511ne_note) names the site whose lists and map query are read. Requests go to https://511.nebraska.gov and https://netg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511ia.org",
+      "note": "Text only: the Settings > Live data note for 511IA (feature/settings strings.xml, live_511ia_note) names the site whose lists and map query are read. Requests go to https://511ia.org and https://iatg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511in.org",
+      "note": "Text only: the Settings > Live data note for 511IN (feature/settings strings.xml, live_511in_note) names the site whose lists and map query are read. Requests go to https://511in.org and https://intg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "511mn.org",
+      "note": "Text only: the Settings > Live data note for 511MN (feature/settings strings.xml, live_511mn_note) names the site whose lists and map query are read. Requests go to https://511mn.org and https://mntg.carsprogram.org (see that entry)."
     },
     {
       "value": "511ny.org",
@@ -819,16 +855,32 @@
       "note": "Text only: the Settings > Live data note for 511PA (feature/settings strings.xml, live_511pa_note) names the site whose lists are read. Requests go to https://www.511pa.com (see that entry)."
     },
     {
+      "value": "511wi.gov",
+      "note": "Text only: the Settings > Live data note for 511WI (feature/settings strings.xml, live_511wi_note) names the site whose lists are read. Requests go to https://511wi.gov (see that entry)."
+    },
+    {
       "value": "api.github.com",
       "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
+    },
+    {
+      "value": "atmsqf.iowadot.gov",
+      "note": "Iowa DOT's camera snapshots (https://atmsqf.iowadot.gov/snapshots/...jpg): core/traffic CarsStates.kt keeps an Iowa camera's still only here; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511IA (Settings > Live data, off by default)."
     },
     {
       "value": "bustime.mta.info",
       "note": "Text in the Settings hint 'Needs a free key from bustime.mta.info' (feature/settings strings.xml). Not a request."
     },
     {
+      "value": "cctv.travelmidwest.com",
+      "note": "Travel Midwest's camera snapshots: core/traffic TravelMidwest.kt keeps a camera's still (remUrls, https://cctv.travelmidwest.com/snapshots/<camera>_<view>.jpg) only on this host; the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_TRAVEL_MIDWEST (Settings > Live data, off by default)."
+    },
+    {
       "value": "ctroads.org",
       "note": "Text only: the Settings > Live data note for CTroads (feature/settings strings.xml, live_ctroads_note) names the site whose lists are read. Requests go to https://ctroads.org (see that entry)."
+    },
+    {
+      "value": "dot511.nebraska.gov",
+      "note": "Nebraska DOT's camera stills (https://dot511.nebraska.gov/images/vid-...jpg): core/traffic CarsStates.kt keeps a Nebraska camera's still only here; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511NE (Settings > Live data, off by default)."
     },
     {
       "value": "eia.gov",
@@ -849,6 +901,26 @@
     {
       "value": "https://",
       "note": "Bare scheme prefix strings: feature/search PlaceCard.kt (adds https:// to a place's website before opening it in the browser) and core/traffic FiveElevenNy.kt (URL checks). Not hosts."
+    },
+    {
+      "value": "https://511.nebraska.gov",
+      "note": "Nebraska's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_511NE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://511ia.org",
+      "note": "Iowa's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_511IA (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://511in.org",
+      "note": "Indiana's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_511IN (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://511mn.org",
+      "note": "Minnesota's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_511MN (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://511wi.gov",
+      "note": "511WI (WisDOT's 511, built by IBI Group like 511PA): core/traffic Ibi511.kt (Ibi511.WI) fetches the site's own map layers (/map/mapIcons/Incidents, Closures, Construction and MessageSigns: every item's position) and list pages (/List/GetData/Incidents, Closures, traffic, MessageSigns and Cameras, 100 rows a page), the same requests 511wi.gov's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_511WI (Settings > Live data, off by default)."
     },
     {
       "value": "https://api-511x-nysdot.carsprogram.org",
@@ -895,12 +967,24 @@
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
+      "value": "https://gis.dot.nd.gov",
+      "note": "North Dakota's NDDOT travel map service (ArcGIS, rcrs_dynamic): core/traffic NorthDakota.kt queries whole layers (where=1=1, attributes only, no geometry but the cameras' points): 7 alerts, 21 and 22 work zones, 5 still cameras, the same requests NDDOT's own map makes, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_NDDOT (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://goo.gle",
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
       "value": "https://gtfsrt.prod.obanyc.com",
       "note": "MTA Bus Time realtime feeds: core/transit TransitRealtime.kt. Gated by NetworkFeature.TRANSIT_BUS_TIME (off by default, user-entered key)."
+    },
+    {
+      "value": "https://iatg.carsprogram.org",
+      "note": "Iowa's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511IA (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://intg.carsprogram.org",
+      "note": "Indiana's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511IN (Settings > Live data, off by default)."
     },
     {
       "value": "https://issuetracker.google.com",
@@ -911,16 +995,48 @@
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
+      "value": "https://kstg.carsprogram.org",
+      "note": "Kansas's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://mdotjboss.state.mi.us",
+      "note": "Michigan's Mi Drive (MDOT): core/traffic MiDrive.kt fetches the lists its own map page reads, /MiDrive/incidents/AllForMap, construction/AllForMap and camera/AllForMap, the whole state every time, no key and nothing about the user's location, search or route; when a camera card opens it fetches that camera's detail page, /MiDrive/camera/getCameraInformation/<id>, for the still's link (the id names the camera, never the viewer). Gated by NetworkFeature.TRAFFIC_MIDRIVE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://mntg.carsprogram.org",
+      "note": "Minnesota's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511MN (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://netg.carsprogram.org",
+      "note": "Nebraska's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511NE (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://opengeo.ncep.noaa.gov",
       "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around every covered state in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://publicapi.ohgo.com",
+      "note": "Ohio's OHGO API (ODOT): core/traffic Ohgo.kt fetches /api/v1/incidents, construction, cameras and digital-signs whole (page-all), the same data OHGO's own site shows, with the user's own free key (Settings > Live data > OHGO key, stored encrypted, sent to this host only, as the api-key query parameter the API documents) and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://sd.cdn.iteris-atis.com",
+      "note": "South Dakota's SD511 (Iteris) CDN: core/traffic SouthDakota.kt fetches the GeoJSON files its own map reads, /geojson/icons/metadata/icons.road-work, incidents-accidents, restriction, obstructions and scheduled-events (the events) and icons.cameras and icons.rwis (camera sites), the whole state every time, no key and nothing about the user's location, search or route; a camera's still (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) is kept only on this host and fetched through NetworkGate.get when its card opens. Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
       "value": "https://tmc.deldot.gov",
       "note": "Delaware's DelDOT (its Transportation Management Center): core/traffic DelDot.kt fetches the files DelDOT's own traffic map reads, /json/advisory.json, vmsg-vms.json and videocamera.json: the advisories, message signs and cameras of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
     },
     {
+      "value": "https://travelmidwest.com",
+      "note": "Illinois' Travel Midwest (the Gateway Traveler Information System of IDOT and the Illinois Tollway): core/traffic TravelMidwest.kt posts `{}` (the only request the site answers; NetworkGate.post) to the GeoJSON files its own map reads, /lmiga/incidentMap.json, constructionMap.json?type=lines, cameraMap.json and dmsMap.json: the incidents, road work, cameras and message signs of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_TRAVEL_MIDWEST (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://www.511pa.com",
       "note": "511PA (PennDOT's 511, built by IBI Group): core/traffic Ibi511.kt (Ibi511.PA) fetches the site's own map layers (/map/mapIcons/MajorRouteClosure, OtherRouteClosure, MajorRouteIncident, OtherRouteIncident, ActiveRoadwork and MessageSigns: every item's position) and list pages (/List/GetData/Closures, Incidents, traffic, MessageSigns and Cameras, 100 rows a page), the same requests 511pa.com's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_511PA (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://www.kandrive.gov",
+      "note": "Kansas's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
     },
     {
       "value": "https://www.mapbox.com",
@@ -931,6 +1047,14 @@
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
+      "value": "kandrive.gov",
+      "note": "Text only: the Settings > Live data note for KanDrive (feature/settings strings.xml, live_kandrive_note) names the site whose lists and map query are read. Requests go to https://www.kandrive.gov and https://kstg.carsprogram.org (see that entry)."
+    },
+    {
+      "value": "kscam.carsprogram.org",
+      "note": "KDOT's RWIS camera stills on the CARS platform (https://kscam.carsprogram.org/KDOT_<id>_IMAGE001.JPG): core/traffic CarsStates.kt keeps a Kansas camera's still only on KDOT's hosts, this one among them; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
+    },
+    {
       "value": "mapbox.cn",
       "note": "Strings inside the MapLibre Android SDK (attribution and feedback links, Mapbox host checks inherited from its Mapbox lineage). App code never uses them: the map style is bundled (assets/light.json, dark.json) and tiles come from pmtiles://file:// on the phone."
     },
@@ -939,8 +1063,24 @@
       "note": "Strings inside the MapLibre Android SDK (attribution and feedback links, Mapbox host checks inherited from its Mapbox lineage). App code never uses them: the map style is bundled (assets/light.json, dark.json) and tiles come from pmtiles://file:// on the phone."
     },
     {
+      "value": "micamerasimages.net",
+      "note": "Mi Drive's camera stills (https://micamerasimages.net/thumbs/<camera>.flv.jpg): core/traffic MiDrive.kt keeps a camera's still only on this host; the camera card fetches it through NetworkGate.get. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_MIDRIVE (Settings > Live data, off by default)."
+    },
+    {
       "value": "overturemaps.org",
       "note": "Text in the About screen's attribution for Overture Maps places (feature/settings strings.xml). Not a request."
+    },
+    {
+      "value": "public.carsprogram.org",
+      "note": "The CARS platform's camera stills (Indiana's video previews, Minnesota's stills, https://public.carsprogram.org/cameras/<state>/<camera>): core/traffic CarsStates.kt keeps a camera's still only on each state's own hosts (CarsStates.Site.stillHosts); the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by the state's toggle (NetworkFeature.TRAFFIC_511IN, TRAFFIC_511MN; Settings > Live data, off by default)."
+    },
+    {
+      "value": "publicapi.ohgo.com",
+      "note": "Text only: the Settings > Live data note for OHGO (feature/settings strings.xml, live_ohgo_note) names where the owner registers for a key and where the key is sent. Requests go to https://publicapi.ohgo.com (see that entry)."
+    },
+    {
+      "value": "sd.cdn.iteris-atis.com",
+      "note": "SD511's CDN as a bare host: core/traffic SouthDakota.kt compares a camera's still link against it (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) and follows only matches, through NetworkGate.get when the card opens. Requests go to https://sd.cdn.iteris-atis.com (see that entry). Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
       "value": "tcp://*:8002",
@@ -953,6 +1093,14 @@
     {
       "value": "video.deldot.gov",
       "note": "DelDOT's camera stream server: core/traffic DelDot.kt keeps a camera's https playlist (urls.m3u8s, https://video.deldot.gov:443/live/<camera id>.stream/playlist.m3u8) only on this host. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
+    },
+    {
+      "value": "www.dot.nd.gov",
+      "note": "NDDOT's camera stills: core/traffic NorthDakota.kt keeps a camera's view links (Link, Link2..., https://www.dot.nd.gov/travel-info/cameras/<camera>.jpg) only on this host; the camera card fetches the first through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_NDDOT (Settings > Live data, off by default)."
+    },
+    {
+      "value": "www.kcscout.net",
+      "note": "KC Scout's (Kansas City's) camera stills: core/traffic CarsStates.kt keeps a Kansas camera's still only on KDOT's hosts, this one among them; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
     }
   ],
   "assets": [
