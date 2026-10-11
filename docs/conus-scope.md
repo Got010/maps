@@ -20,7 +20,8 @@ spike before committing to them; the New York numbers are measured (release v0.1
     pack and the packs naming its regions into one tile folder (`ValhallaConfigFactory.usingTilesDir`, which
     valhalla-mobile 0.6.3 has), with Loki's connectivity check off.
   - Search for the new regions from OSM alone (no Overture, no state address files); New York keeps
-    `search-nys`. Live data (511, DOT cameras, weather alerts) stays New York only for now.
+    `search-nys`. Live data (511, DOT cameras, weather alerts) stays New York only for now; weather covers every
+    state since October 2026 (section 5).
 - Phases: (1) pipeline and a test build that measures every pack and routes real trips on the split packs
   (`.github/workflows/states.yml`); (2) releases ship the new packs under a second manifest, so apps that
   don't know them never download them; (3) the app reads that manifest, routes from a tile folder, searches
@@ -95,10 +96,11 @@ Proposed design, to be proven by a spike:
 
 ### 5. Weather
 
-Weather is New York only today. NWS alerts cover every state (one `area=` request per state, or the national
-feed); the radar picture is one image of New York's box and would need a larger box or tiles; the 7-day
-forecast pack samples 432 points over New York, about 15,000 for the lower 48 at the same spacing, so its
-workflow would run much longer.
+Weather was New York only until October 2026; it now covers every state Southbound offers (HANDOFF, "Weather in
+every covered state"): one `area=` request lists all seven, current weather is one `@XX` request per state, the
+radar picture is one image of a box around all of them, and the forecast pack's lattice keeps the points some
+basemap region holds (477). For the lower 48 the alerts would be the national feed, radar tiles instead of one
+picture, and about 15,000 forecast points at the same spacing, so that workflow would run much longer.
 
 ### 6. Transit
 

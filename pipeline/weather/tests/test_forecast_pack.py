@@ -38,6 +38,24 @@ class ForecastPackTest(unittest.TestCase):
             bounds = tuple(json.load(f)["regions"]["nys"]["bounds"])
         self.assertEqual(432, len(fp.lattice(bounds)))
 
+    def test_the_pack_covers_every_basemap_region(self):
+        # Since October 2026 the lattice spans every covered state, keeping the points some basemap region holds.
+        with open(os.path.join(HERE, "..", "..", "regions.json")) as f:
+            regions = json.load(f)["regions"]
+        kept = fp.covered([
+            (39.95, -75.17),  # Philadelphia
+            (39.29, -76.61),  # Baltimore
+            (38.90, -77.04),  # Washington, DC
+            (41.77, -72.67),  # Hartford
+            (42.65, -73.76),  # Albany
+            (42.36, -71.06),  # Boston: no region
+            (39.40, -78.90),  # West Virginia, inside Maryland's box but not its area
+            (40.00, -81.00),  # Ohio
+        ], regions)
+        self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76)], kept)
+        pts = fp.covered(fp.lattice(tuple(regions["all"]["bounds"])), regions)
+        self.assertEqual(477, len(pts))
+
     def test_icon_codes(self):
         self.assertEqual("skc", fp.icon_code("https://api.weather.gov/icons/land/day/skc?size=medium"))
         self.assertEqual("sct", fp.icon_code("https://api.weather.gov/icons/land/night/sct/rain_showers,20?size=medium"))
