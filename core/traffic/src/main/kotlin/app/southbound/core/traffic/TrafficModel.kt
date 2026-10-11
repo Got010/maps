@@ -27,6 +27,8 @@ enum class TrafficSource(val label: String, val feature: NetworkFeature, val idP
     NY_511("511NY", NetworkFeature.TRAFFIC_511NY, ""),
     PA_511("511PA", NetworkFeature.TRAFFIC_511PA, "pa:"),
     CT_ROADS("CTroads", NetworkFeature.TRAFFIC_CTROADS, "ct:"),
+    MD_CHART("CHART", NetworkFeature.TRAFFIC_CHART_MD, "md:"),
+    DE_DELDOT("DelDOT", NetworkFeature.TRAFFIC_DELDOT, "de:"),
 }
 
 /** One state 511 event: a crash, closure, work zone or special event, at a point. */
@@ -91,9 +93,14 @@ data class TrafficCamera(
     /** Turned off or blocked by its operator; no live image. */
     val disabled: Boolean,
     val source: TrafficSource = TrafficSource.NY_511,
+    /**
+     * Its live video's HLS playlist, for a camera that has no still (CHART's and DelDOT's): the card shows a frame of
+     * the newest segment instead ([Hls]).
+     */
+    val videoUrl: String? = null,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
-    val hasImage: Boolean get() = !disabled && !imageUrl.isNullOrBlank()
+    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank())
 }
 
 /**

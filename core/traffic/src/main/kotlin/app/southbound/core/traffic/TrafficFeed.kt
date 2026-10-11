@@ -21,7 +21,8 @@ import java.util.Collections
  * interval (HANDOFF: 511NY every 2-5 minutes, NYC DOT every 1-2), so the map
  * and navigation can ask as often as they like. Requests carry no location,
  * search or route and always fetch the whole state or city. The other states'
- * 511s (511PA, CTroads: [Ibi511]) come in beside 511NY, each under its own toggle.
+ * 511s ([StateTraffic]: 511PA and CTroads, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot])
+ * come in beside 511NY, each under its own toggle.
  */
 class TrafficFeed(
     private val gate: NetworkGate,
@@ -39,8 +40,12 @@ class TrafficFeed(
     private val eventLayers = HashMap<FiveElevenNyCars.EventLayer, Hashed<List<Incident>>>()
     private var signsHashed: Hashed<List<MessageSign>>? = null
 
-    // The IBI-built 511s, by source: their events, cameras and signs as last fetched.
-    private val ibi = Ibi511.SITES.map { site -> Ibi511Client(site) { url -> fetch(site.source.feature, url) } }
+    // The other states' 511s, by source: their events, cameras and signs as last fetched.
+    private val ibi: List<StateTraffic> = Ibi511.SITES.map { site -> Ibi511Client(site) { url -> fetch(site.source.feature, url) } } +
+        listOf(
+            MarylandChart.Client { url -> fetch(TrafficSource.MD_CHART.feature, url) },
+            DelDot.Client { url -> fetch(TrafficSource.DE_DELDOT.feature, url) },
+        )
     private val ibiEvents = HashMap<TrafficSource, Cached<List<Incident>>>()
     private val ibiCameras = HashMap<TrafficSource, Cached<List<TrafficCamera>>>()
     private val ibiSigns = HashMap<TrafficSource, Cached<List<MessageSign>>>()
@@ -122,9 +127,9 @@ class TrafficFeed(
                     }
                 }
             }
-            // 511PA and CTroads: the same three, each site under its own toggle.
+            // 511PA, CTroads, CHART and DelDOT: the same three, each under its own toggle.
             val ibiJobs = ibi.map { client ->
-                val source = client.site.source
+                val source = client.source
                 val on = gate.isAllowed(source.feature)
                 val eventsJob = async {
                     val had = ibiEvents[source]
@@ -146,7 +151,7 @@ class TrafficFeed(
                     val had = ibiSigns[source]
                     when {
                         !on -> null
-                        !mapExtras || (!force && had?.fresh(now, IBI_SIGNS_TTL_MILLIS) == true) -> had
+                        !mapExtras || (!force && had?.fresh(now, client.signsTtlMillis) == true) -> had
                         else -> load(now, had, extraErrors, "${source.label} signs") { client.signs() }
                     }
                 }
@@ -168,10 +173,10 @@ class TrafficFeed(
             mainErrors.any { extra.startsWith(it.substringBefore(": ")) && it.substringAfter(": ") == extra.substringAfter(": ") }
         }
         TrafficSnapshot(
-            incidents = incidents?.value.orEmpty() + ibi.flatMap { ibiEvents[it.site.source]?.value.orEmpty() },
+            incidents = incidents?.value.orEmpty() + ibi.flatMap { ibiEvents[it.source]?.value.orEmpty() },
             speeds = speeds?.value.orEmpty(),
-            cameras = cameras?.value.orEmpty() + ibi.flatMap { ibiCameras[it.site.source]?.value.orEmpty() },
-            signs = signs?.value.orEmpty() + ibi.flatMap { ibiSigns[it.site.source]?.value.orEmpty() },
+            cameras = cameras?.value.orEmpty() + ibi.flatMap { ibiCameras[it.source]?.value.orEmpty() },
+            signs = signs?.value.orEmpty() + ibi.flatMap { ibiSigns[it.source]?.value.orEmpty() },
             fetchedAt = now,
             errors = shownErrors,
             speedsStale = speedsStale && speeds != null,

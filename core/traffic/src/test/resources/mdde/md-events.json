@@ -1,0 +1,147 @@
+{
+ "data": [
+  {
+   "additionalData": {
+    "actionTypes": [
+     {
+      "actionDescription": "FLASH FUNCTION NOT WORKING PROPERLY",
+      "actionType": "Other"
+     }
+    ]
+   },
+   "closed": false,
+   "county": "Frederick",
+   "createTime": 1791675669000,
+   "description": "Action Event @ MD 77 (E MAIN ST) @ WATER ST [Traffic Control Signal]",
+   "direction": "East",
+   "id": "85ffbbddbead00ca006ad32ec4235c0a",
+   "incidentType": "Other",
+   "lanes": [],
+   "lanesStatus": "",
+   "lastCachedDataUpdateTime": 1791678559454,
+   "lat": 39.62369,
+   "lon": -77.41158,
+   "name": "Action Event @ MD 77 (E MAIN ST) @ WATER ST [Traffic Control Signal]",
+   "opCenter": "SOC",
+   "other": "THURMONT PD",
+   "participantOnScene": false,
+   "participants": [
+    "SHA Signal Ops Unit - 03709SG no AVL"
+   ],
+   "source": "Local Police",
+   "startDateTime": 1791667677000,
+   "trafficAlert": false,
+   "trafficAlertTextMsg": "",
+   "type": 249,
+   "vehicles": "0 vehicles involved."
+  },
+  {
+   "additionalData": {
+    "actionTypes": [
+     {
+      "actionDescription": "",
+      "actionType": "Signal On Flash"
+     }
+    ]
+   },
+   "closed": false,
+   "county": "Prince George's",
+   "createTime": 1791675661000,
+   "description": "Action Event @ MD 201 (KENILWORTH AVE) @ RITTENHOUSE ST [Traffic Control Signal]",
+   "direction": "North",
+   "id": "6b00a85da53f00ca006ad32ec4235c0a",
+   "incidentType": "Other",
+   "lanes": [],
+   "lanesStatus": "",
+   "lastCachedDataUpdateTime": 1791678559456,
+   "lat": 38.963505,
+   "lon": -76.91896,
+   "name": "Action Event @ MD 201 (KENILWORTH AVE) @ RITTENHOUSE ST [Traffic Control Signal]",
+   "opCenter": "SOC",
+   "other": "(431) Muscelli, James",
+   "participantOnScene": false,
+   "participants": [
+    "SHA Signal Ops Unit - 04139SG no AVL"
+   ],
+   "source": "CHART Unit",
+   "startDateTime": 1791639389000,
+   "trafficAlert": false,
+   "trafficAlertTextMsg": "",
+   "type": 249,
+   "vehicles": "0 vehicles involved."
+  },
+  {
+   "additionalData": {
+    "actionTypes": []
+   },
+   "closed": false,
+   "county": "Kent",
+   "createTime": 1791681224000,
+   "description": "Incident @ MD 298 SOUTH BETWEEN ANNIE CROW RD AND EARL NICHOLSON RD",
+   "direction": "South",
+   "id": "490028f6c9e000ca006ad32ec4235c0a",
+   "incidentType": "Debris In Roadway",
+   "lanes": [
+    {
+     "laneDescription": "RS",
+     "laneDirection": "south",
+     "laneStatus": "closed",
+     "laneStatusTimestamp": 1791680804000,
+     "laneTrafficFlowDirection": "primary",
+     "laneType": "Shoulder"
+    },
+    {
+     "laneDescription": "L1",
+     "laneDirection": "south",
+     "laneStatus": "closed",
+     "laneStatusTimestamp": 1791680804000,
+     "laneTrafficFlowDirection": "primary",
+     "laneType": "Traffic Lane"
+    },
+    {
+     "laneDescription": "Dbl Ylw",
+     "laneDirection": "north",
+     "laneStatus": "open",
+     "laneStatusTimestamp": 0,
+     "laneTrafficFlowDirection": "primary",
+     "laneType": "Double Yellow Line"
+    },
+    {
+     "laneDescription": "L1",
+     "laneDirection": "north",
+     "laneStatus": "open",
+     "laneStatusTimestamp": 1791681054000,
+     "laneTrafficFlowDirection": "bi-dir",
+     "laneType": "Traffic Lane"
+    },
+    {
+     "laneDescription": "RS",
+     "laneDirection": "north",
+     "laneStatus": "open",
+     "laneStatusTimestamp": 0,
+     "laneTrafficFlowDirection": "primary",
+     "laneType": "Shoulder"
+    }
+   ],
+   "lanesStatus": "1/1 Southbound-Traffic Lane, Shoulder closed",
+   "lastCachedDataUpdateTime": 1791681226494,
+   "lat": 39.23765,
+   "lon": -76.15689,
+   "name": "Incident @ MD 298 SOUTH BETWEEN ANNIE CROW RD AND EARL NICHOLSON RD",
+   "opCenter": "SOC",
+   "other": "KENT CO. 911",
+   "participantOnScene": true,
+   "participants": [],
+   "source": "Local Police",
+   "startDateTime": 1791680759000,
+   "trafficAlert": true,
+   "trafficAlertTextMsg": "",
+   "type": 2,
+   "vehicles": "0 vehicles involved."
+  }
+ ],
+ "error": null,
+ "success": true,
+ "totalCount": 3,
+ "warnings": null
+}

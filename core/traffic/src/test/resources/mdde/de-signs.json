@@ -1,0 +1,45 @@
+{
+ "timestamp": "2026-10-11T01:25:20Z",
+ "timestampMS": "1791681920099",
+ "version": "1.1",
+ "uid": "-299487316470878765",
+ "status": "normal",
+ "message": "",
+ "signTypeCount": 1,
+ "totalSignCount": 2,
+ "signHash": "-1049247919",
+ "signTypes": [
+  {
+   "id": 0,
+   "name": "VMS",
+   "count": 2,
+   "hash": "-1129751474",
+   "signs": [
+    {
+     "systemId": 14850,
+     "permit": "KVMS001",
+     "timestamp": 1791681920952,
+     "messageLastPolled": 1791696064852,
+     "messageLastUpdated": 1791681920955,
+     "lon": -75.43455,
+     "lat": 38.97066,
+     "enable": true,
+     "title": "DE 1 @ NORTH OF THOMPSONVILLE",
+     "message": "FASTER<br/>IS<br/>FATAL<br/>---------<br/>SLOWER<br/>IS<br/>SAFE"
+    },
+    {
+     "systemId": 14962,
+     "permit": "KVMS002",
+     "timestamp": 1791681920952,
+     "messageLastPolled": 1791696064996,
+     "messageLastUpdated": 1791681920955,
+     "lon": -75.454194,
+     "lat": 39.10098,
+     "enable": true,
+     "title": "DE 1 @ DE 9",
+     "message": "NOW THAT WE<br/>HAVE YOUR<br/>ATTENTION<br/>---------<br/>SLOW DOWNSERIOUSLY"
+    }
+   ]
+  }
+ ]
+}
