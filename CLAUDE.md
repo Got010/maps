@@ -15,8 +15,13 @@ The app is named Southbound. Application ID and Kotlin package: `app.southbound`
 
 ## Distribution
 - The APK ships only through GitHub Releases (Obtainium tracks them). No Play Store.
-- A `vX.Y.Z` tag runs .github/workflows/release.yml, which builds, signs and
-  publishes the APK. versionCode comes from the tag, so tags must only go up.
+- Every merge to main releases by itself: .github/workflows/release.yml picks
+  the next patch version, builds, signs and publishes the APK, and rebuilds the
+  map data when the pipeline changed (otherwise it carries the previous
+  release's packs over). Nobody tags; a `vX.Y.Z` tag push is only an override
+  for a commit already on main. Versions only go up. The 2nd of each month
+  rebuilds the data on a schedule. Merges that touch the pipeline each cost a
+  full data rebuild (an hour or more), so land related ones together.
 - Anything a user does on the phone must work on the signed release build,
   not only debug builds (no `run-as` workflows).
 - The owner has no computer, only a phone with Termux and the GitHub app.
