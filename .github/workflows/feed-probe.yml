@@ -87,6 +87,22 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py dot-dc
+      - name: 511PA and CTroads, icons and lists joined
+        timeout-minutes: 8
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py ibi-join
+      - name: Maryland CHART, more
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py chart-more
+      - name: Delaware DelDOT, more
+        timeout-minutes: 4
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py deldot-more
+      - name: 511NJ config
+        timeout-minutes: 3
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py nj-config
       - name: NYS Address Points
         timeout-minutes: 4
         continue-on-error: true

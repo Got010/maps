@@ -9,7 +9,8 @@ carries a location, search text or route.
 
     feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses
                                   weather-alerts weather-forecast weather-radar weather-current weather-states
-                                  dot-ct dot-nj dot-pa dot-md dot-de dot-dc (default: all)
+                                  dot-ct dot-nj dot-pa dot-md dot-de dot-dc ibi-join chart-more deldot-more
+                                  nj-config (default: all)
 """
 
 import gzip
@@ -815,10 +816,133 @@ def dot_dc():
             print("   hub item", feat.get("id"), "|", p.get("title"), "|", p.get("type"), "|", p.get("url"))
 
 
+def _raw(url):
+    """(status, content type, body bytes) of a binary answer, such as a camera still."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+    print(f"... GET {url}", flush=True)
+    signal.alarm(45)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.headers.get("Content-Type"), r.read(5_000_000)
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get("Content-Type"), e.read(2000)
+    except Exception as e:  # noqa: BLE001 - a probe reports every failure
+        return None, None, f"{type(e).__name__}: {e}".encode()
+    finally:
+        signal.alarm(0)
+
+
+def _ibi_rows(site, name, limit=40):
+    """Every row of an IBI list, 100 a page (the sites' own cap), at most limit pages."""
+    rows, start, total = [], 0, None
+    for _ in range(limit):
+        q = urllib.parse.quote(json.dumps({"columns": [], "start": start, "length": 100}, separators=(",", ":")))
+        status, _, headers, body = get(f"{site}/List/GetData/{name}?query={q}", limit=20_000_000)
+        d = _json(body)
+        if not isinstance(d, dict) or not isinstance(d.get("data"), list):
+            print(f"   {name} start {start}: status {status}, not a page")
+            break
+        if start == 0:
+            print(f"   {name}: cache headers", {k: v for k, v in headers.items() if k.lower() in ("etag", "last-modified", "cache-control", "expires")})
+        total = d.get("recordsTotal")
+        rows += d["data"]
+        start += len(d["data"])
+        if not d["data"] or (total is not None and start >= total):
+            break
+    return rows, total
+
+
+def ibi_join():
+    head("IBI sites (511PA, CTroads): do map icons and list rows share ids, and does a camera still load")
+    for site, layers in (("https://www.511pa.com", ("MajorRouteClosure", "OtherRouteClosure", "MajorRouteIncident", "OtherRouteIncident",
+                                                     "ActiveRoadwork", "SpecialEvents", "WeatherEvents", "Detour", "TurnpikePlannedRoadwork",
+                                                     "MessageSigns", "Cameras")),
+                         ("https://ctroads.org", ("Incidents", "Closures", "Construction", "Congestion", "WeatherIncidents", "SpecialEvents",
+                                                  "MessageSigns", "Cameras"))):
+        print(f"--- {site}")
+        icons = {}
+        for layer in layers:
+            status, _, headers, body = get(f"{site}/map/mapIcons/{layer}", limit=20_000_000)
+            d = _json(body)
+            items = d.get("item2") if isinstance(d, dict) else None
+            icons[layer] = {str(i.get("itemId")): i.get("location") for i in items or [] if isinstance(i, dict)}
+            print(f"   icons {layer}: status {status} items {len(icons[layer])} cache",
+                  {k: v for k, v in headers.items() if k.lower() in ("etag", "last-modified", "cache-control")})
+        for name in ("Incidents", "Closures", "Construction", "traffic", "MessageSigns", "Cameras"):
+            rows, total = _ibi_rows(site, name)
+            ids = [str(r.get("DT_RowId")) for r in rows if isinstance(r, dict)]
+            print(f"   list {name}: total {total} rows {len(rows)} distinct ids {len(set(ids))}")
+            if not rows:
+                continue
+            for layer, found in icons.items():
+                both = len(set(ids) & set(found))
+                if both:
+                    print(f"      in icons {layer}: {both} of {len(set(ids))} (icons {len(found)})")
+            layer_names = {}
+            for r in rows:
+                k = (r.get("layerName"), r.get("type"))
+                layer_names[k] = layer_names.get(k, 0) + 1
+            if any(k != (None, None) for k in layer_names):
+                print("      layerName, type:", sorted(layer_names.items(), key=lambda kv: -kv[1])[:20])
+            print("      keys:", sorted({k for r in rows for k in r})[:70])
+            if name in ("Incidents", "Closures", "Construction", "traffic"):
+                for r in rows[:2]:
+                    print("      row:", json.dumps(r)[:1800])
+                print("      directions:", sorted({str(r.get("direction")) for r in rows})[:30])
+                print("      lanes:", sorted({str(r.get("laneDescription")) for r in rows})[:30])
+                print("      roadways:", sorted({str(r.get("roadwayName")) for r in rows})[:25])
+                print("      lastUpdated:", [r.get("lastUpdated") for r in rows[:5]])
+            if name == "MessageSigns":
+                print("      sample messages:", [(r.get("DT_RowId"), r.get("message"), r.get("message2"), r.get("status")) for r in rows[:6]])
+            if name == "Cameras":
+                first = next((r for r in rows if r.get("images")), None)
+                print("      directions:", sorted({str(r.get("direction")) for r in rows})[:20])
+                print("      images per camera:", sorted({len(r.get("images") or []) for r in rows}))
+                if first:
+                    img = first["images"][0]
+                    status, ctype, body = _raw(site + img.get("imageUrl", ""))
+                    print(f"      still {img.get('imageUrl')}: status {status} type {ctype} bytes {len(body)} jpeg {body[:3] == bytes([0xFF, 0xD8, 0xFF])}")
+                    status, ctype, body = _raw(f"{site}/map/Cctv/{first.get('id')}")
+                    print(f"      by camera id /map/Cctv/{first.get('id')}: status {status} type {ctype} bytes {len(body)}")
+
+
+def chart_more():
+    head("Maryland CHART: events with lanes, signs with pages, speed sensors")
+    base = "https://chartexp1.sha.maryland.gov/CHARTExportClientService"
+    status, d = try_json(f"{base}/getEventMapDataJSON.do", sample=100)
+    rows = (d or {}).get("data") or [] if isinstance(d, dict) else []
+    for r in [r for r in rows if r.get("lanes")][:3] + [r for r in rows if r.get("incidentType") not in ("Other",)][:6] + [r for r in rows if r.get("closed")][:3]:
+        print("   event:", json.dumps(r)[:2000])
+    print("   types:", sorted({(r.get("type"), r.get("incidentType")) for r in rows}, key=str))
+    status, d = try_json(f"{base}/getDMSMapDataJSON.do", sample=100)
+    rows = (d or {}).get("data") or [] if isinstance(d, dict) else []
+    for r in [r for r in rows if "[np]" in (r.get("msgMulti") or "").lower()][:3]:
+        print("   sign with pages:", json.dumps(r)[:1500])
+    print("   signs with text:", sum(1 for r in rows if (r.get("msgPlain") or "").strip()), "of", len(rows))
+    status, d = try_json(f"{base}/getTSSMapDataJSON.do", sample=1500)
+
+
+def deldot_more():
+    head("Delaware DelDOT: signs, Waze alerts, red light cameras")
+    for name in ("vmsg-vms.json", "vmsg-vsl.json", "wazealert.json", "rlecamera.json"):
+        status, _, _, body = get(f"https://tmc.deldot.gov/json/{name}", limit=20_000_000)
+        print(f"--- {name}: status {status} bytes {len(body)}")
+        print("   ", body[:2500])
+
+
+def nj_config():
+    head("511NJ: the app's own config, with a phone browser's headers")
+    for url in ("https://511nj.org/assets/configs/application.json", "https://511nj.org/client/get/event",
+                "https://511nj.org/api/client/get/event"):
+        status, _, headers, body = get(url, headers={**BROWSER, "Referer": "https://511nj.org/"}, limit=2_000_000)
+        print(f"   {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}:", body[:1500].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
-            "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc}
+            "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
+            "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config}
 
 
 class Timeout(Exception):
