@@ -1688,6 +1688,65 @@ def dot_midwest_7():
             print(f"   {src[-70:]}: status {status} bytes {len(js)}; urls {urls[:40]}; paths {rel[:40]}")
 
 
+def dot_midwest_8():
+    """Eighth round: which layer slugs the CARS sites' mapFeaturesQuery answers (one at a time), what an Event
+    carries, and the dashboard's collections; Mi Drive's AllForMap feeds."""
+    gql_features = ('{"query":"query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri '
+                    'features { id geometry properties } __typename } error { message type } } }",'
+                    '"variables":{"input":{"north":49.5,"south":36,"east":-84,"west":-104.5,"zoom":7,"layerSlugs":[%s],"nonClusterableUris":["dashboard"]}}}')
+    slugs = ("incidents", "closures", "construction", "future", "normalEvents", "roadwork", "events", "roadReports", "unplannedEvents",
+             "plannedEvents", "incident", "closure", "roadConditions", "WazeAlerts", "weatherWarningsAreaEvents", "electronicSigns", "normalCameras")
+    for state, site in (("Indiana", "https://511in.org"), ("Minnesota", "https://511mn.org"), ("Iowa", "https://511ia.org"),
+                        ("Nebraska", "https://511.nebraska.gov"), ("Kansas", "https://www.kandrive.gov")):
+        head(f"{state}: layer slugs one at a time")
+        gql = site + "/api/graphql"
+        from collections import Counter
+        for slug in slugs:
+            status, h, doc, text = _post_json(gql, gql_features % json.dumps(slug), headers={"Referer": site + "/", "Origin": site})
+            data = (doc or {}).get("data") if isinstance(doc, dict) else None
+            mf = ((data or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(data, dict) else None
+            if not isinstance(mf, list):
+                print(f"   {slug}: status {status} bytes {len(text)}:", text[:300].replace("\n", " "))
+                continue
+            icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf for f in (m.get("features") or []))
+            types = Counter(m.get("__typename") for m in mf)
+            uris = Counter((m.get("uri") or "").split("/")[0] for m in mf)
+            print(f"   {slug}: {len(mf)} map features, {len(text)} bytes; types {types.most_common(4)}; uri kinds {uris.most_common(4)}; icons {icons.most_common(6)}")
+            if mf and slug in ("incidents", "closures", "construction", "future", "normalEvents", "roadwork", "events"):
+                print("   first:", json.dumps(mf[0])[:1500])
+        # What an Event carries, on the map features and in the dashboard's collections.
+        for name, query in (
+            ("event fields", gql_features.replace("features { id geometry properties } __typename", "features { id geometry properties } __typename ... on Event { title description priority isWazeEvent cityReference color icon agencyAttribution { agencyName } lastUpdated { timestamp timezone } beginTime { timestamp timezone } endTime { timestamp timezone } }") % '"closures","incidents","construction","normalEvents"'),
+            ("dashboard collections", '{"query":"query Dashboard($layerSlugs: [String!]!) { dashboardQuery { collections(layerSlugs: $layerSlugs) { uri title cityReference bbox icon color __typename ... on Event { description priority isWazeEvent agencyAttribution { agencyName } lastUpdated { timestamp timezone } beginTime { timestamp timezone } } } } }","variables":{"layerSlugs":["closures","incidents","construction","normalEvents"]}}'),
+            ("event query", '{"query":"query Event($eventId: ID!) { eventQuery(eventId: $eventId) { event { uri title description bbox features { id geometry properties } } error { type message } } }","variables":{"eventId":"CARSx-43373"}}'),
+        ):
+            status, h, doc, text = _post_json(gql, query, headers={"Referer": site + "/", "Origin": site})
+            print(f"   {name}: status {status} bytes {len(text)}:", text[:2500].replace("\n", " "))
+
+    head("Michigan: Mi Drive's AllForMap feeds")
+    base = "https://mdotjboss.state.mi.us/MiDrive/"
+    for path in ("camera/AllForMap", "construction/AllForMap", "dms/AllForMap", "incidents/AllForMap", "incidents/AllForPage", "plows/AllForMap",
+                 "tollBridges/allForMap"):
+        for headers in ({**BROWSER, "Accept": "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"},
+                        {"User-Agent": UA, "Accept": "application/json"}):
+            status, _, h, body = get(base + path, headers=headers, limit=30_000_000)
+            label = "browser" if "Referer" in headers else "app"
+            print(f"   {path} ({label}): status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+            doc = _json(body)
+            rows = doc if isinstance(doc, list) else (doc.get("data") or doc.get("features") or doc.get("items")) if isinstance(doc, dict) else None
+            if isinstance(doc, dict):
+                print("   top keys:", list(doc)[:12])
+            if isinstance(rows, list):
+                print(f"   rows {len(rows)}; keys {list(rows[0].keys())[:40] if rows and isinstance(rows[0], dict) else None}")
+                for r in rows[:3]:
+                    print("   row:", json.dumps(r)[:1500])
+            if status == 200:
+                break
+    for path in ("camera/getCameraInformation/", "dms/getDMSInfo/", "construction/getConstructionInformation/"):
+        status, _, h, body = get(base + path + "1", headers={**BROWSER, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest", "Referer": base + "map"}, limit=2_000_000)
+        print(f"   {path}1: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:600].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1695,7 +1754,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
             "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5,
-            "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7}
+            "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
+            "dot-midwest-8": dot_midwest_8}
 
 
 class Timeout(Exception):
