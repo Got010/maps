@@ -1845,6 +1845,8 @@ def app_requests():
     """Every Midwest request exactly as the phone makes it (NetworkGate: User-Agent "Southbound", Java's default
     Accept, nothing else; a POST adds Content-Type and Accept JSON), so the shipped readers are known to be answered,
     and the build's DOT camera fetchers (pipeline/search/dot_cameras.py) run against every state."""
+    from collections import Counter
+
     java_accept = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
     app = {"User-Agent": "Southbound", "Accept": java_accept}
     app_post = {"User-Agent": "Southbound", "Content-Type": "application/json", "Accept": "application/json"}
@@ -1879,17 +1881,24 @@ def app_requests():
         show(label, status, h, body)
     query = ("query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri "
              "features { id geometry properties } __typename } error { message type } } }")
-    for site, (w, so, e, n) in (("https://511in.org", (-88.2, 37.7, -84.7, 41.8)), ("https://511mn.org", (-97.3, 43.4, -89.4, 49.5)),
-                                ("https://511ia.org", (-96.7, 40.3, -90.0, 43.6)), ("https://511.nebraska.gov", (-104.2, 39.9, -95.2, 43.1)),
-                                ("https://www.kandrive.gov", (-102.2, 36.9, -94.5, 40.1))):
+    # The app's layer names per site (CarsStates.EVENT_LAYERS; Iowa's own, CarsStates.IOWA_LAYERS).
+    usual = ["incidents", "closures", "construction", "roadReports"]
+    for site, (w, so, e, n), slugs in (("https://511in.org", (-88.2, 37.7, -84.7, 41.8), usual), ("https://511mn.org", (-97.3, 43.4, -89.4, 49.5), usual),
+                                       ("https://511ia.org", (-96.7, 40.3, -90.0, 43.6), ["iowaAppIncident", "iowaAppRoadwork"]),
+                                       ("https://511.nebraska.gov", (-104.2, 39.9, -95.2, 43.1), usual),
+                                       ("https://www.kandrive.gov", (-102.2, 36.9, -94.5, 40.1), usual)):
         body = json.dumps({"query": query, "variables": {"input": {"north": n, "south": so, "east": e, "west": w, "zoom": 14,
-                           "layerSlugs": ["incidents", "closures", "construction", "roadReports"], "nonClusterableUris": ["dashboard"]}}},
+                           "layerSlugs": slugs, "nonClusterableUris": ["dashboard"]}}},
                           separators=(",", ":")).encode()
         status, _, h, text = get(site + "/api/graphql", headers=app_post, method="POST", data=body, limit=30_000_000)
         doc = _json(text)
         mf = (((doc or {}).get("data") or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(doc, dict) else None
         events = sum(1 for m in mf if m.get("__typename") == "Event") if isinstance(mf, list) else None
         show(f"{site} map query ({events} events)", status, h, text)
+        if isinstance(mf, list):
+            icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf if m.get("__typename") == "Event"
+                            for f in (m.get("features") or []) if (f.get("geometry") or {}).get("type") == "Point")
+            print("      icons:", icons.most_common(8))
 
     head("The build's DOT camera lists, every state")
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline", "search"))

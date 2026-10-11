@@ -23,8 +23,6 @@ Settings > What each state has (`core/packs/Coverage.kt`). In short:
   feeds are studied and the maps built), DC (no 511) and Missouri (its map
   publishes no feed the app can read).
 - **Traffic only with your own free key:** Ohio (OHGO).
-- **Cameras and signs but no incidents or closures:** Iowa (511IA answers the
-  app's events query with none; being looked into).
 - **No avoiding DOT cameras:** New Jersey, DC, Ohio and Missouri.
 - **No message signs:** Michigan, North Dakota and South Dakota.
 - **Traffic speeds and transit:** New York City only.
