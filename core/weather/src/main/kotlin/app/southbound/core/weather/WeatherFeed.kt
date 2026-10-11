@@ -53,14 +53,19 @@ data class WeatherSnapshot(
  */
 object Radar {
     /**
-     * West, south, east, north: New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC with a
-     * margin, the same for every phone.
+     * West, south, east, north: every covered state, Kansas to Long Island and Missouri's boot heel to the Northwest
+     * Angle, with a margin, the same for every phone (the east alone was -80.6, 37.8, -71.7, 45.1 until the Midwest
+     * was offered in October 2026). One picture of all of it: a phone asks for the same bytes wherever its map is.
      */
-    val BOUNDS = doubleArrayOf(-80.6, 37.8, -71.7, 45.1)
+    val BOUNDS = doubleArrayOf(-104.2, 35.9, -71.6, 49.5)
 
-    /** About 870 m a pixel, as the New York picture was. */
-    const val WIDTH = 1140
-    const val HEIGHT = 1250
+    /**
+     * About 1.5 km a pixel in Web Mercator units (1.1 km on the ground at 45 degrees north; the east's picture had
+     * 870 m), since the box is three times as wide: MRMS itself is a kilometre, and the picture stays within a
+     * megabyte or two of PNG every three minutes while the layer is shown.
+     */
+    const val WIDTH = 2400
+    const val HEIGHT = 1360
 
     /**
      * MRMS quality-controlled base reflectivity from NCEP's map server, as a WMS GetMap of
