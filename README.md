@@ -1,17 +1,34 @@
 # Southbound
 
 A privacy-first, offline Android maps app for New York, New Jersey,
-Connecticut, Pennsylvania, Maryland, Delaware and DC. It installs only
+Connecticut, Pennsylvania, Maryland, Delaware, DC and the twelve Midwest
+states (Ohio to Kansas and the Dakotas). It installs only
 from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 [CLAUDE.md](CLAUDE.md).
 
-**Status: Phase 3.** Offline maps, search and directions in eleven regional
+**Status: Phase 3.** Offline maps, search and directions in twenty-six regional
 packs across those states (pick the ones you want), drive, walk and bike directions
 with spoken turn-by-turn guidance, and NYC subway, bus, LIRR and Metro-North
 trip planning, all on the phone, plus saved places and recents kept encrypted
 on the phone, speed limits while navigating and 3D buildings. Live transit
-times, 511NY incidents (with routes steering around closures) and NYC DOT
-traffic speeds are opt-in extras.
+times, each state's 511 incidents, cameras and signs (with routes steering
+around closures), weather and NYC DOT traffic speeds are opt-in extras.
+
+### What each state has
+
+Not every state publishes everything. The app says which, and why, under
+Settings > What each state has (`core/packs/Coverage.kt`). In short:
+
+- **No traffic feed:** New Jersey (511NJ refuses GitHub's servers, where the
+  feeds are studied and the maps built), DC (no 511) and Missouri (its map
+  publishes no feed the app can read).
+- **Traffic only with your own free key:** Ohio (OHGO).
+- **No avoiding DOT cameras:** New Jersey, DC, Ohio and Missouri.
+- **No message signs:** Michigan, North Dakota and South Dakota.
+- **Traffic speeds and transit:** New York City only.
+- **Search** outside New York has OpenStreetMap's businesses and house numbers
+  alone; the gas price is the US average outside New York and the Central
+  Atlantic states.
 
 ## Install
 
@@ -30,7 +47,7 @@ Southbound keeps itself current from its own releases (Settings > Updates):
   Settings > Updates). On first start, and then daily, Southbound reads the
   latest release's manifest and downloads, for each ticked region, its map,
   search and local streets for directions, plus main roads for every state
-  (New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC)
+  (the east's, the Midwest's, and the seam between them, as your regions need)
   and NYC transit, fetching only the
   packs that changed, on Wi-Fi unless you allow mobile data. Each download is checked
   against its published SHA-256 before it replaces the old pack, and the map
