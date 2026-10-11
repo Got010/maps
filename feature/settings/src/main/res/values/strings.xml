@@ -114,6 +114,9 @@
     <string name="live_dot">Traffic speeds (NYC DOT)</string>
     <string name="live_dot_note">Speeds on NYC highways and main roads from NYC Open Data, fetched whole. No key needed. The city\'s copy sometimes lags; readings older than two hours are not shown.</string>
     <string name="live_traffic_hint">With any of these on, a traffic button appears on the map. Feeds are fetched only while the layer is shown or while navigating.</string>
+    <string name="coverage_title">What each state has</string>
+    <string name="coverage_show">Show every state</string>
+    <string name="coverage_hide">Hide the states</string>
     <string name="settings_updates">Updates</string>
     <string name="updates_version">Installed %1$s · latest %2$s · checked %3$s</string>
     <string name="updates_version_never">Installed %1$s · not checked yet</string>
