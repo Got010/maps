@@ -135,7 +135,9 @@ class RouteWeatherTest {
 
     @Test
     fun `the requests are fixed, the same for every phone`() {
-        assertEquals("https://api.weather.gov/alerts/active?area=NY", NwsAlerts.URL)
+        assertEquals("https://api.weather.gov/alerts/active?area=NY,NJ,CT,PA,MD,DE,DC", NwsAlerts.URL)
+        // Every state the alerts are asked for, in the same order (the request is the same for every phone).
+        assertEquals("https://api.weather.gov/alerts/active?area=" + NwsAlerts.STATES.joinToString(","), NwsAlerts.URL)
         assertTrue(Radar.URL.startsWith("https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?"))
         assertTrue("crs=EPSG:3857" in Radar.URL)
         assertTrue(Radar.isPng(png))

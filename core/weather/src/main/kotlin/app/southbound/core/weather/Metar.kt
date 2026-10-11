@@ -26,11 +26,22 @@ data class CurrentConditions(
 
 /**
  * Reads `https://aviationweather.gov/api/data/metar?ids=@NY&format=json`: the latest METAR of every
- * reporting station in New York (the NWS Aviation Weather Center), one request, no key, nothing about
- * where the driver is. Seen on 2026-10-08 (feed probe): 49 stations, about 25 KB.
+ * reporting station in a state (the NWS Aviation Weather Center; `@XX` names a state's stations), no
+ * key, the same for every phone. One request per covered state ([URLS]): the API takes a single
+ * `@XX` group per request (a list of them came back as New York's alone), and a box (`bbox=`) leaves
+ * out stations by its own density, LaGuardia and Stewart among them. Seen on 2026-10-11 (feed
+ * probe): New York 49 stations (21 KB), New Jersey 17, Connecticut 11, Pennsylvania 45, Maryland 23,
+ * Delaware 4, about 67 KB in all.
  */
 object Metar {
-    const val URL: String = "https://aviationweather.gov/api/data/metar?ids=@NY&format=json"
+    /**
+     * The states asked for, in this order. Not DC: it has no station of its own (`@DC` answers 204;
+     * Reagan National is in Virginia), and Maryland's Andrews and College Park are within [NEAR_KM] of it.
+     */
+    val STATES: List<String> = listOf("NY", "NJ", "CT", "PA", "MD", "DE")
+
+    /** One request per state in [STATES]. */
+    val URLS: List<String> = STATES.map { "https://aviationweather.gov/api/data/metar?ids=@$it&format=json" }
 
     /** A place farther than this from every station shows no current weather (rough areas, not a guess). */
     const val NEAR_KM = 40.0

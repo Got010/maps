@@ -129,7 +129,7 @@
     <string name="live_fuel">Fuel</string>
     <string name="live_weather_heading">Weather</string>
     <string name="live_weather">Weather: alerts, radar, current weather and forecast (NWS)</string>
-    <string name="live_weather_note">National Weather Service warnings, watches and advisories for all of New York, NOAA\'s radar as one picture of the state, every airport weather station\'s current report, and the 7-day forecast for the whole state (built from NWS forecasts every 6 hours and fetched from Southbound\'s own GitHub, kept on the phone). Each is one download for the whole state; places are looked up on the phone. Warnings on your route are shown and spoken. Nothing about you, your location or your route is sent.</string>
+    <string name="live_weather_note">National Weather Service warnings, watches and advisories for every state Southbound covers (New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC), NOAA\'s radar as one picture of them, every airport weather station\'s current report, and the 7-day forecast for all of them (built from NWS forecasts every 6 hours and fetched from Southbound\'s own GitHub, kept on the phone). Each is one download, the same for every phone; places are looked up on the phone. Warnings on your route are shown and spoken. Nothing about you, your location or your route is sent.</string>
     <string name="live_gas">Gas prices (EIA)</string>
     <string name="live_gas_note">Weekly average retail price for the state you pick, from the U.S. Energy Information Administration. Needs a free EIA API key (eia.gov/opendata/register.php). Nothing about you or your location is sent.</string>
     <string name="live_gas_key">EIA key</string>
