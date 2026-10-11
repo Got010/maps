@@ -8,9 +8,11 @@ key (to see its error document) and for its public API docs. Nothing here
 carries a location, search text or route.
 
     feed-probe.py [section ...]   sections: nycdot 511ny 511ny-new 511ny-travel addresses
-                                  weather-alerts weather-forecast weather-radar weather-current (default: all)
+                                  weather-alerts weather-forecast weather-radar weather-current weather-states
+                                  dot-ct dot-nj dot-pa dot-md dot-de dot-dc (default: all)
 """
 
+import gzip
 import html
 import json
 import re
@@ -23,17 +25,27 @@ import urllib.request
 UA = "Southbound feed probe (+https://github.com/StrongHorse44/maps)"
 
 
-def get(url, limit=4_000_000, method="GET"):
+def _text(raw):
+    """Body bytes as text; some 511 sites gzip a reply the request didn't ask to be compressed."""
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            raw = gzip.decompress(raw)
+        except (OSError, EOFError):
+            pass
+    return raw.decode("utf-8", "replace")
+
+
+def get(url, limit=4_000_000, method="GET", headers=None):
     """(status, final url, headers, body text) without raising on HTTP errors."""
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"}, method=method)
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", **(headers or {})}, method=method)
     print(f"... {method} {url}", flush=True)
     signal.alarm(45)  # a whole request, not just one socket read
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             body = r.read(limit) if method == "GET" else b""
-            return r.status, r.geturl(), dict(r.headers), body.decode("utf-8", "replace")
+            return r.status, r.geturl(), dict(r.headers), _text(body)
     except urllib.error.HTTPError as e:
-        return e.code, url, dict(e.headers), e.read(limit).decode("utf-8", "replace")
+        return e.code, url, dict(e.headers), _text(e.read(limit))
     except Exception as e:  # noqa: BLE001 - a probe reports every failure
         return None, url, {}, f"{type(e).__name__}: {e}"
     finally:
@@ -520,22 +532,39 @@ def weather_states():
         print(f"  {state}: status {st} alerts {len(((_json(b) or {}).get('features')) or [])} bytes {len(b)}")
 
     head("METAR for every covered state")
-    groups = ",".join("@" + st for st in STATES)
     w, s_, e, n = ALL_BOX
-    for url in (f"https://aviationweather.gov/api/data/metar?ids={groups}&format=json",
-                f"https://aviationweather.gov/api/data/metar?bbox={s_},{w},{n},{e}&format=json"):
+
+    def metar(url):
         status, _, headers, body = get(url, limit=10_000_000)
         d = _json(body)
         print(f"--- {url}\nstatus {status} bytes {len(body)} type {headers.get('Content-Type')}")
-        if isinstance(d, list):
-            states = {}
-            for item in d:
-                name = item.get("name") or ""
-                code = name.rsplit(",", 2)[-2].strip() if name.count(",") >= 2 else "?"
-                states[code] = states.get(code, 0) + 1
-            print("stations", len(d), "by state:", dict(sorted(states.items())))
-        else:
+        if not isinstance(d, list):
             print(body[:600])
+            return {}
+        states = {}
+        for item in d:
+            name = item.get("name") or ""
+            code = name.rsplit(",", 2)[-2].strip() if name.count(",") >= 2 else "?"
+            states[code] = states.get(code, 0) + 1
+        print("stations", len(d), "by state:", dict(sorted(states.items())))
+        return {item.get("icaoId"): item for item in d if isinstance(item, dict)}
+
+    # One group per request is known to work (ids=@NY); several in one list returned New York's alone.
+    by_state = {st: metar(f"https://aviationweather.gov/api/data/metar?ids=@{st}&format=json") for st in STATES}
+    for sep in ("%20", "+", ";"):
+        metar("https://aviationweather.gov/api/data/metar?ids=" + sep.join("@" + st for st in STATES) + "&format=json")
+    # A box: which of a state's stations it leaves out, and whether a smaller box or more hours change that.
+    for label, (bw, bs, be, bn), extra in (("every state", ALL_BOX, ""), ("every state, 3 hours", ALL_BOX, "&hours=3"),
+                                            ("New York's old box", (-79.8, 40.4, -71.8, 45.1), "")):
+        print(f"--- box: {label}")
+        got = metar(f"https://aviationweather.gov/api/data/metar?bbox={bs},{bw},{bn},{be}&format=json{extra}")
+        for st, stations in by_state.items():
+            missing = sorted(set(stations) - set(got))
+            if missing and (label != "New York's old box" or st == "NY"):
+                print(f"   {st}: {len(missing)} of {len(stations)} not in the box:",
+                      [(i, stations[i].get("lat"), stations[i].get("lon"), stations[i].get("obsTime")) for i in missing][:20])
+    sample = next(iter(by_state.get("NY", {}).values()), None)
+    print("   one station:", json.dumps(sample)[:900])
 
     head("Radar as one picture of every covered state")
     import math
@@ -620,80 +649,168 @@ def cars_layers(api):
         try_json(f"{api}/{path}")
 
 
-def ibi_layers(site):
-    """The map layers of an IBI-built 511 site (the old 511NY layout): /map/mapIcons/<layer>, /List/GetData/<layer>."""
-    for layer in ("Cameras", "Incidents", "Closures", "Construction", "MessageSigns", "SpecialEvents"):
-        try_json(f"{site}/map/mapIcons/{layer}", sample=500)
-    try_json(f"{site}/List/GetData/Cameras?query=%7B%22columns%22%3A%5B%5D%2C%22start%22%3A0%2C%22length%22%3A5%7D", sample=900)
+def ibi_layers(site, layers=("Cameras", "Incidents", "Closures", "Construction", "MessageSigns", "SpecialEvents")):
+    """The map layers of an IBI-built 511 site (the old 511NY layout): /map/mapIcons/<layer> (every item's
+    position, gzipped), /List/GetData/<layer> (the site's list pages, a DataTables query)."""
+    for layer in layers:
+        status, d = try_json(f"{site}/map/mapIcons/{layer}", sample=700)
+        if isinstance(d, dict):
+            items = d.get("item2") if isinstance(d.get("item2"), list) else None
+            print(f"   mapIcons {layer}: keys {list(d.keys())[:8]} items {len(items) if items is not None else '?'}")
+            if items:
+                print("   first icon:", json.dumps(items[0])[:400])
+    query = urllib.parse.quote(json.dumps({"columns": [], "start": 0, "length": 3}, separators=(",", ":")))
+    for layer in ("Cameras", "MessageSigns", "traffic", "Incidents", "Closures", "Construction", "Events", "events/traffic"):
+        status, d = try_json(f"{site}/List/GetData/{layer}?query={query}", sample=2500)
+        if isinstance(d, dict):
+            print(f"   List {layer}: recordsTotal {d.get('recordsTotal')} recordsFiltered {d.get('recordsFiltered')} keys {list(d.keys())[:8]}")
+    # All of a layer in one page, if the site allows it.
+    big = urllib.parse.quote(json.dumps({"columns": [], "start": 0, "length": 5000}, separators=(",", ":")))
+    for layer in ("Cameras", "MessageSigns", "traffic"):
+        status, _, _, body = get(f"{site}/List/GetData/{layer}?query={big}", limit=60_000_000)
+        d = _json(body)
+        rows = d.get("data") if isinstance(d, dict) else None
+        print(f"   List {layer} x5000: status {status} bytes {len(body)} rows {len(rows) if isinstance(rows, list) else None}"
+              f" total {d.get('recordsTotal') if isinstance(d, dict) else None}")
+        if isinstance(rows, list) and rows and layer == "traffic":
+            kinds = {}
+            for row in rows:
+                k = (row.get("type") or row.get("eventType") or row.get("EventType") or "?", row.get("eventSubType") or row.get("subType") or "")
+                kinds[k] = kinds.get(k, 0) + 1
+            print("   kinds:", sorted(kinds.items(), key=lambda kv: -kv[1])[:25])
+    for page in ("/developers/doc", "/developers/help", "/help/endpoint", "/api/v2/get/event?format=json", "/api/getevents?format=json",
+                 "/api/v2/get/cameras?format=json"):
+        status, _, _, body = get(site + page, limit=2_000_000)
+        print(f"   {page}: status {status} bytes {len(body)}:", text_of(body)[:700].replace("\n", " | ") if "<" in body[:200] else body[:300])
 
 
 def dot_ct():
-    head("Connecticut: CTroads (CTDOT's 511)")
-    final, page = discover("https://ctroads.org/")
-    for cfg in ("https://ctroads.org/configs/main.json", "https://www.ctroads.org/configs/main.json"):
-        status, _, _, body = get(cfg, limit=3_000_000)
-        print(f"--- {cfg}: status {status} bytes {len(body)}")
-        apis = sorted(set(re.findall(r"https://api[^\"'\s]*carsprogram\.org", body)))
-        print("   CARS APIs:", apis, "| layers:", sorted(set(re.findall(r'"api"\s*:\s*"([^"]+)"', body)))[:20])
-        print("   ", body[:1500])
-        for api in apis[:2]:
-            cars_layers(api.rstrip("/"))
-    for api in ("https://api-ctdot.carsprogram.org", "https://api-511x-ctdot.carsprogram.org", "https://api-ct.carsprogram.org"):
-        try_json(api + "/cameras/map-features", sample=500)
+    head("Connecticut: CTroads (CTDOT's 511, built by IBI like 511PA)")
+    ibi_layers("https://ctroads.org")
+
+
+BROWSER = {"User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36",
+           "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9"}
 
 
 def dot_nj():
-    head("New Jersey: 511NJ")
-    discover("https://511nj.org/")
-    ibi_layers("https://511nj.org")
-    for url in ("https://511nj.org/api/client/camera/getCameraDataByTourId?tourId=0",
-                "https://511nj.org/client/get/getAllEvents", "https://511nj.org/api/events",
-                "https://511nj.org/developers", "https://511nj.org/developer"):
-        try_json(url, sample=500)
+    head("New Jersey: 511NJ (TRANSCOM)")
+    status, final, _, page = get("https://511nj.org/", limit=4_000_000)
+    srcs = [urllib.parse.urljoin(final, u) for u in re.findall(r'<script[^>]+src="([^"]+)"', page)]
+    paths = set()
+    for src in srcs:
+        if "511nj.org" not in src:
+            continue
+        _, _, _, js = get(src, limit=30_000_000)
+        paths |= set(re.findall(r"""["'`]((?:https?://[a-z0-9.-]+)?/?(?:api|client|Content|data|assets/config)[/A-Za-z0-9_.?=&{}-]{2,120})["'`]""", js))
+        paths |= set(re.findall(r"""https?://[a-z0-9.-]*(?:511nj|transcom|njdot|iteris|trafficland)[a-z0-9.-]*[^"'`\s]{0,120}""", js))
+    print("   script paths:", len(paths))
+    for p in sorted(paths)[:300]:
+        print("     ", p)
+    # The site's API from GitHub's runners answered 403 (a firewall page). The same with a phone's browser headers:
+    for url in ("https://511nj.org/api/client/camera/getCameraDataByTourId?tourId=0", "https://511nj.org/api/events",
+                "https://511nj.org/assets/config/config.json"):
+        status, _, headers, body = get(url, headers={**BROWSER, "Referer": "https://511nj.org/"}, limit=2_000_000)
+        print(f"   browser headers {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}:", text_of(body)[:300].replace("\n", " | "))
 
 
 def dot_pa():
-    head("Pennsylvania: 511PA")
-    discover("https://www.511pa.com/")
-    ibi_layers("https://www.511pa.com")
-    for url in ("https://www.511pa.com/developers/doc", "https://www.511pa.com/api/v2/get/event?format=json",
-                "https://www.511pa.com/map/data/events"):
-        try_json(url, sample=500)
+    head("Pennsylvania: 511PA (built by IBI)")
+    ibi_layers("https://www.511pa.com", layers=("Cameras", "Incidents", "Closures", "ActiveRoadwork", "MessageSigns",
+                                                "MajorRouteClosure", "MajorRouteIncident", "OtherRouteClosure", "OtherRouteIncident",
+                                                "SpecialEvents", "Detour", "WeatherEvents"))
 
 
 def dot_md():
-    head("Maryland: CHART and MD 511")
+    head("Maryland: CHART (MDOT SHA), no key")
     base = "https://chartexp1.sha.maryland.gov/CHARTExportClientService"
-    for name in ("getEventMapDataJSON.do", "getCameraMapDataJSON.do", "getDMSMapDataJSON.do", "getRTMSMapDataJSON.do",
-                 "getActiveIncidentDataJSON.do", "getClosureMapDataJSON.do"):
-        try_json(f"{base}/{name}", sample=900)
-    discover("https://chart.maryland.gov/")
-    discover("https://md511.maryland.gov/")
-    for cfg in ("https://md511.maryland.gov/configs/main.json",):
-        status, _, _, body = get(cfg, limit=3_000_000)
-        print(f"--- {cfg}: status {status} bytes {len(body)}")
-        apis = sorted(set(re.findall(r"https://api[^\"'\s]*carsprogram\.org", body)))
-        print("   CARS APIs:", apis)
-        for api in apis[:2]:
-            cars_layers(api.rstrip("/"))
+    for name in ("getEventMapDataJSON.do", "getCameraMapDataJSON.do", "getDMSMapDataJSON.do"):
+        status, d = try_json(f"{base}/{name}", sample=300)
+        rows = d.get("data") if isinstance(d, dict) else None
+        if not isinstance(rows, list):
+            continue
+        print(f"   {name}: {len(rows)} rows; other keys {[k for k in d if k != 'data']}")
+        for row in rows[:2]:
+            print("   row:", json.dumps(row)[:2500])
+        if name.startswith("getEvent"):
+            kinds = {}
+            for row in rows:
+                k = (row.get("incidentType") or row.get("type") or "?", row.get("closed"), row.get("eventType") or "")
+                kinds[k] = kinds.get(k, 0) + 1
+            print("   (incidentType, closed, eventType):", sorted(kinds.items(), key=lambda kv: -kv[1]))
+            print("   keys seen:", sorted({k for row in rows for k in row})[:80])
+        if name.startswith("getCamera"):
+            print("   keys seen:", sorted({k for row in rows for k in row}))
+            print("   opStatus:", {s: sum(1 for r in rows if r.get("opStatus") == s) for s in {r.get("opStatus") for r in rows}})
+            first = rows[0]
+            for url in (first.get("publicVideoURL"), f"https://chart.maryland.gov/Video/GetSnapshot/{first.get('id')}",
+                        f"https://{first.get('cctvIp')}/rtplive/{first.get('id')}/playlist.m3u8"):
+                if url:
+                    status, _, headers, body = get(url, limit=3_000_000)
+                    print(f"   camera {url}: status {status} type {headers.get('Content-Type')} bytes {len(body)}")
+                    print("     mentions:", sorted(set(re.findall(r"""https?://[^\s"'<>]+(?:m3u8|jpg|jpeg|png|mjpg)[^\s"'<>]*""", body)))[:10])
+    for name in ("getTSSMapDataJSON.do", "getRWISMapDataJSON.do", "getWebMessagesDataJSON.do", "getSpeedSensorMapDataJSON.do",
+                 "getLaneClosureMapDataJSON.do", "getPlannedClosureMapDataJSON.do", "getWZMapDataJSON.do", "getSnowEmergencyMapDataJSON.do"):
+        status, _, _, body = get(f"{base}/{name}", limit=20_000_000)
+        print(f"   {name}: status {status} bytes {len(body)} json {_json(body) is not None}:", body[:200].replace("\n", " "))
+    # The CHART site's own scripts name every export it reads.
+    status, final, _, page = get("https://chart.maryland.gov/", limit=4_000_000)
+    found = set(re.findall(r"ExportClientService/[A-Za-z]+\.do", page))
+    for src in re.findall(r'<script[^>]+src="([^"]+)"', page):
+        src = urllib.parse.urljoin(final, src)
+        if "chart.maryland.gov" in src and "/lib/" not in src:
+            _, _, _, js = get(src, limit=10_000_000)
+            found |= set(re.findall(r"ExportClientService/[A-Za-z]+\.do", js))
+    for path in ("/TrafficCameras", "/TravInfo/TravelerAlerts", "/Map", "/TravInfo/Index"):
+        _, f2, _, p2 = get("https://chart.maryland.gov" + path, limit=4_000_000)
+        found |= set(re.findall(r"ExportClientService/[A-Za-z]+\.do", p2))
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', p2):
+            src = urllib.parse.urljoin(f2, src)
+            if "chart.maryland.gov" in src and "/lib/" not in src:
+                _, _, _, js = get(src, limit=10_000_000)
+                found |= set(re.findall(r"ExportClientService/[A-Za-z]+\.do", js))
+    print("   exports the CHART site names:", sorted(found))
 
 
 def dot_de():
-    head("Delaware: DelDOT")
-    for url in ("https://tmc.deldot.gov/json/advisory.json", "https://tmc.deldot.gov/json/videocamera.json",
-                "https://tmc.deldot.gov/json/dms.json", "https://tmc.deldot.gov/json/roadClosure.json",
-                "https://deldot.gov/json/advisory.json"):
-        try_json(url, sample=900)
-    discover("https://deldot.gov/map/index.shtml")
+    head("Delaware: DelDOT TMC, no key")
+    for url, key in (("https://tmc.deldot.gov/json/advisory.json", "advisories"), ("https://tmc.deldot.gov/json/videocamera.json", "videoCameras")):
+        status, d = try_json(url, sample=300)
+        rows = d.get(key) if isinstance(d, dict) else None
+        if isinstance(rows, list):
+            print(f"   {key}: {len(rows)}; keys seen {sorted({k for r in rows for k in r})}")
+            for row in rows[:2]:
+                print("   row:", json.dumps(row)[:2500])
+            if key == "advisories":
+                kinds = {}
+                for r in rows:
+                    t = r.get("type")
+                    k = json.dumps(t)[:80] if not isinstance(t, str) else t
+                    kinds[k] = kinds.get(k, 0) + 1
+                print("   types:", kinds)
+    # The travel map's own scripts name the other feeds (signs, closures, speeds).
+    status, final, _, page = get("https://deldot.gov/map/index.shtml", limit=4_000_000)
+    feeds = set(re.findall(r"""["'](https?://[^"']*?\.json[^"']*|/[A-Za-z0-9_/.-]*?\.json[^"']*)["']""", page))
+    for src in re.findall(r'<script[^>]+src="([^"]+)"', page):
+        src = urllib.parse.urljoin(final, src)
+        if "deldot.gov" in src and "/CLF4/" not in src:
+            _, _, _, js = get(src, limit=10_000_000)
+            feeds |= set(re.findall(r"""["'](https?://[^"']*?\.json[^"']*|/[A-Za-z0-9_/.-]*?\.json[^"']*)["']""", js))
+    print("   feeds named:", sorted(feeds))
+    for f in sorted(feeds):
+        if any(k in f.lower() for k in ("vms", "sign", "dms", "closure", "restriction", "speed", "flow", "travel", "event")):
+            try_json(urllib.parse.urljoin("https://tmc.deldot.gov/", f) if f.startswith("/json") else urllib.parse.urljoin(final, f), sample=900)
 
 
 def dot_dc():
-    head("Washington, DC: DDOT")
-    discover("https://ddot.dc.gov/")
-    for url in ("https://opendata.dc.gov/api/search/v1/collections/all/items?q=traffic%20camera&limit=10",
-                "https://opendata.dc.gov/api/search/v1/collections/all/items?q=road%20closure&limit=10"):
-        status, d = try_json(url, sample=400)
-        for feat in (d or {}).get("features", [])[:10] if isinstance(d, dict) else []:
+    head("Washington, DC: DDOT (no 511; open data)")
+    layer = "https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Sensors_WebMercator/MapServer"
+    for n in (11, 93):
+        try_json(f"{layer}/{n}?f=json", sample=300)
+        status, d = try_json(f"{layer}/{n}/query?where=1%3D1&outFields=*&outSR=4326&f=geojson", sample=1200)
+    for q in ("traffic incident", "work zone", "street closure", "lane closure", "moratorium"):
+        status, d = try_json(f"https://opendata.dc.gov/api/search/v1/collections/all/items?q={urllib.parse.quote(q)}&limit=8", sample=200)
+        for feat in (d or {}).get("features", [])[:8] if isinstance(d, dict) else []:
             p = feat.get("properties", {})
             print("   hub item", feat.get("id"), "|", p.get("title"), "|", p.get("type"), "|", p.get("url"))
 
