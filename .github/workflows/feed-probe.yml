@@ -1,4 +1,4 @@
-# Prints what 511NY, NYC Open Data, gis.ny.gov and the weather sources really send (scripts/feed-probe.py), since the
+# Prints what 511NY, the other covered states' DOTs, NYC Open Data, gis.ny.gov and the weather sources really send (scripts/feed-probe.py), since the
 # dev container can't reach them. Read the job log; the answers become test fixtures. No secret, no key,
 # a read-only token. Run it from the Actions tab (Feed probe > Run workflow), or it runs when this file or
 # the script changes on a branch.
@@ -58,6 +58,35 @@ jobs:
         timeout-minutes: 4
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py weather-current
+      # The other covered states (owner, October 2026: the same weather and DOT features as New York).
+      - name: Weather, every covered state
+        timeout-minutes: 6
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py weather-states
+      - name: Connecticut DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-ct
+      - name: New Jersey DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-nj
+      - name: Pennsylvania DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-pa
+      - name: Maryland DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-md
+      - name: Delaware DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-de
+      - name: DC DOT
+        timeout-minutes: 5
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-dc
       - name: NYS Address Points
         timeout-minutes: 4
         continue-on-error: true

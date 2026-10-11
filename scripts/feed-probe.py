@@ -496,9 +496,212 @@ def weather_current():
         print(b[:600])
 
 
+# The regions beyond New York (owner, October 2026): every state Southbound covers, for the same weather and DOT
+# features as New York. A fixed list, the same request for every phone.
+STATES = ["NY", "NJ", "CT", "PA", "MD", "DE", "DC"]
+ALL_BOX = (-80.6, 37.8, -71.7, 45.1)  # west, south, east, north: every covered state with a margin
+
+
+def weather_states():
+    head("NWS alerts for every covered state in one request")
+    url = "https://api.weather.gov/alerts/active?area=" + ",".join(STATES)
+    status, _, headers, body = get(url, limit=40_000_000)
+    feats = ((_json(body) or {}).get("features")) or []
+    print(f"status {status} bytes {len(body)} alerts {len(feats)} type {headers.get('Content-Type')}")
+    if status != 200:
+        print(body[:800])
+    per = {}
+    for f in feats:
+        for z in f.get("properties", {}).get("geocode", {}).get("UGC", []) or []:
+            per[z[:2]] = per.get(z[:2], 0) + 1
+    print("zones named, by state code:", per)
+    for state in STATES:
+        st, _, _, b = get("https://api.weather.gov/alerts/active?area=" + state, limit=20_000_000)
+        print(f"  {state}: status {st} alerts {len(((_json(b) or {}).get('features')) or [])} bytes {len(b)}")
+
+    head("METAR for every covered state")
+    groups = ",".join("@" + st for st in STATES)
+    w, s_, e, n = ALL_BOX
+    for url in (f"https://aviationweather.gov/api/data/metar?ids={groups}&format=json",
+                f"https://aviationweather.gov/api/data/metar?bbox={s_},{w},{n},{e}&format=json"):
+        status, _, headers, body = get(url, limit=10_000_000)
+        d = _json(body)
+        print(f"--- {url}\nstatus {status} bytes {len(body)} type {headers.get('Content-Type')}")
+        if isinstance(d, list):
+            states = {}
+            for item in d:
+                name = item.get("name") or ""
+                code = name.rsplit(",", 2)[-2].strip() if name.count(",") >= 2 else "?"
+                states[code] = states.get(code, 0) + 1
+            print("stations", len(d), "by state:", dict(sorted(states.items())))
+        else:
+            print(body[:600])
+
+    head("Radar as one picture of every covered state")
+    import math
+
+    def merc(lon, lat):
+        return lon * 20037508.34 / 180, math.log(math.tan((90 + lat) * math.pi / 360)) * 6378137
+
+    (x0, y0), (x1, y1) = merc(w, s_), merc(e, n)
+    for width, height in ((1024, 1100), (1280, 1376)):
+        url = ("https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?service=WMS&version=1.3.0&request=GetMap"
+               f"&layers=conus_bref_qcd&styles=&crs=EPSG:3857&bbox={x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f}&width={width}&height={height}"
+               "&format=image/png&transparent=true")
+        status, _, headers, body = get(url, limit=10_000_000)
+        print(f"--- {width}x{height}: status {status} type {headers.get('Content-Type')} bytes {len(body)} png {body[1:4] == 'PNG'}")
+
+    head("NWS forecast grid at a point in each state")
+    for name, lat, lon in (("Philadelphia", 39.9526, -75.1652), ("Pittsburgh", 40.4406, -79.9959), ("Hartford", 41.7658, -72.6734),
+                           ("Trenton", 40.2206, -74.7597), ("Baltimore", 39.2904, -76.6122), ("Dover", 39.1582, -75.5244),
+                           ("Washington", 38.8951, -77.0364)):
+        status, _, _, body = get(f"https://api.weather.gov/points/{lat},{lon}")
+        p = (_json(body) or {}).get("properties", {})
+        print(f"  {name}: status {status} grid {p.get('gridId')} {p.get('gridX')},{p.get('gridY')} zone {p.get('forecastZone')}")
+
+
+def _urls_in(text, limit=120):
+    """Absolute URLs and /api-like paths a page or script mentions."""
+    found = set(re.findall(r"""https?://[^\s"'<>)\\]+""", text))
+    found |= set(re.findall(r"""["'](/(?:api|map|List|configs?|data|json|services?)[^"'\s<>]{1,120})["']""", text))
+    return sorted(found)[:limit]
+
+
+def discover(site, scripts=6):
+    """A 511 site's home page: the scripts and APIs it names, and the config files of a CARS site."""
+    status, final, headers, page = get(site, limit=4_000_000)
+    print(f"--- {site}: status {status} final {final} bytes {len(page)} type {headers.get('Content-Type')}")
+    urls = _urls_in(page)
+    for u in urls:
+        print("   page mentions", u)
+    srcs = [urllib.parse.urljoin(final, u) for u in re.findall(r'<script[^>]+src="([^"]+)"', page)]
+    print("   scripts:", srcs[:20])
+    seen = set(urls)
+    for src in srcs[:scripts]:
+        _, _, _, js = get(src, limit=30_000_000)
+        for u in _urls_in(js, 200):
+            if u not in seen and any(k in u for k in ("api", "carsprogram", "json", "map", "camera", "event", "incident", "sign", "List")):
+                seen.add(u)
+                print("   script mentions", u)
+    return final, page
+
+
+def try_json(url, label=None, sample=900):
+    """GET and say what came back: size, top-level shape, a sample item."""
+    status, final, headers, body = get(url, limit=40_000_000)
+    d = _json(body)
+    shape = type(d).__name__
+    items = None
+    if isinstance(d, dict):
+        for key in ("features", "items", "data", "Data", "result", "results", "events", "cameras", "signs"):
+            if isinstance(d.get(key), list):
+                items = d[key]
+                shape = f"dict[{key}]"
+                break
+        if items is None:
+            shape = "dict keys " + ",".join(list(d.keys())[:12])
+    elif isinstance(d, list):
+        items = d
+    print(f"--- {label or url}\nstatus {status} type {headers.get('Content-Type')} bytes {len(body)} final {final} shape {shape}"
+          + (f" items {len(items)}" if items is not None else ""))
+    if items:
+        print("   first:", json.dumps(items[0])[:sample])
+    elif d is None:
+        print("   body:", text_of(body)[:400] if "<html" in body[:500].lower() else body[:400])
+    return status, d
+
+
+def cars_layers(api):
+    """The collections of a CARS (Castle Rock) 511 API, as 511NY's (FiveElevenNyCars)."""
+    for path in ("events/map-features?eventClassifications=incidents",
+                 "events/map-features?eventClassifications=closures&maxBeginDateOffset=300000",
+                 "events/map-features?eventClassifications=construction&maxBeginDateOffset=300000",
+                 "cameras/map-features", "signs/map-features"):
+        try_json(f"{api}/{path}")
+
+
+def ibi_layers(site):
+    """The map layers of an IBI-built 511 site (the old 511NY layout): /map/mapIcons/<layer>, /List/GetData/<layer>."""
+    for layer in ("Cameras", "Incidents", "Closures", "Construction", "MessageSigns", "SpecialEvents"):
+        try_json(f"{site}/map/mapIcons/{layer}", sample=500)
+    try_json(f"{site}/List/GetData/Cameras?query=%7B%22columns%22%3A%5B%5D%2C%22start%22%3A0%2C%22length%22%3A5%7D", sample=900)
+
+
+def dot_ct():
+    head("Connecticut: CTroads (CTDOT's 511)")
+    final, page = discover("https://ctroads.org/")
+    for cfg in ("https://ctroads.org/configs/main.json", "https://www.ctroads.org/configs/main.json"):
+        status, _, _, body = get(cfg, limit=3_000_000)
+        print(f"--- {cfg}: status {status} bytes {len(body)}")
+        apis = sorted(set(re.findall(r"https://api[^\"'\s]*carsprogram\.org", body)))
+        print("   CARS APIs:", apis, "| layers:", sorted(set(re.findall(r'"api"\s*:\s*"([^"]+)"', body)))[:20])
+        print("   ", body[:1500])
+        for api in apis[:2]:
+            cars_layers(api.rstrip("/"))
+    for api in ("https://api-ctdot.carsprogram.org", "https://api-511x-ctdot.carsprogram.org", "https://api-ct.carsprogram.org"):
+        try_json(api + "/cameras/map-features", sample=500)
+
+
+def dot_nj():
+    head("New Jersey: 511NJ")
+    discover("https://511nj.org/")
+    ibi_layers("https://511nj.org")
+    for url in ("https://511nj.org/api/client/camera/getCameraDataByTourId?tourId=0",
+                "https://511nj.org/client/get/getAllEvents", "https://511nj.org/api/events",
+                "https://511nj.org/developers", "https://511nj.org/developer"):
+        try_json(url, sample=500)
+
+
+def dot_pa():
+    head("Pennsylvania: 511PA")
+    discover("https://www.511pa.com/")
+    ibi_layers("https://www.511pa.com")
+    for url in ("https://www.511pa.com/developers/doc", "https://www.511pa.com/api/v2/get/event?format=json",
+                "https://www.511pa.com/map/data/events"):
+        try_json(url, sample=500)
+
+
+def dot_md():
+    head("Maryland: CHART and MD 511")
+    base = "https://chartexp1.sha.maryland.gov/CHARTExportClientService"
+    for name in ("getEventMapDataJSON.do", "getCameraMapDataJSON.do", "getDMSMapDataJSON.do", "getRTMSMapDataJSON.do",
+                 "getActiveIncidentDataJSON.do", "getClosureMapDataJSON.do"):
+        try_json(f"{base}/{name}", sample=900)
+    discover("https://chart.maryland.gov/")
+    discover("https://md511.maryland.gov/")
+    for cfg in ("https://md511.maryland.gov/configs/main.json",):
+        status, _, _, body = get(cfg, limit=3_000_000)
+        print(f"--- {cfg}: status {status} bytes {len(body)}")
+        apis = sorted(set(re.findall(r"https://api[^\"'\s]*carsprogram\.org", body)))
+        print("   CARS APIs:", apis)
+        for api in apis[:2]:
+            cars_layers(api.rstrip("/"))
+
+
+def dot_de():
+    head("Delaware: DelDOT")
+    for url in ("https://tmc.deldot.gov/json/advisory.json", "https://tmc.deldot.gov/json/videocamera.json",
+                "https://tmc.deldot.gov/json/dms.json", "https://tmc.deldot.gov/json/roadClosure.json",
+                "https://deldot.gov/json/advisory.json"):
+        try_json(url, sample=900)
+    discover("https://deldot.gov/map/index.shtml")
+
+
+def dot_dc():
+    head("Washington, DC: DDOT")
+    discover("https://ddot.dc.gov/")
+    for url in ("https://opendata.dc.gov/api/search/v1/collections/all/items?q=traffic%20camera&limit=10",
+                "https://opendata.dc.gov/api/search/v1/collections/all/items?q=road%20closure&limit=10"):
+        status, d = try_json(url, sample=400)
+        for feat in (d or {}).get("features", [])[:10] if isinstance(d, dict) else []:
+            p = feat.get("properties", {})
+            print("   hub item", feat.get("id"), "|", p.get("title"), "|", p.get("type"), "|", p.get("url"))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
-            "weather-radar": weather_radar, "weather-current": weather_current}
+            "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
+            "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc}
 
 
 class Timeout(Exception):
