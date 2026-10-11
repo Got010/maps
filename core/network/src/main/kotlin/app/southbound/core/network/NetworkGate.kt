@@ -44,6 +44,12 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Illinois' Travel Midwest (IDOT and the Tollway's Gateway): incidents, roadwork, cameras and message signs, the whole state. */
     TRAFFIC_TRAVEL_MIDWEST(enabledByDefault = false),
+
+    /** North Dakota's NDDOT travel map (ArcGIS): alerts, work zones and cameras, the whole state. */
+    TRAFFIC_NDDOT(enabledByDefault = false),
+
+    /** South Dakota's SD511 (Iteris): road work, incidents, restrictions and cameras, the whole state. */
+    TRAFFIC_SD511(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

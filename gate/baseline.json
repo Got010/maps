@@ -911,6 +911,10 @@
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
     {
+      "value": "https://gis.dot.nd.gov",
+      "note": "North Dakota's NDDOT travel map service (ArcGIS, rcrs_dynamic): core/traffic NorthDakota.kt queries whole layers (where=1=1, attributes only, no geometry but the cameras' points): 7 alerts, 21 and 22 work zones, 5 still cameras, the same requests NDDOT's own map makes, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_NDDOT (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://goo.gle",
       "note": "Documentation link in an error or warning message of an AndroidX, Compose, DataStore or Kotlin library. Never opened or requested."
     },
@@ -929,6 +933,10 @@
     {
       "value": "https://opengeo.ncep.noaa.gov",
       "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around every covered state in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://sd.cdn.iteris-atis.com",
+      "note": "South Dakota's SD511 (Iteris) CDN: core/traffic SouthDakota.kt fetches the GeoJSON files its own map reads, /geojson/icons/metadata/icons.road-work, incidents-accidents, restriction, obstructions and scheduled-events (the events) and icons.cameras and icons.rwis (camera sites), the whole state every time, no key and nothing about the user's location, search or route; a camera's still (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) is kept only on this host and fetched through NetworkGate.get when its card opens. Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
       "value": "https://tmc.deldot.gov",
@@ -973,6 +981,10 @@
     {
       "value": "video.deldot.gov",
       "note": "DelDOT's camera stream server: core/traffic DelDot.kt keeps a camera's https playlist (urls.m3u8s, https://video.deldot.gov:443/live/<camera id>.stream/playlist.m3u8) only on this host. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
+    },
+    {
+      "value": "www.dot.nd.gov",
+      "note": "NDDOT's camera stills: core/traffic NorthDakota.kt keeps a camera's view links (Link, Link2..., https://www.dot.nd.gov/travel-info/cameras/<camera>.jpg) only on this host; the camera card fetches the first through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_NDDOT (Settings > Live data, off by default)."
     }
   ],
   "assets": [

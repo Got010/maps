@@ -11,7 +11,7 @@ import org.junit.Test
 
 class SettingsEntryTest {
     /** The network toggles schema 6 added, as an export with every toggle on writes them (last in the group). */
-    private val NEWER_6 = ""","TRAFFIC_511WI":true,"TRAFFIC_TRAVEL_MIDWEST":true"""
+    private val NEWER_6 = ""","TRAFFIC_511WI":true,"TRAFFIC_TRAVEL_MIDWEST":true,"TRAFFIC_NDDOT":true,"TRAFFIC_SD511":true"""
 
     /** The network toggles schemas 5 and 6 added. */
     private val NEWER_5 = ""","TRAFFIC_CHART_MD":true,"TRAFFIC_DELDOT":true""" + NEWER_6
@@ -21,7 +21,7 @@ class SettingsEntryTest {
 
     private val SINCE_4 = listOf(
         NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT,
-        NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST,
+        NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
     )
 
     /** The toggles newer than schema 3, plus [also], all off. */
@@ -57,7 +57,7 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(62, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(64, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
@@ -144,12 +144,13 @@ class SettingsEntryTest {
     }
 
     @Test
-    fun `a schema 5 bundle reads with 511WI and Travel Midwest off`() {
+    fun `a schema 5 bundle reads with schema 6's four toggles off`() {
         val s = Samples.settings()
         assertTrue(s.network.getValue(NetworkFeature.TRAFFIC_511WI) && s.network.getValue(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST))
         val five = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_6, "")
-        assertTrue("TRAFFIC_DELDOT" in five && "TRAFFIC_511WI" !in five && "TRAFFIC_TRAVEL_MIDWEST" !in five)
-        val newest = listOf(NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST).associateWith { false }
+        assertTrue("TRAFFIC_DELDOT" in five && "TRAFFIC_511WI" !in five && "TRAFFIC_TRAVEL_MIDWEST" !in five && "TRAFFIC_SD511" !in five)
+        val newest = listOf(NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511)
+            .associateWith { false }
         assertEquals(s.copy(network = s.network + newest), SettingsEntry.decode(five.toByteArray(), schema = 5))
         assertEquals(60, SettingsEntry.count(s, 5))
         for ((text, schema) in listOf(five to 6L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 5L)) {
