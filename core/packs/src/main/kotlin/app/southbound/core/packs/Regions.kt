@@ -27,7 +27,7 @@ data class LonLat(val lon: Double, val lat: Double)
  * tell which region a point belongs to where boxes overlap: northern New
  * Jersey's box takes in Staten Island and the Bronx, its area does not.
  *
- * A [planned] region is built by the pipeline but not offered yet: its packs
+ * A [planned] region is built by the pipeline but not offered yet (none today; the Midwest's fifteen were until v0.1.38 shipped their packs): its packs
  * aren't in a release the app reads, so it stays out of [Regions.basemaps]
  * (the picker, the updater, the missing-map check). The Midwest's fifteen are
  * planned until their packs ship (pipeline/regions.json).
@@ -274,7 +274,7 @@ object Regions {
             ),
         ),
         Region(
-            "ohn", "Northern Ohio", Bounds(-84.82, 40.64, -80.51, 42.33), basemap = true, planned = true,
+            "ohn", "Northern Ohio", Bounds(-84.82, 40.64, -80.51, 42.33), basemap = true,
             area = listOf(
                 LonLat(-83.068, 41.848),
                 LonLat(-82.711, 41.68),
@@ -290,7 +290,7 @@ object Regions {
             ),
         ),
         Region(
-            "ohs", "Southern Ohio", Bounds(-84.83, 38.4, -80.51, 40.66), basemap = true, planned = true,
+            "ohs", "Southern Ohio", Bounds(-84.83, 38.4, -80.51, 40.66), basemap = true,
             area = listOf(
                 LonLat(-80.52, 40.647),
                 LonLat(-80.58, 40.619),
@@ -387,7 +387,7 @@ object Regions {
             ),
         ),
         Region(
-            "in", "Indiana", Bounds(-88.12, 37.77, -84.77, 41.77), basemap = true, planned = true,
+            "in", "Indiana", Bounds(-88.12, 37.77, -84.77, 41.77), basemap = true,
             area = listOf(
                 LonLat(-84.806, 41.758),
                 LonLat(-84.824, 39.097),
@@ -519,7 +519,7 @@ object Regions {
             ),
         ),
         Region(
-            "iln", "Chicago and Northern Illinois", Bounds(-91.11, 40.89, -87.01, 42.52), basemap = true, planned = true,
+            "iln", "Chicago and Northern Illinois", Bounds(-91.11, 40.89, -87.01, 42.52), basemap = true,
             area = listOf(
                 LonLat(-90.967, 40.946),
                 LonLat(-90.949, 40.982),
@@ -556,7 +556,7 @@ object Regions {
             ),
         ),
         Region(
-            "ils", "Central and Southern Illinois", Bounds(-91.53, 36.97, -87.5, 40.91), basemap = true, planned = true,
+            "ils", "Central and Southern Illinois", Bounds(-91.53, 36.97, -87.5, 40.91), basemap = true,
             area = listOf(
                 LonLat(-90.627, 38.89),
                 LonLat(-90.658, 38.921),
@@ -706,7 +706,7 @@ object Regions {
             ),
         ),
         Region(
-            "mis", "Southern Michigan", Bounds(-87.22, 41.69, -82.14, 43.81), basemap = true, planned = true,
+            "mis", "Southern Michigan", Bounds(-87.22, 41.69, -82.14, 43.81), basemap = true,
             area = listOf(
                 LonLat(-82.145, 43.601),
                 LonLat(-82.154, 43.55),
@@ -737,7 +737,7 @@ object Regions {
             ),
         ),
         Region(
-            "miu", "Northern Michigan and the Upper Peninsula", Bounds(-90.42, 43.79, -82.18, 48.31), basemap = true, planned = true,
+            "miu", "Northern Michigan and the Upper Peninsula", Bounds(-90.42, 43.79, -82.18, 48.31), basemap = true,
             area = listOf(
                 LonLat(-89.34, 47.984),
                 LonLat(-88.643, 48.257),
@@ -831,7 +831,7 @@ object Regions {
             ),
         ),
         Region(
-            "wi", "Wisconsin", Bounds(-92.91, 42.49, -86.24, 47.32), basemap = true, planned = true,
+            "wi", "Wisconsin", Bounds(-92.91, 42.49, -86.24, 47.32), basemap = true,
             area = listOf(
                 LonLat(-86.764, 45.444),
                 LonLat(-86.251, 45.236),
@@ -956,7 +956,7 @@ object Regions {
             ),
         ),
         Region(
-            "mn", "Minnesota", Bounds(-97.24, 43.49, -89.49, 49.38), basemap = true, planned = true,
+            "mn", "Minnesota", Bounds(-97.24, 43.49, -89.49, 49.38), basemap = true,
             area = listOf(
                 LonLat(-97.226, 48.993),
                 LonLat(-95.177, 48.993),
@@ -1140,7 +1140,7 @@ object Regions {
             ),
         ),
         Region(
-            "ia", "Iowa", Bounds(-96.65, 40.37, -90.13, 43.51), basemap = true, planned = true,
+            "ia", "Iowa", Bounds(-96.65, 40.37, -90.13, 43.51), basemap = true,
             area = listOf(
                 LonLat(-96.58, 43.285),
                 LonLat(-96.537, 43.299),
@@ -1271,7 +1271,7 @@ object Regions {
             ),
         ),
         Region(
-            "mo", "Missouri", Bounds(-95.78, 35.98, -89.11, 40.63), basemap = true, planned = true,
+            "mo", "Missouri", Bounds(-95.78, 35.98, -89.11, 40.63), basemap = true,
             area = listOf(
                 LonLat(-95.634, 40.309),
                 LonLat(-95.656, 40.324),
@@ -1436,7 +1436,7 @@ object Regions {
             ),
         ),
         Region(
-            "nd", "North Dakota", Bounds(-104.06, 45.93, -96.55, 49.0), basemap = true, planned = true,
+            "nd", "North Dakota", Bounds(-104.06, 45.93, -96.55, 49.0), basemap = true,
             area = listOf(
                 LonLat(-104.048, 48.993),
                 LonLat(-97.226, 48.993),
@@ -1485,7 +1485,7 @@ object Regions {
             ),
         ),
         Region(
-            "sd", "South Dakota", Bounds(-104.07, 42.51, -96.44, 45.95), basemap = true, planned = true,
+            "sd", "South Dakota", Bounds(-104.07, 42.51, -96.44, 45.95), basemap = true,
             area = listOf(
                 LonLat(-104.039, 45.0),
                 LonLat(-104.045, 45.942),
@@ -1548,7 +1548,7 @@ object Regions {
             ),
         ),
         Region(
-            "ne", "Nebraska", Bounds(-104.06, 39.99, -95.31, 43.01), basemap = true, planned = true,
+            "ne", "Nebraska", Bounds(-104.06, 39.99, -95.31, 43.01), basemap = true,
             area = listOf(
                 LonLat(-104.054, 41.0),
                 LonLat(-104.053, 43.0),
@@ -1637,7 +1637,7 @@ object Regions {
             ),
         ),
         Region(
-            "ks", "Kansas", Bounds(-102.06, 36.99, -94.6, 40.01), basemap = true, planned = true,
+            "ks", "Kansas", Bounds(-102.06, 36.99, -94.6, 40.01), basemap = true,
             area = listOf(
                 LonLat(-102.04, 37.0),
                 LonLat(-102.051, 40.0),
@@ -1692,7 +1692,7 @@ object Regions {
         "Connecticut" to listOf("ct"),
         "Pennsylvania" to listOf("pae", "paw"),
         "Maryland, Delaware and DC" to listOf("md"),
-        // The Midwest (planned: left out until their packs ship).
+        // The Midwest, offered since v0.1.38 carried its packs (October 2026).
         "Ohio" to listOf("ohn", "ohs"),
         "Indiana" to listOf("in"),
         "Illinois" to listOf("iln", "ils"),
