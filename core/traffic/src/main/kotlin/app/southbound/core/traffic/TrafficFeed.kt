@@ -21,12 +21,14 @@ import java.util.Collections
  * interval (HANDOFF: 511NY every 2-5 minutes, NYC DOT every 1-2), so the map
  * and navigation can ask as often as they like. Requests carry no location,
  * search or route and always fetch the whole state or city. The other states'
- * 511s ([StateTraffic]: 511PA, CTroads and 511WI, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot])
- * come in beside 511NY, each under its own toggle.
+ * 511s ([StateTraffic]: 511PA, CTroads and 511WI, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot];
+ * Illinois' Travel Midwest, [TravelMidwest]) come in beside 511NY, each under its own toggle.
  */
 class TrafficFeed(
     private val gate: NetworkGate,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Travel Midwest's files answer only a POST; the same rules as [fetch] (the gate's, tests stand in). */
+    private val post: (NetworkFeature, String, ByteArray) -> ByteArray = { feature, url, body -> gate.post(feature, url, body) },
     private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
 ) {
     private val mutex = Mutex()
@@ -45,6 +47,7 @@ class TrafficFeed(
         listOf(
             MarylandChart.Client { url -> fetch(TrafficSource.MD_CHART.feature, url) },
             DelDot.Client { url -> fetch(TrafficSource.DE_DELDOT.feature, url) },
+            TravelMidwest.Client { url, body -> post(TrafficSource.IL_TRAVEL_MIDWEST.feature, url, body) },
         )
     private val ibiEvents = HashMap<TrafficSource, Cached<List<Incident>>>()
     private val ibiCameras = HashMap<TrafficSource, Cached<List<TrafficCamera>>>()
