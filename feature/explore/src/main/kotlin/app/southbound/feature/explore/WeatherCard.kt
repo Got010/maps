@@ -179,8 +179,8 @@ internal fun WeatherAlertCard(alert: WeatherAlert, onClose: () -> Unit, modifier
 }
 
 /**
- * Alerts the route passes through, one line each, under the route summary; a tap opens the
- * alert. Nothing when there are none.
+ * Alerts the route passes through while they are in effect, one line each, under the route summary, with when
+ * one begins if that is after the driver gets there; a tap opens the alert. Nothing when there are none.
  */
 @Composable
 internal fun WeatherOnRouteNote(alerts: List<AlertOnRoute>, onOpen: (WeatherAlert) -> Unit, modifier: Modifier = Modifier) {
@@ -193,11 +193,25 @@ internal fun WeatherOnRouteNote(alerts: List<AlertOnRoute>, onOpen: (WeatherAler
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(Icons.Filled.Warning, contentDescription = null, tint = item.alert.severity.color(), modifier = Modifier.size(20.dp))
+                // From when, if it begins only after the driver gets there ("Thu 9:00 PM").
+                val from = item.startsAt?.let {
+                    DateUtils.formatDateTime(
+                        LocalContext.current,
+                        it,
+                        DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY,
+                    )
+                }
                 Text(
-                    if (item.metersAhead < 100) {
-                        stringResource(R.string.explore_weather_on_route_now, item.alert.event)
-                    } else {
-                        stringResource(R.string.explore_weather_on_route_ahead, item.alert.event, SpokenUnits.distance(item.metersAhead))
+                    when {
+                        item.metersAhead < 100 && from != null -> stringResource(R.string.explore_weather_on_route_now_from, item.alert.event, from)
+                        item.metersAhead < 100 -> stringResource(R.string.explore_weather_on_route_now, item.alert.event)
+                        from != null -> stringResource(
+                            R.string.explore_weather_on_route_ahead_from,
+                            item.alert.event,
+                            SpokenUnits.distance(item.metersAhead),
+                            from,
+                        )
+                        else -> stringResource(R.string.explore_weather_on_route_ahead, item.alert.event, SpokenUnits.distance(item.metersAhead))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f),

@@ -3,8 +3,11 @@ package app.southbound.core.weather
 import app.southbound.core.traffic.Geo
 import app.southbound.core.traffic.GeoPoint
 
-/** An alert whose area the route passes through, and how far along the route it starts (0 when already inside). */
-data class AlertOnRoute(val alert: WeatherAlert, val metersAhead: Double)
+/**
+ * An alert whose area the route passes through, and how far along the route it starts (0 when already inside).
+ * [startsAt] (POSIX millis) is set when the alert begins only after the driver is expected to reach its area.
+ */
+data class AlertOnRoute(val alert: WeatherAlert, val metersAhead: Double, val startsAt: Long? = null)
 
 /**
  * Which alert areas a route crosses, from the alerts' own polygons or their zones' shapes.
@@ -15,21 +18,40 @@ object RouteWeather {
     const val STEP_METERS = 500.0
 
     /**
-     * The alerts in [areas] (an alert's id to its rings) that [route] enters, ordered by
-     * where it first does. Alerts that ended before [now] are left out.
+     * How far the time the driver reaches an area may be off: an alert that ends up to this long before they get
+     * there, or starts up to this long after they have left, still counts (a late start, traffic, a stop).
      */
-    fun alongRoute(route: List<GeoPoint>, alerts: List<WeatherAlert>, areas: Map<String, List<Ring>>, now: Long): List<AlertOnRoute> {
+    const val SLACK_MILLIS = 30 * 60_000L
+
+    /**
+     * The alerts in [areas] (an alert's id to its rings) that [route] enters while they are in effect, ordered by
+     * where it first does. The driver is taken to reach a point [secondsPerMeter] seconds per metre along the route
+     * after [now] (the route's own time over its length; 0 takes every point as now): an alert that will have ended
+     * before they enter its area, or begins only after they have left it, is left out, each with [SLACK_MILLIS] to
+     * spare. One that begins after they get there says when ([AlertOnRoute.startsAt]).
+     */
+    fun alongRoute(
+        route: List<GeoPoint>,
+        alerts: List<WeatherAlert>,
+        areas: Map<String, List<Ring>>,
+        now: Long,
+        secondsPerMeter: Double = 0.0,
+    ): List<AlertOnRoute> {
         if (route.isEmpty()) return emptyList()
         val samples = sample(route)
+        val pace = secondsPerMeter.takeIf { it.isFinite() && it > 0 } ?: 0.0
+        fun at(meters: Double) = now + (meters * pace * 1000).toLong()
         return alerts.mapNotNull { alert ->
-            if (alert.ends != null && alert.ends < now) return@mapNotNull null
             val rings = areas[alert.id].orEmpty().ifEmpty { alert.polygons }
             if (rings.isEmpty()) return@mapNotNull null
             val boxes = rings.map(::box)
-            val first = samples.firstOrNull { (point, _) ->
-                rings.indices.any { i -> boxes[i].contains(point) && inside(point, rings[i]) }
-            } ?: return@mapNotNull null
-            AlertOnRoute(alert, first.second)
+            val inArea = samples.filter { (point, _) -> rings.indices.any { i -> boxes[i].contains(point) && inside(point, rings[i]) } }
+            if (inArea.isEmpty()) return@mapNotNull null
+            val enter = at(inArea.first().second)
+            val leave = at(inArea.last().second)
+            if (alert.ends != null && alert.ends < maxOf(now, enter - SLACK_MILLIS)) return@mapNotNull null
+            if (alert.onset != null && alert.onset > leave + SLACK_MILLIS) return@mapNotNull null
+            AlertOnRoute(alert, inArea.first().second, alert.onset?.takeIf { it > enter })
         }.sortedWith(compareBy<AlertOnRoute> { it.metersAhead }.thenBy { it.alert.severity.ordinal })
     }
 
