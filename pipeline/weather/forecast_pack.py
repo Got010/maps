@@ -6,10 +6,12 @@ The phone never asks a weather service about a place. A GitHub Action
 small file, forecast-ny.json.gz, on the prerelease tagged "weather"; every phone
 downloads the same file and looks a town up in it on the phone.
 
-How: a lattice over pipeline/regions.json's "all" box (every covered state:
-New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC),
-STEP degrees apart, keeping the points inside a basemap region (its box, and its
-area where it has one: the regions the app offers). The file keeps its old name,
+How: a lattice over the box of the regions pipeline/regions.json offers (every
+basemap region not marked planned: New York, New Jersey, Connecticut,
+Pennsylvania, Maryland, Delaware and DC; the Midwest joins when its packs
+ship), STEP degrees apart, keeping the points inside one of those regions (its
+box, and its area where it has one). The lattice starts at that box's south-west
+corner, so the points stay put while the box does. The file keeps its old name,
 forecast-ny.json.gz, so apps from before the other states read it too. Each
 point is looked up once with api.weather.gov/points/{lat},{lon} (its forecast
 grid cell; kept in a cache file between runs); points the NWS has no forecast for
@@ -79,9 +81,18 @@ def in_area(area, lon, lat):
     return inside
 
 
+def offered_box(regions):
+    """One box (west, south, east, north) around every basemap region not marked planned."""
+    boxes = [r["bounds"] for r in regions.values() if r.get("basemap") and not r.get("planned")]
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
 def covered(points, regions):
-    """The points inside some basemap region of regions.json ({id: region}): its box, and its area if it has one."""
-    basemaps = [r for r in regions.values() if r.get("basemap")]
+    """
+    The points inside some basemap region of regions.json ({id: region}): its box, and its area if it has one. A
+    planned region (the Midwest's, built but not offered yet) doesn't count: the pack grows with it when it ships.
+    """
+    basemaps = [r for r in regions.values() if r.get("basemap") and not r.get("planned")]
     return [
         (lat, lon) for lat, lon in points
         if any(in_box(r["bounds"], lon, lat) and ("area" not in r or in_area(r["area"], lon, lat)) for r in basemaps)
@@ -207,7 +218,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True)
     parser.add_argument("--cache", help="the points -> grid cell cache, read and rewritten")
-    parser.add_argument("--region", default="all", help="the regions.json box to cover; points outside every basemap region drop out")
+    parser.add_argument("--region", help="a regions.json box to cover instead of the offered regions' (points outside every offered region drop out)")
     parser.add_argument("--step", type=float, default=STEP)
     parser.add_argument("--limit", type=int, help="only N points from the middle of the lattice (a quick check)")
     parser.add_argument("--print-raw", action="store_true", help="print one cell's raw forecast answer (for fixtures)")
@@ -215,7 +226,8 @@ def main():
 
     with open(os.path.join(HERE, "..", "regions.json")) as f:
         regions = json.load(f)["regions"]
-    points = covered(lattice(tuple(regions[args.region]["bounds"]), args.step), regions)
+    box = tuple(regions[args.region]["bounds"]) if args.region else offered_box(regions)
+    points = covered(lattice(box, args.step), regions)
     if args.limit:
         points = points[len(points) // 2:][: args.limit]
     cache = {}
