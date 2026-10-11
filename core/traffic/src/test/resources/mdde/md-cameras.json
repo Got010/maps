@@ -1,0 +1,46 @@
+{
+ "data": [
+  {
+   "cameraCategories": [
+    "Wash. DC"
+   ],
+   "cctvIp": "strmr5.sha.maryland.gov",
+   "commMode": "ONLINE",
+   "description": "I-270 & Old Hundred Rd (MD 109)(CAM 165)",
+   "id": "7a00a1dc01250075004d823633235daa",
+   "lastCachedDataUpdateTime": 1791482344389,
+   "lat": 39.2773,
+   "lon": -77.3236,
+   "milePost": 22.29,
+   "name": "I-270 & Old Hundred Rd (MD 109)",
+   "opStatus": "OK",
+   "publicVideoURL": "https://chart.maryland.gov/Video/GetVideo/7a00a1dc01250075004d823633235daa",
+   "routeNumber": 270,
+   "routePrefix": "IS",
+   "routeSuffix": ""
+  },
+  {
+   "cameraCategories": [
+    "Western MD"
+   ],
+   "cctvIp": "strmr5.sha.maryland.gov",
+   "commMode": "ONLINE",
+   "description": "I-70 East of I-270",
+   "id": "9201ff5801f700d700437a45351f0214",
+   "lastCachedDataUpdateTime": 1791482344389,
+   "lat": 39.39761,
+   "lon": -77.42188,
+   "milePost": 53.13,
+   "name": "710002",
+   "opStatus": "OK",
+   "publicVideoURL": "https://chart.maryland.gov/Video/GetVideo/9201ff5801f700d700437a45351f0214",
+   "routeNumber": 70,
+   "routePrefix": "IS",
+   "routeSuffix": ""
+  }
+ ],
+ "error": null,
+ "success": true,
+ "totalCount": 2,
+ "warnings": null
+}
