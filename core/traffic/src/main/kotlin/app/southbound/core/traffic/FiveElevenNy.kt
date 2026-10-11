@@ -242,8 +242,9 @@ object FiveElevenNy {
     /**
      * A sign's messages as display lines: MULTI [nl] and HTML <br> start a
      * line, [np] a page (an empty line between pages), other MULTI tags go,
-     * spaces are squeezed and placeholders such as NO_MESSAGE drop out. Each
-     * entry of [messages] is one or more lines. Text stays as the sign has it.
+     * HTML entities (&nbsp; &amp;, from the IBI sites) are decoded, spaces are
+     * squeezed and placeholders such as NO_MESSAGE drop out. Each entry of
+     * [messages] is one or more lines. Text stays as the sign has it.
      */
     fun signLines(messages: List<String>): List<String> {
         val lines = ArrayList<String>()
@@ -251,7 +252,7 @@ object FiveElevenNy {
             for ((i, page) in message.split(PAGE_BREAK).withIndex()) {
                 if (i > 0 && lines.isNotEmpty() && lines.last().isNotEmpty()) lines += ""
                 page.split(LINE_BREAK)
-                    .map { it.replace(MULTI_TAG, "").replace(SPACES, " ").trim() }
+                    .map { it.replace(MULTI_TAG, "").let(::decodeEntities).replace(SPACES, " ").trim() }
                     .filter { it.isNotEmpty() && it.uppercase(Locale.ROOT) !in PLACEHOLDERS }
                     .let { lines += it }
             }
@@ -259,6 +260,12 @@ object FiveElevenNy {
         while (lines.lastOrNull()?.isEmpty() == true) lines.removeAt(lines.lastIndex)
         return lines
     }
+
+    /** The few HTML entities the sign feeds use; anything else stays as it is. */
+    private fun decodeEntities(text: String): String =
+        if ('&' !in text) text
+        else text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'")
+            .replace("&lt;", "<").replace("&gt;", ">")
 
     /** Relative links are 511NY's own; plain http to its host is upgraded (Android blocks cleartext). */
     private fun absoluteUrl(url: String): String = when {
