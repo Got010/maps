@@ -85,7 +85,7 @@ class ExploreServices private constructor(context: Context) {
     val traffic = TrafficFeed(networkGate)
 
     /**
-     * NWS alerts for the whole state, NOAA radar, the stations' current weather and the 7-day forecast pack (from
+     * NWS alerts for every covered state, NOAA radar, the stations' current weather and the 7-day forecast pack (from
      * the "weather" pre-release on GitHub, kept in files/weather so it reads offline), behind the weather toggle.
      */
     val weather = WeatherFeed(

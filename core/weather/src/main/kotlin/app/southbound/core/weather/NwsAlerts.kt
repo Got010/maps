@@ -38,13 +38,17 @@ data class WeatherAlert(
 )
 
 /**
- * Reads `https://api.weather.gov/alerts/active?area=NY`: every active alert for the whole
- * state, a GeoJSON FeatureCollection, no key and nothing about where the driver is. Seen on
- * 2026-10-07 (scripts/feed-probe.py): New York had none (221 bytes); the whole country had
- * 222, some with a Polygon, others with only `affectedZones`.
+ * Reads `https://api.weather.gov/alerts/active?area=NY,NJ,CT,PA,MD,DE,DC`: every active alert in
+ * every state Southbound covers ([STATES]), a GeoJSON FeatureCollection, no key and nothing about
+ * where the driver is (the same request for every phone). Seen on 2026-10-07 (scripts/feed-probe.py):
+ * New York had none (221 bytes); the whole country had 222, some with a Polygon, others with only
+ * `affectedZones`.
  */
 object NwsAlerts {
-    const val URL: String = "https://api.weather.gov/alerts/active?area=NY"
+    /** The states Southbound covers (owner, October 2026: the same weather everywhere). */
+    val STATES: List<String> = listOf("NY", "NJ", "CT", "PA", "MD", "DE", "DC")
+
+    const val URL: String = "https://api.weather.gov/alerts/active?area=NY,NJ,CT,PA,MD,DE,DC"
 
     /** Zone shapes are read from this host only, whatever an alert names. */
     const val ZONE_PREFIX: String = "https://api.weather.gov/zones/"

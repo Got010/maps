@@ -41,7 +41,7 @@ data class ForecastDay(
 
 /** The whole pack: every grid point's forecast, as built at [generatedAt] (POSIX millis). */
 class ForecastPack(val generatedAt: Long, val points: List<ForecastPoint>) {
-    /** The grid point nearest [point], within [Forecasts.NEAR_KM]; null when none is that close (outside the state). */
+    /** The grid point nearest [point], within [Forecasts.NEAR_KM]; null when none is that close (outside the covered states). */
     fun nearest(point: GeoPoint): ForecastPoint? =
         points.minByOrNull { Geo.distanceMeters(it.location, point) }
             ?.takeIf { Geo.distanceMeters(it.location, point) <= Forecasts.NEAR_KM * 1000 }
@@ -49,7 +49,9 @@ class ForecastPack(val generatedAt: Long, val points: List<ForecastPoint>) {
 
 /**
  * Reads forecast-ny.json.gz, the pack pipeline/weather/forecast_pack.py builds every six hours from the
- * National Weather Service (see .github/workflows/weather.yml), and turns its periods into days.
+ * National Weather Service (see .github/workflows/weather.yml), and turns its periods into days. Since
+ * October 2026 it covers every basemap region (all the covered states); the name stayed, so older apps
+ * read it too.
  */
 object Forecasts {
     /** The release the pack is published on (a pre-release, so no update check sees it) and its file. */

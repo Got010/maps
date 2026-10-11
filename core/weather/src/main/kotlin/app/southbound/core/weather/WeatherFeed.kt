@@ -18,18 +18,18 @@ import kotlin.math.ln
 import kotlin.math.tan
 
 /**
- * The radar picture of the whole state, a transparent PNG in Web Mercator spanning
+ * The radar picture of every covered state, a transparent PNG in Web Mercator spanning
  * [Radar.BOUNDS], so the map draws it between those corners. [fetchedAt] is POSIX millis.
  */
 class RadarImage(val png: ByteArray, val fetchedAt: Long)
 
-/** The latest weather: alerts for the state, the shapes of their areas and, when asked for, radar and current conditions. */
+/** The latest weather: alerts for the covered states, the shapes of their areas and, when asked for, radar and current conditions. */
 data class WeatherSnapshot(
     val alerts: List<WeatherAlert> = emptyList(),
     /** Each alert's id to its area: its own polygons, else its zones' shapes once read. */
     val areas: Map<String, List<Ring>> = emptyMap(),
     val radar: RadarImage? = null,
-    /** The latest observation at each station in the state, when asked for. */
+    /** The latest observation at each station in the covered states, when asked for. */
     val conditions: List<CurrentConditions> = emptyList(),
     /** The 7-day forecast pack, when asked for and not too old ([Forecasts.MAX_AGE_MILLIS]). */
     val forecast: ForecastPack? = null,
@@ -47,12 +47,20 @@ data class WeatherSnapshot(
     }
 }
 
-/** NOAA's radar mosaic as one picture of New York (seen on 2026-10-07: a 60-70 KB PNG, cached 2 min upstream). */
+/**
+ * NOAA's radar mosaic as one picture of every covered state (seen on 2026-10-07: New York alone a 60-70 KB PNG,
+ * cached 2 min upstream).
+ */
 object Radar {
-    /** West, south, east, north: the state with a margin, the same for every phone. */
-    val BOUNDS = doubleArrayOf(-79.8, 40.4, -71.8, 45.1)
-    const val WIDTH = 1024
-    const val HEIGHT = 820
+    /**
+     * West, south, east, north: New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC with a
+     * margin, the same for every phone.
+     */
+    val BOUNDS = doubleArrayOf(-80.6, 37.8, -71.7, 45.1)
+
+    /** About 870 m a pixel, as the New York picture was. */
+    const val WIDTH = 1140
+    const val HEIGHT = 1250
 
     /**
      * MRMS quality-controlled base reflectivity from NCEP's map server, as a WMS GetMap of
@@ -88,9 +96,9 @@ interface ForecastSource {
 
 /**
  * Fetches the weather the user turned on (Settings > Live data > Weather), through
- * [NetworkGate]: the state's alerts, the shapes of the zones they name, and the radar
- * picture while the weather layer is shown. Every request is the same for every phone in
- * New York; none carries a location, search or route.
+ * [NetworkGate]: the covered states' alerts, the shapes of the zones they name, and the radar
+ * picture while the weather layer is shown. Every request is the same for every phone;
+ * none carries a location, search or route.
  */
 class WeatherFeed(
     private val gate: NetworkGate,
@@ -107,6 +115,9 @@ class WeatherFeed(
     private var radar: RadarImage? = null
     private var conditions: List<CurrentConditions>? = null
     private var conditionsAt = 0L
+
+    // Each state's last good stations, so one state's failed request keeps its old ones.
+    private val conditionsByUrl = HashMap<String, List<CurrentConditions>>()
     private var forecast: ForecastPack? = null
     private var forecastId: Long? = null
     private var forecastCheckedAt = 0L
@@ -137,6 +148,7 @@ class WeatherFeed(
             alerts = null
             radar = null
             conditions = null
+            conditionsByUrl.clear()
             return@withLock WeatherSnapshot.EMPTY.also { _snapshot.value = it }
         }
         val now = clock()
@@ -157,15 +169,25 @@ class WeatherFeed(
             loadZones(alerts.orEmpty(), errors)
             if (withForecast) loadForecast(now, force, errors)
             if (withConditions && (force || conditions == null || now - conditionsAt >= CONDITIONS_TTL_MILLIS)) {
-                try {
-                    conditions = Metar.parse(fetch(NetworkFeature.WEATHER, Metar.URL).decodeToString())
+                var answered = 0
+                var failed: String? = null
+                for (url in Metar.URLS) {
+                    try {
+                        conditionsByUrl[url] = Metar.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
+                        answered++
+                    } catch (e: NetworkFeatureDisabledException) {
+                        throw e
+                    } catch (e: IOException) {
+                        failed = failed ?: e.message.orEmpty()
+                    } catch (e: IllegalArgumentException) {
+                        failed = failed ?: e.message.orEmpty()
+                    }
+                }
+                if (failed != null) errors += "Current weather: $failed"
+                // All failed: asked again next time, as before. Some: the rest keep their last stations until the next round.
+                if (answered > 0) {
+                    conditions = Metar.URLS.flatMap { conditionsByUrl[it].orEmpty() }.distinctBy { it.station }
                     conditionsAt = now
-                } catch (e: NetworkFeatureDisabledException) {
-                    throw e
-                } catch (e: IOException) {
-                    errors += "Current weather: ${e.message}"
-                } catch (e: IllegalArgumentException) {
-                    errors += "Current weather: ${e.message}"
                 }
             }
             if (withRadar && (force || radar == null || now - radar!!.fetchedAt >= RADAR_TTL_MILLIS)) {
@@ -261,7 +283,7 @@ class WeatherFeed(
         /** Stations report hourly, more often when the weather changes. */
         const val CONDITIONS_TTL_MILLIS = 10 * 60_000L
 
-        /** A storm can name most of the state's 88 forecast zones; a few dozen at a time, the rest next refresh. */
+        /** A storm can name most of a state's forecast zones (New York has 88); a few dozen at a time, the rest next refresh. */
         const val MAX_ZONES_PER_REFRESH = 40
     }
 }
