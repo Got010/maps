@@ -356,6 +356,8 @@ private fun networkLabel(feature: NetworkFeature): Int = when (feature) {
     NetworkFeature.WEATHER -> R.string.backup_net_weather
     NetworkFeature.TRAFFIC_511PA -> R.string.backup_net_511pa
     NetworkFeature.TRAFFIC_CTROADS -> R.string.backup_net_ctroads
+    NetworkFeature.TRAFFIC_CHART_MD -> R.string.backup_net_chart_md
+    NetworkFeature.TRAFFIC_DELDOT -> R.string.backup_net_deldot
 }
 
 /** Counts only: no place, list or key name, and never a key. */
