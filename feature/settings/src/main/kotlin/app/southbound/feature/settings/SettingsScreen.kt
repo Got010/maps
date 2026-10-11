@@ -319,6 +319,21 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_sd511, toggles.getValue(NetworkFeature.TRAFFIC_SD511), R.string.live_sd511_note) {
         network.set(NetworkFeature.TRAFFIC_SD511, it)
     }
+    Toggle(R.string.live_511in, toggles.getValue(NetworkFeature.TRAFFIC_511IN), R.string.live_511in_note) {
+        network.set(NetworkFeature.TRAFFIC_511IN, it)
+    }
+    Toggle(R.string.live_511mn, toggles.getValue(NetworkFeature.TRAFFIC_511MN), R.string.live_511mn_note) {
+        network.set(NetworkFeature.TRAFFIC_511MN, it)
+    }
+    Toggle(R.string.live_511ia, toggles.getValue(NetworkFeature.TRAFFIC_511IA), R.string.live_511ia_note) {
+        network.set(NetworkFeature.TRAFFIC_511IA, it)
+    }
+    Toggle(R.string.live_511ne, toggles.getValue(NetworkFeature.TRAFFIC_511NE), R.string.live_511ne_note) {
+        network.set(NetworkFeature.TRAFFIC_511NE, it)
+    }
+    Toggle(R.string.live_kandrive, toggles.getValue(NetworkFeature.TRAFFIC_KANDRIVE), R.string.live_kandrive_note) {
+        network.set(NetworkFeature.TRAFFIC_KANDRIVE, it)
+    }
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }

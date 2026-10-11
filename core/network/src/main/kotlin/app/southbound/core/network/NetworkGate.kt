@@ -50,6 +50,21 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** South Dakota's SD511 (Iteris): road work, incidents, restrictions and cameras, the whole state. */
     TRAFFIC_SD511(enabledByDefault = false),
+
+    /** Indiana's 511 (CARS platform): events, cameras and message signs, the whole state. */
+    TRAFFIC_511IN(enabledByDefault = false),
+
+    /** Minnesota's 511 (CARS platform). */
+    TRAFFIC_511MN(enabledByDefault = false),
+
+    /** Iowa's 511 (CARS platform). */
+    TRAFFIC_511IA(enabledByDefault = false),
+
+    /** Nebraska 511 (CARS platform). */
+    TRAFFIC_511NE(enabledByDefault = false),
+
+    /** Kansas' KanDrive (CARS platform). */
+    TRAFFIC_KANDRIVE(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

@@ -33,6 +33,11 @@ enum class TrafficSource(val label: String, val feature: NetworkFeature, val idP
     IL_TRAVEL_MIDWEST("Travel Midwest", NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, "il:"),
     ND_DOT("NDDOT", NetworkFeature.TRAFFIC_NDDOT, "nd:"),
     SD_511("SD511", NetworkFeature.TRAFFIC_SD511, "sd:"),
+    IN_511("511IN", NetworkFeature.TRAFFIC_511IN, "in:"),
+    MN_511("511MN", NetworkFeature.TRAFFIC_511MN, "mn:"),
+    IA_511("511IA", NetworkFeature.TRAFFIC_511IA, "ia:"),
+    NE_511("Nebraska 511", NetworkFeature.TRAFFIC_511NE, "ne:"),
+    KS_KANDRIVE("KanDrive", NetworkFeature.TRAFFIC_KANDRIVE, "ks:"),
 }
 
 /** One state 511 event: a crash, closure, work zone or special event, at a point. */
