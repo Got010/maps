@@ -141,8 +141,13 @@ def fiveeleven_new():
     """511NY's new site reads {api}/map-features?{layer query} per layer (and {api}/hash to skip unchanged
     ones); found in its config (demo.511ny.org/configs/main.json) and main bundle, October 2026."""
     head("511NY new platform: map-features")
+    cars_features("https://api-511x-nysdot.carsprogram.org/")
+
+
+def cars_features(base, limit_keys=80):
+    """What a CARS-platform API (api-511x-<agency>.carsprogram.org) answers for the map-features the sites read."""
     from collections import Counter
-    base = "https://api-511x-nysdot.carsprogram.org/"
+    base = base.rstrip("/") + "/"
     for path, query in (("events", "eventClassifications=incidents"),
                         ("events", "eventClassifications=closures&maxBeginDateOffset=300000"),
                         ("events", "eventClassifications=construction&maxBeginDateOffset=300000"),
@@ -163,7 +168,7 @@ def fiveeleven_new():
         geoms = Counter((f.get("geometry") or {}).get("type") for f in feats if isinstance(f, dict))
         print("geometry types:", geoms)
         keys = Counter(k for f in feats if isinstance(f, dict) for k in (f.get("properties") or {}))
-        print("property keys:", keys.most_common(80))
+        print("property keys:", keys.most_common(limit_keys))
         for field in ("eventType", "icon", "priority", "eventClassification", "type", "status", "layer"):
             values = Counter(str((f.get("properties") or {}).get(field)) for f in feats if isinstance(f, dict))
             if len(values) > 1 or "None" not in values:
@@ -1036,12 +1041,128 @@ def dot_midwest_other():
             print("   failed:", repr(e)[:200])
 
 
+# Indiana, Minnesota, Iowa, Nebraska and Kansas serve the same JavaScript shell as 511NY's new site (the CARS
+# platform, Castle Rock): the API host is in the site's config, as 511NY's was (demo.511ny.org/configs/main.json).
+CARS_SITES = {"Indiana": "https://511in.org", "Minnesota": "https://511mn.org", "Iowa": "https://511ia.org",
+              "Nebraska": "https://511.nebraska.gov", "Kansas": "https://www.kandrive.gov", "North Dakota": "https://travel.dot.nd.gov"}
+
+
+def dot_midwest_cars():
+    for state, site in CARS_SITES.items():
+        head(f"{state}: {site}, CARS platform?")
+        api = None
+        try:
+            for path in ("/configs/main.json", "/config/main.json", "/configs/config.json", "/assets/configs/main.json"):
+                status, _, h, body = get(site + path, limit=2_000_000)
+                print(f"   {path}: status {status} type {h.get('Content-Type')} bytes {len(body)}")
+                if status == 200 and body.lstrip().startswith("{"):
+                    print("    ", body[:2000].replace("\n", " "))
+                    found = re.findall(r"https://[a-z0-9.-]*carsprogram\.org", body)
+                    if found:
+                        api = found[0]
+                        break
+            if not api:
+                status, final, _, page = get(site + "/", limit=2_000_000)
+                for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:12]:
+                    src = urllib.parse.urljoin(final, src)
+                    _, _, _, js = get(src, limit=12_000_000)
+                    found = sorted(set(re.findall(r"https://[a-z0-9.-]*carsprogram\.org", js)))
+                    hosts = sorted(set(re.findall(r"https://api[a-z0-9.-]*\.(?:org|gov|com)[/a-z0-9._-]{0,40}", js)))
+                    configs = sorted(set(re.findall(r"""["']([^"' ]*configs?/[^"' ]*\.json)["']""", js)))
+                    if found or hosts or configs:
+                        print(f"   {src[-70:]}: carsprogram {found[:5]}; api hosts {hosts[:10]}; configs {configs[:5]}")
+                    if found and not api:
+                        api = found[0]
+            if api:
+                print(f"   API: {api}")
+                cars_features(api, limit_keys=25)
+            else:
+                print("   no CARS API host found")
+        except Exception as e:
+            print("   failed:", repr(e)[:200])
+
+
+def dot_midwest_2():
+    """Follow-ups from the first Midwest probe: South Dakota (Iteris), Ohio's keyed API docs, Illinois' JSON paths,
+    Michigan's public/api, Missouri's map services."""
+    head("South Dakota: sd511.org (Iteris)")
+    try:
+        status, final, _, page = get("https://www.sd511.org/", headers=BROWSER, limit=4_000_000)
+        print("   scripts:", re.findall(r'<script[^>]+src="([^"]+)"', page)[:20])
+        print("   data-ish on the page:", sorted(set(re.findall(r"""["'](https?://[^"']+(?:api|json|xml|rest)[^"']*)["']""", page)))[:20],
+              sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:api|json|xml|rest|data)[A-Za-z0-9_./?=&-]*)["']""", page)))[:30])
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:15]:
+            src = urllib.parse.urljoin(final, src)
+            if any(x in src for x in ("jquery", "bootstrap", "google", "gtag", "polyfill")):
+                continue
+            _, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+            hits = sorted(set(re.findall(r"""["'](https?://[^"' ]+(?:api|json|rest|feed)[^"' ]*)["']""", js)))
+            rel = sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:api|json|rest|feed|data)[A-Za-z0-9_./?=&{}-]*)["']""", js)))
+            if hits or rel:
+                print(f"   {src[-70:]}: {hits[:15]} {rel[:25]}")
+    except Exception as e:
+        print("   failed:", repr(e)[:200])
+
+    head("Ohio: OHGO public API docs (a key, free registration?)")
+    for url in ("https://publicapi.ohgo.com/docs/resources", "https://publicapi.ohgo.com/docs", "https://publicapi.ohgo.com/",
+                "https://publicapi.ohgo.com/api/v1/cameras?page-size=1"):
+        status, _, h, body = get(url, headers=BROWSER, limit=3_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}")
+        print("    ", (text_of(body) if "<" in body[:300] else body)[:2500].replace("\n", " | "))
+
+    head("Illinois: Travel Midwest JSON paths from the bundle")
+    for base in ("https://travelmidwest.com/lmiga", "https://travelmidwest.com", "https://travelmidwest.com/api", "https://www.travelmidwest.com/lmiga"):
+        for path in ("/incidentMap.json?type=lines", "/incidents.json", "/cameraMap.json", "/cameraReport.json", "/dmsMap.json", "/dmsReport.json",
+                     "/congestionMap.json", "/constructionMap.json?type=lines", "/construction.json"):
+            status, _, h, body = get(base + path, headers={**BROWSER, "Accept": "application/json"}, limit=20_000_000)
+            kind = "json" if body.lstrip()[:1] in "[{" else "other"
+            print(f"   {base + path}: status {status} type {h.get('Content-Type')} bytes {len(body)} {kind}")
+            if status == 200 and kind == "json":
+                print("    ", body[:1200].replace("\n", " "))
+        print()
+
+    head("Michigan: Mi Drive public/api")
+    try:
+        _, _, _, js = get("https://mdotjboss.state.mi.us/MiDrive/js/main.js", headers=BROWSER, limit=8_000_000)
+        spots = [m.start() for m in re.finditer(r"public/api/", js)][:20]
+        for i in spots:
+            print("   ...", js[max(0, i - 160):i + 160].replace("\n", " "), "...")
+        paths = sorted(set(re.findall(r"""public/api/[A-Za-z0-9_./-]+""", js)))
+        print("   paths:", paths[:40])
+        _, _, _, js2 = get("https://mdotjboss.state.mi.us/MiDrive/js/map/mapdatabase.js?version=1", headers=BROWSER, limit=8_000_000)
+        print("   mapdatabase.js bytes", len(js2), "urls:", sorted(set(re.findall(r"""["'](/?[A-Za-z0-9_./-]*(?:api|json|rest|Server|data)[A-Za-z0-9_./?=&{}-]*)["']""", js2)))[:40])
+        for path in paths[:12] + ["public/api/incidents", "public/api/cameras", "public/api/dms", "public/api/events"]:
+            url = "https://mdotjboss.state.mi.us/MiDrive/" + path
+            status, _, h, body = get(url, headers={**BROWSER, "Accept": "application/json"}, limit=20_000_000)
+            print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:500].replace("\n", " "))
+    except Exception as e:
+        print("   failed:", repr(e)[:200])
+
+    head("Missouri: traveler.modot.org map services")
+    try:
+        status, final, _, page = get("https://traveler.modot.org/map/", headers=BROWSER, limit=4_000_000)
+        srcs = re.findall(r'<script[^>]+src="([^"]+)"', page)
+        print("   scripts:", srcs[:30])
+        print("   services on the page:", sorted(set(re.findall(r"""https?://[^"' ]+(?:rest/services|FeatureServer|MapServer|\.json)[^"' ]*""", page)))[:20])
+        for src in srcs[:30]:
+            src = urllib.parse.urljoin(final, src)
+            if "modot.org" not in src or "ruxit" in src or "Incapsula" in src:
+                continue
+            _, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+            hits = sorted(set(re.findall(r"""https?://[^"' ]+(?:rest/services|FeatureServer|MapServer|\.json|/api/)[^"' ]*""", js)))
+            rel = sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:api|json|rest|services|data)[A-Za-z0-9_./?=&{}-]*)["']""", js)))
+            print(f"   {src[-70:]}: bytes {len(js)}; {hits[:20]} {rel[:20]}")
+    except Exception as e:
+        print("   failed:", repr(e)[:200])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
             "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
-            "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other}
+            "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
+            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2}
 
 
 class Timeout(Exception):
