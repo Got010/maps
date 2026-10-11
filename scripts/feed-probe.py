@@ -36,14 +36,14 @@ def _text(raw):
     return raw.decode("utf-8", "replace")
 
 
-def get(url, limit=4_000_000, method="GET", headers=None):
-    """(status, final url, headers, body text) without raising on HTTP errors."""
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", **(headers or {})}, method=method)
+def get(url, limit=4_000_000, method="GET", headers=None, data=None):
+    """(status, final url, headers, body text) without raising on HTTP errors. [data] (bytes) makes it a POST."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", **(headers or {})}, method=method, data=data)
     print(f"... {method} {url}", flush=True)
     signal.alarm(45)  # a whole request, not just one socket read
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
-            body = r.read(limit) if method == "GET" else b""
+            body = r.read(limit) if method in ("GET", "POST") else b""
             return r.status, r.geturl(), dict(r.headers), _text(body)
     except urllib.error.HTTPError as e:
         return e.code, url, dict(e.headers), _text(e.read(limit))
@@ -1156,13 +1156,123 @@ def dot_midwest_2():
         print("   failed:", repr(e)[:200])
 
 
+def dot_midwest_3():
+    """Third round: the CARS states' own hosts (<st>tg.carsprogram.org, found in their bundles), South Dakota's Iteris
+    aggregator, Ohio's swagger, Illinois' POST endpoints and IDOT's ArcGIS, Michigan's publicApi calls, Missouri's
+    ArcGIS, North Dakota's bundle."""
+    for state, hosts in (("Indiana", ["intg", "public"]), ("Minnesota", ["mntg", "public"]), ("Iowa", ["iatg", "public"]),
+                         ("Nebraska", ["netg", "public"]), ("Kansas", ["kstg", "ks"])):
+        head(f"{state}: CARS hosts")
+        for host in hosts:
+            api = f"https://{host}.carsprogram.org"
+            status, _, h, body = get(f"{api}/events/map-features?eventClassifications=incidents", limit=20_000_000)
+            print(f"   {api}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:200].replace("\n", " "))
+            if status == 200 and body.lstrip().startswith(("{", "[")):
+                cars_features(api, limit_keys=25)
+                break
+
+    head("South Dakota: Iteris aggregator layers")
+    base = "https://aggregator.iteris-atis.com/aggregator/services/layers/group/sddot/current/"
+    for layer in ("rest_area", "incident", "incidents", "event", "events", "construction", "road_condition", "road_conditions", "camera", "cameras",
+                  "cctv", "dms", "message_sign", "closure", "closures", "winter_road", "weather", ""):
+        url = base + (f"?layer_type={layer}" if layer else "")
+        status, _, h, body = get(url, headers=BROWSER, limit=20_000_000)
+        print(f"   {layer or '(none)'}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:400].replace("\n", " "))
+    for url in ("https://sd.cdn.iteris-atis.com/geojson/icons/metadata/", "https://aggregator.iteris-atis.com/aggregator/services/layers/group/sddot/",
+                "https://aggregator.iteris-atis.com/aggregator/services/"):
+        status, _, h, body = get(url, headers=BROWSER, limit=4_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:600].replace("\n", " "))
+    for src in ("https://www.sd511.org/atis-static.iteriscdn.com/WebApps/SD/SafeTravel4/v1.0/js/prefs_base.js?v=1.9.16",
+                "https://www.sd511.org/atis-static.iteriscdn.com/WebApps/SD/SafeTravel4/v1.0/js/mapbox-gl-traffic.js?v=1.9.16",
+                "https://www.sd511.org/atis-static.iteriscdn.com/WebApps/SD/SafeTravel4/v1.0/js/alert_ticker.js?v=1.9.16",
+                "https://www.sd511.org/atis-static.iteriscdn.com/WebApps/SD/SafeTravel4/v1.0/js/bootstrap_utilities.js?v=1.9.16"):
+        status, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+        print(f"   {src[-60:]}: status {status} bytes {len(js)}; layer_type values {sorted(set(re.findall(r'layer_type=([A-Za-z_]+)', js)))[:30]};"
+              f" urls {sorted(set(re.findall(r'https?://[^\"\' ]+(?:aggregator|iteris)[^\"\' ]*', js)))[:15]}")
+    status, final, _, page = get("https://www.sd511.org/", headers=BROWSER, limit=4_000_000)
+    print("   inline layer_type values:", sorted(set(re.findall(r"layer_type=([A-Za-z_]+)", page))))
+    print("   inline iteris urls:", sorted(set(re.findall(r"""https?://[^"' ]+(?:aggregator|iteris-atis)[^"' ]*""", page)))[:30])
+
+    head("Ohio: OHGO swagger (the schema, without a key)")
+    for url in ("https://publicapi.ohgo.com/swagger/v1/swagger.json", "https://publicapi.ohgo.com/swagger/docs/v1", "https://publicapi.ohgo.com/swagger",
+                "https://publicapi.ohgo.com/swagger/index.html"):
+        status, _, h, body = get(url, headers=BROWSER, limit=4_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}")
+        if status == 200 and body.lstrip().startswith("{"):
+            try:
+                doc = json.loads(body)
+                print("   paths:", list(doc.get("paths", {}))[:30])
+                for name, schema in list(doc.get("definitions", doc.get("components", {}).get("schemas", {})).items())[:12]:
+                    print(f"   {name}: {list((schema or {}).get('properties', {}))[:30]}")
+            except ValueError:
+                print("   ", body[:800])
+        elif status == 200:
+            print("   ", re.findall(r"""["'](/swagger/[^"']+)["']""", body)[:5], text_of(body)[:300].replace("\n", " | "))
+
+    head("Illinois: Travel Midwest POST endpoints and IDOT's ArcGIS")
+    for path in ("incidentMap.json?type=lines", "incidentMap.json", "cameraMap.json", "dmsMap.json", "congestionMap.json", "constructionMap.json?type=lines",
+                 "incidents.json", "construction.json", "dmsReport.json", "chicagoQuickTraffic.json"):
+        for body_text, ctype in (("{}", "application/json"), ("", "application/x-www-form-urlencoded")):
+            status, _, h, body = get("https://travelmidwest.com/lmiga/" + path, headers={**BROWSER, "Accept": "application/json", "Content-Type": ctype,
+                                                                                            "Referer": "https://travelmidwest.com/"},
+                                     method="POST", data=body_text.encode(), limit=20_000_000)
+            print(f"   POST {path} ({ctype}): status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:700].replace("\n", " "))
+            if status == 200:
+                break
+    status, final, _, page = get("https://www.gettingaroundillinois.com/", headers=BROWSER, limit=4_000_000)
+    urls = sorted(set(re.findall(r"""https?://[^"' <>]+(?:rest/services|FeatureServer|MapServer|arcgis)[^"' <>]*""", page)))
+    print("   IDOT page arcgis urls:", urls[:30])
+    for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:25]:
+        src = urllib.parse.urljoin(final, src)
+        if any(x in src for x in ("jquery", "bootstrap", "google", "gtag", "datatables", "inspinia", "popper", "font")):
+            continue
+        _, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+        hits = sorted(set(re.findall(r"""https?://[^"' <>]+(?:rest/services|FeatureServer|MapServer|arcgis|\.json|/api/)[^"' <>]*""", js)))
+        if hits:
+            print(f"   {src[-70:]}: {hits[:25]}")
+    for url in ("https://gis1.dot.illinois.gov/arcgis/rest/services?f=json", "https://gis.dot.illinois.gov/arcgis/rest/services?f=json",
+                "https://www.gettingaroundillinois.com/arcgis/rest/services?f=json"):
+        status, _, h, body = get(url, headers=BROWSER, limit=2_000_000)
+        print(f"   {url}: status {status} bytes {len(body)}:", body[:800].replace("\n", " "))
+
+    head("Michigan: how Mi Drive calls publicApi")
+    for src in ("https://mdotjboss.state.mi.us/MiDrive/js/main.js", "https://mdotjboss.state.mi.us/MiDrive/js/map/mapdatabase.js?version=1",
+                "https://mdotjboss.state.mi.us/MiDrive/js/map/mapvars.js", "https://mdotjboss.state.mi.us/MiDrive/js/common.js?version=83"):
+        status, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+        calls = sorted(set(re.findall(r"""(?:publicApi|secureApi|pageAPI|server)\s*\+\s*["']([^"']+)["']""", js)))
+        print(f"   {src[-50:]}: status {status} bytes {len(js)}; api paths {calls[:60]}")
+        for m in list(re.finditer(r"\.(?:getJSON|ajax|get)\(", js))[:8]:
+            print("     ...", js[m.start():m.start() + 220].replace("\n", " "))
+    status, final, _, page = get("https://mdotjboss.state.mi.us/MiDrive/map", headers=BROWSER, limit=4_000_000)
+    print("   inline api mentions:", sorted(set(re.findall(r"""(?:publicApi|public/api/|public/page/)[^"' <>;]{0,80}""", page)))[:30])
+
+    head("Missouri: MoDOT ArcGIS services")
+    status, _, _, page = get("https://traveler.modot.org/map/", headers=BROWSER, limit=4_000_000)
+    print("   inline urls:", sorted(set(u for u in re.findall(r"""https?://[^"' <>]+""", page) if "modot" in u or "arcgis" in u or "esri" in u))[:30])
+    print("   inline paths:", sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:rest|services|api|json|Server|data)[A-Za-z0-9_./?=&-]*)["']""", page)))[:30])
+    for url in ("https://gis.modot.mo.gov/arcgis/rest/services?f=json", "https://gis.modot.mo.gov/arcgis/rest/services/TravelerInformation?f=json",
+                "https://traveler.modot.org/arcgis/rest/services?f=json", "https://traveler.modot.org/map/data/", "https://www.modot.org/traveler-map"):
+        status, _, h, body = get(url, headers=BROWSER, limit=2_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:700].replace("\n", " "))
+
+    head("North Dakota: travel.dot.nd.gov bundle")
+    for src in ("https://travel.dot.nd.gov/static/js/main.bb4da58d.chunk.js", "https://travel.dot.nd.gov/static/js/2.83af0331.chunk.js"):
+        status, _, _, js = get(src, headers=BROWSER, limit=12_000_000)
+        urls = sorted(set(u for u in re.findall(r"""https?://[^"' <>\\]+""", js) if not any(x in u for x in ("mapbox", "unpkg", "google", "w3.org", "github", "reactjs", "facebook", "mozilla"))))
+        rel = sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:api|json|rest|feed|data|services)[A-Za-z0-9_./?=&{}-]*)["']""", js)))
+        print(f"   {src[-40:]}: status {status} bytes {len(js)}; urls {urls[:40]}; paths {rel[:40]}")
+    for url in ("https://travel.dot.nd.gov/api/", "https://travel.dot.nd.gov/data/", "https://www.dot.nd.gov/travel-info-v2/"):
+        status, _, h, body = get(url, headers=BROWSER, limit=2_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
             "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
-            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2}
+            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3}
 
 
 class Timeout(Exception):
