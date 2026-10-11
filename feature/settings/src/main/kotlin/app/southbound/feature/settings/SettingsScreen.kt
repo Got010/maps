@@ -334,6 +334,9 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_kandrive, toggles.getValue(NetworkFeature.TRAFFIC_KANDRIVE), R.string.live_kandrive_note) {
         network.set(NetworkFeature.TRAFFIC_KANDRIVE, it)
     }
+    Toggle(R.string.live_midrive, toggles.getValue(NetworkFeature.TRAFFIC_MIDRIVE), R.string.live_midrive_note) {
+        network.set(NetworkFeature.TRAFFIC_MIDRIVE, it)
+    }
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }

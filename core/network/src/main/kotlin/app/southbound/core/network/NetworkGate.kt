@@ -65,6 +65,9 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Kansas' KanDrive (CARS platform). */
     TRAFFIC_KANDRIVE(enabledByDefault = false),
+
+    /** Michigan's Mi Drive (MDOT): incidents, work zones and cameras, the whole state. */
+    TRAFFIC_MIDRIVE(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

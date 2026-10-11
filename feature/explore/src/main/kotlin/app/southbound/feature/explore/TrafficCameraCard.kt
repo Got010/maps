@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.traffic.Hls
+import app.southbound.core.traffic.MiDrive
 import app.southbound.core.traffic.TrafficCamera
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -80,19 +81,22 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
     var reloads by remember(camera.id) { mutableIntStateOf(0) }
     var state by remember(camera.id) { mutableStateOf<StillState>(StillState.Loading) }
     var busy by remember(camera.id) { mutableStateOf(false) }
-    LaunchedEffect(camera.id, camera.imageUrl, camera.videoUrl, reloads) {
+    LaunchedEffect(camera.id, camera.imageUrl, camera.videoUrl, camera.stillVia, reloads) {
         val url = camera.imageUrl?.takeIf { it.isNotBlank() }
         val video = camera.videoUrl?.takeIf { it.isNotBlank() }
-        if (!camera.hasImage || (url == null && video == null)) return@LaunchedEffect
+        val via = camera.stillVia?.takeIf { it.isNotBlank() }
+        if (!camera.hasImage || (url == null && video == null && via == null)) return@LaunchedEffect
         // Keep the old picture on screen while a refresh loads; only the first load shows a spinner.
         if (state !is StillState.Shown) state = StillState.Loading
         busy = true
         state = try {
             val bitmap = withContext(Dispatchers.IO) {
-                if (url == null) {
+                // Mi Drive's list names no still: its camera's detail page does (the same toggle, the same rules).
+                val still = url ?: via?.let { MiDrive.stillOf(gate.get(camera.source.feature, it).decodeToString()) }
+                if (still == null) {
                     videoFrame(gate, camera, video ?: return@withContext null)
                 } else {
-                    val bytes = gate.get(camera.source.feature, url)
+                    val bytes = gate.get(camera.source.feature, still)
                     if (bytes.size > MAX_IMAGE_BYTES) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 }
             }

@@ -38,6 +38,7 @@ enum class TrafficSource(val label: String, val feature: NetworkFeature, val idP
     IA_511("511IA", NetworkFeature.TRAFFIC_511IA, "ia:"),
     NE_511("Nebraska 511", NetworkFeature.TRAFFIC_511NE, "ne:"),
     KS_KANDRIVE("KanDrive", NetworkFeature.TRAFFIC_KANDRIVE, "ks:"),
+    MI_DRIVE("Mi Drive", NetworkFeature.TRAFFIC_MIDRIVE, "mi:"),
 }
 
 /** One state 511 event: a crash, closure, work zone or special event, at a point. */
@@ -107,9 +108,14 @@ data class TrafficCamera(
      * the newest segment instead ([Hls]).
      */
     val videoUrl: String? = null,
+    /**
+     * A JSON page naming the still, for a camera whose list gives none (Mi Drive's, [MiDrive.cameraInfoUrl]): the card
+     * fetches it first and takes the link [MiDrive.stillOf] allows.
+     */
+    val stillVia: String? = null,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
-    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank())
+    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank() || !stillVia.isNullOrBlank())
 }
 
 /**

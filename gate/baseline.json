@@ -971,6 +971,10 @@
       "note": "Kansas's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
     },
     {
+      "value": "https://mdotjboss.state.mi.us",
+      "note": "Michigan's Mi Drive (MDOT): core/traffic MiDrive.kt fetches the lists its own map page reads, /MiDrive/incidents/AllForMap, construction/AllForMap and camera/AllForMap, the whole state every time, no key and nothing about the user's location, search or route; when a camera card opens it fetches that camera's detail page, /MiDrive/camera/getCameraInformation/<id>, for the still's link (the id names the camera, never the viewer). Gated by NetworkFeature.TRAFFIC_MIDRIVE (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://mntg.carsprogram.org",
       "note": "Minnesota's 511 services host (Castle Rock's CARS platform): core/traffic CarsStates.kt fetches the whole camera list, /cameras_v1/api/cameras, and sign list, /signs_v1/api/signs, as the state's own site does, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511MN (Settings > Live data, off by default)."
     },
@@ -1021,6 +1025,10 @@
     {
       "value": "mapbox.com",
       "note": "Strings inside the MapLibre Android SDK (attribution and feedback links, Mapbox host checks inherited from its Mapbox lineage). App code never uses them: the map style is bundled (assets/light.json, dark.json) and tiles come from pmtiles://file:// on the phone."
+    },
+    {
+      "value": "micamerasimages.net",
+      "note": "Mi Drive's camera stills (https://micamerasimages.net/thumbs/<camera>.flv.jpg): core/traffic MiDrive.kt keeps a camera's still only on this host; the camera card fetches it through NetworkGate.get. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_MIDRIVE (Settings > Live data, off by default)."
     },
     {
       "value": "overturemaps.org",

@@ -105,6 +105,8 @@
     <string name="live_511ne_note">Nebraska DOT\'s crashes, closures and roadwork across Nebraska, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. No key needed: these are the lists and map query 511.nebraska.gov\'s own map reads.</string>
     <string name="live_kandrive">Incidents and closures in Kansas (KanDrive)</string>
     <string name="live_kandrive_note">KDOT\'s crashes, closures and roadwork across Kansas, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. No key needed: these are the lists and map query kandrive.gov\'s own map reads.</string>
+    <string name="live_midrive">Incidents and closures in Michigan (Mi Drive)</string>
+    <string name="live_midrive_note">MDOT\'s crashes, closures and work zones across Michigan, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras on the map (a camera\'s picture is fetched when you open it; message signs are not read, their text is one page per sign). No key needed: these are the lists Mi Drive\'s own map reads.</string>
     <string name="live_dot">Traffic speeds (NYC DOT)</string>
     <string name="live_dot_note">Speeds on NYC highways and main roads from NYC Open Data, fetched whole. No key needed. The city\'s copy sometimes lags; readings older than two hours are not shown.</string>
     <string name="live_traffic_hint">With any of these on, a traffic button appears on the map. Feeds are fetched only while the layer is shown or while navigating.</string>
@@ -207,6 +209,7 @@
     <string name="backup_net_511ia">511IA traffic</string>
     <string name="backup_net_511ne">Nebraska 511 traffic</string>
     <string name="backup_net_kandrive">KanDrive (Kansas) traffic</string>
+    <string name="backup_net_midrive">Mi Drive (Michigan) traffic</string>
     <string name="backup_export_failed_kept">Export failed: %1$s. The partial file could not be deleted; delete it yourself.</string>
     <string name="backup_summary">%1$d saved places in %2$d lists, %3$d recents, Home and Work set: %4$d, %5$d API keys, %6$d preference values</string>
     <string name="backup_import_title">Import</string>
