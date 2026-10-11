@@ -73,7 +73,7 @@ class RegionsTest(unittest.TestCase):
         self.assertFalse(self.regions["nys"]["basemap"])
         offered = {n: r for n, r in self.regions.items() if r["basemap"] and not r.get("planned")}
         basemaps = [r["bounds"] for r in offered.values()]
-        self.assertEqual(11, len(basemaps))
+        self.assertEqual(26, len(basemaps))
         # Every region whose search pack is cut from search-nys lies inside the nys region.
         cut = [name for name, region in offered.items() if region.get("search_from") == "nys"]
         self.assertEqual(["nyc", "li", "hudson", "capital", "western", "njn"], cut)

@@ -31,17 +31,20 @@ class RegionsTest {
     fun `statewide is not a basemap region`() {
         assertTrue(Regions.basemaps.none { it.id == Regions.STATEWIDE })
         assertTrue(Regions.basemaps.none { it.id == "all" })
-        assertEquals(11, Regions.basemaps.size)
+        assertEquals(26, Regions.basemaps.size)
         assertEquals("New York and Northern New Jersey", Regions.nameOf("nys"))
         assertEquals("custom", Regions.nameOf("custom"))
     }
 
-    /** The four states beyond New York, offered since their packs are in southbound-v2.json; the Midwest not yet. */
+    /** Every state's regions are offered since their packs are in southbound-v2.json (the Midwest's since v0.1.38). */
     @Test
     fun `the other states are offered, grouped by state`() {
-        assertEquals(listOf("ohn", "ohs", "in", "iln", "ils", "mis", "miu", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"), Regions.all.filter { it.planned }.map { it.id })
+        assertEquals(emptyList<String>(), Regions.all.filter { it.planned }.map { it.id })
         assertEquals(
-            listOf("New York", "New Jersey", "Connecticut", "Pennsylvania", "Maryland, Delaware and DC"),
+            listOf(
+                "New York", "New Jersey", "Connecticut", "Pennsylvania", "Maryland, Delaware and DC", "Ohio", "Indiana", "Illinois", "Michigan",
+                "Wisconsin", "Minnesota", "Iowa", "Missouri", "North Dakota", "South Dakota", "Nebraska", "Kansas",
+            ),
             Regions.byState.map { it.first },
         )
         // Every region under one heading, in the picker's order.
@@ -54,15 +57,16 @@ class RegionsTest {
         assertEquals("njs", Regions.basemapAt(39.3643, -74.4229)?.id) // Atlantic City
     }
 
-    /** Planned regions are built, not offered: nothing is installed or asked for there until their packs ship. */
+    /** The Midwest's regions are offered, and their outlines run along state lines, so each city is one region's alone. */
     @Test
-    fun `the midwest is planned, not offered`() {
-        assertNull(Regions.basemapAt(41.8781, -87.6298)) // Chicago
-        assertTrue(Regions.byState.none { it.first == "Illinois" })
+    fun `the midwest is offered, each city in one region`() {
+        assertEquals("iln", Regions.basemapAt(41.8781, -87.6298)?.id) // Chicago
+        assertEquals(listOf("iln", "ils"), Regions.byState.first { it.first == "Illinois" }.second.map { it.id })
         fun only(id: String, lat: Double, lon: Double) {
             val region = Regions.byId(id)!!
-            assertTrue("$id should hold $lat,$lon", region.planned && region.contains(lat, lon))
-            val others = Regions.all.filter { it.planned && it.id != id && it.contains(lat, lon) }.map { it.id }
+            assertTrue("$id should hold $lat,$lon", !region.planned && region.contains(lat, lon))
+            assertEquals("$lat,$lon is $id's", id, Regions.basemapAt(lat, lon)?.id)
+            val others = Regions.basemaps.filter { it.id != id && it.contains(lat, lon) }.map { it.id }
             assertEquals("$lat,$lon is $id's alone", emptyList<String>(), others)
         }
         only("iln", 41.8781, -87.6298) // Chicago
