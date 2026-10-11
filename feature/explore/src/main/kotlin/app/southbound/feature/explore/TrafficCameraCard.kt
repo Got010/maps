@@ -2,6 +2,8 @@ package app.southbound.feature.explore
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaDataSource
+import android.media.MediaMetadataRetriever
 import android.text.format.DateFormat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -44,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
+import app.southbound.core.traffic.Hls
 import app.southbound.core.traffic.TrafficCamera
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -66,9 +69,10 @@ private sealed interface StillState {
 /**
  * A tapped state 511 traffic camera: its name, road and direction, and its latest
  * still. The still is fetched through [gate] under its 511's toggle (511NY, 511PA,
- * CTroads) from the camera's own image link (which names the camera, never the
- * viewer) when the card opens and on Refresh. An offline camera says so and
- * fetches nothing.
+ * CTroads, CHART, DelDOT) from the camera's own image link (which names the camera,
+ * never the viewer) when the card opens and on Refresh. A camera that only streams
+ * video (CHART's, DelDOT's) shows a frame of its newest few seconds instead
+ * ([videoFrame]). An offline camera says so and fetches nothing.
  */
 @Composable
 internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose: () -> Unit, modifier: Modifier) {
@@ -76,16 +80,21 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
     var reloads by remember(camera.id) { mutableIntStateOf(0) }
     var state by remember(camera.id) { mutableStateOf<StillState>(StillState.Loading) }
     var busy by remember(camera.id) { mutableStateOf(false) }
-    LaunchedEffect(camera.id, camera.imageUrl, reloads) {
-        val url = camera.imageUrl
-        if (!camera.hasImage || url == null) return@LaunchedEffect
+    LaunchedEffect(camera.id, camera.imageUrl, camera.videoUrl, reloads) {
+        val url = camera.imageUrl?.takeIf { it.isNotBlank() }
+        val video = camera.videoUrl?.takeIf { it.isNotBlank() }
+        if (!camera.hasImage || (url == null && video == null)) return@LaunchedEffect
         // Keep the old picture on screen while a refresh loads; only the first load shows a spinner.
         if (state !is StillState.Shown) state = StillState.Loading
         busy = true
         state = try {
             val bitmap = withContext(Dispatchers.IO) {
-                val bytes = gate.get(camera.source.feature, url)
-                if (bytes.size > MAX_IMAGE_BYTES) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (url == null) {
+                    videoFrame(gate, camera, video ?: return@withContext null)
+                } else {
+                    val bytes = gate.get(camera.source.feature, url)
+                    if (bytes.size > MAX_IMAGE_BYTES) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
             }
             if (bitmap == null) StillState.Failed(StillState.Reason.NOT_AN_IMAGE) else StillState.Shown(bitmap, System.currentTimeMillis())
         } catch (e: CancellationException) {
@@ -183,4 +192,55 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
             }
         }
     }
+}
+
+/**
+ * One frame of a camera that only streams video: its playlist, the media playlist it names, then the newest segment
+ * (a few seconds of MPEG-TS, a few hundred kB), each through [gate] under the camera's toggle, and the segment's
+ * last frame decoded on the phone. Null when the segment holds no frame the phone can decode.
+ *
+ * @throws IOException when a request fails; IllegalArgumentException when a playlist isn't one.
+ */
+private fun videoFrame(gate: NetworkGate, camera: TrafficCamera, playlistUrl: String): Bitmap? {
+    var url = playlistUrl
+    // A master playlist, then a media playlist: never more than that.
+    repeat(2) {
+        val playlist = gate.get(camera.source.feature, url)
+        if (playlist.size > Hls.MAX_PLAYLIST_BYTES) throw IllegalArgumentException("a video playlist far too big")
+        when (val next = Hls.next(url, playlist.decodeToString())) {
+            is Hls.Next.Playlist -> url = next.url
+            is Hls.Next.Segment -> {
+                val segment = gate.get(camera.source.feature, next.url, timeoutMillis = 30_000)
+                if (segment.size > Hls.MAX_SEGMENT_BYTES) return null
+                return lastFrame(segment)
+            }
+        }
+    }
+    throw IllegalArgumentException("a video playlist that names no video")
+}
+
+/** The last frame of a short MPEG-TS segment, read from memory (nothing written to storage). */
+private fun lastFrame(segment: ByteArray): Bitmap? = MediaMetadataRetriever().use { retriever ->
+    try {
+        retriever.setDataSource(BytesDataSource(segment))
+        val durationUs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000)
+        durationUs?.let { retriever.getFrameAtTime(it, MediaMetadataRetriever.OPTION_PREVIOUS_SYNC) }
+            ?: retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+    } catch (e: RuntimeException) {
+        // MediaMetadataRetriever throws IllegalArgumentException or RuntimeException for data it can't read.
+        null
+    }
+}
+
+private class BytesDataSource(private val bytes: ByteArray) : MediaDataSource() {
+    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+        if (position >= bytes.size) return -1
+        val n = minOf(size.toLong(), bytes.size - position).toInt()
+        System.arraycopy(bytes, position.toInt(), buffer, offset, n)
+        return n
+    }
+
+    override fun getSize(): Long = bytes.size.toLong()
+
+    override fun close() {}
 }
