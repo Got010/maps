@@ -56,9 +56,11 @@ class TravelMidwestTest {
         assertEquals("High", bridge.severity)
         assertEquals("2 left lanes closed", bridge.lanesStatus)
         assertEquals("Bridge repair, two left lanes closed: NB I-90/I-94 (Dan Ryan Expy) from 31st St to I-55", bridge.description)
-        assertEquals(central(2026, 3, 2, 8, 0), bridge.updatedAt)
+        assertEquals(central(2026, 10, 10, 6, 15), bridge.updatedAt)
+        // `lanes` full shuts the ramp whatever the wording; no last update, so the span's start.
         val ramp = work[1]
         assertEquals(IncidentKind.CLOSURE, ramp.kind)
+        assertEquals(central(2026, 10, 9, 21, 0), ramp.updatedAt)
         assertEquals("All lanes closed", ramp.lanesStatus)
         assertEquals("I-88", ramp.roadway)
         assertEquals("Eastbound", ramp.direction)
