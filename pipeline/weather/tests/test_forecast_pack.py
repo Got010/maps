@@ -50,10 +50,12 @@ class ForecastPackTest(unittest.TestCase):
             (42.65, -73.76),  # Albany
             (42.36, -71.06),  # Boston: no region
             (39.40, -78.90),  # West Virginia, inside Maryland's box but not its area
-            (40.00, -81.00),  # Ohio
+            (40.00, -81.00),  # Ohio: planned, not offered yet
         ], regions)
         self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76)], kept)
-        pts = fp.covered(fp.lattice(tuple(regions["all"]["bounds"])), regions)
+        # The offered regions' box is the east's, whatever planned regions "all" has grown by, so the points stay put.
+        self.assertEqual((-80.52, 37.88, -71.75, 45.02), fp.offered_box(regions))
+        pts = fp.covered(fp.lattice(fp.offered_box(regions)), regions)
         self.assertEqual(477, len(pts))
 
     def test_icon_codes(self):
