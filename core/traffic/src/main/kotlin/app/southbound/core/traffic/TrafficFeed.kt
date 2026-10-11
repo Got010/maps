@@ -48,6 +48,8 @@ class TrafficFeed(
             MarylandChart.Client { url -> fetch(TrafficSource.MD_CHART.feature, url) },
             DelDot.Client { url -> fetch(TrafficSource.DE_DELDOT.feature, url) },
             TravelMidwest.Client { url, body -> post(TrafficSource.IL_TRAVEL_MIDWEST.feature, url, body) },
+            NorthDakota.Client { url -> fetch(TrafficSource.ND_DOT.feature, url) },
+            SouthDakota.Client { url -> fetch(TrafficSource.SD_511.feature, url) },
         )
     private val ibiEvents = HashMap<TrafficSource, Cached<List<Incident>>>()
     private val ibiCameras = HashMap<TrafficSource, Cached<List<TrafficCamera>>>()

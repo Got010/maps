@@ -23,7 +23,7 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 | `manifest.json` | `{"app":"southbound","schema":6,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n}`. Always first. The importer checks every count against what the other entries hold. |
 | `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`. A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
 | `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`. The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
-| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 15 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, and schema 5 had 13, without `TRAFFIC_511WI` and `TRAFFIC_TRAVEL_MIDWEST`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
+| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 17 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, and schema 5 had 13, without `TRAFFIC_511WI`, `TRAFFIC_TRAVEL_MIDWEST`, `TRAFFIC_NDDOT` and `TRAFFIC_SD511`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
 
 ## Import rules
 
@@ -92,9 +92,9 @@ the importer then declares the range it supports and needs a tested migration fo
 - **5** (October 2026): the `network` group gained `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT` (Settings > Live data >
   Incidents and closures in Maryland, in Delaware). A schema 1 to 4 bundle is read with its own fields exactly and
   imports with both off.
-- **6** (October 2026): the `network` group gained `TRAFFIC_511WI` and `TRAFFIC_TRAVEL_MIDWEST` (Settings > Live data >
-  Incidents and closures in Wisconsin, in Illinois). A schema 1 to 5 bundle is read with its own fields exactly and
-  imports with both off. Exports are written as schema 6.
+- **6** (October 2026): the `network` group gained `TRAFFIC_511WI`, `TRAFFIC_TRAVEL_MIDWEST`, `TRAFFIC_NDDOT` and
+  `TRAFFIC_SD511` (Settings > Live data > Incidents and closures in Wisconsin, in Illinois, in North Dakota, in South
+  Dakota). A schema 1 to 5 bundle is read with its own fields exactly and imports with all four off. Exports are written as schema 6.
 
 ## Checking an export from Termux
 

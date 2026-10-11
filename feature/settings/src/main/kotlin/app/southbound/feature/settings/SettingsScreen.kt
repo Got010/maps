@@ -313,6 +313,12 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_travel_midwest, toggles.getValue(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST), R.string.live_travel_midwest_note) {
         network.set(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, it)
     }
+    Toggle(R.string.live_nddot, toggles.getValue(NetworkFeature.TRAFFIC_NDDOT), R.string.live_nddot_note) {
+        network.set(NetworkFeature.TRAFFIC_NDDOT, it)
+    }
+    Toggle(R.string.live_sd511, toggles.getValue(NetworkFeature.TRAFFIC_SD511), R.string.live_sd511_note) {
+        network.set(NetworkFeature.TRAFFIC_SD511, it)
+    }
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }
