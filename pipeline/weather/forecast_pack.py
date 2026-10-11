@@ -6,7 +6,11 @@ The phone never asks a weather service about a place. A GitHub Action
 small file, forecast-ny.json.gz, on the prerelease tagged "weather"; every phone
 downloads the same file and looks a town up in it on the phone.
 
-How: a lattice over pipeline/regions.json's "nys" box, STEP degrees apart. Each
+How: a lattice over pipeline/regions.json's "all" box (every covered state:
+New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC),
+STEP degrees apart, keeping the points inside a basemap region (its box, and its
+area where it has one: the regions the app offers). The file keeps its old name,
+forecast-ny.json.gz, so apps from before the other states read it too. Each
 point is looked up once with api.weather.gov/points/{lat},{lon} (its forecast
 grid cell; kept in a cache file between runs); points the NWS has no forecast for
 (the ocean, the lakes, Canada) drop out. Each distinct grid cell's
@@ -56,6 +60,32 @@ def lattice(bounds, step=STEP):
                 continue
             points.append((lat, lon))
     return points
+
+
+def in_box(bounds, lon, lat):
+    return bounds[0] <= lon <= bounds[2] and bounds[1] <= lat <= bounds[3]
+
+
+def in_area(area, lon, lat):
+    """Ray casting; the same as Region.insideArea in core/packs Regions.kt."""
+    inside = False
+    previous = area[-1]
+    for point in area:
+        if (point[1] > lat) != (previous[1] > lat) and (
+            lon < (previous[0] - point[0]) * (lat - point[1]) / (previous[1] - point[1]) + point[0]
+        ):
+            inside = not inside
+        previous = point
+    return inside
+
+
+def covered(points, regions):
+    """The points inside some basemap region of regions.json ({id: region}): its box, and its area if it has one."""
+    basemaps = [r for r in regions.values() if r.get("basemap")]
+    return [
+        (lat, lon) for lat, lon in points
+        if any(in_box(r["bounds"], lon, lat) and ("area" not in r or in_area(r["area"], lon, lat)) for r in basemaps)
+    ]
 
 
 def get_json(url, tries=3):
@@ -177,15 +207,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True)
     parser.add_argument("--cache", help="the points -> grid cell cache, read and rewritten")
-    parser.add_argument("--region", default="nys")
+    parser.add_argument("--region", default="all", help="the regions.json box to cover; points outside every basemap region drop out")
     parser.add_argument("--step", type=float, default=STEP)
     parser.add_argument("--limit", type=int, help="only N points from the middle of the lattice (a quick check)")
     parser.add_argument("--print-raw", action="store_true", help="print one cell's raw forecast answer (for fixtures)")
     args = parser.parse_args()
 
     with open(os.path.join(HERE, "..", "regions.json")) as f:
-        bounds = tuple(json.load(f)["regions"][args.region]["bounds"])
-    points = lattice(bounds, args.step)
+        regions = json.load(f)["regions"]
+    points = covered(lattice(tuple(regions[args.region]["bounds"]), args.step), regions)
     if args.limit:
         points = points[len(points) // 2:][: args.limit]
     cache = {}

@@ -1,5 +1,6 @@
 # Builds the forecast pack (pipeline/weather/forecast_pack.py): the National Weather Service's 7-day forecast for a
-# fixed grid of points over New York, published as forecast-ny.json.gz on the prerelease tagged "weather". Every
+# fixed grid of points over every covered state (New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware
+# and DC; the file kept its New York name), published as forecast-ny.json.gz on the prerelease tagged "weather". Every
 # phone downloads the same file, so no request says where anyone is. A prerelease, so Obtainium and the app's own
 # update check (both read the latest full release) never see it.
 #
@@ -61,7 +62,7 @@ jobs:
           if ! gh release view weather --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create weather --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
               --title "Weather forecast (data, refreshed every 6 hours)" \
-              --notes "forecast-ny.json.gz: the National Weather Service 7-day forecast for a fixed grid over New York, read by the app's weather layer. Not an app release."
+              --notes "forecast-ny.json.gz: the National Weather Service 7-day forecast for a fixed grid over every state Southbound covers, read by the app's weather layer. Not an app release."
           fi
           gh release upload weather --repo "$GITHUB_REPOSITORY" --clobber \
             "$RUNNER_TEMP/forecast-ny.json.gz" "$RUNNER_TEMP/points-cache.json"
