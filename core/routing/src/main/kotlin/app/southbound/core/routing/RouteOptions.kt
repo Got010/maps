@@ -77,4 +77,17 @@ internal object RouteOptions {
         }
         return body.substring(0, start + 1) + """"exclude_polygons":$json,""" + body.substring(start + 1)
     }
+
+    /**
+     * Adds Valhalla `exclude_locations` to a request [body]: the road at each of [points] (a spot on a route beside a
+     * plate reader, [CameraAvoidance]) is left out of the route, that stretch alone, not the streets around it as a
+     * polygon would. Valhalla allows `service_limits.max_exclude_locations` of them ([OfflineRouter] raises it).
+     */
+    fun withExcludeLocations(body: String, points: List<CameraAvoidance.Spot>): String {
+        if (points.isEmpty()) return body
+        val start = body.indexOf('{')
+        require(start >= 0) { "Route request isn't a JSON object" }
+        val json = points.joinToString(",", prefix = "[", postfix = "]") { String.format(Locale.ROOT, """{"lat":%.6f,"lon":%.6f}""", it.lat, it.lon) }
+        return body.substring(0, start + 1) + """"exclude_locations":$json,""" + body.substring(start + 1)
+    }
 }

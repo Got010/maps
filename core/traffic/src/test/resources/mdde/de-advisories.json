@@ -1,0 +1,92 @@
+{
+ "advisories": [
+  {
+   "id": "T20261011-0001",
+   "timestamp": "2026-10-11T00:01:34Z",
+   "timestampMS": "1791676894868",
+   "published": {
+    "id": 181532,
+    "linkbackUrl": "https://www.deldot.gov/Traffic/incident/index.shtml?id=181532"
+   },
+   "type": {
+    "id": 1,
+    "code": "C",
+    "name": "Construction"
+   },
+   "where": {
+    "county": {
+     "id": 2,
+     "code": "N",
+     "name": "New Castle County"
+    },
+    "location": "PULASKI HIGHWAY WESTBOUND BETWEEN BROOKMONT DR AND SALEM CHURCH RD: LANES CLOSED DUE TO ROAD WORK.",
+    "lon": -75.690813,
+    "lat": 39.620238,
+    "point": {
+     "type": "Point",
+     "coordinates": [
+      -75.69081346779046,
+      39.62023814468844
+     ]
+    },
+    "address": {
+     "name": null,
+     "address1": "Pulaski Highway",
+     "address2": "",
+     "address3": null,
+     "city": "Newark",
+     "state": "DE",
+     "zip": "19702",
+     "country": "USA"
+    }
+   },
+   "effect": "",
+   "impact": "EXPECT DELAYS. UNTIL 6:00 AM.",
+   "hash": -75514066
+  },
+  {
+   "id": "T20261009-0045",
+   "timestamp": "2026-10-09T20:14:13Z",
+   "timestampMS": "1791576853968",
+   "published": {
+    "id": 181514,
+    "linkbackUrl": "https://www.deldot.gov/Traffic/incident/index.shtml?id=181514"
+   },
+   "type": {
+    "id": 6,
+    "code": "RC",
+    "name": "Road Closure"
+   },
+   "where": {
+    "county": {
+     "id": 2,
+     "code": "N",
+     "name": "New Castle County"
+    },
+    "location": "SILVERSIDE RD BETWEEN VEALE RD AND MARSH RD: ROAD CLOSED DUE TO ROAD WORK",
+    "lon": -75.504038,
+    "lat": 39.801537,
+    "point": {
+     "type": "Point",
+     "coordinates": [
+      -75.504038453339,
+      39.8015369803496
+     ]
+    },
+    "address": {
+     "name": null,
+     "address1": "2109 Silverside Road",
+     "address2": "",
+     "address3": null,
+     "city": "Wilmington",
+     "state": "DE",
+     "zip": "19810",
+     "country": "USA"
+    }
+   },
+   "effect": "NORTHBOUND: USE VEALE RD. THEN MARSH RD. REJOIN SILVERSIDE RD.\n\nSOUTHBOUND: USE MARSH RD. THEN VEALE RD. REJOIN SILVERSIDE RD.\n\nWESTBOUND VEALE RD: CONTINUE ON VEALE RD. THEN MARSH RD. REJOIN SILVERSIDE RD.",
+   "impact": "SEEK ALTERNATE ROUTE. UNTIL SUN, OCT 11, 2026, 3:00 PM.",
+   "hash": -1320784292
+  }
+ ]
+}

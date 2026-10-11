@@ -21,6 +21,21 @@ class RouteOptionsTest {
         val body = """{"costing":"auto"}"""
         assertEquals(body, RouteOptions.withExcludePolygons(body, emptyList()))
         assertEquals(body, RouteOptions.withExcludePolygons(body, listOf(listOf(-74.0 to 40.7, -73.9 to 40.7))))
+        assertEquals(body, RouteOptions.withExcludeLocations(body, emptyList()))
+    }
+
+    @Test
+    fun `exclude locations go into the request body as lat-lon points, beside the polygons`() {
+        val body = """{"format":"osrm","costing":"auto","locations":[]}"""
+        val points = listOf(CameraAvoidance.Spot(40.7, -74.0), CameraAvoidance.Spot(41.123456789, -73.5))
+        assertEquals(
+            """{"exclude_locations":[{"lat":40.700000,"lon":-74.000000},{"lat":41.123457,"lon":-73.500000}],""" +
+                """"format":"osrm","costing":"auto","locations":[]}""",
+            RouteOptions.withExcludeLocations(body, points),
+        )
+        val ring = listOf(-74.0 to 40.7, -73.99 to 40.7, -73.99 to 40.71, -74.0 to 40.7)
+        val both = RouteOptions.withExcludeLocations(RouteOptions.withExcludePolygons(body, listOf(ring)), points.take(1))
+        assertEquals(true, both.startsWith("""{"exclude_locations":[{"lat":40.700000,"lon":-74.000000}],"exclude_polygons":[[["""))
     }
 
     @Test

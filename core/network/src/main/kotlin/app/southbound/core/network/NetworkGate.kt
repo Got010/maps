@@ -32,6 +32,12 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Connecticut's 511 (CTroads, CTDOT): the same for Connecticut. */
     TRAFFIC_CTROADS(enabledByDefault = false),
+
+    /** Maryland's CHART (MDOT SHA): incidents, closures, message signs and cameras, the whole state. */
+    TRAFFIC_CHART_MD(enabledByDefault = false),
+
+    /** Delaware's DelDOT: advisories and closures, message signs and cameras, the whole state. */
+    TRAFFIC_DELDOT(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {
