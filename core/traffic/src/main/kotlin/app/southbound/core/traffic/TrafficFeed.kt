@@ -21,7 +21,7 @@ import java.util.Collections
  * interval (HANDOFF: 511NY every 2-5 minutes, NYC DOT every 1-2), so the map
  * and navigation can ask as often as they like. Requests carry no location,
  * search or route and always fetch the whole state or city. The other states'
- * 511s ([StateTraffic]: 511PA and CTroads, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot])
+ * 511s ([StateTraffic]: 511PA, CTroads and 511WI, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot])
  * come in beside 511NY, each under its own toggle.
  */
 class TrafficFeed(

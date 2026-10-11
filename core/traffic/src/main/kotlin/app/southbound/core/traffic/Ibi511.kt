@@ -21,14 +21,20 @@ import java.util.zip.GZIPInputStream
  * An event or a sign is a map icon joined to its list row by id; a camera row has its own position. Found by
  * scripts/feed-probe.py on 2026-10-11: 511PA had 366 events (227 roadwork, 119 closures, 20 incidents), 1,565
  * cameras and 1,170 signs; CTroads 347 cameras, 136 signs and no events that evening, so its event rows are read
- * as 511PA's (the same platform). Not a documented API (the documented one, /api/v2/get/event, wants a developer
- * key): if a site changes, the probe workflow shows what it sends now.
+ * as 511PA's (the same platform); 511WI (the same platform again) 490 cameras, each with a still and a video
+ * stream, 167 signs, 367 roadwork icons and no incidents that morning, its lists in the same layout. Not a
+ * documented API (the documented one, /api/v2/get/event, wants a developer key): if a site changes, the probe
+ * workflow shows what it sends now.
  */
 object Ibi511 {
     /** A map layer of events, the list its details are in, and the kind its items are (null: by their wording). */
     data class EventLayer(val icons: String, val list: String, val kind: IncidentKind?)
 
-    class Site(val source: TrafficSource, val base: String, val eventLayers: List<EventLayer>) {
+    /**
+     * [videoHosts]: the end of the host names a camera row's `videoUrl` may name (511WI's cctv1.dot.wi.gov), for a
+     * camera the card may show a frame of when its still fails; empty keeps the video out.
+     */
+    class Site(val source: TrafficSource, val base: String, val eventLayers: List<EventLayer>, val videoHosts: List<String> = emptyList()) {
         fun iconsUrl(layer: String): String = "$base/map/mapIcons/$layer"
 
         fun listUrl(list: String, start: Int): String =
@@ -72,7 +78,19 @@ object Ibi511 {
         ),
     )
 
-    val SITES: List<Site> = listOf(PA, CT)
+    val WI = Site(
+        TrafficSource.WI_511,
+        "https://511wi.gov",
+        listOf(
+            EventLayer("Incidents", "Incidents", null),
+            EventLayer("Closures", "Closures", IncidentKind.CLOSURE),
+            // "traffic" holds every event; its "Roadwork Closure" rows are marked isFullClosure, so they come out closures.
+            EventLayer("Construction", "traffic", IncidentKind.ROADWORK),
+        ),
+        videoHosts = listOf(".dot.wi.gov"),
+    )
+
+    val SITES: List<Site> = listOf(PA, CT, WI)
 
     /** The bytes as text, gunzipped when the site sent gzip that wasn't asked for. */
     fun text(bytes: ByteArray): String {
@@ -179,6 +197,8 @@ object Ibi511 {
         val images = (row["images"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }
         val working = images.filter { it["disabled"] != true && it["blocked"] != true }
         val still = working.ifEmpty { images }.firstNotNullOfOrNull { it.text("imageUrl") }
+        val video = working.filter { it["videoDisabled"] != true }.firstNotNullOfOrNull { it.text("videoUrl") }
+            ?.takeIf { url -> site.videoHosts.any { videoHost(url)?.endsWith(it) == true } }
         return TrafficCamera(
             id = site.source.idPrefix + id,
             name = row.text("location") ?: row.text("nickname") ?: "Camera $id",
@@ -189,7 +209,16 @@ object Ibi511 {
             direction = direction(row.text("direction")),
             disabled = working.isEmpty(),
             source = site.source,
+            videoUrl = video,
         )
+    }
+
+    /** The host of an https playlist link, lower case; null for anything else. */
+    private fun videoHost(url: String): String? = try {
+        val u = java.net.URI(url)
+        if (u.scheme == "https" && u.rawQuery == null && u.path.orEmpty().endsWith(".m3u8")) u.host?.lowercase(Locale.US) else null
+    } catch (e: java.net.URISyntaxException) {
+        null
     }
 
     /** A sign row placed at its icon's position; `message`, `message2` and `message3` are the pages it flips through. */

@@ -120,6 +120,61 @@ class Ibi511Test {
         assertEquals("Eastbound", events.getValue("pa:136415").direction)
     }
 
+    /**
+     * 511WI: the rows the probe printed on 2026-10-11 (a camera with a still and a video stream, a sign, a roadwork row
+     * and a "Roadwork Closure" row marked isFullClosure). The closure's icon stands in: its layer was empty that day.
+     */
+    @Test
+    fun `511WI reads as 511PA does, with camera video on its own servers`() {
+        val icons = mapOf(
+            "Construction" to icons("566011" to (43.0337705435589 to -87.969008234053), "566098" to (44.52 to -88.02)),
+            "Closures" to icons("566098" to (44.52 to -88.02)),
+            "MessageSigns" to icons("ATMS_DMS--1" to (42.99461 to -88.03796)),
+        )
+        val lists = mapOf(
+            "traffic" to res("wi-traffic.json"), "Closures" to res("wi-closures.json"), "Incidents" to res("wi-incidents.json"),
+            "Cameras" to res("wi-cameras.json"), "MessageSigns" to res("wi-signs.json"),
+        )
+        val client = Ibi511Client(Ibi511.WI, site(icons, lists))
+        val events = client.events(0L).associateBy { it.id }
+        assertEquals(setOf("wi:566011", "wi:566098"), events.keys)
+        val work = events.getValue("wi:566011")
+        assertEquals(IncidentKind.ROADWORK, work.kind)
+        assertEquals("I-94", work.roadway)
+        assertEquals("Westbound", work.direction)
+        assertEquals(GeoPoint(43.0337705435589, -87.969008234053), work.location)
+        assertTrue(work.description.startsWith("Roadwork - Mainline Right Lane Closed on I-94 WB"))
+        assertFalse(work.isClosure)
+        assertEquals(TrafficSource.WI_511, work.source)
+        val closed = events.getValue("wi:566098")
+        assertEquals(IncidentKind.CLOSURE, closed.kind)
+        assertEquals("French Rd", closed.roadway)
+        assertEquals("All lanes closed", closed.lanesStatus)
+        assertTrue(closed.isClosure)
+
+        val cameras = client.cameras()
+        assertEquals(2, cameras.size)
+        val cam = cameras.first()
+        assertEquals("wi:1", cam.id)
+        assertEquals("I-39/US 51 at County B", cam.name)
+        assertEquals("https://511wi.gov/map/Cctv/937", cam.imageUrl)
+        assertEquals("https://cctv1.dot.wi.gov/rtplive/CCTV-49-0011/playlist.m3u8", cam.videoUrl)
+        assertEquals(GeoPoint(44.454149, -89.518702), cam.location)
+        assertNull(cam.roadway?.takeIf { it == "Unknown" })
+        // A stream on a host that isn't WisDOT's is not followed; the still stays.
+        assertNull(cameras[1].videoUrl)
+        assertEquals("https://511wi.gov/map/Cctv/1321", cameras[1].imageUrl)
+        // 511PA's cameras name no stream.
+        assertTrue(Ibi511Client(Ibi511.PA, site(paIcons, paLists)).cameras().all { it.videoUrl == null })
+
+        val sign = client.signs().single()
+        assertEquals("wi:ATMS_DMS--1", sign.id)
+        assertEquals(listOf("BARKER RD 10 MIN", "CAPITOL DR 8 MIN", "DOWNTOWN 9 MIN"), sign.lines)
+        assertEquals("I-41/894", sign.roadway)
+        assertEquals("Northbound", sign.direction)
+        assertEquals(GeoPoint(42.99461, -88.03796), sign.location)
+    }
+
     @Test
     fun `a list is read again only when its layers show something new, or after a while`() {
         val icons = paIcons.toMutableMap()
