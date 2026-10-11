@@ -125,7 +125,9 @@ jobs:
           python3 "$GITHUB_WORKSPACE/pipeline/search/addresses.py" --check albany.csv -n 15
 
       # What trimming Overture Places would save in the statewide search pack (pipeline/search/overture_sizes.py).
+      # Up to half an hour, so only on a manual run (Actions > Feed probe > Run workflow).
       - name: Overture Places sizes
+        if: github.event_name == 'workflow_dispatch'
         timeout-minutes: 30
         continue-on-error: true
         run: |
