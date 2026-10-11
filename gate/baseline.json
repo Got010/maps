@@ -795,6 +795,10 @@
   },
   "hosts": [
     {
+      "value": ".dot.wi.gov",
+      "note": "WisDOT's camera stream servers (cctv1.dot.wi.gov and the like): core/traffic Ibi511.kt keeps a 511WI camera's https playlist link (https://cctv<n>.dot.wi.gov/rtplive/<camera>/playlist.m3u8) only when its host ends in this suffix. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511WI (Settings > Live data, off by default)."
+    },
+    {
       "value": ".githubusercontent.com",
       "note": "core/network GitHubReleases.isAllowed accepts any https host ending .githubusercontent.com (where GitHub redirects release asset downloads, e.g. objects.githubusercontent.com), checked on every redirect hop. Used for map pack downloads (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default); every such request runs inside NetworkGate.request(feature), so the feature toggle gates it. The token goes to api.github.com only, never to this host. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
@@ -817,6 +821,10 @@
     {
       "value": "511pa.com",
       "note": "Text only: the Settings > Live data note for 511PA (feature/settings strings.xml, live_511pa_note) names the site whose lists are read. Requests go to https://www.511pa.com (see that entry)."
+    },
+    {
+      "value": "511wi.gov",
+      "note": "Text only: the Settings > Live data note for 511WI (feature/settings strings.xml, live_511wi_note) names the site whose lists are read. Requests go to https://511wi.gov (see that entry)."
     },
     {
       "value": "api.github.com",
@@ -849,6 +857,10 @@
     {
       "value": "https://",
       "note": "Bare scheme prefix strings: feature/search PlaceCard.kt (adds https:// to a place's website before opening it in the browser) and core/traffic FiveElevenNy.kt (URL checks). Not hosts."
+    },
+    {
+      "value": "https://511wi.gov",
+      "note": "511WI (WisDOT's 511, built by IBI Group like 511PA): core/traffic Ibi511.kt (Ibi511.WI) fetches the site's own map layers (/map/mapIcons/Incidents, Closures, Construction and MessageSigns: every item's position) and list pages (/List/GetData/Incidents, Closures, traffic, MessageSigns and Cameras, 100 rows a page), the same requests 511wi.gov's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_511WI (Settings > Live data, off by default)."
     },
     {
       "value": "https://api-511x-nysdot.carsprogram.org",
