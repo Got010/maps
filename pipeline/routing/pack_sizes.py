@@ -9,13 +9,16 @@ For a few choices of regions it prints the download in MB under:
   per region      levels 0 and 1 shared, plus one pack of local roads per region, as the first test build cut
                   them: a tile on a boundary comes in every region's pack.
   one copy        levels 0 and 1 shared, plus tiles grouped by the regions they cover, so each comes once.
-  one copy, L0    what split_tiles.py writes: only level 0 (motorways, trunk and primary roads) shared, and
-                  level 1 (secondary and tertiary) going by region like local roads, each tile once.
+  one copy, L0    what split_tiles.py writes: only level 0 (motorways, trunk and primary roads) shared, by the
+                  "main" group of the regions (the east's level 0 for a New York phone, the Midwest's too for one
+                  with a Midwest region), and level 1 (secondary and tertiary) going by region like local roads,
+                  each tile once.
 
 Run by the states test build; nothing reads its output but people.
 """
 
 import json
+import os
 import sys
 
 CHOICES = [
@@ -26,12 +29,21 @@ CHOICES = [
     ("Pennsylvania", ["pae", "paw"]),
     ("Maryland, Delaware, DC", ["md"]),
     ("Everything east", ["nyc", "li", "hudson", "capital", "western", "njn", "njs", "ct", "pae", "paw", "md"]),
-    ("Illinois", ["il"]),
-    ("Ohio", ["oh"]),
-    ("Michigan + Ohio + Indiana", ["mi", "oh", "in"]),
-    ("The Midwest", ["oh", "in", "il", "mi", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"]),
+    ("Chicago and Northern Illinois", ["iln"]),
+    ("Northern Ohio", ["ohn"]),
+    ("Ohio", ["ohn", "ohs"]),
+    ("Southern Michigan + Ohio + Indiana", ["mis", "ohn", "ohs", "in"]),
+    ("NYC + Chicago (a trip there)", ["nyc", "iln"]),
+    ("The Midwest", ["ohn", "ohs", "in", "iln", "ils", "mis", "miu", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"]),
 ]
 SCHEMES = ["per region", "one copy", "one copy, L0"]
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import split_tiles as st  # noqa: E402
+
+REGIONS = st.load_regions()
 
 
 def read_index(lines):
@@ -47,10 +59,15 @@ def sizes(tiles, choice):
         if level in by_level:
             by_level[level] += size
     local = [(level, size, set(covers)) for _, level, size, covers in tiles if level == 2]
+    groups = {st.group_of(REGIONS[name]) for name in chosen if name in REGIONS}
+    main = 0
+    for path, level, size, covers in tiles:
+        if level == 0 and groups & set(st.main_groups_for_tile(REGIONS, 0, st.tile_from_path(path)[1], covers)):
+            main += size
     out = {
         "per region": by_level[0] + by_level[1] + sum(size * len(chosen & covers) for _, size, covers in local),
         "one copy": by_level[0] + by_level[1] + sum(size for _, size, covers in local if chosen & covers),
-        "one copy, L0": by_level[0] + sum(
+        "one copy, L0": main + sum(
             size for _, level, size, covers in tiles if level in (1, 2) and chosen & set(covers)
         ),
     }

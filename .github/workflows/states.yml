@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        region: [njn, njs, ct, pae, paw, md, oh, in, il, mi, wi, mn, ia, mo, nd, sd, ne, ks]
+        region: [njn, njs, ct, pae, paw, md, ohn, ohs, in, iln, ils, mis, miu, wi, mn, ia, mo, nd, sd, ne, ks]
     env:
       REGION: ${{ matrix.region }}
     steps:
@@ -104,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        region: [njs, ct, pae, paw, md, oh, in, il, mi, wi, mn, ia, mo, nd, sd, ne, ks]
+        region: [njs, ct, pae, paw, md, ohn, ohs, in, iln, ils, mis, miu, wi, mn, ia, mo, nd, sd, ne, ks]
     env:
       REGION: ${{ matrix.region }}
     steps:

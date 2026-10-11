@@ -48,6 +48,15 @@ class RegionsTest(unittest.TestCase):
         for name in self.regions:
             self.assertRegex(name, r"^[a-z0-9]+$")
 
+    def test_basemap_regions_have_a_main_road_group(self):
+        for name, region in self.regions.items():
+            if region["basemap"]:
+                self.assertIn(region.get("main"), ("east", "midwest"), name)
+                if region.get("planned"):
+                    self.assertEqual("midwest", region["main"], name)
+            else:
+                self.assertNotIn("main", region, name)
+
     def test_bounds_are_sane(self):
         for name, region in self.regions.items():
             minlon, minlat, maxlon, maxlat = region["bounds"]
