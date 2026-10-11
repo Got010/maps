@@ -8,9 +8,9 @@
 REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
 # The regions beyond New York: OSM-only search, routing from the split packs (southbound-v2.json). The Midwest's
-# (MIDWEST_REGIONS) are planned: the states test build builds them, a release not yet.
-STATE_REGIONS := njs ct pae paw md
+# (MIDWEST_REGIONS) are planned in regions.json: releases ship their packs, the app offers them from its next version.
 MIDWEST_REGIONS := ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks
+STATE_REGIONS := njs ct pae paw md $(MIDWEST_REGIONS)
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
@@ -29,7 +29,7 @@ state: $(STATE_PACKS)
 ## states: the other states' regions' basemaps and search packs (OSM only), and the split routing packs
 states: $(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split
 
-## midwest: the Midwest's planned regions' basemaps and search packs (their routing is in routing-split)
+## midwest: the Midwest's regions' basemaps and search packs alone (their routing is in routing-split)
 midwest: $(addprefix tiles-,$(MIDWEST_REGIONS)) $(addprefix search-,$(MIDWEST_REGIONS))
 
 ## routing-split: one graph for every state, cut into routing-main.tar and routing-<region>.tar (routing/split.sh)
