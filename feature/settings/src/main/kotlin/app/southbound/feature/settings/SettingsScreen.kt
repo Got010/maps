@@ -337,6 +337,10 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_midrive, toggles.getValue(NetworkFeature.TRAFFIC_MIDRIVE), R.string.live_midrive_note) {
         network.set(NetworkFeature.TRAFFIC_MIDRIVE, it)
     }
+    Toggle(R.string.live_ohgo, toggles.getValue(NetworkFeature.TRAFFIC_OHGO), R.string.live_ohgo_note) {
+        network.set(NetworkFeature.TRAFFIC_OHGO, it)
+    }
+    if (toggles.getValue(NetworkFeature.TRAFFIC_OHGO)) KeyField(secrets, ApiKey.OHGO, R.string.live_ohgo_key, R.string.live_ohgo_key_saved)
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }
