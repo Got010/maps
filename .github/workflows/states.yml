@@ -1,5 +1,6 @@
 # Test build of the states beyond New York (owner, October 2026: New Jersey, Connecticut, Pennsylvania and
-# Maryland, with Delaware and DC). Builds each planned region's basemap and search pack (OSM only), and the one
+# Maryland, with Delaware and DC; then the twelve Midwest states). Builds each state region's basemap and search
+# pack (OSM only), and the one
 # routing graph for every state cut into routing-main.tar and routing-<region>.tar (pipeline/routing/split.sh),
 # prints sizes, build times and peak memory, and routes real trips on the split packs against the whole graph
 # (pipeline/routing/route_check.py). It also builds New York's search pack and cuts it into one per region, as a
@@ -40,11 +41,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # The seven extracts, the merged one, the loose tiles and the packs side by side need room.
+      # The nineteen extracts (about 3.8 GB), the merged one, the loose tiles and the packs side by side need room.
       - name: Free disk space
         run: |
           echo "cores $(nproc)"; free -g; df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell /usr/lib/jvm
+          sudo docker image prune -af >/dev/null 2>&1 || true
           df -h /
 
       - name: Build the graph and split it
@@ -79,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        region: [njn, njs, ct, pae, paw, md]
+        region: [njn, njs, ct, pae, paw, md, ohn, ohs, in, iln, ils, mis, miu, wi, mn, ia, mo, nd, sd, ne, ks]
     env:
       REGION: ${{ matrix.region }}
     steps:
@@ -102,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        region: [njs, ct, pae, paw, md]
+        region: [njs, ct, pae, paw, md, ohn, ohs, in, iln, ils, mis, miu, wi, mn, ia, mo, nd, sd, ne, ks]
     env:
       REGION: ${{ matrix.region }}
     steps:
