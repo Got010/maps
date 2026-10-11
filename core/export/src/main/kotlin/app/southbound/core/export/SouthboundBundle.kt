@@ -27,11 +27,12 @@ import java.util.TimeZone
  * Schema 1 is these four entries; a new entry, a new ApiKey or NetworkFeature, or a change to any entry's format
  * bumps it, and the importer then declares the range it supports (with a tested migration for the older ones).
  * Schema 2 (October 2026) added the route setting `avoid_dot_cameras`; a schema 1 bundle imports with it off.
- * Schema 3 added the `WEATHER` toggle, schema 4 `TRAFFIC_511PA` and `TRAFFIC_CTROADS`; an older bundle imports with them off.
+ * Schema 3 added the `WEATHER` toggle, schema 4 `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 5 `TRAFFIC_CHART_MD` and
+ * `TRAFFIC_DELDOT`; an older bundle imports with them off.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 4L
+    const val SCHEMA = 5L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */

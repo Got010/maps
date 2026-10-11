@@ -69,8 +69,8 @@ class SouthboundBundleTest {
         val entries = SouthboundBundle.encode(Samples.data(), "0.1.14")
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
-            """{"app":"southbound","schema":4,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":58}""",
+            """{"app":"southbound","schema":5,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":60}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -110,7 +110,7 @@ class SouthboundBundleTest {
         val bytes = file(entries)
         val header = SouthboundBundle.readHeader(ByteArrayInputStream(bytes))
         assertEquals("southbound", header.appId)
-        assertEquals(4L, header.schemaVersion)
+        assertEquals(5L, header.schemaVersion)
         assertEquals(1_791_028_800_000L, header.createdMs)
         assertFalse(header.verified)
         assertEquals(entries.mapValues { it.value.toList() }, read(bytes).mapValues { it.value.toList() })
@@ -160,10 +160,10 @@ class SouthboundBundleTest {
         val one = linkedMapOf<String, ByteArray>()
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":4", "\"schema\":1")
-                .replace("\"settings\":58", "\"settings\":54")
+                .replace("\"schema\":5", "\"schema\":1")
+                .replace("\"settings\":60", "\"settings\":54")
                 .replace("\"avoid_dot_cameras\":true,", "")
-                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true", "")
             one[name] = t.toByteArray()
         }
         val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
@@ -185,9 +185,9 @@ class SouthboundBundleTest {
         val two = linkedMapOf<String, ByteArray>()
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":4", "\"schema\":2")
-                .replace("\"settings\":58", "\"settings\":55")
-                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
+                .replace("\"schema\":5", "\"schema\":2")
+                .replace("\"settings\":60", "\"settings\":55")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true", "")
             two[name] = t.toByteArray()
         }
         val bytes = raw(*two.map { it.key to it.value }.toTypedArray(), schema = 2)
@@ -203,9 +203,9 @@ class SouthboundBundleTest {
         val three = linkedMapOf<String, ByteArray>()
         for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":4", "\"schema\":3")
-                .replace("\"settings\":58", "\"settings\":56")
-                .replace(",\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
+                .replace("\"schema\":5", "\"schema\":3")
+                .replace("\"settings\":60", "\"settings\":56")
+                .replace(",\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true,\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true", "")
             three[name] = t.toByteArray()
         }
         val bytes = raw(*three.map { it.key to it.value }.toTypedArray(), schema = 3)
@@ -216,13 +216,35 @@ class SouthboundBundleTest {
         assertEquals(Samples.data().userData, data.userData)
     }
 
+    @Test
+    fun `a schema 4 file still imports, with CHART and DelDOT off`() {
+        // A schema 4 export as v0.1.34 wrote it: 58 settings and the network group without the CHART and DelDOT toggles.
+        val five = SouthboundBundle.encode(Samples.data(), "0.1.34")
+        val four = linkedMapOf<String, ByteArray>()
+        for ((name, bytes) in five) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":5", "\"schema\":4")
+                .replace("\"settings\":60", "\"settings\":58")
+                .replace(",\"TRAFFIC_CHART_MD\":true,\"TRAFFIC_DELDOT\":true", "")
+            four[name] = t.toByteArray()
+        }
+        val bytes = raw(*four.map { it.key to it.value }.toTypedArray(), schema = 4)
+        assertEquals(4L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
+        val data = SouthboundBundle.decode(read(bytes))
+        val expected = Samples.data().settings
+        val newest = listOf(NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT).associateWith { false }
+        assertEquals(expected.copy(network = expected.network + newest), data.settings)
+        assertEquals(Samples.data().userData, data.userData)
+    }
+
     /** The toggles newer than a schema 3 bundle, plus [also], all off. */
     private fun newerOff(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
-        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS) + also).associateWith { false }
+        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT) + also)
+            .associateWith { false }
 
     @Test
     fun `a newer schema is refused from the header alone`() {
-        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 5)
+        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 6)
         assertEquals(FwxError.SCHEMA_TOO_NEW, code { SouthboundBundle.readHeader(ByteArrayInputStream(bytes)) })
     }
 
@@ -282,15 +304,16 @@ class SouthboundBundleTest {
     fun `manifest must match the contents`() {
         refuses(mutated("manifest.json", "\"saved_places\":3", "\"saved_places\":4"))
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
-        refuses(mutated("manifest.json", "\"settings\":58", "\"settings\":57"))
+        refuses(mutated("manifest.json", "\"settings\":60", "\"settings\":59"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
-        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":5"))
-        // Older settings have no avoid_dot_cameras, weather, 511PA or CTroads toggle, so these settings don't fit an older manifest.
-        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":3"))
-        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":2"))
-        refuses(mutated("manifest.json", "\"schema\":4", "\"schema\":1"))
+        refuses(mutated("manifest.json", "\"schema\":5", "\"schema\":6"))
+        // Older settings have no avoid_dot_cameras, weather, 511PA, CTroads, CHART or DelDOT toggle, so these settings don't fit an older manifest.
+        refuses(mutated("manifest.json", "\"schema\":5", "\"schema\":4"))
+        refuses(mutated("manifest.json", "\"schema\":5", "\"schema\":3"))
+        refuses(mutated("manifest.json", "\"schema\":5", "\"schema\":2"))
+        refuses(mutated("manifest.json", "\"schema\":5", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
-        refuses(mutated("manifest.json", ",\"settings\":58", ""))
+        refuses(mutated("manifest.json", ",\"settings\":60", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
     }
 
@@ -485,14 +508,14 @@ class SouthboundBundleTest {
 
     /** If one of these fails, the bundle's contents changed: update docs/EXPORT.md and bump the schema (with a migration). */
     @Test
-    fun `schema 4 pins what the stores hold`() {
+    fun `schema 5 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
         assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA"), ApiKey.entries.map { it.name })
         assertEquals(
             listOf(
                 "PACK_DOWNLOADS", "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME",
-                "TRANSIT_BUS_TIME", "GAS_PRICES", "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS",
+                "TRANSIT_BUS_TIME", "GAS_PRICES", "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS", "TRAFFIC_CHART_MD", "TRAFFIC_DELDOT",
             ),
             NetworkFeature.entries.map { it.name },
         )
@@ -502,9 +525,9 @@ class SouthboundBundleTest {
         assertEquals(12, fields(RoutePrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.WalkPrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.BikePrefs::class.java))
-        assertEquals(58, SettingsEntry.count(Samples.settings()))
+        assertEquals(60, SettingsEntry.count(Samples.settings()))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
-        assertEquals(1L..4L, SouthboundBundle.SCHEMA_RANGE)
+        assertEquals(1L..5L, SouthboundBundle.SCHEMA_RANGE)
     }
 
     @Test

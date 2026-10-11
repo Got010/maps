@@ -1,0 +1,83 @@
+{
+ "data": [
+  {
+   "beaconsEnabled": false,
+   "commMode": "ONLINE",
+   "description": "I-95 South, past Ex 80 MD 543, prior to MD 136 at MM 79.5",
+   "hasBeacons": true,
+   "id": "f5000493003b00600050fa2cc4235c0a",
+   "lastCachedDataUpdateTime": 1791675769360,
+   "lat": 39.480022,
+   "lon": -76.263306,
+   "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-695       15 MILES&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;&amp;nbsp;&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt; 14 MINUTES&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;",
+   "msgMulti": "[pt25o0][jl3]I-695       15 MILES[nl][nl][jl3] 14 MINUTES",
+   "msgPlain": "I-695       15 MILES   14 MINUTES",
+   "name": "8829",
+   "opStatus": "OK"
+  },
+  {
+   "beaconsEnabled": false,
+   "commMode": "ONLINE",
+   "description": "US 1 NORTH, PAST MISSION ROAD",
+   "hasBeacons": false,
+   "id": "d00007f2001000190062d32cc4235c0a",
+   "lastCachedDataUpdateTime": 1791480429340,
+   "lat": 39.16273,
+   "lon": -76.79309,
+   "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;&amp;nbsp;&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;&amp;nbsp;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;",
+   "msgMulti": "",
+   "msgPlain": "",
+   "name": "7712",
+   "opStatus": "OK"
+  },
+  {
+   "beaconsEnabled": false,
+   "commMode": "ONLINE",
+   "description": "I-97 North past Exit 12 Crain Highway",
+   "hasBeacons": true,
+   "id": "b100036c009500a7004af02c76235daa",
+   "lastCachedDataUpdateTime": 1791575537874,
+   "lat": 39.128716,
+   "lon": -76.64148,
+   "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;HAZMATS&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;PROHIBITED&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;IN TUNNELS&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRowBlank'&gt;&lt;td class='dmsMsgTextBlank'&gt;&amp;nbsp;&lt;td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-695        5 MILES&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;&amp;nbsp;&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;  5 MINUTES&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;",
+   "msgMulti": "[pt30o0][jl3]HAZMATS[nl][jl3]PROHIBITED[nl][jl3]IN TUNNELS[np][pt25o0][jl3]I-695        5 MILES[nl][nl][jl3]  5 MINUTES",
+   "msgPlain": "HAZMATS PROHIBITED IN TUNNELS I-695        5 MILES    5 MINUTES",
+   "name": "5511",
+   "opStatus": "OK"
+  },
+  {
+   "beaconsEnabled": false,
+   "commMode": "ONLINE",
+   "description": "PRINCE GEORGE'S COUNTY MD",
+   "hasBeacons": true,
+   "id": "8c010c44002400510054fa2cc4235c0a",
+   "lastCachedDataUpdateTime": 1791679612122,
+   "lat": 39.06228,
+   "lon": -76.8914,
+   "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;MD 200 TOLLS TO&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-95   $0.40&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-370  $2.98&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRowBlank'&gt;&lt;td class='dmsMsgTextBlank'&gt;&amp;nbsp;&lt;td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;TRAVEL TIME TO&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-95    2 MIN&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;I-370  18 MIN&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;",
+   "msgMulti": "[pt25o0][jl3]MD 200 TOLLS TO[nl][jl3]I-95   $0.40[nl][jl3]I-370  $2.98[np][pt25o0][jl3]TRAVEL TIME TO[nl][jl3]I-95    2 MIN[nl][jl3]I-370  18 MIN",
+   "msgPlain": "MD 200 TOLLS TO I-95   $0.40 I-370  $2.98 TRAVEL TIME TO I-95    2 MIN I-370  18 MIN",
+   "name": "8337 trs",
+   "opStatus": "OK"
+  },
+  {
+   "beaconsEnabled": false,
+   "commMode": "ONLINE",
+   "description": "ETL: BALTIMORE CITY MD",
+   "hasBeacons": false,
+   "id": "b80016a200bc007d0054fa2cc4235c0a",
+   "lastCachedDataUpdateTime": 1791680363466,
+   "lat": 39.309,
+   "lon": -76.537636,
+   "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;$0.46&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;$0.96&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;E-ZPASS&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRowBlank'&gt;&lt;td class='dmsMsgTextBlank'&gt;&amp;nbsp;&lt;td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;$0.46&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;$0.96&lt;/td&gt;&lt;/tr&gt;&lt;tr class='dmsMsgRow'&gt;&lt;td class='dmsMsgTextCenter'&gt;2 AXLE&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;",
+   "msgMulti": "[pt25o0][jl3]$0.46[nl][jl3]$0.96[nl][jl3]E-ZPASS[np][pt25o0][jl3]$0.46[nl][jl3]$0.96[nl][jl3]2 AXLE",
+   "msgPlain": "$0.46 $0.96 E-ZPASS $0.46 $0.96 2 AXLE",
+   "name": "8084 trs brick",
+   "opStatus": "OK"
+  }
+ ],
+ "error": null,
+ "success": true,
+ "totalCount": 5,
+ "warnings": null
+}

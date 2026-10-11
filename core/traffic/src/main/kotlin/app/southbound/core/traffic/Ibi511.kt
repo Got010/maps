@@ -293,7 +293,12 @@ object Ibi511 {
  * run to several pages (511PA's every event is four, about 0.5 MB) and most of it is roadwork that rarely changes.
  * Not thread-safe: [TrafficFeed] calls it under its lock.
  */
-class Ibi511Client(val site: Ibi511.Site, private val fetch: (String) -> ByteArray) {
+class Ibi511Client(val site: Ibi511.Site, private val fetch: (String) -> ByteArray) : StateTraffic {
+    override val source: TrafficSource get() = site.source
+
+    /** Their signs come as list pages with nothing to say they haven't changed, so less often than 511NY's. */
+    override val signsTtlMillis: Long get() = TrafficFeed.IBI_SIGNS_TTL_MILLIS
+
     private class Rows(val byId: Map<String, Map<*, *>>, val asked: Set<String>, val fetchedAt: Long)
 
     private val lists = HashMap<String, Rows>()
@@ -304,7 +309,7 @@ class Ibi511Client(val site: Ibi511.Site, private val fetch: (String) -> ByteArr
      * @throws java.io.IOException when a request fails; @throws IllegalArgumentException when an answer isn't
      * what the site's pages read.
      */
-    fun events(now: Long): List<Incident> {
+    override fun events(now: Long): List<Incident> {
         val icons = site.eventLayers.associateWith { Ibi511.parseIcons(get(site.iconsUrl(it.icons))) }
         val out = LinkedHashMap<String, Incident>()
         for ((list, layers) in site.eventLayers.groupBy { it.list }) {
@@ -327,10 +332,10 @@ class Ibi511Client(val site: Ibi511.Site, private val fetch: (String) -> ByteArr
     }
 
     /** Every camera, all pages of the site's camera list. */
-    fun cameras(): List<TrafficCamera> = rows(Ibi511.CAMERAS_LIST).values.mapNotNull { Ibi511.camera(it, site) }
+    override fun cameras(): List<TrafficCamera> = rows(Ibi511.CAMERAS_LIST).values.mapNotNull { Ibi511.camera(it, site) }
 
     /** Every message sign on the site's map, with what it says. */
-    fun signs(): List<MessageSign> {
+    override fun signs(): List<MessageSign> {
         val icons = Ibi511.parseIcons(get(site.iconsUrl(Ibi511.SIGNS_LAYER)))
         if (icons.isEmpty()) return emptyList()
         val rows = rows(Ibi511.SIGNS_LIST)

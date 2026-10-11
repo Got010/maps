@@ -10,12 +10,16 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class SettingsEntryTest {
-    /** The network toggles schema 4 added, as an export with every toggle on writes them (last in the group). */
-    private val NEWER = ""","TRAFFIC_511PA":true,"TRAFFIC_CTROADS":true"""
+    /** The network toggles schema 5 added, as an export with every toggle on writes them (last in the group). */
+    private val NEWER_5 = ""","TRAFFIC_CHART_MD":true,"TRAFFIC_DELDOT":true"""
+
+    /** The network toggles schemas 4 and 5 added. */
+    private val NEWER = ""","TRAFFIC_511PA":true,"TRAFFIC_CTROADS":true""" + NEWER_5
 
     /** The toggles newer than schema 3, plus [also], all off. */
     private fun off(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
-        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS) + also).associateWith { false }
+        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT) + also)
+            .associateWith { false }
 
     @Test
     fun `defaults and changed settings round trip`() {
@@ -47,7 +51,7 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(58, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(60, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
@@ -93,16 +97,37 @@ class SettingsEntryTest {
     }
 
     @Test
-    fun `a schema 3 bundle reads with 511PA and CTroads off`() {
+    fun `a schema 3 bundle reads with 511PA, CTroads, CHART and DelDOT off`() {
         val s = Samples.settings()
         assertTrue(s.network.getValue(NetworkFeature.TRAFFIC_511PA) && s.network.getValue(NetworkFeature.TRAFFIC_CTROADS))
-        // What schema 3 wrote: the network group without the two newer toggles.
+        // What schema 3 wrote: the network group without the four newer toggles.
         val three = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER, "")
-        assertTrue("TRAFFIC_511PA" !in three && "TRAFFIC_CTROADS" !in three)
+        assertTrue("TRAFFIC_511PA" !in three && "TRAFFIC_CTROADS" !in three && "TRAFFIC_DELDOT" !in three)
         assertEquals(s.copy(network = s.network + off()), SettingsEntry.decode(three.toByteArray(), schema = 3))
         assertEquals(56, SettingsEntry.count(s, 3))
         // Schema 4 requires them, and schema 3 refuses them.
         for ((text, schema) in listOf(three to 4L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 3L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
+    }
+
+    @Test
+    fun `a schema 4 bundle reads with CHART and DelDOT off`() {
+        val s = Samples.settings()
+        assertTrue(s.network.getValue(NetworkFeature.TRAFFIC_CHART_MD) && s.network.getValue(NetworkFeature.TRAFFIC_DELDOT))
+        // What schema 4 wrote: the network group without the two newest toggles.
+        val four = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_5, "")
+        assertTrue("TRAFFIC_511PA" in four && "TRAFFIC_CHART_MD" !in four && "TRAFFIC_DELDOT" !in four)
+        val newest = listOf(NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT).associateWith { false }
+        assertEquals(s.copy(network = s.network + newest), SettingsEntry.decode(four.toByteArray(), schema = 4))
+        assertEquals(58, SettingsEntry.count(s, 4))
+        // Schema 5 requires them, and schema 4 refuses them.
+        for ((text, schema) in listOf(four to 5L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 4L)) {
             try {
                 SettingsEntry.decode(text.toByteArray(), schema)
                 fail("accepted schema $schema")

@@ -49,7 +49,8 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
     /**
      * Routes from [from] through [waypoints], best first, with up to two
      * alternatives when Valhalla finds them. [prefs] are the driver's route options. [avoid] holds polygons (rings of
-     * lon, lat) the route must not cross, e.g. around closures. [useDistance]
+     * lon, lat) the route must not cross, e.g. around closures; [excludePoints] roads it must not use (a spot on
+     * each, beside a plate reader, [CameraAvoidance]). [useDistance]
      * weighs distance into the choice and [alternates] false asks for the
      * best route only (the preview's shorter way, [ShorterRoute]). Blocking:
      * call off the main thread.
@@ -62,6 +63,7 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         waypoints: List<Waypoint>,
         mode: TravelMode,
         avoid: List<List<Pair<Double, Double>>> = emptyList(),
+        excludePoints: List<CameraAvoidance.Spot> = emptyList(),
         // Phase 6: tolls, highways, ferries and the vehicle profile.
         prefs: RoutePrefs = RoutePrefs.DEFAULT,
         useDistance: Double? = null,
@@ -72,7 +74,8 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         val body = when (request) {
             is RouteRequest.HttpPost -> {
                 val withPrefs = RouteOptions.withPrefs(request.body.decodeToString(), mode, prefs, useDistance)
-                RouteOptions.withExcludePolygons(if (alternates) withPrefs else RouteOptions.withoutAlternates(withPrefs), avoid)
+                val withPolygons = RouteOptions.withExcludePolygons(if (alternates) withPrefs else RouteOptions.withoutAlternates(withPrefs), avoid)
+                RouteOptions.withExcludeLocations(withPolygons, excludePoints)
             }
             is RouteRequest.HttpGet -> throw RoutingException("Unexpected GET route request")
         }
@@ -98,17 +101,28 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         private const val TILE_CACHE_BYTES = 256 * 1024 * 1024
 
         /**
+         * Valhalla allows 50 `exclude_locations` by default; "Avoid plate readers" sends one per camera met, up to
+         * [CameraAvoidance.MAX_CAMERAS], and closures' polygons keep their own limit. Loki finds each point's road
+         * from the tile's bins, so a few hundred cost tens of milliseconds, not the seconds that as many polygons would.
+         */
+        private const val MAX_EXCLUDE_LOCATIONS = CameraAvoidance.MAX_CAMERAS + 50
+
+        /**
          * A folder of tiles is a phone's part of the graph: Loki's connectivity check colours connected areas by
          * the local tiles present, so with the regions between two places missing it would call them unconnected
          * though the main roads join them (pipeline/routing/route_check.py found it); it's off, as valhalla-mobile
          * turns it off for any tile set that isn't whole.
          */
         fun configFor(routingPack: File): ValhallaConfig {
-            if (!routingPack.isDirectory) return ValhallaConfigFactory.usingTileExtract(routingPack.absolutePath)
+            if (!routingPack.isDirectory) {
+                val config = ValhallaConfigFactory.usingTileExtract(routingPack.absolutePath)
+                return config.copy(serviceLimits = config.serviceLimits?.copy(maxExcludeLocations = MAX_EXCLUDE_LOCATIONS))
+            }
             val config = ValhallaConfigFactory.usingTilesDir(routingPack.absolutePath)
             return config.copy(
                 loki = config.loki?.copy(useConnectivity = false),
                 mjolnir = config.mjolnir?.copy(maxCacheSize = TILE_CACHE_BYTES),
+                serviceLimits = config.serviceLimits?.copy(maxExcludeLocations = MAX_EXCLUDE_LOCATIONS),
             )
         }
     }

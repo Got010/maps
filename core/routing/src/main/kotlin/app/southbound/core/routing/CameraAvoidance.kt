@@ -4,54 +4,60 @@ import kotlin.math.cos
 import kotlin.math.sqrt
 
 /**
- * Turns licence-plate readers on a route into Valhalla `exclude_polygons`,
- * for the "Avoid plate readers" route option: a small square around each
- * camera, so the router finds a way past it on another street.
+ * The "Avoid plate readers" and "Avoid DOT cameras" route options: the roads past the cameras a route meets become
+ * Valhalla `exclude_locations` (a spot on the road beside each camera: that stretch of road is left out, and the
+ * streets around it stay open, so the router can turn off onto a side street right before the camera), and the app
+ * routes again, a few cameras at a time (the loop lives in feature/explore PlateReaders):
  *
- * The app does this a few cameras at a time rather than for a whole corridor:
- * route, square off the cameras on the best route, route again, and repeat
- * while new ones turn up (see [MAX_PASSES]). Valhalla caps the total
- * perimeter of all exclude polygons (`max_exclude_polygons_length`, 10 km by
- * default), and closures from the traffic layer share that budget, so
- * [merge] keeps closures first and adds cameras while there is room.
+ * 1. Route; note the cameras within [NEAR_ROUTE_METERS] of the best route (the ones the route card counts).
+ * 2. Exclude the road beside each and route again, up to [MAX_PASSES] times while new cameras turn up, or until
+ *    [MAX_CAMERAS] roads are excluded or [MAX_ROUTINGS] routings are spent.
+ * 3. When a pass finds no route (a camera on the only way: a bridge, the one road in), [passable] bisects the new
+ *    cameras to find which, drops it for good and carries on with the rest, instead of giving up.
+ * 4. A camera the new route passes again on another road within reach gets a second spot ([SAME_ROAD_METERS]).
+ * 5. Of every pass's routes, the plain one included, the one with the fewest cameras wins (quickest when tied): a
+ *    late pass can be pushed onto streets with more cameras than the highway it left.
+ *
+ * Measured with pyvalhalla on the release's tiles and search pack (October 2026). Over 48 Hudson Valley trips past
+ * plate readers, this clears every reader on 38 trips and leaves 20 of the 262 the plain routes met, for a median
+ * 7 minutes more (p90 21); the squares did 31 trips and 42 left for 6.3 minutes. With DOT cameras avoided too (53
+ * trips, 534 cameras): 32 trips cleared and 104 left against 28 and 178, for a median 12 minutes more (p90 34).
+ * The owner's Pelham Manor to the Hudson Valley example went from 8 readers on every option to 2 (77 minutes
+ * instead of 62). Squares (`exclude_polygons`) were used before: Valhalla caps their total perimeter at 10 km
+ * (60 cameras), which a long trip reached by its fifth pass; a pass that found no route ended the whole thing,
+ * often on the first pass, leaving the plain route; and the last route was kept even when an earlier pass had
+ * fewer cameras.
  */
 object CameraAvoidance {
-    /** Half the side of the square around a camera, metres: its own road, not the next one over. */
-    const val HALF_SIDE_METERS = 18.0
-
     /**
-     * A camera this close to a route counts as on it, for avoiding: the same
-     * reach as the count on each route card (RouteAlerts.MAX_OFFSET_M in
-     * core:search), so what is counted is what the app tries to avoid.
+     * A camera this close to a route counts as on it, for avoiding: the same reach as the count on each route card
+     * (RouteAlerts.MAX_OFFSET_M in core:search), so what is counted is what the app tries to avoid.
      */
     const val NEAR_ROUTE_METERS = 40.0
 
+    /** At most this many roads are excluded for one trip; the phone's Valhalla is configured to take them (OfflineRouter). */
+    const val MAX_CAMERAS = 300
+
+    /** Route, exclude the cameras found, route again: at most this many times after the first route (16 added one trip in 53). */
+    const val MAX_PASSES = 12
+
     /**
-     * A camera further off the route line than this gets its square on the
-     * road beside it instead (see [HALF_SIDE_METERS]); otherwise the square
-     * could miss the road it watches.
+     * Routings one preview may spend on avoiding, the bisections of [passable] included; each is a second or so on
+     * the phone. The median trip takes 6 or 7, nine in ten under 18; the few that ran past 24 in the measurements
+     * found nothing more after it.
      */
-    const val SNAP_TO_ROUTE_METERS = 12.0
-
-    /** At most this many cameras are squared off for one trip (60 x 144 m = 8.6 km of perimeter). */
-    const val MAX_CAMERAS = 60
+    const val MAX_ROUTINGS = 24
 
     /**
-     * Route, square off the cameras found, route again: at most this many times after the first route. Each new
-     * route can meet readers the last one didn't, so 3 left many unseen: over 47 Hudson Valley trips past readers
-     * (the release's tiles and search pack, October 2026), 3 passes cleared every reader on 21 trips and left 112
-     * of 254 on the routes, 8 cleared 30 and left 57 for about a minute more (median 6.2 against 5.0 minutes
-     * added); 12 passes, or smaller squares, changed nothing more. A trip stops as soon as no new reader turns up
-     * (3.5 routings on average).
+     * A camera already excluded gets another spot when a later route passes it on a road farther than this from its
+     * earlier spots (the other carriageway, a frontage road, the cross street at a corner camera). Without this,
+     * 29 trips cleared and 39 readers were left instead of 38 and 20.
      */
-    const val MAX_PASSES = 8
-
-    /** Valhalla's default limit is 10 km of total perimeter; stay a little under it. */
-    const val MAX_TOTAL_PERIMETER_METERS = 9_500.0
+    const val SAME_ROAD_METERS = 8.0
 
     /**
-     * A camera this close to the start, a stop or the destination is left
-     * alone: excluding the road a waypoint snaps to makes routing fail.
+     * A camera this close to the start, a stop or the destination is left alone: excluding the road a waypoint
+     * snaps to makes routing fail.
      */
     const val WAYPOINT_CLEARANCE_METERS = 150.0
 
@@ -61,66 +67,39 @@ object CameraAvoidance {
     /** A point in WGS84 degrees. */
     data class Spot(val lat: Double, val lon: Double)
 
-    /** A closed ring of (lon, lat) pairs around [center], as Valhalla wants it. */
-    fun square(center: Spot, halfSideMeters: Double = HALF_SIDE_METERS): List<Pair<Double, Double>> {
-        val dLat = halfSideMeters / METERS_PER_DEGREE_LAT
-        val dLon = dLat / cos(center.lat * DEG).coerceAtLeast(0.01)
-        val west = center.lon - dLon
-        val east = center.lon + dLon
-        val south = center.lat - dLat
-        val north = center.lat + dLat
-        return listOf(west to south, east to south, east to north, west to north, west to south)
-    }
+    /** Whether [spot] is far enough from every one of [waypoints] (the start, stops and destination) to exclude. */
+    fun clearOfWaypoints(spot: Spot, waypoints: List<Spot>): Boolean =
+        waypoints.none { distanceMeters(spot, it) < WAYPOINT_CLEARANCE_METERS }
+
+    /** What [passable] found: the items of a batch that can be excluded together, and the ones that shut the only way. */
+    class Split<T>(val kept: List<T>, val dropped: List<T>)
 
     /**
-     * Squares around [cameras], in the order given, skipping any within
-     * [WAYPOINT_CLEARANCE_METERS] of a [waypoints] entry (the start, stops and
-     * destination), at most [max].
+     * When excluding a whole [batch] leaves no route, finds the largest part of it that does: [fits] says whether a
+     * route exists with the given items excluded (on top of whatever was excluded before). Halves the batch and
+     * tries each half on top of what already fits, down to single items; an item that fits with nothing else new is
+     * [Split.dropped], unavoidable. About 2 log2(n) calls of [fits] for each dropped item; a batch that fits whole
+     * costs one.
      */
-    fun polygons(
-        cameras: List<Spot>,
-        waypoints: List<Spot>,
-        max: Int = MAX_CAMERAS,
-        halfSideMeters: Double = HALF_SIDE_METERS,
-    ): List<List<Pair<Double, Double>>> =
-        cameras
-            .filter { cam -> waypoints.none { distanceMeters(cam, it) < WAYPOINT_CLEARANCE_METERS } }
-            .distinct()
-            .take(max)
-            .map { square(it, halfSideMeters) }
-
-    /**
-     * [closures] and then as many [cameras] as fit in [maxPerimeterMeters] of
-     * total perimeter. Closures are never dropped here (ClosureAvoidance keeps
-     * them under the limit on its own); a camera that doesn't fit is left out,
-     * and the route may then pass it.
-     */
-    fun merge(
-        closures: List<List<Pair<Double, Double>>>,
-        cameras: List<List<Pair<Double, Double>>>,
-        maxPerimeterMeters: Double = MAX_TOTAL_PERIMETER_METERS,
-    ): List<List<Pair<Double, Double>>> {
-        if (cameras.isEmpty()) return closures
-        var used = closures.sumOf { perimeterMeters(it) }
-        val out = closures.toMutableList()
-        for (ring in cameras) {
-            val length = perimeterMeters(ring)
-            if (used + length > maxPerimeterMeters) break
-            used += length
-            out += ring
+    suspend fun <T> passable(batch: List<T>, fits: suspend (List<T>) -> Boolean): Split<T> {
+        val kept = ArrayList<T>()
+        val dropped = ArrayList<T>()
+        suspend fun split(part: List<T>) {
+            if (part.isEmpty()) return
+            if (fits(kept + part)) {
+                kept += part
+                return
+            }
+            if (part.size == 1) {
+                dropped += part
+                return
+            }
+            val half = part.size / 2
+            split(part.subList(0, half))
+            split(part.subList(half, part.size))
         }
-        return out
-    }
-
-    /** Length of a ring of (lon, lat) pairs, metres. */
-    fun perimeterMeters(ring: List<Pair<Double, Double>>): Double {
-        var total = 0.0
-        for (i in 1 until ring.size) {
-            val (lon1, lat1) = ring[i - 1]
-            val (lon2, lat2) = ring[i]
-            total += distanceMeters(Spot(lat1, lon1), Spot(lat2, lon2))
-        }
-        return total
+        split(batch)
+        return Split(kept, dropped)
     }
 
     fun distanceMeters(a: Spot, b: Spot): Double {

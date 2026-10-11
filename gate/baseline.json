@@ -807,6 +807,10 @@
       "note": "Suffix literal in org/maplibre/android/http/NativeHttpRequest (MapLibre Native's HTTP request class; Mapbox host checks inherited from its Mapbox lineage, like mapbox.com). Not contacted by app code: the style is bundled and tiles are pmtiles://file://. Every request in the app's own code still goes through core/network NetworkGate; MapLibre's own client is not behind it and is unused."
     },
     {
+      "value": ".sha.maryland.gov",
+      "note": "CHART's camera stream servers (strmr5.sha.maryland.gov, a camera's cctvIp): core/traffic MarylandChart.kt follows a camera's stream only on a host one label under this suffix, https://<host>/rtplive/<camera id>/playlist.m3u8. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_CHART_MD (Settings > Live data, off by default)."
+    },
+    {
       "value": "511ny.org",
       "note": "Text only: the Settings > Live data note for 511NY (feature/settings strings.xml, live_511_note) names the site whose feeds are read. Not contacted: since 511NY's October 2026 move the app reads api-511x-nysdot.carsprogram.org (see that entry)."
     },
@@ -875,6 +879,10 @@
       "note": "Current weather: core/weather Metar.URLS, the NWS Aviation Weather Center's latest METAR of every reporting station in each covered state (ids=@NY, @NJ, @CT, @PA, @MD, @DE; one request per state, the API takes one state a request), the same for every phone. Drawn as temperature badges on the weather layer and as the nearest station's conditions on a place card, worked out on the phone. No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
+      "value": "https://chartexp1.sha.maryland.gov",
+      "note": "Maryland's CHART (MDOT SHA's traffic centre): core/traffic MarylandChart.kt fetches the exports CHART's own traffic map reads, /CHARTExportClientService/getEventMapDataJSON.do, getDMSMapDataJSON.do and getCameraMapDataJSON.do: the events, message signs and cameras of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_CHART_MD (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://ctroads.org",
       "note": "CTroads (CTDOT's 511, built by IBI Group like 511PA): core/traffic Ibi511.kt (Ibi511.CT) fetches the site's own map layers (/map/mapIcons/Incidents, Closures, Construction and MessageSigns: every item's position) and list pages (/List/GetData/Incidents, Closures, Construction, MessageSigns and Cameras, 100 rows a page), the same requests ctroads.org's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_CTROADS (Settings > Live data, off by default)."
     },
@@ -907,6 +915,10 @@
       "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around every covered state in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
+      "value": "https://tmc.deldot.gov",
+      "note": "Delaware's DelDOT (its Transportation Management Center): core/traffic DelDot.kt fetches the files DelDOT's own traffic map reads, /json/advisory.json, vmsg-vms.json and videocamera.json: the advisories, message signs and cameras of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://www.511pa.com",
       "note": "511PA (PennDOT's 511, built by IBI Group): core/traffic Ibi511.kt (Ibi511.PA) fetches the site's own map layers (/map/mapIcons/MajorRouteClosure, OtherRouteClosure, MajorRouteIncident, OtherRouteIncident, ActiveRoadwork and MessageSigns: every item's position) and list pages (/List/GetData/Closures, Incidents, traffic, MessageSigns and Cameras, 100 rows a page), the same requests 511pa.com's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_511PA (Settings > Live data, off by default)."
     },
@@ -937,6 +949,10 @@
     {
       "value": "tcp://_*:8002",
       "note": "Valhalla's httpd.service.listen setting (tcp://*:8002) in its bundled default configuration (com/valhalla/valhalla/default.json) and the matching default in valhalla-models-config. That is the standalone valhalla_service server's address; valhalla-mobile runs the engine in-process and the app only calls its actor API, but that nothing listens on it has not been verified on a device."
+    },
+    {
+      "value": "video.deldot.gov",
+      "note": "DelDOT's camera stream server: core/traffic DelDot.kt keeps a camera's https playlist (urls.m3u8s, https://video.deldot.gov:443/live/<camera id>.stream/playlist.m3u8) only on this host. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
     }
   ],
   "assets": [
