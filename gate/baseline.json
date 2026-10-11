@@ -835,6 +835,10 @@
       "note": "Text in the Settings hint 'Needs a free key from bustime.mta.info' (feature/settings strings.xml). Not a request."
     },
     {
+      "value": "cctv.travelmidwest.com",
+      "note": "Travel Midwest's camera snapshots: core/traffic TravelMidwest.kt keeps a camera's still (remUrls, https://cctv.travelmidwest.com/snapshots/<camera>_<view>.jpg) only on this host; the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_TRAVEL_MIDWEST (Settings > Live data, off by default)."
+    },
+    {
       "value": "ctroads.org",
       "note": "Text only: the Settings > Live data note for CTroads (feature/settings strings.xml, live_ctroads_note) names the site whose lists are read. Requests go to https://ctroads.org (see that entry)."
     },
@@ -929,6 +933,10 @@
     {
       "value": "https://tmc.deldot.gov",
       "note": "Delaware's DelDOT (its Transportation Management Center): core/traffic DelDot.kt fetches the files DelDOT's own traffic map reads, /json/advisory.json, vmsg-vms.json and videocamera.json: the advisories, message signs and cameras of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://travelmidwest.com",
+      "note": "Illinois' Travel Midwest (the Gateway Traveler Information System of IDOT and the Illinois Tollway): core/traffic TravelMidwest.kt posts `{}` (the only request the site answers; NetworkGate.post) to the GeoJSON files its own map reads, /lmiga/incidentMap.json, constructionMap.json?type=lines, cameraMap.json and dmsMap.json: the incidents, road work, cameras and message signs of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_TRAVEL_MIDWEST (Settings > Live data, off by default)."
     },
     {
       "value": "https://www.511pa.com",
