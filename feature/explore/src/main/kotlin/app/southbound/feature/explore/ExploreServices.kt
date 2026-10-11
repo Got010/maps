@@ -82,7 +82,7 @@ class ExploreServices private constructor(context: Context) {
     val userData by lazy { UserDataStore(File(appContext.noBackupFilesDir, UserDataStore.FILE_NAME), KeystoreSealer()) }
 
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
-    val traffic = TrafficFeed(networkGate)
+    val traffic = TrafficFeed(networkGate, apiKey = { secrets.get(it) })
 
     /**
      * NWS alerts for every covered state, NOAA radar, the stations' current weather and the 7-day forecast pack (from

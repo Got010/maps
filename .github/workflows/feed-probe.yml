@@ -132,6 +132,30 @@ jobs:
         timeout-minutes: 14
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py dot-midwest-4
+      - name: Midwest DOTs, fifth round
+        timeout-minutes: 16
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-5
+      - name: Midwest DOTs, sixth round
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-6
+      - name: Midwest DOTs, seventh round
+        timeout-minutes: 16
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-7
+      - name: Midwest DOTs, eighth round
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-8
+      - name: Midwest DOTs, ninth round
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-9
+      - name: Midwest DOTs, tenth round
+        timeout-minutes: 6
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-midwest-10
       - name: NYS Address Points
         timeout-minutes: 4
         continue-on-error: true

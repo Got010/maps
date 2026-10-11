@@ -29,6 +29,17 @@ enum class TrafficSource(val label: String, val feature: NetworkFeature, val idP
     CT_ROADS("CTroads", NetworkFeature.TRAFFIC_CTROADS, "ct:"),
     MD_CHART("CHART", NetworkFeature.TRAFFIC_CHART_MD, "md:"),
     DE_DELDOT("DelDOT", NetworkFeature.TRAFFIC_DELDOT, "de:"),
+    WI_511("511WI", NetworkFeature.TRAFFIC_511WI, "wi:"),
+    IL_TRAVEL_MIDWEST("Travel Midwest", NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, "il:"),
+    ND_DOT("NDDOT", NetworkFeature.TRAFFIC_NDDOT, "nd:"),
+    SD_511("SD511", NetworkFeature.TRAFFIC_SD511, "sd:"),
+    IN_511("511IN", NetworkFeature.TRAFFIC_511IN, "in:"),
+    MN_511("511MN", NetworkFeature.TRAFFIC_511MN, "mn:"),
+    IA_511("511IA", NetworkFeature.TRAFFIC_511IA, "ia:"),
+    NE_511("Nebraska 511", NetworkFeature.TRAFFIC_511NE, "ne:"),
+    KS_KANDRIVE("KanDrive", NetworkFeature.TRAFFIC_KANDRIVE, "ks:"),
+    MI_DRIVE("Mi Drive", NetworkFeature.TRAFFIC_MIDRIVE, "mi:"),
+    OH_OHGO("OHGO", NetworkFeature.TRAFFIC_OHGO, "oh:"),
 }
 
 /** One state 511 event: a crash, closure, work zone or special event, at a point. */
@@ -98,9 +109,14 @@ data class TrafficCamera(
      * the newest segment instead ([Hls]).
      */
     val videoUrl: String? = null,
+    /**
+     * A JSON page naming the still, for a camera whose list gives none (Mi Drive's, [MiDrive.cameraInfoUrl]): the card
+     * fetches it first and takes the link [MiDrive.stillOf] allows.
+     */
+    val stillVia: String? = null,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
-    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank())
+    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank() || !stillVia.isNullOrBlank())
 }
 
 /**

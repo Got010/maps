@@ -307,6 +307,40 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     Toggle(R.string.live_deldot, toggles.getValue(NetworkFeature.TRAFFIC_DELDOT), R.string.live_deldot_note) {
         network.set(NetworkFeature.TRAFFIC_DELDOT, it)
     }
+    Toggle(R.string.live_511wi, toggles.getValue(NetworkFeature.TRAFFIC_511WI), R.string.live_511wi_note) {
+        network.set(NetworkFeature.TRAFFIC_511WI, it)
+    }
+    Toggle(R.string.live_travel_midwest, toggles.getValue(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST), R.string.live_travel_midwest_note) {
+        network.set(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, it)
+    }
+    Toggle(R.string.live_nddot, toggles.getValue(NetworkFeature.TRAFFIC_NDDOT), R.string.live_nddot_note) {
+        network.set(NetworkFeature.TRAFFIC_NDDOT, it)
+    }
+    Toggle(R.string.live_sd511, toggles.getValue(NetworkFeature.TRAFFIC_SD511), R.string.live_sd511_note) {
+        network.set(NetworkFeature.TRAFFIC_SD511, it)
+    }
+    Toggle(R.string.live_511in, toggles.getValue(NetworkFeature.TRAFFIC_511IN), R.string.live_511in_note) {
+        network.set(NetworkFeature.TRAFFIC_511IN, it)
+    }
+    Toggle(R.string.live_511mn, toggles.getValue(NetworkFeature.TRAFFIC_511MN), R.string.live_511mn_note) {
+        network.set(NetworkFeature.TRAFFIC_511MN, it)
+    }
+    Toggle(R.string.live_511ia, toggles.getValue(NetworkFeature.TRAFFIC_511IA), R.string.live_511ia_note) {
+        network.set(NetworkFeature.TRAFFIC_511IA, it)
+    }
+    Toggle(R.string.live_511ne, toggles.getValue(NetworkFeature.TRAFFIC_511NE), R.string.live_511ne_note) {
+        network.set(NetworkFeature.TRAFFIC_511NE, it)
+    }
+    Toggle(R.string.live_kandrive, toggles.getValue(NetworkFeature.TRAFFIC_KANDRIVE), R.string.live_kandrive_note) {
+        network.set(NetworkFeature.TRAFFIC_KANDRIVE, it)
+    }
+    Toggle(R.string.live_midrive, toggles.getValue(NetworkFeature.TRAFFIC_MIDRIVE), R.string.live_midrive_note) {
+        network.set(NetworkFeature.TRAFFIC_MIDRIVE, it)
+    }
+    Toggle(R.string.live_ohgo, toggles.getValue(NetworkFeature.TRAFFIC_OHGO), R.string.live_ohgo_note) {
+        network.set(NetworkFeature.TRAFFIC_OHGO, it)
+    }
+    if (toggles.getValue(NetworkFeature.TRAFFIC_OHGO)) KeyField(secrets, ApiKey.OHGO, R.string.live_ohgo_key, R.string.live_ohgo_key_saved)
     Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
         network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
     }

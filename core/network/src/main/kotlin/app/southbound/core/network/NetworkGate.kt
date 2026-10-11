@@ -38,6 +38,39 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Delaware's DelDOT: advisories and closures, message signs and cameras, the whole state. */
     TRAFFIC_DELDOT(enabledByDefault = false),
+
+    /** Wisconsin's 511 (511WI, WisDOT): incidents, closures, roadwork, cameras and message signs, the whole state. */
+    TRAFFIC_511WI(enabledByDefault = false),
+
+    /** Illinois' Travel Midwest (IDOT and the Tollway's Gateway): incidents, roadwork, cameras and message signs, the whole state. */
+    TRAFFIC_TRAVEL_MIDWEST(enabledByDefault = false),
+
+    /** North Dakota's NDDOT travel map (ArcGIS): alerts, work zones and cameras, the whole state. */
+    TRAFFIC_NDDOT(enabledByDefault = false),
+
+    /** South Dakota's SD511 (Iteris): road work, incidents, restrictions and cameras, the whole state. */
+    TRAFFIC_SD511(enabledByDefault = false),
+
+    /** Indiana's 511 (CARS platform): events, cameras and message signs, the whole state. */
+    TRAFFIC_511IN(enabledByDefault = false),
+
+    /** Minnesota's 511 (CARS platform). */
+    TRAFFIC_511MN(enabledByDefault = false),
+
+    /** Iowa's 511 (CARS platform). */
+    TRAFFIC_511IA(enabledByDefault = false),
+
+    /** Nebraska 511 (CARS platform). */
+    TRAFFIC_511NE(enabledByDefault = false),
+
+    /** Kansas' KanDrive (CARS platform). */
+    TRAFFIC_KANDRIVE(enabledByDefault = false),
+
+    /** Michigan's Mi Drive (MDOT): incidents, work zones and cameras, the whole state. */
+    TRAFFIC_MIDRIVE(enabledByDefault = false),
+
+    /** Ohio's OHGO (ODOT), with the user's own key: incidents, construction, cameras and message signs, the whole state. */
+    TRAFFIC_OHGO(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {
@@ -93,6 +126,32 @@ class NetworkGate(private val toggles: NetworkToggles) {
             connection.disconnect()
         }
     }
+
+    /**
+     * A plain HTTPS POST for [feature] with a fixed [body] (Travel Midwest answers its map feeds to a POST of `{}`
+     * and nothing else): the same rules as [get], and the body must say nothing about the user either. Blocking.
+     */
+    fun post(feature: NetworkFeature, url: String, body: ByteArray, contentType: String = "application/json", timeoutMillis: Int = 15_000): ByteArray =
+        request(feature) {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = timeoutMillis
+                connection.readTimeout = timeoutMillis
+                connection.useCaches = false
+                connection.instanceFollowRedirects = false
+                connection.setRequestProperty("User-Agent", USER_AGENT)
+                connection.setRequestProperty("Content-Type", contentType)
+                connection.setRequestProperty("Accept", "application/json")
+                connection.outputStream.use { it.write(body) }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IOException("HTTP $code from ${URL(url).host}")
+                connection.inputStream.use { it.readBytes() }
+            } finally {
+                connection.disconnect()
+            }
+        }
 
     companion object {
         const val USER_AGENT = "Southbound"
