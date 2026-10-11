@@ -86,9 +86,10 @@ PY
 fetch_source() {
   local name="$1" url
   case "$name" in
-    new-york | new-jersey | connecticut | pennsylvania | maryland | delaware | district-of-columbia)
+    new-york | new-jersey | connecticut | pennsylvania | maryland | delaware | district-of-columbia | \
+      ohio | indiana | illinois | michigan | wisconsin | minnesota | iowa | missouri | north-dakota | south-dakota | nebraska | kansas)
       url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
-    *) echo "Unknown source '$name'. Known: new-york, new-jersey, connecticut, pennsylvania, maryland, delaware, district-of-columbia." >&2; exit 2 ;;
+    *) echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2; exit 2 ;;
   esac
   SOURCE_FILE="$DATA_DIR/sources/$name-latest.osm.pbf"
   echo "==> Fetching $url"

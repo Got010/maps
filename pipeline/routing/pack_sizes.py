@@ -25,7 +25,11 @@ CHOICES = [
     ("All of New York + North NJ", ["nyc", "li", "hudson", "capital", "western", "njn"]),
     ("Pennsylvania", ["pae", "paw"]),
     ("Maryland, Delaware, DC", ["md"]),
-    ("Everything", ["nyc", "li", "hudson", "capital", "western", "njn", "njs", "ct", "pae", "paw", "md"]),
+    ("Everything east", ["nyc", "li", "hudson", "capital", "western", "njn", "njs", "ct", "pae", "paw", "md"]),
+    ("Illinois", ["il"]),
+    ("Ohio", ["oh"]),
+    ("Michigan + Ohio + Indiana", ["mi", "oh", "in"]),
+    ("The Midwest", ["oh", "in", "il", "mi", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"]),
 ]
 SCHEMES = ["per region", "one copy", "one copy, L0"]
 

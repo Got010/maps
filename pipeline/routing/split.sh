@@ -4,15 +4,17 @@
 #
 # One Valhalla graph for every state at once (region "all" in regions.json:
 # New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware and DC,
-# each extract whole, merged), so roads join across every state line; then
+# and the twelve Midwest states, each extract whole, merged), so roads join
+# across every state line; then
 # split_tiles.py cuts its tiles into the main roads everywhere (level 0:
 # motorways, trunk and primary roads) and the rest (levels 1 and 2) by the
 # regions each tile covers, each tile once. A phone unpacks the main pack and
 # the packs naming its regions into one tile folder: a long trip runs on the
 # main roads, smaller roads and local streets exist where the driver has the map.
 #
-# Memory: the graph for all seven extracts (about 1.3 GB of OSM) is the
-# largest build in the pipeline; it wants a runner with more than 7 GB.
+# Memory: the graph for every extract (about 1.3 GB of OSM for the first seven
+# states, 5.4 GB peak; the Midwest adds about 2.5 GB of OSM) is the largest
+# build in the pipeline; it wants the public repository's 16 GB runners.
 #
 # Usage: split.sh [region]      default: all
 set -euo pipefail
