@@ -1808,6 +1808,38 @@ def dot_midwest_9():
         print(f"   {url}: status {status} type {ctype} bytes {len(body)}")
 
 
+def dot_midwest_10():
+    """Tenth round: OHGO's swagger definitions in full (Ohio's reader is written against them: the API wants a key
+    the owner enters in Settings, so the probe sees no data), and the docs pages' words on the key and the result shape."""
+    head("Ohio: OHGO swagger definitions")
+    status, _, h, body = get("https://publicapi.ohgo.com/docs/v1/swagger.json", headers=BROWSER, limit=4_000_000)
+    print(f"   spec: status {status} bytes {len(body)}")
+    doc = _json(body)
+    if isinstance(doc, dict):
+        print("   host/basePath:", doc.get("host"), doc.get("basePath"), doc.get("servers"), "security:", json.dumps(doc.get("securityDefinitions") or doc.get("components", {}).get("securitySchemes"))[:600])
+        defs = doc.get("definitions") or doc.get("components", {}).get("schemas", {})
+        for name in ("Camera", "CameraView", "CameraApiResult", "Construction", "ConstructionWorkZone", "ConstructionDetour", "Incident", "IncidentApiResult",
+                     "DigitalSign", "DigitalSignApiResult", "Link", "DangerousSlowdown", "TravelDelay", "Location", "Geometry"):
+            sc = defs.get(name)
+            if sc is None:
+                print(f"   {name}: (no definition)")
+                continue
+            print(f"   {name}:", json.dumps(sc)[:3000])
+        for path in ("/api/v1/cameras", "/api/v1/incidents", "/api/v1/construction", "/api/v1/digital-signs"):
+            op = (doc.get("paths", {}).get(path) or {}).get("get") or {}
+            print(f"   GET {path}: params", json.dumps([{k: p.get(k) for k in ("name", "in", "type", "required", "description", "enum")} for p in op.get("parameters", [])])[:2500])
+            print(f"   GET {path}: responses", json.dumps(op.get("responses"))[:600], "| description:", (op.get("description") or op.get("summary") or "")[:600].replace("\n", " "))
+        print("   all definitions:", sorted(defs.keys()))
+    for page in ("/docs/api-key", "/docs/registration", "/docs/v1/query-params", "/docs/v1/filters", "/docs/v1/api-results", "/docs/cache", "/docs/v1/incidents",
+                 "/docs/v1/construction", "/docs/v1/digital-signs", "/docs/v1/cameras", "/docs/terms-of-use"):
+        status, _, h, body = get("https://publicapi.ohgo.com" + page, headers=BROWSER, limit=2_000_000)
+        print(f"   {page}: status {status} bytes {len(body)}:", text_of(body)[:1800].replace("\n", " | "))
+    # Without a key: the error shape and headers (the app shows this when the key is missing or wrong).
+    for url in ("https://publicapi.ohgo.com/api/v1/cameras?page-size=1", "https://publicapi.ohgo.com/api/v1/incidents?page-all=true"):
+        status, _, h, body = get(url, headers={"User-Agent": UA, "Accept": "application/json"}, limit=200_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} headers {dict((k, v) for k, v in h.items() if k.lower() in ('www-authenticate', 'cache-control', 'x-ratelimit-limit'))}:", body[:400].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1816,7 +1848,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
             "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5,
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
-            "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9}
+            "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
+            "dot-midwest-10": dot_midwest_10}
 
 
 class Timeout(Exception):
