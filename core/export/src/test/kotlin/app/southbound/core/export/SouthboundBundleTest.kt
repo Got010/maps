@@ -69,8 +69,8 @@ class SouthboundBundleTest {
         val entries = SouthboundBundle.encode(Samples.data(), "0.1.14")
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
-            """{"app":"southbound","schema":3,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":56}""",
+            """{"app":"southbound","schema":4,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":58}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -110,7 +110,7 @@ class SouthboundBundleTest {
         val bytes = file(entries)
         val header = SouthboundBundle.readHeader(ByteArrayInputStream(bytes))
         assertEquals("southbound", header.appId)
-        assertEquals(3L, header.schemaVersion)
+        assertEquals(4L, header.schemaVersion)
         assertEquals(1_791_028_800_000L, header.createdMs)
         assertFalse(header.verified)
         assertEquals(entries.mapValues { it.value.toList() }, read(bytes).mapValues { it.value.toList() })
@@ -155,15 +155,15 @@ class SouthboundBundleTest {
     @Test
     fun `a schema 1 file still imports, with DOT cameras not avoided`() {
         // A schema 1 export as v0.1.21 wrote it: schema 1 in the header and the manifest, 54 settings, the route
-        // group without avoid_dot_cameras and the network group without the weather toggle.
-        val three = SouthboundBundle.encode(Samples.data(), "0.1.21")
+        // group without avoid_dot_cameras and the network group without the weather, 511PA and CTroads toggles.
+        val four = SouthboundBundle.encode(Samples.data(), "0.1.21")
         val one = linkedMapOf<String, ByteArray>()
-        for ((name, bytes) in three) {
+        for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":3", "\"schema\":1")
-                .replace("\"settings\":56", "\"settings\":54")
+                .replace("\"schema\":4", "\"schema\":1")
+                .replace("\"settings\":58", "\"settings\":54")
                 .replace("\"avoid_dot_cameras\":true,", "")
-                .replace(",\"WEATHER\":true", "")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
             one[name] = t.toByteArray()
         }
         val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
@@ -171,7 +171,7 @@ class SouthboundBundleTest {
         val data = SouthboundBundle.decode(read(bytes))
         val expected = Samples.data().settings
         assertEquals(
-            expected.copy(route = expected.route.copy(avoidDotCameras = false), network = expected.network + (NetworkFeature.WEATHER to false)),
+            expected.copy(route = expected.route.copy(avoidDotCameras = false), network = expected.network + newerOff(NetworkFeature.WEATHER)),
             data.settings,
         )
         assertEquals(Samples.data().userData, data.userData)
@@ -179,25 +179,50 @@ class SouthboundBundleTest {
 
     @Test
     fun `a schema 2 file still imports, with weather off`() {
-        // A schema 2 export as v0.1.22 wrote it: 55 settings and the network group without the weather toggle.
-        val three = SouthboundBundle.encode(Samples.data(), "0.1.22")
+        // A schema 2 export as v0.1.22 wrote it: 55 settings and the network group without the weather, 511PA and
+        // CTroads toggles.
+        val four = SouthboundBundle.encode(Samples.data(), "0.1.22")
         val two = linkedMapOf<String, ByteArray>()
-        for ((name, bytes) in three) {
+        for ((name, bytes) in four) {
             val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":3", "\"schema\":2")
-                .replace("\"settings\":56", "\"settings\":55")
-                .replace(",\"WEATHER\":true", "")
+                .replace("\"schema\":4", "\"schema\":2")
+                .replace("\"settings\":58", "\"settings\":55")
+                .replace(",\"WEATHER\":true,\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
             two[name] = t.toByteArray()
         }
         val bytes = raw(*two.map { it.key to it.value }.toTypedArray(), schema = 2)
         val data = SouthboundBundle.decode(read(bytes))
         val expected = Samples.data().settings
-        assertEquals(expected.copy(network = expected.network + (NetworkFeature.WEATHER to false)), data.settings)
+        assertEquals(expected.copy(network = expected.network + newerOff(NetworkFeature.WEATHER)), data.settings)
     }
 
     @Test
+    fun `a schema 3 file still imports, with 511PA and CTroads off`() {
+        // A schema 3 export as v0.1.33 wrote it: 56 settings and the network group without the 511PA and CTroads toggles.
+        val four = SouthboundBundle.encode(Samples.data(), "0.1.33")
+        val three = linkedMapOf<String, ByteArray>()
+        for ((name, bytes) in four) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":4", "\"schema\":3")
+                .replace("\"settings\":58", "\"settings\":56")
+                .replace(",\"TRAFFIC_511PA\":true,\"TRAFFIC_CTROADS\":true", "")
+            three[name] = t.toByteArray()
+        }
+        val bytes = raw(*three.map { it.key to it.value }.toTypedArray(), schema = 3)
+        assertEquals(3L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
+        val data = SouthboundBundle.decode(read(bytes))
+        val expected = Samples.data().settings
+        assertEquals(expected.copy(network = expected.network + newerOff()), data.settings)
+        assertEquals(Samples.data().userData, data.userData)
+    }
+
+    /** The toggles newer than a schema 3 bundle, plus [also], all off. */
+    private fun newerOff(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
+        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS) + also).associateWith { false }
+
+    @Test
     fun `a newer schema is refused from the header alone`() {
-        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 4)
+        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 5)
         assertEquals(FwxError.SCHEMA_TOO_NEW, code { SouthboundBundle.readHeader(ByteArrayInputStream(bytes)) })
     }
 
@@ -459,14 +484,14 @@ class SouthboundBundleTest {
 
     /** If one of these fails, the bundle's contents changed: update docs/EXPORT.md and bump the schema (with a migration). */
     @Test
-    fun `schema 3 pins what the stores hold`() {
+    fun `schema 4 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
         assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA"), ApiKey.entries.map { it.name })
         assertEquals(
             listOf(
                 "PACK_DOWNLOADS", "APP_UPDATES", "TRAFFIC_511NY", "TRAFFIC_NYC_DOT", "TRAFFIC_TOMTOM", "TRANSIT_REALTIME",
-                "TRANSIT_BUS_TIME", "GAS_PRICES", "WEATHER",
+                "TRANSIT_BUS_TIME", "GAS_PRICES", "WEATHER", "TRAFFIC_511PA", "TRAFFIC_CTROADS",
             ),
             NetworkFeature.entries.map { it.name },
         )
@@ -476,9 +501,9 @@ class SouthboundBundleTest {
         assertEquals(12, fields(RoutePrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.WalkPrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.BikePrefs::class.java))
-        assertEquals(56, SettingsEntry.count(Samples.settings()))
+        assertEquals(58, SettingsEntry.count(Samples.settings()))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
-        assertEquals(1L..3L, SouthboundBundle.SCHEMA_RANGE)
+        assertEquals(1L..4L, SouthboundBundle.SCHEMA_RANGE)
     }
 
     @Test

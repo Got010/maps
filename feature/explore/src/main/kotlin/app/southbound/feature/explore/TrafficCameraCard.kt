@@ -42,7 +42,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.traffic.TrafficCamera
@@ -65,10 +64,11 @@ private sealed interface StillState {
 }
 
 /**
- * A tapped 511NY traffic camera: its name, road and direction, and its latest
- * still. The still is fetched through [gate] under the 511NY toggle from the
- * camera's own image link (which names the camera, never the viewer) when the
- * card opens and on Refresh. An offline camera says so and fetches nothing.
+ * A tapped state 511 traffic camera: its name, road and direction, and its latest
+ * still. The still is fetched through [gate] under its 511's toggle (511NY, 511PA,
+ * CTroads) from the camera's own image link (which names the camera, never the
+ * viewer) when the card opens and on Refresh. An offline camera says so and
+ * fetches nothing.
  */
 @Composable
 internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose: () -> Unit, modifier: Modifier) {
@@ -84,7 +84,7 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
         busy = true
         state = try {
             val bitmap = withContext(Dispatchers.IO) {
-                val bytes = gate.get(NetworkFeature.TRAFFIC_511NY, url)
+                val bytes = gate.get(camera.source.feature, url)
                 if (bytes.size > MAX_IMAGE_BYTES) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }
             if (bitmap == null) StillState.Failed(StillState.Reason.NOT_AN_IMAGE) else StillState.Shown(bitmap, System.currentTimeMillis())
@@ -118,7 +118,7 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
             }
             val road = listOfNotNull(camera.roadway, camera.direction).joinToString(" · ")
             Text(
-                listOf(stringResource(R.string.explore_traffic_camera_source), road).filter { it.isNotEmpty() }.joinToString(" · "),
+                listOf(stringResource(R.string.explore_traffic_camera_source, camera.source.label), road).filter { it.isNotEmpty() }.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(end = 8.dp, bottom = 8.dp),
@@ -149,8 +149,8 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
                     )
                     is StillState.Failed -> Text(
                         when (s.reason) {
-                            StillState.Reason.TURNED_OFF -> stringResource(R.string.explore_traffic_camera_turned_off)
-                            StillState.Reason.NOT_AN_IMAGE -> stringResource(R.string.explore_traffic_camera_not_image)
+                            StillState.Reason.TURNED_OFF -> stringResource(R.string.explore_traffic_camera_turned_off, camera.source.label)
+                            StillState.Reason.NOT_AN_IMAGE -> stringResource(R.string.explore_traffic_camera_not_image, camera.source.label)
                             StillState.Reason.NETWORK -> stringResource(R.string.explore_traffic_camera_failed, s.detail ?: "no connection")
                         },
                         color = Color.White,
