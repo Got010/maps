@@ -1376,13 +1376,100 @@ def dot_midwest_4():
                 print("    ", body[:700].replace("\n", " | "))
 
 
+def dot_midwest_5():
+    """Fifth round: the CARS services by name (events_v1, cameras_v1, signs_v1, the WZDx feed), South Dakota's inline
+    layer code, Michigan's and Missouri's inline page code, North Dakota's ArcGIS layers."""
+    for state, site, tg, st in (("Indiana", "https://511in.org", "intg", "in"), ("Minnesota", "https://511mn.org", "mntg", "mn"),
+                                ("Iowa", "https://511ia.org", "iatg", "ia"), ("Nebraska", "https://511.nebraska.gov", "netg", "ne"),
+                                ("Kansas", "https://www.kandrive.gov", "kstg", "ks")):
+        head(f"{state}: CARS services")
+        try:
+            status, final, _, page = get(site + "/", limit=2_000_000)
+            for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:12]:
+                if "google" in src:
+                    continue
+                src = urllib.parse.urljoin(final, src)
+                _, _, _, js = get(src, limit=12_000_000)
+                i = js.find("signs_v1")
+                if i >= 0:
+                    print("   config ...", js[max(0, i - 900):i + 500].replace("\n", " "), "...")
+                for m in list(re.finditer(r"""_v1/api[A-Za-z0-9_/${}.-]{0,60}""", js))[:40]:
+                    pass
+                print("   service paths:", sorted(set(re.findall(r"""[a-z-]+_v1/api[A-Za-z0-9_/.-]{0,50}""", js)))[:40])
+                print("   graphql/rest:", sorted(set(re.findall(r"""/api/(?:graphql|v1)[A-Za-z0-9_/.-]{0,40}""", js)))[:20])
+            base = f"https://{tg}.carsprogram.org"
+            for path in ("/events_v1/api", "/events_v1/api/events", "/events_v1/api/map-features", "/cameras_v1/api", "/cameras_v1/api/cameras",
+                         "/signs_v1/api", "/signs_v1/api/signs", "/rest-areas_v1/api", "/traveltimes_v1/api/travel-times", "/api/graphql"):
+                status, _, h, body = get(base + path, headers={"Accept": "application/json, */*", "Referer": site + "/", "Origin": site}, limit=20_000_000)
+                print(f"   {base + path}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:400].replace("\n", " "))
+            for url in (f"https://{st}.carsprogram.org/carsapi_v1/api/wzdx", f"https://{tg}.carsprogram.org/carsapi_v1/api/wzdx"):
+                status, _, h, body = get(url, headers={"Accept": "application/json"}, limit=40_000_000)
+                print(f"   WZDx {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:700].replace("\n", " "))
+        except Exception as e:
+            print("   failed:", repr(e)[:200])
+
+    head("South Dakota: the page's own layer code")
+    status, final, _, page = get("https://www.sd511.org/", headers=BROWSER, limit=4_000_000)
+    for m in list(re.finditer(r"geojson|cdn\.iteris-atis\.com|aggregator\.iteris", page))[:40]:
+        print("   ...", page[max(0, m.start() - 160):m.start() + 160].replace("\n", " "), "...")
+    print("   urls:", sorted(set(u for u in re.findall(r"""https?://[^"' <>]+""", page) if "iteris" in u or "geojson" in u or "json" in u))[:40])
+    for url in ("https://sd.cdn.iteris-atis.com/geojson/", "https://sd.cdn.iteris-atis.com/geojson/incidents.geojson", "https://sd.cdn.iteris-atis.com/geojson/events.geojson",
+                "https://sd.cdn.iteris-atis.com/geojson/cameras.geojson", "https://sd.cdn.iteris-atis.com/geojson/dms.geojson",
+                "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.json", "https://sd.cdn.iteris-atis.com/geojson/road_conditions.geojson"):
+        status, _, h, body = get(url, headers=BROWSER, limit=20_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+
+    head("Michigan: Mi Drive's inline page code")
+    status, _, _, page = get("https://mdotjboss.state.mi.us/MiDrive/map", headers=BROWSER, limit=4_000_000)
+    for block in re.findall(r"<script(?![^>]*src)[^>]*>(.*?)</script>", page, flags=re.S)[:10]:
+        lines = [l.strip() for l in block.splitlines() if re.search(r"[Uu]rl|api|server|\.json|Layer\(", l)]
+        print("   inline:", lines[:40])
+    print("   quoted relative paths:", sorted(set(re.findall(r"""["']([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./?=&-]+)["']""", page)))[:40])
+    for path in ("public/api/incident/all", "public/api/incidents/all", "public/api/camera/all", "public/api/cameras/all", "public/api/dms/all",
+                 "public/api/construction/all", "public/api/incident", "public/api/camera", "public/api/event/all", "public/page/incidents",
+                 "camera/favoriteCameras/", "public/api/truckparking/all", "public/api/speed/all"):
+        url = "https://mdotjboss.state.mi.us/MiDrive/" + path
+        status, _, h, body = get(url, headers={**BROWSER, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}, limit=20_000_000)
+        print(f"   {url}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " "))
+
+    head("Missouri: traveler.modot.org inline code")
+    for url in ("https://traveler.modot.org/map/", "https://traveler.modot.org/mapv3/index.html"):
+        status, _, _, page = get(url, headers=BROWSER, limit=4_000_000)
+        blocks = re.findall(r"<script(?![^>]*src)[^>]*>(.*?)</script>", page, flags=re.S)
+        print(f"   {url}: {len(blocks)} inline scripts, {sum(len(b) for b in blocks)} bytes")
+        for block in blocks[:6]:
+            hits = sorted(set(re.findall(r"""["']([A-Za-z0-9_][A-Za-z0-9_./-]*(?:/|\.json|\.js|Server)[A-Za-z0-9_./?=&-]*)["']""", block)))
+            print("     strings:", hits[:50])
+            for m in list(re.finditer(r"""(?:url|URL|Url)\s*[:=]\s*["'`]([^"'`]+)["'`]""", block))[:20]:
+                print("     url:", m.group(1)[:150])
+        print("   iframes/links:", re.findall(r'<(?:iframe|link|a)[^>]+(?:src|href)="([^"]+)"', page)[:20])
+
+    head("North Dakota: rcrs_dynamic layers")
+    base = "https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic/MapServer"
+    for layer in (5, 37, 7, 41, 21, 22, 31, 32):
+        url = f"{base}/{layer}/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson"
+        status, _, h, body = get(url, headers=BROWSER, limit=30_000_000)
+        print(f"   layer {layer}: status {status} type {h.get('Content-Type')} bytes {len(body)}")
+        try:
+            doc = json.loads(body)
+            feats = doc.get("features", [])
+            from collections import Counter
+            print("   features:", len(feats), "geometry:", Counter((f.get("geometry") or {}).get("type") for f in feats).most_common(3))
+            if feats:
+                print("   keys:", list((feats[0].get("properties") or {}).keys())[:40])
+                for f in feats[:2]:
+                    print("   feature:", json.dumps(f)[:1200])
+        except ValueError:
+            print("    ", body[:400].replace("\n", " "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
             "dot-ct": dot_ct, "dot-nj": dot_nj, "dot-pa": dot_pa, "dot-md": dot_md, "dot-de": dot_de, "dot-dc": dot_dc,
             "ibi-join": ibi_join, "chart-more": chart_more, "deldot-more": deldot_more, "nj-config": nj_config, "hls": hls_frames,
             "dot-midwest-ibi": dot_midwest_ibi, "dot-midwest-other": dot_midwest_other,
-            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4}
+            "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5}
 
 
 class Timeout(Exception):
