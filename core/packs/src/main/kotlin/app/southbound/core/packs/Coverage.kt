@@ -94,10 +94,7 @@ object Coverage {
         State("MI", "Michigan", "Mi Drive", none("Mi Drive gives each sign's words on a page of its own, one request per sign", Item.SIGNS)),
         State("WI", "Wisconsin", "511WI", emptyList()),
         State("MN", "Minnesota", "511MN", emptyList()),
-        State(
-            "IA", "Iowa", "511IA",
-            none("511IA answers the app's events query with none (checked October 2026; its cameras and signs come through)", Item.INCIDENTS),
-        ),
+        State("IA", "Iowa", "511IA", emptyList()),
         State("MO", "Missouri", null, none(MO_WHY, *TRAFFIC)),
         State("ND", "North Dakota", "NDDOT", none("NDDOT publishes no message signs", Item.SIGNS)),
         State("SD", "South Dakota", "SD511", none("SD511 publishes no message signs", Item.SIGNS)),
@@ -147,13 +144,11 @@ object Coverage {
         fun names(pick: (State) -> Boolean) = join(STATES.filter(pick).map { it.name })
         val noFeed = names { it.trafficFeed == null }
         val keyed = names { it.trafficFeed != null && it.entry(Item.INCIDENTS).level == Level.PARTIAL }
-        val noEvents = names { it.trafficFeed != null && it.entry(Item.INCIDENTS).level == Level.NONE }
         val noAvoid = names { it.entry(Item.AVOID_DOT_CAMERAS).level == Level.NONE }
         val noSigns = names { it.trafficFeed != null && it.entry(Item.SIGNS).level == Level.NONE }
         return listOfNotNull(
             noFeed.takeIf { it.isNotEmpty() }?.let { "No traffic feed: $it." },
             keyed.takeIf { it.isNotEmpty() }?.let { "Traffic only with your own key: $it." },
-            noEvents.takeIf { it.isNotEmpty() }?.let { "Cameras and signs but no incidents or closures: $it." },
             noAvoid.takeIf { it.isNotEmpty() }?.let { "No avoiding DOT cameras: $it." },
             noSigns.takeIf { it.isNotEmpty() }?.let { "No message signs: $it." },
             "Traffic speeds and transit: New York City only.",
@@ -168,12 +163,10 @@ object Coverage {
         val states = STATES.filter { it.name in heading }
         val noFeed = states.filter { it.trafficFeed == null }
         val keyed = states.filter { it.trafficFeed != null && it.entry(Item.INCIDENTS).level == Level.PARTIAL }
-        val noEvents = states.filter { it.trafficFeed != null && it.entry(Item.INCIDENTS).level == Level.NONE }
         return when {
             noFeed.isNotEmpty() && noFeed.size == states.size -> "No traffic feed (Settings > What each state has)"
             noFeed.isNotEmpty() -> "No traffic feed for ${join(noFeed.map { it.name })} (Settings > What each state has)"
             keyed.isNotEmpty() -> "Traffic needs your free ${keyed.joinToString { it.trafficFeed!! }} key (Settings > Live data)"
-            noEvents.isNotEmpty() -> "No incidents or closures yet; cameras and signs only (Settings > What each state has)"
             else -> null
         }
     }
