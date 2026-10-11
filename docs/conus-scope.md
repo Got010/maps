@@ -28,15 +28,14 @@ spike before committing to them; the New York numbers are measured (release v0.1
   several packs and offers the new regions.
 - **The Midwest next** (owner, October 2026: "the entire midwest states. Same features as all other states"):
   Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, North Dakota, South Dakota, Nebraska
-  and Kansas, by the same phases. One region a state to begin with (`oh`, `in`, `il`, `mi`, `wi`, `mn`, `ia`,
-  `mo`, `nd`, `sd`, `ne`, `ks`, outlines from Natural Earth's 10 m state lines simplified to about a kilometre),
-  marked `planned` until the test build has measured them; a state whose basemap comes out far bigger than
-  Pennsylvania's halves (about 165 MB) is split before it ships, as Pennsylvania was. The one routing graph
-  grows to every covered state (about 3.8 GB of OSM; the first seven states' 1.3 GB built at 5.4 GB peak
-  memory), so the test build's memory, time and `routing-main.tar` size decide whether the main roads stay one
-  pack for every phone or become one pack per group of states. Then the app offers the regions, weather adds
-  the states and widens the radar and forecast grid, and each state's DOT feed is probed and read as the
-  others were.
+  and Kansas, by the same phases. Fifteen regions (outlines from Natural Earth's 10 m state lines simplified to
+  about a kilometre): one a state, and Ohio, Illinois and Michigan halved (`ohn`/`ohs`, `iln`/`ils`,
+  `mis`/`miu`), since whole they measured 0.8 to 1 GB of map and local roads against Pennsylvania's halves at
+  about 370 MB; marked `planned` until their packs ship. The one routing graph covers every state (3.8 GB of
+  OSM; 48 minutes and 6.2 GB of memory on a 16 GB runner). Main roads go by group: `routing-main.tar` stays the
+  east's (119 MB), `routing-main-midwest.tar` and a seam pack join it on a phone with a Midwest region or a trip
+  there, instead of one 301 MB pack for every phone. Then the app offers the regions, weather adds the states
+  and widens the radar and forecast grid, and each state's DOT feed is probed and read as the others were.
 
 ## Where New York stands (the baseline to scale)
 

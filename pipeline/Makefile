@@ -5,12 +5,12 @@
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
 
-REGIONS := nyc li hudson capital western njn njs ct pae paw md oh in il mi wi mn ia mo nd sd ne ks nys
+REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
 # The regions beyond New York: OSM-only search, routing from the split packs (southbound-v2.json). The Midwest's
 # (MIDWEST_REGIONS) are planned: the states test build builds them, a release not yet.
 STATE_REGIONS := njs ct pae paw md
-MIDWEST_REGIONS := oh in il mi wi mn ia mo nd sd ne ks
+MIDWEST_REGIONS := ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))

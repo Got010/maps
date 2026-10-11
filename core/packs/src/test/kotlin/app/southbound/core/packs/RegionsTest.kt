@@ -39,7 +39,7 @@ class RegionsTest {
     /** The four states beyond New York, offered since their packs are in southbound-v2.json; the Midwest not yet. */
     @Test
     fun `the other states are offered, grouped by state`() {
-        assertEquals(listOf("oh", "in", "il", "mi", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"), Regions.all.filter { it.planned }.map { it.id })
+        assertEquals(listOf("ohn", "ohs", "in", "iln", "ils", "mis", "miu", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"), Regions.all.filter { it.planned }.map { it.id })
         assertEquals(
             listOf("New York", "New Jersey", "Connecticut", "Pennsylvania", "Maryland, Delaware and DC"),
             Regions.byState.map { it.first },
@@ -59,20 +59,32 @@ class RegionsTest {
     fun `the midwest is planned, not offered`() {
         assertNull(Regions.basemapAt(41.8781, -87.6298)) // Chicago
         assertTrue(Regions.byState.none { it.first == "Illinois" })
-        val il = Regions.byId("il")!!
-        assertTrue(il.planned && il.contains(41.8781, -87.6298))
-        assertTrue(!il.contains(41.5868, -93.6250)) // Des Moines, inside Illinois' box? no: west of it, and inside Iowa's outline
-        assertTrue(Regions.byId("ia")!!.contains(41.5868, -93.6250))
+        fun only(id: String, lat: Double, lon: Double) {
+            val region = Regions.byId(id)!!
+            assertTrue("$id should hold $lat,$lon", region.planned && region.contains(lat, lon))
+            val others = Regions.all.filter { it.planned && it.id != id && it.contains(lat, lon) }.map { it.id }
+            assertEquals("$lat,$lon is $id's alone", emptyList<String>(), others)
+        }
+        only("iln", 41.8781, -87.6298) // Chicago
+        only("iln", 42.2711, -89.0940) // Rockford
+        only("ils", 40.6936, -89.5890) // Peoria
+        only("ils", 38.6245, -90.1507) // East St. Louis
+        only("mo", 38.6386, -90.2847) // St. Louis, Forest Park (the outlines run about a kilometre from the river)
+        only("ia", 41.5868, -93.6250) // Des Moines
         // State lines, not boxes: Toledo is Ohio's though Michigan's box reaches it; Gary, Indiana is not Illinois'.
-        assertTrue(Regions.byId("oh")!!.contains(41.6528, -83.5379) && !Regions.byId("mi")!!.contains(41.6528, -83.5379))
-        assertTrue(Regions.byId("in")!!.contains(41.5934, -87.3464) && !Regions.byId("il")!!.contains(41.5934, -87.3464))
-        // Both of Michigan's peninsulas, and Wisconsin's side of the Menominee.
-        assertTrue(Regions.byId("mi")!!.contains(46.4953, -84.3453)) // Sault Ste. Marie
-        assertTrue(Regions.byId("mi")!!.contains(42.3314, -83.0458)) // Detroit
-        assertTrue(Regions.byId("wi")!!.contains(45.1083, -87.6143) && !Regions.byId("mi")!!.contains(45.1083, -87.6143)) // Marinette, WI
-        // St. Louis (Forest Park) is Missouri's, East St. Louis Illinois'; the outlines run about a kilometre from the river.
-        assertTrue(Regions.byId("mo")!!.contains(38.6386, -90.2847) && !Regions.byId("il")!!.contains(38.6386, -90.2847))
-        assertTrue(Regions.byId("il")!!.contains(38.6245, -90.1507))
+        only("ohn", 41.6528, -83.5379) // Toledo
+        only("ohn", 41.4993, -81.6944) // Cleveland
+        only("ohs", 39.9612, -82.9988) // Columbus
+        only("ohs", 39.1031, -84.5120) // Cincinnati
+        only("in", 41.5934, -87.3464) // Gary
+        // Michigan: the south, the north and the Upper Peninsula; Wisconsin's side of the Menominee.
+        only("mis", 42.3314, -83.0458) // Detroit
+        only("mis", 42.9634, -85.6681) // Grand Rapids
+        only("miu", 44.7631, -85.6206) // Traverse City
+        only("miu", 46.4953, -84.3453) // Sault Ste. Marie
+        only("wi", 45.1083, -87.6143) // Marinette
+        only("mn", 44.9778, -93.2650) // Minneapolis
+        only("ks", 39.0473, -95.6752) // Topeka
     }
 
     @Test
