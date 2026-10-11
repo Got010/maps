@@ -1915,7 +1915,11 @@ def iowa_slugs():
             if "google" in src:
                 continue
             _, _, _, js = get(urllib.parse.urljoin(final, src), headers=BROWSER, limit=15_000_000)
-            pairs = re.findall(r'([A-Z][A-Z0-9_]{2,40}):"([a-z][A-Za-z0-9]{2,40})"', js)
+            # Object literals (KEY:"value") and compiled TypeScript string enums (e.KEY="value").
+            pairs = re.findall(r'([A-Z][A-Z0-9_]{2,40})\s*[:=]\s*"([a-z][A-Za-z0-9-]{2,40})"', js)
+            for key in ("ROAD_REPORTS", "CONSTRUCTION", "WAZE_REPORTS", "WINTER_DRIVING", "INCIDENTS", "CLOSURES", "TRUCKERS_REPORTS"):
+                for m in list(re.finditer(key + r'\b', js))[:2]:
+                    print(f"   {site} {src[-40:]} {key} ...", js[max(0, m.start() - 120):m.start() + 160].replace("\n", " "), "...")
             slugs = sorted(set(v for k, v in pairs if any(w in k for w in ("EVENT", "CLOSURE", "CONSTRUCTION", "INCIDENT", "ROAD", "WORK", "REPORT", "LAYER", "WINTER", "TRAFFIC", "FUTURE", "WEATHER", "TRUCK", "DELAY", "RESTRICT", "SPECIAL", "PLANNED", "ALERT", "CRASH"))))
             for m in re.finditer(r"layerSlugs:\[([^\]]{1,200})\]", js):
                 print(f"   {site} {src[-40:]} layerSlugs: {m.group(1)[:200]}")
