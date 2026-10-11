@@ -1,0 +1,4 @@
+[{"latitude": 43.173918, "longitude": -86.210415, "id": "ETX-21385", "title": "SB US-31 BR: Single-Lane Closure", "icon": "2", "coordinatePoints": [[-86.219571, 43.180174], [-86.218903, 43.179443], [-86.206922, 43.171691]], "active": true},
+ {"latitude": 42.403273, "longitude": -86.268345, "id": "ETX-21250", "title": "NB I-196 BL: Single-Lane Closure", "icon": "2", "coordinatePoints": [[-86.271049, 42.403235], [-86.26, 42.40]], "active": true},
+ {"latitude": 42.7, "longitude": -84.5, "id": "ETX-21000", "title": "EB M-43: Total Closure", "icon": "1", "coordinatePoints": [[-84.51, 42.7], [-84.49, 42.7]], "active": true},
+ {"latitude": 42.8, "longitude": -84.6, "id": "ETX-20999", "title": "WB I-96: Lane Shift", "icon": "4", "coordinatePoints": [], "active": false}]

@@ -69,6 +69,8 @@ object CarsStates {
      * reads once, as the graver of the two. Clusters (several events drawn as one at this zoom) have no events to
      * read and are skipped; planned events (`future/` icons) too.
      *
+     * Zoom 14 opens every cluster (the ninth probe round: Indiana 479 events at zooms 10 to 16, 77 features at 7).
+     *
      * @throws IllegalArgumentException when it isn't the query's answer (a GraphQL error included).
      */
     fun parseEvents(json: String, site: Site): List<Incident> {
@@ -102,7 +104,8 @@ object CarsStates {
         val lat = (coords.getOrNull(1) as? Number)?.toDouble() ?: return null
         if ((lat == 0.0 && lon == 0.0) || lat !in -90.0..90.0 || lon !in -180.0..180.0) return null
         val icon = (((pin["properties"] as? Map<*, *>)?.get("icon") as? Map<*, *>)?.get("url") as? String).orEmpty()
-        if ("/future/" in icon) return null
+        // Planned work ("STARTS WEDNESDAY") and events drawn as over ("_inactive") are not on the road now.
+        if ("/future/" in icon || "inactive" in icon) return null
         val tooltip = plain(m.text("tooltip").orEmpty())
         val where = tooltip.substringBefore(":", "").trim()
         val what = tooltip.substringAfter(":", tooltip).trim()
@@ -125,13 +128,17 @@ object CarsStates {
         )
     }
 
-    /** By the icon first (`tg_closure`, `tg_crash`), then the words ("roadwork", "construction"). */
+    /**
+     * By the icon first (`tg_closure` a closure, `tg_crash` a crash), then the words ("roadwork", "construction"); a
+     * ramp or lane icon (`tg_ramp_impact`, `tg_lane_closure`, Minnesota's) and `tg_warning` and `tg_info` go by the
+     * words, so "Entrance ramp closed." is other with its lanes and "Road closed, ..." a closure.
+     */
     fun kindOf(icon: String, words: String): IncidentKind {
         val w = words.lowercase(Locale.US)
         return when {
             "tg_closure" in icon -> IncidentKind.CLOSURE
             "tg_crash" in icon || "tg_accident" in icon -> IncidentKind.ACCIDENT
-            w.startsWith("road closed") || w.startsWith("bridge closed") -> IncidentKind.CLOSURE
+            w.startsWith("road closed") || w.startsWith("bridge closed") || w.startsWith("railroad crossing closed") -> IncidentKind.CLOSURE
             "crash" in w || "accident" in w || "stalled" in w || "disabled vehicle" in w -> IncidentKind.ACCIDENT
             "roadwork" in w || "road work" in w || "construction" in w || "maintenance" in w || "utility work" in w || "bridge work" in w -> IncidentKind.ROADWORK
             "police" in w -> IncidentKind.POLICE
