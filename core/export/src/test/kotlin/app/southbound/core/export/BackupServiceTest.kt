@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 56), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 58), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -349,9 +349,9 @@ class BackupServiceTest {
         // A kept import says the same before it lands.
         val c = device("c")
         c.stores.failApply = true
-        assertEquals(8, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
+        assertEquals(10, (import(c, file) as ImportOutcome.Pending).turnedOn.size)
         c.stores.failApply = false
-        assertEquals(8, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
+        assertEquals(10, (runBlocking { c.service.resume() } as ResumeOutcome.Applied).turnedOn.size)
     }
 
     @Test
