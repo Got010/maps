@@ -10,6 +10,12 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class SettingsEntryTest {
+    /** The network toggles schema 4 added, as an export with every toggle on writes them (last in the group). */
+    private val NEWER = ""","TRAFFIC_511PA":true,"TRAFFIC_CTROADS":true"""
+
+    /** The toggles newer than schema 3, plus [also], all off. */
+    private fun off(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
+        (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS) + also).associateWith { false }
 
     @Test
     fun `defaults and changed settings round trip`() {
@@ -41,18 +47,19 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(56, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(58, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
     fun `a schema 1 bundle reads with DOT cameras not avoided`() {
         val s = Samples.settings()
-        // What schema 1 wrote: the same groups without the route group's avoid_dot_cameras or the weather toggle.
+        // What schema 1 wrote: the same groups without the route group's avoid_dot_cameras or the weather, 511PA and
+        // CTroads toggles.
         val one = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""""avoid_dot_cameras":true,""", "")
-            .replace(""","WEATHER":true""", "")
+            .replace(""","WEATHER":true""" + NEWER, "")
         assertTrue("avoid_dot_cameras" !in one)
         val back = SettingsEntry.decode(one.toByteArray(), schema = 1)
-        assertEquals(s.copy(route = s.route.copy(avoidDotCameras = false), network = s.network + (NetworkFeature.WEATHER to false)), back)
+        assertEquals(s.copy(route = s.route.copy(avoidDotCameras = false), network = s.network + off(NetworkFeature.WEATHER)), back)
         // Schema 2 requires the field, and schema 1 refuses it.
         for ((text, schema) in listOf(one to 2L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 1L)) {
             try {
@@ -68,14 +75,34 @@ class SettingsEntryTest {
     fun `a schema 2 bundle reads with weather off`() {
         val s = Samples.settings()
         assertTrue(s.network.getValue(NetworkFeature.WEATHER))
-        // What schema 2 wrote: the network group without the weather toggle.
-        val two = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""","WEATHER":true""", "")
+        // What schema 2 wrote: the network group without the weather, 511PA and CTroads toggles.
+        val two = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(""","WEATHER":true""" + NEWER, "")
         assertTrue("WEATHER" !in two)
-        assertEquals(s.copy(network = s.network + (NetworkFeature.WEATHER to false)), SettingsEntry.decode(two.toByteArray(), schema = 2))
+        assertEquals(s.copy(network = s.network + off(NetworkFeature.WEATHER)), SettingsEntry.decode(two.toByteArray(), schema = 2))
         assertEquals(55, SettingsEntry.count(s, 2))
         assertEquals(54, SettingsEntry.count(s, 1))
         // Schema 3 requires it, and schema 2 refuses it.
         for ((text, schema) in listOf(two to 3L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 2L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
+    }
+
+    @Test
+    fun `a schema 3 bundle reads with 511PA and CTroads off`() {
+        val s = Samples.settings()
+        assertTrue(s.network.getValue(NetworkFeature.TRAFFIC_511PA) && s.network.getValue(NetworkFeature.TRAFFIC_CTROADS))
+        // What schema 3 wrote: the network group without the two newer toggles.
+        val three = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER, "")
+        assertTrue("TRAFFIC_511PA" !in three && "TRAFFIC_CTROADS" !in three)
+        assertEquals(s.copy(network = s.network + off()), SettingsEntry.decode(three.toByteArray(), schema = 3))
+        assertEquals(56, SettingsEntry.count(s, 3))
+        // Schema 4 requires them, and schema 3 refuses them.
+        for ((text, schema) in listOf(three to 4L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 3L)) {
             try {
                 SettingsEntry.decode(text.toByteArray(), schema)
                 fail("accepted schema $schema")

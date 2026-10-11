@@ -811,12 +811,20 @@
       "note": "Text only: the Settings > Live data note for 511NY (feature/settings strings.xml, live_511_note) names the site whose feeds are read. Not contacted: since 511NY's October 2026 move the app reads api-511x-nysdot.carsprogram.org (see that entry)."
     },
     {
+      "value": "511pa.com",
+      "note": "Text only: the Settings > Live data note for 511PA (feature/settings strings.xml, live_511pa_note) names the site whose lists are read. Requests go to https://www.511pa.com (see that entry)."
+    },
+    {
       "value": "api.github.com",
       "note": "Southbound's own GitHub releases: core/network GitHubReleases.kt, used by core/updates for map packs (NetworkFeature.PACK_DOWNLOADS, on by default) and new app versions (NetworkFeature.APP_UPDATES, off by default). github.com is accepted as a redirect host for the release asset download. GitHubReleases.isAllowed accepts api.github.com, github.com and any *.githubusercontent.com over HTTPS, checked on every redirect hop. The release asset bytes come from *.githubusercontent.com, recorded as the suffix entry .githubusercontent.com. Also the weather forecast pack (NetworkFeature.WEATHER, off by default): core/weather GitHubForecastSource reads the \"weather\" pre-release (GitHubReleases.byTag) and its forecast-ny.json.gz, the same file for every phone, at most hourly."
     },
     {
       "value": "bustime.mta.info",
       "note": "Text in the Settings hint 'Needs a free key from bustime.mta.info' (feature/settings strings.xml). Not a request."
+    },
+    {
+      "value": "ctroads.org",
+      "note": "Text only: the Settings > Live data note for CTroads (feature/settings strings.xml, live_ctroads_note) names the site whose lists are read. Requests go to https://ctroads.org (see that entry)."
     },
     {
       "value": "eia.gov",
@@ -867,6 +875,10 @@
       "note": "Current weather: core/weather Metar.URLS, the NWS Aviation Weather Center's latest METAR of every reporting station in each covered state (ids=@NY, @NJ, @CT, @PA, @MD, @DE; one request per state, the API takes one state a request), the same for every phone. Drawn as temperature badges on the weather layer and as the nearest station's conditions on a place card, worked out on the phone. No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
+      "value": "https://ctroads.org",
+      "note": "CTroads (CTDOT's 511, built by IBI Group like 511PA): core/traffic Ibi511.kt (Ibi511.CT) fetches the site's own map layers (/map/mapIcons/Incidents, Closures, Construction and MessageSigns: every item's position) and list pages (/List/GetData/Incidents, Closures, Construction, MessageSigns and Cameras, 100 rows a page), the same requests ctroads.org's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_CTROADS (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://data.cityofnewyork.us",
       "note": "NYC DOT traffic speeds: core/traffic NycDotSpeeds.kt. Gated by NetworkFeature.TRAFFIC_NYC_DOT (off by default)."
     },
@@ -893,6 +905,10 @@
     {
       "value": "https://opengeo.ncep.noaa.gov",
       "note": "NOAA radar: core/weather Radar.URL, one WMS GetMap of MRMS base reflectivity over a fixed box around every covered state in EPSG:3857, the same picture for every phone, drawn as the map's weather layer. No key, nothing about the user's location or the map area viewed. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://www.511pa.com",
+      "note": "511PA (PennDOT's 511, built by IBI Group): core/traffic Ibi511.kt (Ibi511.PA) fetches the site's own map layers (/map/mapIcons/MajorRouteClosure, OtherRouteClosure, MajorRouteIncident, OtherRouteIncident, ActiveRoadwork and MessageSigns: every item's position) and list pages (/List/GetData/Closures, Incidents, traffic, MessageSigns and Cameras, 100 rows a page), the same requests 511pa.com's map and list pages make. The whole state every time, no key and nothing about the user's location, search or route. Camera stills are the list's own image links (/map/Cctv/<image id>), fetched through NetworkGate.get when a camera card opens. Gated by NetworkFeature.TRAFFIC_511PA (Settings > Live data, off by default)."
     },
     {
       "value": "https://www.mapbox.com",

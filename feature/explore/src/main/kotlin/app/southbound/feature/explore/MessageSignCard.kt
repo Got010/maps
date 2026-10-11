@@ -35,7 +35,7 @@ private val SIGN_AMBER = Color(0xFFFFB300)
 private val SIGN_AMBER_DIM = Color(0x66FFB300)
 
 /**
- * A tapped 511NY message sign: what it says right now, amber on black in a
+ * A tapped state 511 message sign: what it says right now, amber on black in a
  * fixed-width face like the sign itself, with its road and direction. Pages
  * the sign flips through are split by a faint rule.
  */
@@ -63,7 +63,7 @@ internal fun MessageSignCard(sign: MessageSign, onClose: () -> Unit, modifier: M
                 )
             }
             Text(
-                listOfNotNull(stringResource(R.string.explore_sign_source), road.ifEmpty { null }, updated).joinToString(" · "),
+                listOfNotNull(stringResource(R.string.explore_sign_source, sign.source.label), road.ifEmpty { null }, updated).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(end = 8.dp, bottom = 10.dp),

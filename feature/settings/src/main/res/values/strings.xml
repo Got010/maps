@@ -77,11 +77,15 @@
     <string name="live_key_save">Save key</string>
     <string name="live_key_remove">Remove key</string>
     <string name="live_traffic">Live traffic</string>
-    <string name="live_511">Incidents and closures (511NY)</string>
+    <string name="live_511">Incidents and closures in New York (511NY)</string>
     <string name="live_511_note">Crashes, closures and work zones across the state, fetched whole every few minutes. Routes steer around closures. Also shows traffic cameras and message signs on the map. No key needed: these are the feeds 511ny.org\'s own map reads.</string>
+    <string name="live_511pa">Incidents and closures in Pennsylvania (511PA)</string>
+    <string name="live_511pa_note">PennDOT\'s crashes, closures and roadwork across Pennsylvania, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. No key needed: these are the lists 511pa.com\'s own map and list pages read.</string>
+    <string name="live_ctroads">Incidents and closures in Connecticut (CTroads)</string>
+    <string name="live_ctroads_note">CTDOT\'s crashes, closures and roadwork across Connecticut, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. No key needed: these are the lists ctroads.org\'s own map and list pages read.</string>
     <string name="live_dot">Traffic speeds (NYC DOT)</string>
     <string name="live_dot_note">Speeds on NYC highways and main roads from NYC Open Data, fetched whole. No key needed. The city\'s copy sometimes lags; readings older than two hours are not shown.</string>
-    <string name="live_traffic_hint">With either on, a traffic button appears on the map. Feeds are fetched only while the layer is shown or while navigating.</string>
+    <string name="live_traffic_hint">With any of these on, a traffic button appears on the map. Feeds are fetched only while the layer is shown or while navigating.</string>
     <string name="settings_updates">Updates</string>
     <string name="updates_version">Installed %1$s · latest %2$s · checked %3$s</string>
     <string name="updates_version_never">Installed %1$s · not checked yet</string>
@@ -168,6 +172,8 @@
     <string name="backup_net_bus">bus arrivals</string>
     <string name="backup_net_gas">gas prices</string>
     <string name="backup_net_weather">weather</string>
+    <string name="backup_net_511pa">511PA traffic</string>
+    <string name="backup_net_ctroads">CTroads traffic</string>
     <string name="backup_export_failed_kept">Export failed: %1$s. The partial file could not be deleted; delete it yourself.</string>
     <string name="backup_summary">%1$d saved places in %2$d lists, %3$d recents, Home and Work set: %4$d, %5$d API keys, %6$d preference values</string>
     <string name="backup_import_title">Import</string>
