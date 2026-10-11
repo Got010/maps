@@ -6,7 +6,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SOURCES = {"new-york", "new-jersey", "connecticut", "pennsylvania", "maryland", "delaware", "district-of-columbia"}  # fetch_source
+SOURCES = {"new-york", "new-jersey", "connecticut", "pennsylvania", "maryland", "delaware", "district-of-columbia",
+           "ohio", "indiana", "illinois", "michigan", "wisconsin", "minnesota", "iowa", "missouri", "north-dakota", "south-dakota",
+           "nebraska", "kansas"}  # fetch_source
 
 
 def in_box(bounds, lon, lat):
@@ -51,8 +53,9 @@ class RegionsTest(unittest.TestCase):
             minlon, minlat, maxlon, maxlat = region["bounds"]
             self.assertLess(minlon, maxlon, name)
             self.assertLess(minlat, maxlat, name)
-            self.assertTrue(-80.6 <= minlon and maxlon <= -71, name)
-            self.assertTrue(37.8 <= minlat and maxlat <= 45.1, name)
+            # The covered states: Kansas to Long Island, Missouri's boot heel to the Northwest Angle.
+            self.assertTrue(-104.1 <= minlon and maxlon <= -71, name)
+            self.assertTrue(35.9 <= minlat and maxlat <= 49.4, name)
             self.assertIsInstance(region["basemap"], bool)
             self.assertTrue(region["name"])
 

@@ -74,8 +74,9 @@ class AssignmentTest(unittest.TestCase):
         self.assertEqual(["pae"], self.packs_at(41.10, -75.40))
 
     def test_tiles_no_region_covers(self):
-        self.assertEqual([], self.packs_at(40.0, -82.0))  # Ohio
+        self.assertEqual([], self.packs_at(37.5, -85.0))  # Kentucky
         self.assertEqual([], self.packs_at(37.5, -78.0))  # Virginia
+        self.assertEqual(["oh"], self.packs_at(40.0, -82.0))  # Ohio, since the Midwest (planned regions count)
 
 
 class SplitTest(unittest.TestCase):
@@ -89,7 +90,7 @@ class SplitTest(unittest.TestCase):
                 st.tile_path(1, st.tile_id_at(1, 40.75, -73.98)): b"arterials",
                 st.tile_path(2, st.tile_id_at(2, 42.8864, -78.8784)): b"buffalo",
                 st.tile_path(2, st.tile_id_at(2, 39.9526, -75.1636)): b"philadelphia",
-                st.tile_path(2, st.tile_id_at(2, 40.0, -82.0)): b"ohio",
+                st.tile_path(2, st.tile_id_at(2, 37.5, -85.0)): b"kentucky",
             }
             for rel, data in files.items():
                 os.makedirs(os.path.dirname(os.path.join(tiles, rel)), exist_ok=True)
@@ -102,7 +103,7 @@ class SplitTest(unittest.TestCase):
 
             self.assertEqual((1, len(b"highways")), result["main"])
             self.assertEqual((1, len(b"buffalo")), result["western"])
-            self.assertEqual((1, len(b"ohio")), result[None])
+            self.assertEqual((1, len(b"kentucky")), result[None])
             # Manhattan's 1-degree level 1 tile reaches four regions; Philadelphia and Camden's level 2 tile, once,
             # in the pack for both regions.
             arterials = st.pack_for(1, st.regions_for_tile(regions, 1, st.tile_id_at(1, 40.75, -73.98)))
@@ -120,7 +121,7 @@ class SplitTest(unittest.TestCase):
             self.assertEqual(arterials.split("-"), listing[f"routing-{arterials}.tar"])
             with open(index) as f:
                 rows = [json.loads(line) for line in f]
-            self.assertIn([st.tile_path(2, st.tile_id_at(2, 40.0, -82.0)), 2, 4, []], rows)
+            self.assertIn([st.tile_path(2, st.tile_id_at(2, 37.5, -85.0)), 2, 8, []], rows)
             with tarfile.open(os.path.join(out, "routing-njs-pae.tar")) as tar:
                 (member,) = tar.getmembers()
                 self.assertEqual(st.tile_path(2, st.tile_id_at(2, 39.9526, -75.1636)), member.name)
