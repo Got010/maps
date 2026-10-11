@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.southbound.core.packs.Coverage
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
@@ -71,6 +72,15 @@ fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: 
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            // What this state's maps come without (no traffic feed, or one that needs a key), before it is picked.
+            Coverage.pickerNote(state)?.let { note ->
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = if (regions.size > 1) 0.dp else 8.dp),
                 )
             }
             for (region in regions) {

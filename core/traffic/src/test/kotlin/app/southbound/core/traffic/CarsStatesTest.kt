@@ -145,6 +145,21 @@ class CarsStatesEventsTest {
     }
 
     @Test
+    fun `Iowa's events, asked by its own layer names`() {
+        // The wording and icons 511IA's two layers answered with (scripts/feed-probe.py, 2026-10-11); ids and places stand in.
+        val events = CarsStates.parseEvents(res("ia-events.json"), CarsStates.IA)
+        assertEquals(listOf("ia:CARSx-1001", "ia:CARSx-1002", "ia:CARSx-1003", "ia:CARSx-1005"), events.map { it.id })
+        assertEquals(listOf(IncidentKind.CLOSURE, IncidentKind.ROADWORK, IncidentKind.ROADWORK, IncidentKind.ACCIDENT), events.map { it.kind })
+        assertEquals("US 75", events[0].roadway)
+        assertEquals("All lanes closed", events[0].lanesStatus)
+        assertFalse(events[0].description.contains("<strong>"))
+        assertEquals("Entrance ramp closed", events[2].lanesStatus)
+        assertEquals("Left shoulder blocked", events[3].lanesStatus)
+        assertEquals("Westbound", events[3].direction)
+        assertTrue(events.all { it.source == TrafficSource.IA_511 })
+    }
+
+    @Test
     fun `kinds, lanes and directions from the icon and the words`() {
         assertEquals(IncidentKind.CLOSURE, CarsStates.kindOf("/images/tg_closure_urgent.svg", "Road closed."))
         assertEquals(IncidentKind.ACCIDENT, CarsStates.kindOf("/images/tg_crash_routine.svg", "Crash."))
@@ -154,6 +169,8 @@ class CarsStatesEventsTest {
         assertEquals(IncidentKind.OTHER, CarsStates.kindOf("/images/tg_warning_routine.svg", "Look out for flaggers."))
         assertEquals(IncidentKind.OTHER, CarsStates.kindOf("/images/tg_ramp_impact_routine.svg", "Entrance ramp closed."))
         assertEquals(IncidentKind.CLOSURE, CarsStates.kindOf("/images/tg_warning_urgent.svg", "Railroad crossing closed from County Road 13 to 22nd Avenue."))
+        assertEquals(IncidentKind.ROADWORK, CarsStates.kindOf("/images/tg_roadwork_routine.svg", "Entrance ramp closed, due to night time construction work."))
+        assertEquals(IncidentKind.CLOSURE, CarsStates.kindOf("/images/tg_roadwork_routine.svg", "Road closed, due to road construction work."))
         assertEquals("Entrance ramp closed", CarsStates.lanesIn("Entrance ramp closed."))
         assertEquals("Exit ramp closed", CarsStates.lanesIn("Exit ramp closed, because of roadwork."))
         assertEquals("Right lane blocked", CarsStates.lanesIn("Right lane blocked. Crash."))
@@ -178,6 +195,13 @@ class CarsStatesEventsTest {
         assertEquals(49.5, (input["north"] as Number).toDouble(), 0.0)
         assertEquals(-97.3, (input["west"] as Number).toDouble(), 0.0)
         assertEquals(listOf("dashboard"), input["nonClusterableUris"])
+        // Iowa renamed its layers; asked for the others' names it answers with no events.
+        for (site in CarsStates.SITES) {
+            val slugs = ((app.southbound.core.network.MiniJson.parse(CarsStates.eventsQuery(site).decodeToString()) as Map<*, *>)["variables"] as Map<*, *>)
+                .let { (it["input"] as Map<*, *>)["layerSlugs"] }
+            val want = if (site === CarsStates.IA) listOf("iowaAppIncident", "iowaAppRoadwork") else listOf("incidents", "closures", "construction", "roadReports")
+            assertEquals(site.source.name, want, slugs)
+        }
         for (site in CarsStates.SITES) {
             val b = site.bounds
             assertTrue(site.source.name, b.west < b.east && b.south < b.north && b.west in -105.0..-84.0 && b.north in 36.0..50.0)

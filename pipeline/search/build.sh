@@ -179,21 +179,17 @@ else
   echo "==> ADDRESS_POINTS_URL is not set: addresses from OSM only"
 fi
 
-# State DOT traffic cameras for "Avoid DOT cameras" (dot_cameras.py): the
-# whole state's list, fetched here so the phone never asks for it. A failed
-# fetch leaves them out rather than failing the pack. Only the states
-# dot_cameras.SOURCES lists have one (New York so far).
-CAMERA_STATE="${SEARCH_STATE:-${DEFAULT_STATE:-NY}}"
-DOT_URL="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import dot_cameras; print(dot_cameras.SOURCES.get(sys.argv[2], ""))' "$PIPELINE_DIR/search" "$CAMERA_STATE")"
-if [[ -z "$DOT_URL" ]]; then
-  echo "==> No DOT camera list for $CAMERA_STATE"
-elif [[ "${DOT_CAMERAS:-1}" == 1 ]]; then
+# State DOT traffic cameras for "Avoid DOT cameras" (dot_cameras.py): the whole
+# list of every state the region covers that publishes one, fetched here so the
+# phone never asks for it. A state that fails is left out with a warning; with
+# none fetched the pack has no cameras rather than failing.
+if [[ "${DOT_CAMERAS:-1}" == 1 ]]; then
   DOT_FILE="$DATA_DIR/tmp/dot-cameras-$REGION.json"
-  echo "==> Fetching DOT cameras $DOT_URL"
-  if curl -sSfL --retry 3 --max-time 120 -o "$DOT_FILE" "$DOT_URL" && python3 "$PIPELINE_DIR/search/dot_cameras.py" --check "$DOT_FILE" | tail -1; then
+  echo "==> Fetching DOT camera lists for $REGION"
+  if python3 "$PIPELINE_DIR/search/dot_cameras.py" fetch --region "$REGION" --regions "$PIPELINE_DIR/regions.json" --out "$DOT_FILE"; then
     ARGS="$ARGS --dot-cameras=/data/tmp/$(basename "$DOT_FILE")"
   else
-    echo "::warning::DOT cameras could not be fetched; the pack has none"
+    echo "::warning::No DOT camera list for $REGION; the pack has none"
     rm -f "$DOT_FILE"
   fi
 fi

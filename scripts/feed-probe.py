@@ -16,6 +16,7 @@ carries a location, search text or route.
 import gzip
 import html
 import json
+import os
 import re
 import signal
 import sys
@@ -1840,6 +1841,123 @@ def dot_midwest_10():
         print(f"   {url}: status {status} type {h.get('Content-Type')} headers {dict((k, v) for k, v in h.items() if k.lower() in ('www-authenticate', 'cache-control', 'x-ratelimit-limit'))}:", body[:400].replace("\n", " "))
 
 
+def app_requests():
+    """Every Midwest request exactly as the phone makes it (NetworkGate: User-Agent "Southbound", Java's default
+    Accept, nothing else; a POST adds Content-Type and Accept JSON), so the shipped readers are known to be answered,
+    and the build's DOT camera fetchers (pipeline/search/dot_cameras.py) run against every state."""
+    from collections import Counter
+
+    java_accept = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+    app = {"User-Agent": "Southbound", "Accept": java_accept}
+    app_post = {"User-Agent": "Southbound", "Content-Type": "application/json", "Accept": "application/json"}
+
+    def show(label, status, h, body):
+        ok = "OK " if status == 200 and body[:1] in ("{", "[") else "?? "
+        print(f"   {ok}{label}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:160].replace("\n", " "))
+
+    head("The phone's own requests, Midwest")
+    q100 = urllib.parse.quote(json.dumps({"columns": [], "start": 0, "length": 100}, separators=(",", ":")))
+    gets = [
+        ("511WI icons", "https://511wi.gov/map/mapIcons/ConstructionClosures"),
+        ("511WI list", f"https://511wi.gov/List/GetData/Cameras?query={q100}"),
+        ("NDDOT alerts", "https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic/MapServer/7/query?where=1%3D1&outFields=*&returnGeometry=false&f=json"),
+        ("NDDOT cameras", "https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic/MapServer/5/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=json"),
+        ("SD511 road work", "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.road-work.geojson"),
+        ("SD511 cameras", "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.cameras.geojson"),
+        ("Mi Drive incidents", "https://mdotjboss.state.mi.us/MiDrive/incidents/AllForMap"),
+        ("Mi Drive construction", "https://mdotjboss.state.mi.us/MiDrive/construction/AllForMap"),
+        ("Mi Drive cameras", "https://mdotjboss.state.mi.us/MiDrive/camera/AllForMap"),
+        ("Mi Drive camera detail", "https://mdotjboss.state.mi.us/MiDrive/camera/getCameraInformation/1129"),
+        ("OHGO without a key", "https://publicapi.ohgo.com/api/v1/cameras?page-all=true&api-key="),
+    ]
+    for tg in ("intg", "mntg", "iatg", "netg", "kstg"):
+        gets.append((f"{tg} cameras", f"https://{tg}.carsprogram.org/cameras_v1/api/cameras"))
+        gets.append((f"{tg} signs", f"https://{tg}.carsprogram.org/signs_v1/api/signs"))
+    for label, url in gets:
+        status, _, h, body = get(url, headers=app, limit=30_000_000)
+        show(label, status, h, body)
+    for label, url in (("Travel Midwest incidents", "https://travelmidwest.com/lmiga/incidentMap.json"),):
+        status, _, h, body = get(url, headers=app_post, method="POST", data=b"{}", limit=30_000_000)
+        show(label, status, h, body)
+    query = ("query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri "
+             "features { id geometry properties } __typename } error { message type } } }")
+    # The app's layer names per site (CarsStates.EVENT_LAYERS; Iowa's own, CarsStates.IOWA_LAYERS).
+    usual = ["incidents", "closures", "construction", "roadReports"]
+    for site, (w, so, e, n), slugs in (("https://511in.org", (-88.2, 37.7, -84.7, 41.8), usual), ("https://511mn.org", (-97.3, 43.4, -89.4, 49.5), usual),
+                                       ("https://511ia.org", (-96.7, 40.3, -90.0, 43.6), ["iowaAppIncident", "iowaAppRoadwork"]),
+                                       ("https://511.nebraska.gov", (-104.2, 39.9, -95.2, 43.1), usual),
+                                       ("https://www.kandrive.gov", (-102.2, 36.9, -94.5, 40.1), usual)):
+        body = json.dumps({"query": query, "variables": {"input": {"north": n, "south": so, "east": e, "west": w, "zoom": 14,
+                           "layerSlugs": slugs, "nonClusterableUris": ["dashboard"]}}},
+                          separators=(",", ":")).encode()
+        status, _, h, text = get(site + "/api/graphql", headers=app_post, method="POST", data=body, limit=30_000_000)
+        doc = _json(text)
+        mf = (((doc or {}).get("data") or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(doc, dict) else None
+        events = sum(1 for m in mf if m.get("__typename") == "Event") if isinstance(mf, list) else None
+        show(f"{site} map query ({events} events)", status, h, text)
+        if isinstance(mf, list):
+            icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf if m.get("__typename") == "Event"
+                            for f in (m.get("features") or []) if (f.get("geometry") or {}).get("type") == "Point")
+            print("      icons:", icons.most_common(8))
+
+    head("The build's DOT camera lists, every state")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline", "search"))
+    import dot_cameras
+    for state, fetch in dot_cameras.FETCHERS.items():
+        try:
+            rows = fetch()
+            print(f"   {state}: {len(rows)} cameras; first {rows[0] if rows else None}")
+        except Exception as e:  # noqa: BLE001 - a probe reports every failure
+            print(f"   {state}: FAILED {type(e).__name__}: {str(e)[:200]}")
+    for state, why in dot_cameras.NO_LIST.items():
+        print(f"   {state}: no list ({why})")
+
+
+def iowa_slugs():
+    """511IA answers the app's events query (incidents, closures, construction, roadReports) with nothing, while
+    Travel Midwest carries Iowa CARS road work: read the layer names Iowa's own bundle defines and try each one."""
+    head("Iowa: the layer names its own map uses")
+    candidates = set()
+    for site in ("https://511ia.org", "https://511in.org"):
+        status, final, _, page = get(site + "/", headers=BROWSER, limit=2_000_000)
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:15]:
+            if "google" in src:
+                continue
+            _, _, _, js = get(urllib.parse.urljoin(final, src), headers=BROWSER, limit=15_000_000)
+            # Object literals (KEY:"value") and compiled TypeScript string enums (e.KEY="value").
+            pairs = re.findall(r'([A-Z][A-Z0-9_]{2,40})\s*[:=]\s*"([a-z][A-Za-z0-9-]{2,40})"', js)
+            for key in ("ROAD_REPORTS", "CONSTRUCTION", "WAZE_REPORTS", "WINTER_DRIVING", "INCIDENTS", "CLOSURES", "TRUCKERS_REPORTS"):
+                for m in list(re.finditer(key + r'\b', js))[:2]:
+                    print(f"   {site} {src[-40:]} {key} ...", js[max(0, m.start() - 120):m.start() + 160].replace("\n", " "), "...")
+            slugs = sorted(set(v for k, v in pairs if any(w in k for w in ("EVENT", "CLOSURE", "CONSTRUCTION", "INCIDENT", "ROAD", "WORK", "REPORT", "LAYER", "WINTER", "TRAFFIC", "FUTURE", "WEATHER", "TRUCK", "DELAY", "RESTRICT", "SPECIAL", "PLANNED", "ALERT", "CRASH"))))
+            for m in re.finditer(r"layerSlugs:\[([^\]]{1,200})\]", js):
+                print(f"   {site} {src[-40:]} layerSlugs: {m.group(1)[:200]}")
+            if slugs:
+                print(f"   {site} {src[-40:]} enum slugs: {slugs[:120]}")
+            if site.endswith("511ia.org"):
+                candidates.update(slugs)
+                candidates.update(re.findall(r'layerSlugs:\["([a-zA-Z]+)"', js))
+    query = ("query MapFeatures($input: MapFeaturesArgs!) { mapFeaturesQuery(input: $input) { mapFeatures { bbox tooltip uri "
+             "features { id geometry properties } __typename } error { message type } } }")
+    from collections import Counter
+    for slug in sorted(candidates)[:80]:
+        body = json.dumps({"query": query, "variables": {"input": {"north": 43.6, "south": 40.3, "east": -90.0, "west": -96.7, "zoom": 14,
+                           "layerSlugs": [slug], "nonClusterableUris": ["dashboard"]}}}, separators=(",", ":")).encode()
+        status, _, h, text = get("https://511ia.org/api/graphql", headers={**BROWSER, "Content-Type": "application/json", "Accept": "application/json"},
+                                 method="POST", data=body, limit=30_000_000)
+        doc = _json(text)
+        mf = (((doc or {}).get("data") or {}).get("mapFeaturesQuery") or {}).get("mapFeatures") if isinstance(doc, dict) else None
+        if not isinstance(mf, list):
+            print(f"   {slug}: status {status}:", text[:160].replace("\n", " "))
+            continue
+        types = Counter(m.get("__typename") for m in mf)
+        icons = Counter(((f.get("properties") or {}).get("icon") or {}).get("url") for m in mf for f in (m.get("features") or []) if m.get("__typename") == "Event")
+        print(f"   {slug}: {len(mf)} features; types {types.most_common(3)}; icons {icons.most_common(5)}")
+        tips = [m.get("tooltip") for m in mf if m.get("__typename") == "Event"][:3]
+        if tips:
+            print(f"     tooltips: {json.dumps(tips)[:500]}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1849,7 +1967,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-cars": dot_midwest_cars, "dot-midwest-2": dot_midwest_2, "dot-midwest-3": dot_midwest_3, "dot-midwest-4": dot_midwest_4, "dot-midwest-5": dot_midwest_5,
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
-            "dot-midwest-10": dot_midwest_10}
+            "dot-midwest-10": dot_midwest_10,
+            "app-requests": app_requests, "iowa-slugs": iowa_slugs}
 
 
 class Timeout(Exception):

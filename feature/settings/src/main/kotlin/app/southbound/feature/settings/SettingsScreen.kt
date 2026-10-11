@@ -6,6 +6,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import app.southbound.core.packs.Coverage
 import app.southbound.core.export.BackupService
 import app.southbound.core.network.ApiKey
 import app.southbound.core.routing.FuelPrefs
@@ -250,6 +251,8 @@ fun SettingsScreen(
                 HorizontalDivider(Modifier.padding(top = 24.dp))
                 UpdatesSection(network, secrets)
                 HorizontalDivider(Modifier.padding(top = 24.dp))
+                CoverageSection()
+                HorizontalDivider(Modifier.padding(top = 24.dp))
                 LiveDataSection(network, secrets)
             }
 
@@ -346,6 +349,13 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
     }
     Text(
         stringResource(R.string.live_traffic_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    // The states whose traffic isn't here, so an empty traffic layer there is never a mystery.
+    Text(
+        Coverage.summary().first(),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),

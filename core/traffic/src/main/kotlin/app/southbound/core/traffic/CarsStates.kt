@@ -19,8 +19,17 @@ object CarsStates {
     /**
      * One state's site: [api] its CARS services host, [site] the public site (whose `/api/graphql` answers the
      * events), [stillHosts] the ends of the host names a camera's still may be on; anything else is not followed.
+     * [eventLayers] are the map layers asked for events, the site's own names for them ([EVENT_LAYERS] unless the
+     * site renamed them, as Iowa did).
      */
-    class Site(val source: TrafficSource, val api: String, val site: String, val stillHosts: List<String>, val bounds: Bounds) {
+    class Site(
+        val source: TrafficSource,
+        val api: String,
+        val site: String,
+        val stillHosts: List<String>,
+        val bounds: Bounds,
+        val eventLayers: List<String> = EVENT_LAYERS,
+    ) {
         val camerasUrl: String get() = "$api/cameras_v1/api/cameras"
         val signsUrl: String get() = "$api/signs_v1/api/signs"
         val graphqlUrl: String get() = "$site/api/graphql"
@@ -31,7 +40,10 @@ object CarsStates {
 
     val IN = Site(TrafficSource.IN_511, "https://intg.carsprogram.org", "https://511in.org", listOf("public.carsprogram.org"), Bounds(-88.2, 37.7, -84.7, 41.8))
     val MN = Site(TrafficSource.MN_511, "https://mntg.carsprogram.org", "https://511mn.org", listOf("public.carsprogram.org"), Bounds(-97.3, 43.4, -89.4, 49.5))
-    val IA = Site(TrafficSource.IA_511, "https://iatg.carsprogram.org", "https://511ia.org", listOf("atmsqf.iowadot.gov"), Bounds(-96.7, 40.3, -90.0, 43.6))
+    val IA = Site(
+        TrafficSource.IA_511, "https://iatg.carsprogram.org", "https://511ia.org", listOf("atmsqf.iowadot.gov"), Bounds(-96.7, 40.3, -90.0, 43.6),
+        eventLayers = IOWA_LAYERS,
+    )
     val NE = Site(TrafficSource.NE_511, "https://netg.carsprogram.org", "https://511.nebraska.gov", listOf("dot511.nebraska.gov"), Bounds(-104.2, 39.9, -95.2, 43.1))
     val KS = Site(TrafficSource.KS_KANDRIVE, "https://kstg.carsprogram.org", "https://www.kandrive.gov", listOf("www.kcscout.net", ".skyvdn.com", "kscam.carsprogram.org"), Bounds(-102.2, 36.9, -94.5, 40.1))
     val SITES: List<Site> = listOf(IN, MN, IA, NE, KS)
@@ -39,8 +51,16 @@ object CarsStates {
     /**
      * The map layers whose events the app shows (the sites' own slugs: incidents and closures, construction, and
      * Minnesota's, Nebraska's and Kansas' "road reports"); "future" (planned work, "STARTS WEDNESDAY") is left out.
+     * A getter, like [IOWA_LAYERS]: the sites above take it while the object is still being set up.
      */
-    val EVENT_LAYERS: List<String> = listOf("incidents", "closures", "construction", "roadReports")
+    val EVENT_LAYERS: List<String> get() = listOf("incidents", "closures", "construction", "roadReports")
+
+    /**
+     * Iowa's names for the same layers, the two its map opens with: "Unplanned Traffic Events" (`iowaAppIncident`)
+     * and "Construction" (`iowaAppRoadwork`). Asked for [EVENT_LAYERS], 511IA answers with no events; asked by these
+     * (scripts/feed-probe.py, 2026-10-11) it had 245 road work events and a crash.
+     */
+    val IOWA_LAYERS: List<String> get() = listOf("iowaAppIncident", "iowaAppRoadwork")
 
     /**
      * The map zoom the query is made at: the server groups nearby events into clusters at low zooms (at 7, half of
@@ -56,7 +76,7 @@ object CarsStates {
         val b = site.bounds
         val query = "query MapFeatures(\$input: MapFeaturesArgs!) { mapFeaturesQuery(input: \$input) { mapFeatures { bbox tooltip uri " +
             "features { id geometry properties } __typename } error { message type } } }"
-        val slugs = EVENT_LAYERS.joinToString(",") { "\"$it\"" }
+        val slugs = site.eventLayers.joinToString(",") { "\"$it\"" }
         return ("{\"query\":\"$query\",\"variables\":{\"input\":{\"north\":${b.north},\"south\":${b.south},\"east\":${b.east},\"west\":${b.west}," +
             "\"zoom\":$ZOOM,\"layerSlugs\":[$slugs],\"nonClusterableUris\":[\"dashboard\"]}}}").encodeToByteArray()
     }
@@ -129,7 +149,8 @@ object CarsStates {
     }
 
     /**
-     * By the icon first (`tg_closure` a closure, `tg_crash` a crash), then the words ("roadwork", "construction"); a
+     * By the icon first (`tg_closure` a closure, `tg_crash` a crash), then the words ("roadwork", "construction"), with
+     * Iowa's `tg_roadwork` icon road work unless its words say closed or crash; a
      * ramp or lane icon (`tg_ramp_impact`, `tg_lane_closure`, Minnesota's) and `tg_warning` and `tg_info` go by the
      * words, so "Entrance ramp closed." is other with its lanes and "Road closed, ..." a closure.
      */
@@ -140,6 +161,7 @@ object CarsStates {
             "tg_crash" in icon || "tg_accident" in icon -> IncidentKind.ACCIDENT
             w.startsWith("road closed") || w.startsWith("bridge closed") || w.startsWith("railroad crossing closed") -> IncidentKind.CLOSURE
             "crash" in w || "accident" in w || "stalled" in w || "disabled vehicle" in w -> IncidentKind.ACCIDENT
+            "tg_roadwork" in icon -> IncidentKind.ROADWORK
             "roadwork" in w || "road work" in w || "construction" in w || "maintenance" in w || "utility work" in w || "bridge work" in w -> IncidentKind.ROADWORK
             "police" in w -> IncidentKind.POLICE
             else -> IncidentKind.OTHER
