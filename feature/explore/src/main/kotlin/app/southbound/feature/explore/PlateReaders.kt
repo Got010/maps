@@ -4,6 +4,7 @@ import app.southbound.core.map.CameraPin
 import app.southbound.core.map.MapPoint
 import app.southbound.core.routing.CameraAvoidance
 import app.southbound.core.routing.Navigator
+import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
@@ -44,20 +45,17 @@ internal object PlateReaders {
         )
     }
 
-    /** Routes found around the cameras, and the camera squares they were found with. */
-    class Avoided(val routes: List<Route>, val polygons: List<List<Pair<Double, Double>>>)
+    /** Routes found around the cameras, and the spots (one on the road beside each camera) they were found avoiding. */
+    class Avoided(val routes: List<Route>, val points: List<CameraAvoidance.Spot>)
 
     /**
-     * "Avoid plate readers" and "Avoid DOT cameras": starting from the plain
-     * [first] routes, squares off the cameras of [categories] (landmark
-     * categories, e.g. [Landmark.ALPR_CAMERA]) on the best route and routes again, up to
-     * [CameraAvoidance.MAX_PASSES] times while new cameras turn up on the new
-     * best route. Only the cameras actually met are excluded, never a whole
-     * corridor, which keeps within Valhalla's polygon limit. When a pass finds
-     * no route (a camera on the only way in, say), the last routes that worked
-     * are kept, possibly the plain ones. [nav] is left avoiding exactly the
-     * squares of the routes returned, so reroutes during the trip match.
-     * Blocking: call off the main thread.
+     * "Avoid plate readers" and "Avoid DOT cameras" ([CameraAvoidance] says how and why): starting from the plain
+     * [first] routes, excludes the road beside each camera of [categories] (landmark categories, e.g.
+     * [Landmark.ALPR_CAMERA]) on the best route and routes again, up to [CameraAvoidance.MAX_PASSES] times while new
+     * cameras turn up. A pass that finds no route bisects its new cameras, drops the one on the only way and goes on.
+     * Of all the passes' routes, the plain ones included, the ones with the fewest cameras on the best route come
+     * back (the quickest when tied). [nav] is left avoiding exactly the spots of the routes returned, so reroutes
+     * during the trip match. Blocking: call off the main thread.
      */
     suspend fun avoid(
         nav: Navigator,
@@ -71,41 +69,72 @@ internal object PlateReaders {
     ): Avoided {
         val ends = listOf(CameraAvoidance.Spot(from.coordinates.lat, from.coordinates.lng)) +
             waypoints.map { CameraAvoidance.Spot(it.coordinate.lat, it.coordinate.lng) }
-        // Each camera met so far, where its square goes; kept in the order found.
-        val spots = LinkedHashMap<Long, CameraAvoidance.Spot>()
-        var best = Avoided(first, emptyList())
-        repeat(CameraAvoidance.MAX_PASSES) {
-            val route = best.routes.firstOrNull() ?: return best
-            if (spots.size >= CameraAvoidance.MAX_CAMERAS) return best
-            val line = route.line()
-            val fresh = categories.flatMap { category ->
-                RouteAlerts.alongRoute(line, near(index, line, CameraAvoidance.NEAR_ROUTE_METERS, category), category, CameraAvoidance.NEAR_ROUTE_METERS)
-            }.filter { it.id !in spots }
-            if (fresh.isEmpty()) return best
-            fresh.forEach { spots[it.id] = squareSpot(line, it) }
-            val polygons = CameraAvoidance.polygons(spots.values.toList(), ends)
-            // Every new camera sits next to a stop (or past the cap): routing again would change nothing.
-            if (polygons.size == best.polygons.size) return best
-            val next = try {
-                nav.routes(from, waypoints, mode, closures, polygons)
+        // Every road excluded so far, in the order found; each camera's own spots; the cameras on the only way.
+        val points = ArrayList<CameraAvoidance.Spot>()
+        val spotsOf = HashMap<Long, MutableList<CameraAvoidance.Spot>>()
+        val unavoidable = HashSet<Long>()
+        var routings = 0
+        suspend fun routesAvoiding(extra: List<CameraAvoidance.Spot>): List<Route> {
+            routings++
+            return try {
+                nav.routes(from, waypoints, mode, closures, points + extra)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 emptyList()
             }
-            if (next.isEmpty()) {
-                nav.cameraAvoid = best.polygons
-                return best
-            }
-            best = Avoided(next, polygons)
         }
+        val passes = arrayListOf(Avoided(first, emptyList()))
+        var current = first
+        var passesLeft = CameraAvoidance.MAX_PASSES
+        while (passesLeft-- > 0) {
+            if (points.size >= CameraAvoidance.MAX_CAMERAS || routings >= CameraAvoidance.MAX_ROUTINGS) break
+            val line = current.firstOrNull()?.line() ?: break
+            val fresh = onRoute(index, line, categories)
+                .filter { it.id !in unavoidable }
+                .mapNotNull { camera ->
+                    val spot = spotOn(line, camera)
+                    val known = spotsOf[camera.id].orEmpty()
+                    // Met again on another road within reach: a second spot. Next to a waypoint: left alone.
+                    if (known.any { CameraAvoidance.distanceMeters(it, spot) < CameraAvoidance.SAME_ROAD_METERS }) null
+                    else if (!CameraAvoidance.clearOfWaypoints(spot, ends)) null
+                    else camera.id to spot
+                }
+                .take(CameraAvoidance.MAX_CAMERAS - points.size)
+            if (fresh.isEmpty()) break
+            var batch = fresh
+            var next = routesAvoiding(batch.map { it.second })
+            if (next.isEmpty()) {
+                val split = CameraAvoidance.passable(batch) { part ->
+                    routings < CameraAvoidance.MAX_ROUTINGS && routesAvoiding(part.map { it.second }).isNotEmpty()
+                }
+                split.dropped.forEach { unavoidable += it.first }
+                batch = split.kept
+                // Every new camera is on the only way: the next pass meets whatever else is there.
+                if (batch.isEmpty()) continue
+                next = routesAvoiding(batch.map { it.second })
+                if (next.isEmpty()) break
+            }
+            batch.forEach { (id, spot) -> spotsOf.getOrPut(id) { ArrayList() } += spot }
+            points += batch.map { it.second }
+            current = next
+            passes += Avoided(next, points.toList())
+        }
+        val best = passes.minWith(
+            compareBy<Avoided>({ onRoute(index, it.routes.first().line(), categories).size }, { RouteSummary.of(it.routes.first()).durationSeconds }),
+        )
+        nav.cameraAvoid = best.points
         return best
     }
 
-    /** The camera itself, or, when it stands well off the line, the point on the route beside it. */
-    private fun squareSpot(line: RouteLine, camera: Landmark): CameraAvoidance.Spot {
-        val loc = line.locate(camera.point)
-        val onRoad = loc?.takeIf { it.offset > CameraAvoidance.SNAP_TO_ROUTE_METERS }?.let { line.pointAt(it.along) }
+    /** The cameras of [categories] within [CameraAvoidance.NEAR_ROUTE_METERS] of [line], as the route card counts them. */
+    private fun onRoute(index: PlaceSearch, line: RouteLine, categories: List<String>): List<Landmark> = categories.flatMap { category ->
+        RouteAlerts.alongRoute(line, near(index, line, CameraAvoidance.NEAR_ROUTE_METERS, category), category, CameraAvoidance.NEAR_ROUTE_METERS)
+    }.distinctBy { it.id }
+
+    /** The point of the route beside [camera]: the road to exclude. The camera itself when it can't be placed on the line. */
+    private fun spotOn(line: RouteLine, camera: Landmark): CameraAvoidance.Spot {
+        val onRoad = line.locate(camera.point)?.let { line.pointAt(it.along) }
         return onRoad?.let { CameraAvoidance.Spot(it.lat, it.lon) } ?: CameraAvoidance.Spot(camera.lat, camera.lon)
     }
 
