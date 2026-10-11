@@ -11,8 +11,18 @@ level and tile id (2/000/756/425.gph):
   level 1, 1-degree tiles: secondary and tertiary roads
   level 2, 0.25-degree tiles: everything else (residential, service, ...)
 
-routing-main.tar gets every tile of the main levels (level 0 by default: the
-roads a long trip runs on), which every phone has. Every other tile, secondary
+The main levels (level 0 by default: the roads a long trip runs on) go by the
+"main" group of the regions each tile covers (regions.json: "east" for New York
+and its neighbours, "midwest"): routing-main.tar holds the tiles covering east
+regions alone, routing-main-midwest.tar the Midwest's, routing-main-east-midwest.tar
+the ones on the seam, and each is listed for every region of its groups, so a
+phone has the main roads of its own part of the country, and of any region it
+adds for a trip, with nothing in between missing: a trip from New York to
+Chicago runs on the east pack, the seam pack and the Midwest pack, all three on
+a phone with a New York region and Chicago's. (One pack for every phone was the
+first layout; the Midwest would have taken it from 119 to 301 MB.) A main-level
+tile covering no region goes with the regions whose boxes it touches, failing
+that with every group. Every other tile, secondary
 and tertiary roads and local streets alike, goes by the basemap regions of regions.json
 (planned ones too) it covers: it is sampled on a 9 by 9 grid of points, and each
 point goes to the regions the app would give it (Regions.basemapsAt in
@@ -27,7 +37,7 @@ region covers (Ohio, Virginia: the extracts reach a little past the state
 lines) are left out and counted.
 
 routing-packs.json, next to the packs, lists each pack with the regions it
-serves (an empty list for routing-main.tar: every phone); the release manifest
+serves (the main packs: every region of their groups); the release manifest
 copies it. The packs are plain tars of the tile files, ordered and timestamped
 the same on every run.
 """
@@ -44,6 +54,8 @@ LEVEL_SIZES = {0: 4.0, 1: 1.0, 2: 0.25}
 # states test build routes every trip on this layout against the whole graph (route_check.py).
 MAIN_LEVELS = (0,)
 MAIN_PACK = "main"
+# The group whose main-road pack keeps the first layout's name, routing-main.tar: the phones out there have it.
+MAIN_GROUP = "east"
 PACKS_JSON = "routing-packs.json"
 SAMPLES = 9
 
@@ -135,6 +147,30 @@ def owners_at(regions, lon, lat):
     return [n for n in found if "area" in regions[n]] or found
 
 
+def group_of(region):
+    return region.get("main", MAIN_GROUP)
+
+
+def boxes_touch(a, b):
+    return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
+
+
+def main_groups_for_tile(regions, level, tile_id, covers):
+    """The main-road groups a main-level tile goes to, sorted: those of the regions it covers; failing that, of the
+    regions whose boxes it touches (the tile over Kentucky's border roads goes with Ohio's and Indiana's); failing
+    that, every group."""
+    groups = sorted({group_of(regions[name]) for name in covers})
+    if not groups:
+        bounds = tile_bounds(level, tile_id)
+        groups = sorted({group_of(r) for r in regions.values() if boxes_touch(r["bounds"], bounds)})
+    return groups or sorted({group_of(r) for r in regions.values()}) or [MAIN_GROUP]
+
+
+def regions_in_groups(regions, groups):
+    """The regions of the groups, in regions.json's order: what a main pack of those groups is listed for."""
+    return [name for name, r in regions.items() if group_of(r) in groups]
+
+
 def regions_for_tile(regions, level, tile_id):
     """The regions a tile covers, in regions.json's order ([] for none)."""
     minlon, minlat, maxlon, maxlat = tile_bounds(level, tile_id)
@@ -150,11 +186,13 @@ def regions_for_tile(regions, level, tile_id):
     return sorted(found, key=order.index)
 
 
-def pack_for(level, covers, main_levels=MAIN_LEVELS):
-    """The pack a tile goes into: MAIN_PACK for the main levels, else the regions it covers joined in alphabetical
-    order ("hudson-njn-nyc"); None when it covers none."""
+def pack_for(level, covers, main_levels=MAIN_LEVELS, groups=(MAIN_GROUP,)):
+    """The pack a tile goes into: for the main levels MAIN_PACK for the first group alone ("main") or the groups
+    joined ("main-midwest", "main-east-midwest"); else the regions it covers joined in alphabetical order
+    ("hudson-njn-nyc"), None when it covers none."""
     if level in main_levels:
-        return MAIN_PACK
+        groups = sorted(groups)
+        return MAIN_PACK if groups == [MAIN_GROUP] else "-".join([MAIN_PACK] + groups)
     return "-".join(sorted(covers)) or None
 
 
@@ -190,8 +228,8 @@ def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None, 
     """Writes the packs and routing-packs.json and returns {pack: (tiles, bytes)} plus the left-out tiles under
     None. With index, also writes one JSON line per tile there ([path, level, bytes, regions it covers]) for
     pack_sizes.py and route_check.py."""
-    packs = {MAIN_PACK: []}
-    covering = {MAIN_PACK: []}
+    packs = {}
+    covering = {}
     dropped = []
     level_bytes = {level: 0 for level in LEVEL_SIZES}
     lines = []
@@ -199,12 +237,18 @@ def split(tiles_dir, out_dir, regions, max_mb=None, log=sys.stdout, index=None, 
         size = os.path.getsize(os.path.join(tiles_dir, rel))
         level_bytes[level] += size
         covers = regions_for_tile(regions, level, tile_id)
-        name = pack_for(level, covers, main_levels)
+        if level in main_levels:
+            groups = main_groups_for_tile(regions, level, tile_id, covers)
+            name = pack_for(level, covers, main_levels, groups)
+            covering.setdefault(name, regions_in_groups(regions, groups))
+        else:
+            name = pack_for(level, covers, main_levels)
+            if name is not None:
+                covering.setdefault(name, sorted(covers))
         if name is None:
             dropped.append(rel)
         else:
             packs.setdefault(name, []).append(rel)
-            covering.setdefault(name, sorted(covers))
         lines.append(json.dumps([rel, level, size, covers]))
     if index:
         with open(index, "w") as f:
@@ -247,7 +291,7 @@ def main(argv=None):
     parser.add_argument("--max-mb", type=float, default=1900, help="fail if a pack would be larger (GitHub's limit is 2 GiB)")
     parser.add_argument("--index", help="write a JSON line per tile here (see pack_sizes.py)")
     parser.add_argument("--main-levels", default=",".join(str(lv) for lv in MAIN_LEVELS),
-                        help="levels every phone gets in routing-main.tar (default 0)")
+                        help="the main levels, shared by group in the routing-main packs (default 0)")
     args = parser.parse_args(argv)
     main_levels = tuple(int(lv) for lv in args.main_levels.split(",") if lv)
     split(args.tiles_dir, args.out_dir, load_regions(args.regions), args.max_mb, index=args.index,

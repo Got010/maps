@@ -44,6 +44,17 @@ PLACES = {
     "Scranton": (41.4090, -75.6624),
     "Wilmington, DE": (39.7447, -75.5466),
     "Washington, DC": (38.8977, -77.0365),
+    "Chicago": (41.8781, -87.6298),
+    "Detroit": (42.3314, -83.0458),
+    "Cleveland": (41.4993, -81.6944),
+    "Columbus": (39.9612, -82.9988),
+    "Cincinnati": (39.1031, -84.5120),
+    "Indianapolis": (39.7684, -86.1581),
+    "St. Louis": (38.6386, -90.2847),
+    "Minneapolis": (44.9778, -93.2650),
+    "Kansas City": (39.0997, -94.5786),
+    "Fargo": (46.8772, -96.7898),
+    "Omaha": (41.2565, -95.9345),
 }
 
 # (from, to, the phone's regions, must it match the whole graph)
@@ -55,6 +66,14 @@ TRIPS = [
     ("Philadelphia City Hall", "Baltimore Inner Harbor", ["pae", "md"], True),
     ("Scranton", "Wilmington, DE", ["pae", "md"], True),
     ("Times Square", "Washington, DC", ["nyc", "md"], True),
+    # The Midwest: across the seam between the east's and the Midwest's main-road packs, and within it.
+    ("Times Square", "Chicago", ["nyc", "iln"], True),  # through Pennsylvania, Ohio and Indiana on main roads
+    ("Cleveland", "Pittsburgh", ["ohn", "paw"], True),
+    ("Chicago", "Detroit", ["iln", "mis"], True),  # through Indiana
+    ("Columbus", "Cincinnati", ["ohs"], True),
+    ("Indianapolis", "St. Louis", ["in", "mo"], True),  # through Illinois
+    ("Minneapolis", "Kansas City", ["mn", "mo"], True),  # through Iowa
+    ("Fargo", "Omaha", ["nd", "ne"], True),  # through South Dakota
     # Without Pennsylvania's local roads: where does the trip end?
     ("Times Square", "Philadelphia City Hall", ["nyc"], False),
 ]
