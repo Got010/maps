@@ -36,8 +36,15 @@ object CameraAvoidance {
     /** At most this many cameras are squared off for one trip (60 x 144 m = 8.6 km of perimeter). */
     const val MAX_CAMERAS = 60
 
-    /** Route, square off the cameras found, route again: at most this many times after the first route. */
-    const val MAX_PASSES = 3
+    /**
+     * Route, square off the cameras found, route again: at most this many times after the first route. Each new
+     * route can meet readers the last one didn't, so 3 left many unseen: over 47 Hudson Valley trips past readers
+     * (the release's tiles and search pack, October 2026), 3 passes cleared every reader on 21 trips and left 112
+     * of 254 on the routes, 8 cleared 30 and left 57 for about a minute more (median 6.2 against 5.0 minutes
+     * added); 12 passes, or smaller squares, changed nothing more. A trip stops as soon as no new reader turns up
+     * (3.5 routings on average).
+     */
+    const val MAX_PASSES = 8
 
     /** Valhalla's default limit is 10 km of total perimeter; stay a little under it. */
     const val MAX_TOTAL_PERIMETER_METERS = 9_500.0
