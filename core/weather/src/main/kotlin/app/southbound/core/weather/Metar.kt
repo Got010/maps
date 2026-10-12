@@ -46,6 +46,12 @@ object Metar {
     /** A place farther than this from every station shows no current weather (rough areas, not a guess). */
     const val NEAR_KM = 40.0
 
+    /**
+     * An observation older than this is no longer shown: stations report at least hourly, so it means the phone has
+     * been offline (or the station silent) for hours, and it no longer says what the weather is now.
+     */
+    const val MAX_AGE_MILLIS = 3 * 3_600_000L
+
     /** @throws IllegalArgumentException when it isn't a JSON list. */
     fun parse(json: String): List<CurrentConditions> {
         if (json.isBlank()) return emptyList() // 204 No Content: nothing reported

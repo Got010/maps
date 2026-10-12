@@ -5,6 +5,7 @@ import app.southbound.core.network.NetworkFeatureDisabledException
 import app.southbound.core.network.NetworkGate
 import app.southbound.core.traffic.GeoPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,11 +26,12 @@ class RadarImage(val png: ByteArray, val fetchedAt: Long)
 
 /** The latest weather: alerts for the covered states, the shapes of their areas and, when asked for, radar and current conditions. */
 data class WeatherSnapshot(
+    /** The alerts that haven't ended yet ([WeatherAlert.ends]), from the last good list. */
     val alerts: List<WeatherAlert> = emptyList(),
     /** Each alert's id to its area: its own polygons, else its zones' shapes once read. */
     val areas: Map<String, List<Ring>> = emptyMap(),
     val radar: RadarImage? = null,
-    /** The latest observation at each station in the covered states, when asked for. */
+    /** The latest observation at each station in the covered states, when asked for, at most [Metar.MAX_AGE_MILLIS] old. */
     val conditions: List<CurrentConditions> = emptyList(),
     /** The 7-day forecast pack, when asked for and not too old ([Forecasts.MAX_AGE_MILLIS]). */
     val forecast: ForecastPack? = null,
@@ -114,6 +116,8 @@ class WeatherFeed(
     private val forecastDir: File? = null,
     private val fetch: (NetworkFeature, String) -> ByteArray = gate::get,
 ) {
+    // Guards the fields below. It is held to see what is stale and to store what came back, never across a request:
+    // one refresh is some sixty requests, minutes on a poor connection, and nothing should wait on them.
     private val mutex = Mutex()
     private var alerts: List<WeatherAlert>? = null
     private var alertsAt = 0L
@@ -125,11 +129,19 @@ class WeatherFeed(
     private val conditionsByUrl = HashMap<String, List<CurrentConditions>>()
     private var forecast: ForecastPack? = null
     private var forecastId: Long? = null
-    private var forecastCheckedAt = 0L
+
+    // When the release was last asked about the pack, whatever came of it; null until it has been.
+    private var forecastCheckedAt: Long? = null
+
+    // The release's file that didn't read as a pack: not downloaded again until the release has another.
+    private var forecastFailedId: Long? = null
     private var forecastLoaded = false
 
     // A zone's shape rarely changes: once read, kept for the life of the process.
     private val zoneShapes = HashMap<String, List<Ring>>()
+
+    // What a refresh under way is fetching. A refresh that starts meanwhile leaves those to it, so nothing is asked twice.
+    private val busy = HashSet<Part>()
     private val _snapshot = MutableStateFlow(WeatherSnapshot.EMPTY)
 
     val snapshot: StateFlow<WeatherSnapshot> = _snapshot.asStateFlow()
@@ -142,105 +154,181 @@ class WeatherFeed(
      * picture (for the map's weather layer) and [withConditions] the stations' current
      * conditions (the layer's temperatures, a place card); without them the last ones are
      * kept but nothing is requested for them. A failure keeps the last good data and adds an error.
+     * What another refresh is still fetching is left to it; its answers reach [snapshot] when it is done.
      */
     suspend fun refresh(
         force: Boolean = false,
         withRadar: Boolean = false,
         withConditions: Boolean = false,
         withForecast: Boolean = false,
-    ): WeatherSnapshot = mutex.withLock {
-        if (!isEnabled) {
-            alerts = null
-            radar = null
-            conditions = null
-            conditionsByUrl.clear()
-            return@withLock WeatherSnapshot.EMPTY.also { _snapshot.value = it }
+    ): WeatherSnapshot {
+        val plan = mutex.withLock {
+            if (!isEnabled) {
+                clear()
+                return@withLock null
+            }
+            plan(clock(), force, withRadar, withConditions, withForecast)
+        } ?: return WeatherSnapshot.EMPTY
+        val got = Fetched()
+        // Stored even when a request throws or the refresh is cancelled part way: what came back is kept, and the
+        // parts are freed for the next refresh.
+        val outcome = runCatching { withContext(Dispatchers.IO) { fetchParts(plan, got) } }
+        val snapshot = withContext(NonCancellable) { mutex.withLock { store(plan, got) } }
+        outcome.getOrThrow()
+        return snapshot
+    }
+
+    /** Weather turned off: what was fetched goes, and nothing is shown. Under the lock. */
+    private fun clear(): WeatherSnapshot {
+        alerts = null
+        radar = null
+        conditions = null
+        conditionsByUrl.clear()
+        return WeatherSnapshot.EMPTY.also { _snapshot.value = it }
+    }
+
+    /** Under the lock: what this refresh fetches (what is stale and not being fetched already), claimed for it. */
+    private fun plan(now: Long, force: Boolean, withRadar: Boolean, withConditions: Boolean, withForecast: Boolean): Plan {
+        val parts = HashSet<Part>()
+        // The alerts when stale, and the zone shapes still missing every time.
+        parts += Part.ALERTS
+        if (withConditions && (force || conditions == null || now - conditionsAt >= CONDITIONS_TTL_MILLIS)) parts += Part.CONDITIONS
+        val shown = radar
+        if (withRadar && (force || shown == null || now - shown.fetchedAt >= RADAR_TTL_MILLIS)) parts += Part.RADAR
+        if (withForecast) parts += Part.FORECAST
+        parts -= busy
+        busy += parts
+        return Plan(
+            now = now,
+            force = force,
+            parts = parts,
+            alertsDue = Part.ALERTS in parts && (force || alerts == null || now - alertsAt >= ALERTS_TTL_MILLIS),
+            alerts = alerts,
+            knownZones = HashSet(zoneShapes.keys),
+            forecastLoaded = forecastLoaded,
+            forecastId = forecastId,
+            forecastCheckedAt = forecastCheckedAt,
+            forecastFailedId = forecastFailedId,
+        )
+    }
+
+    /** The requests, without the lock: every answer and error goes into [got]. */
+    private fun fetchParts(plan: Plan, got: Fetched) {
+        if (plan.alertsDue) {
+            try {
+                got.alerts = NwsAlerts.parse(fetch(NetworkFeature.WEATHER, NwsAlerts.URL).decodeToString())
+            } catch (e: NetworkFeatureDisabledException) {
+                throw e
+            } catch (e: IOException) {
+                got.errors += "Weather alerts: ${e.message}"
+            } catch (e: IllegalArgumentException) {
+                got.errors += "Weather alerts: ${e.message}"
+            }
         }
-        val now = clock()
-        val errors = ArrayList<String>()
-        withContext(Dispatchers.IO) {
-            if (force || alerts == null || now - alertsAt >= ALERTS_TTL_MILLIS) {
+        if (Part.ALERTS in plan.parts) loadZones(got.alerts ?: plan.alerts.orEmpty(), plan.knownZones, got)
+        if (Part.FORECAST in plan.parts) loadForecast(plan, got)
+        if (Part.CONDITIONS in plan.parts) {
+            var failed: String? = null
+            for (url in Metar.URLS) {
                 try {
-                    alerts = NwsAlerts.parse(fetch(NetworkFeature.WEATHER, NwsAlerts.URL).decodeToString())
-                    alertsAt = now
+                    got.conditions[url] = Metar.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
                 } catch (e: NetworkFeatureDisabledException) {
                     throw e
                 } catch (e: IOException) {
-                    errors += "Weather alerts: ${e.message}"
+                    failed = failed ?: e.message.orEmpty()
                 } catch (e: IllegalArgumentException) {
-                    errors += "Weather alerts: ${e.message}"
+                    failed = failed ?: e.message.orEmpty()
                 }
             }
-            loadZones(alerts.orEmpty(), errors)
-            if (withForecast) loadForecast(now, force, errors)
-            if (withConditions && (force || conditions == null || now - conditionsAt >= CONDITIONS_TTL_MILLIS)) {
-                var answered = 0
-                var failed: String? = null
-                for (url in Metar.URLS) {
-                    try {
-                        conditionsByUrl[url] = Metar.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
-                        answered++
-                    } catch (e: NetworkFeatureDisabledException) {
-                        throw e
-                    } catch (e: IOException) {
-                        failed = failed ?: e.message.orEmpty()
-                    } catch (e: IllegalArgumentException) {
-                        failed = failed ?: e.message.orEmpty()
-                    }
-                }
-                if (failed != null) errors += "Current weather: $failed"
-                // All failed: asked again next time, as before. Some: the rest keep their last stations until the next round.
-                if (answered > 0) {
-                    conditions = Metar.URLS.flatMap { conditionsByUrl[it].orEmpty() }.distinctBy { it.station }
-                    conditionsAt = now
-                }
-            }
-            if (withRadar && (force || radar == null || now - radar!!.fetchedAt >= RADAR_TTL_MILLIS)) {
-                try {
-                    val png = fetch(NetworkFeature.WEATHER, Radar.URL)
-                    if (Radar.isPng(png)) radar = RadarImage(png, now) else errors += "Radar: not an image"
-                } catch (e: NetworkFeatureDisabledException) {
-                    throw e
-                } catch (e: IOException) {
-                    errors += "Radar: ${e.message}"
-                }
+            if (failed != null) got.errors += "Current weather: $failed"
+        }
+        if (Part.RADAR in plan.parts) {
+            try {
+                val png = fetch(NetworkFeature.WEATHER, Radar.URL)
+                if (Radar.isPng(png)) got.radar = RadarImage(png, plan.now) else got.errors += "Radar: not an image"
+            } catch (e: NetworkFeatureDisabledException) {
+                throw e
+            } catch (e: IOException) {
+                got.errors += "Radar: ${e.message}"
             }
         }
-        val list = alerts.orEmpty()
+    }
+
+    /** Under the lock: keeps what came back, frees the parts and publishes the snapshot. */
+    private fun store(plan: Plan, got: Fetched): WeatherSnapshot {
+        busy -= plan.parts
+        // Turned off while the requests ran: nothing they brought is kept.
+        if (!isEnabled) return clear()
+        val now = plan.now
+        got.alerts?.let {
+            alerts = it
+            alertsAt = now
+        }
+        zoneShapes += got.zones
+        // All failed: asked again next time, as before. Some: the rest keep their last stations until the next round.
+        if (got.conditions.isNotEmpty()) {
+            conditionsByUrl += got.conditions
+            conditions = Metar.URLS.flatMap { conditionsByUrl[it].orEmpty() }.distinctBy { it.station }
+            conditionsAt = now
+        }
+        got.radar?.let { radar = it }
+        if (got.forecastLoaded) forecastLoaded = true
+        got.forecast?.let {
+            forecast = it
+            forecastId = got.forecastId
+        }
+        got.forecastCheckedAt?.let { forecastCheckedAt = it }
+        got.forecastFailedId?.let { forecastFailedId = it }
+        // Offline the last alerts and observations stay: an alert past its end and an observation hours old are
+        // left out rather than drawn as if they were current.
+        val list = alerts.orEmpty().filter { it.ends == null || it.ends >= now }
         val areas = list.associate { a ->
             a.id to a.polygons.ifEmpty { a.zoneUrls.flatMap { zoneShapes[it].orEmpty() } }
         }
+        val current = conditions.orEmpty().filter { now - it.observedAt <= Metar.MAX_AGE_MILLIS }
         val fresh = forecast?.takeIf { now - it.generatedAt <= Forecasts.MAX_AGE_MILLIS }
-        WeatherSnapshot(list, areas, radar, conditions.orEmpty(), fresh, alertsAt.takeIf { alerts != null }, errors).also { _snapshot.value = it }
+        return WeatherSnapshot(list, areas, radar, current, fresh, alertsAt.takeIf { alerts != null }, got.errors)
+            .also { _snapshot.value = it }
     }
 
     /**
      * The forecast pack: the one kept on the phone first, then, at most once an hour, the release's current
      * file, downloaded only when it changed (it is rebuilt every six hours).
      */
-    private fun loadForecast(now: Long, force: Boolean, errors: MutableList<String>) {
-        if (!forecastLoaded) {
-            forecastLoaded = true
+    private fun loadForecast(plan: Plan, got: Fetched) {
+        var have = plan.forecastId
+        if (!plan.forecastLoaded) {
+            got.forecastLoaded = true
             val dir = forecastDir
             if (dir != null) {
                 runCatching {
                     val file = File(dir, Forecasts.ASSET)
                     if (file.isFile) {
-                        forecast = Forecasts.parse(file.readBytes())
-                        forecastId = File(dir, ID_FILE).takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+                        got.forecast = Forecasts.parse(file.readBytes())
+                        have = File(dir, ID_FILE).takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+                        got.forecastId = have
                     }
                 }
             }
         }
-        if (!force && forecast != null && now - forecastCheckedAt < FORECAST_CHECK_MILLIS) return
+        if (!forecastDue(plan.now, plan.forecastCheckedAt, plan.force)) return
         val source = forecastSource ?: return
         try {
             val id = source.latestId()
-            forecastCheckedAt = now
-            if (id == null || id == forecastId) return
+            // A check from here on, whatever comes of it: no release, or a pack that doesn't download or read, waits
+            // for the next hourly check instead of being asked about at every refresh.
+            got.forecastCheckedAt = plan.now
+            if (id == null || id == have || id == plan.forecastFailedId) return
             val bytes = source.download(id)
-            forecast = Forecasts.parse(bytes)
-            forecastId = id
+            val pack = try {
+                Forecasts.parse(bytes)
+            } catch (e: IllegalArgumentException) {
+                // The same file would fail the same way (a pack version this app doesn't know, a truncated upload).
+                got.forecastFailedId = id
+                throw e
+            }
+            got.forecast = pack
+            got.forecastId = id
             forecastDir?.let { dir ->
                 runCatching {
                     dir.mkdirs()
@@ -253,27 +341,59 @@ class WeatherFeed(
         } catch (e: NetworkFeatureDisabledException) {
             throw e
         } catch (e: IOException) {
-            errors += "Forecast: ${e.message}"
+            got.errors += "Forecast: ${e.message}"
         } catch (e: IllegalArgumentException) {
-            errors += "Forecast: ${e.message}"
+            got.errors += "Forecast: ${e.message}"
         }
     }
 
     /** Reads the shapes of the zones alerts without a polygon name, a few per refresh. */
-    private fun loadZones(list: List<WeatherAlert>, errors: MutableList<String>) {
-        val missing = list.filter { it.polygons.isEmpty() }.flatMap { it.zoneUrls }.distinct().filter { it !in zoneShapes }
+    private fun loadZones(list: List<WeatherAlert>, known: Set<String>, got: Fetched) {
+        val missing = list.filter { it.polygons.isEmpty() }.flatMap { it.zoneUrls }.distinct().filter { it !in known }
         var failed = 0
         for (url in missing.take(MAX_ZONES_PER_REFRESH)) {
             if (!url.startsWith(NwsAlerts.ZONE_PREFIX)) continue
             try {
-                zoneShapes[url] = NwsZones.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
+                got.zones[url] = NwsZones.parse(fetch(NetworkFeature.WEATHER, url).decodeToString())
             } catch (e: IOException) {
                 failed++
             } catch (e: IllegalArgumentException) {
-                zoneShapes[url] = emptyList()
+                // Not a zone (a captive portal's page answers 200 too): not kept, so it is asked again next time.
+                failed++
             }
         }
-        if (failed > 0) errors += "Weather zones: $failed couldn't be read"
+        if (failed > 0) got.errors += "Weather zones: $failed couldn't be read"
+    }
+
+    /** What a refresh fetches, each part by one refresh at a time. ALERTS includes the zone shapes still missing. */
+    private enum class Part { ALERTS, CONDITIONS, RADAR, FORECAST }
+
+    /** One refresh's work, decided under the lock, with the state its requests start from. */
+    private class Plan(
+        val now: Long,
+        val force: Boolean,
+        val parts: Set<Part>,
+        val alertsDue: Boolean,
+        val alerts: List<WeatherAlert>?,
+        val knownZones: Set<String>,
+        val forecastLoaded: Boolean,
+        val forecastId: Long?,
+        val forecastCheckedAt: Long?,
+        val forecastFailedId: Long?,
+    )
+
+    /** What one refresh's requests brought back, stored under the lock once they are done. */
+    private class Fetched {
+        var alerts: List<WeatherAlert>? = null
+        val zones = HashMap<String, List<Ring>>()
+        val conditions = HashMap<String, List<CurrentConditions>>()
+        var radar: RadarImage? = null
+        var forecastLoaded = false
+        var forecast: ForecastPack? = null
+        var forecastId: Long? = null
+        var forecastCheckedAt: Long? = null
+        var forecastFailedId: Long? = null
+        val errors = ArrayList<String>()
     }
 
     companion object {
@@ -290,5 +410,13 @@ class WeatherFeed(
 
         /** A storm can name most of a state's forecast zones (New York has 88); a few dozen at a time, the rest next refresh. */
         const val MAX_ZONES_PER_REFRESH = 40
+
+        /**
+         * Whether the release is asked about the forecast pack now: when forced, when it never has been, or when it
+         * was last asked [FORECAST_CHECK_MILLIS] ago or more. Whatever came of the last check counts (a pack, none,
+         * or one that didn't read), so a missing or broken pack costs a request an hour, not one a refresh.
+         */
+        internal fun forecastDue(now: Long, checkedAt: Long?, force: Boolean): Boolean =
+            force || checkedAt == null || now - checkedAt >= FORECAST_CHECK_MILLIS
     }
 }
