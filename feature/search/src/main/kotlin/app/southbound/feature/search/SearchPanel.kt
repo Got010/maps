@@ -1,6 +1,8 @@
 package app.southbound.feature.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,6 +68,7 @@ import app.southbound.core.search.SearchResult
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** A named group of places shown while the search box is empty: a saved list, or recents. */
@@ -76,6 +80,10 @@ enum class ShortcutSlot { HOME, WORK }
 /**
  * Full-screen search: type, see results as you go, pick one. While the box is
  * empty, the user's saved lists and recent places are offered instead.
+ *
+ * With [fieldAtBottom] the field sits on the keyboard and everything grows up from it, nearest first: the best match
+ * (or Home, Work and the latest recent) right above the field, within the thumb's reach (docs/bottom-search.md).
+ * Otherwise the field is at the top with the lists running down from it.
  *
  * Every lookup runs against the search pack on the phone; nothing typed here
  * leaves the device. [index] is null when no search pack is installed.
@@ -101,29 +109,47 @@ fun SearchPanel(
      * distance, for a weather search ("weather albany") on towns. Null shows no weather (the weather toggle off).
      */
     weatherFor: (@Composable (Place) -> Unit)? = null,
+    /** The field at the bottom, on the keyboard (Settings > Driving > Search bar at the bottom). */
+    fieldAtBottom: Boolean = false,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
+    // The query [results] answer: the Search key only ever opens a result for what is typed now.
+    var resultsFor by remember { mutableStateOf<String?>(null) }
+    // The Search key was pressed before the results for what is typed now were in: open the top one when they are.
+    var pickWhenReady by remember { mutableStateOf(false) }
     // Shown instead of "No matches" when the lookup itself failed, so a broken pack is visible.
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     // One minute-tick for every row's Open/Closed label.
     val now = rememberNow()
     val keyboard = LocalSoftwareKeyboardController.current
+    val groupsState = rememberLazyListState()
+    val resultsState = rememberLazyListState()
 
     LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(query, index) {
-        if (index == null || query.isBlank()) {
+        val asked = query
+        if (index == null || asked.isBlank()) {
             results = emptyList()
             error = null
+            resultsFor = asked
             return@LaunchedEffect
         }
         delay(TYPING_DEBOUNCE_MS)
-        val outcome = withContext(Dispatchers.IO) { runCatching { index.search(query, near) } }
+        val outcome = withContext(Dispatchers.IO) { runCatching { index.search(asked, near) } }
         results = outcome.getOrDefault(emptyList())
         error = outcome.exceptionOrNull()?.let { "${it::class.simpleName}: ${it.message}" }
+        resultsFor = asked
+    }
+    // With the field at the bottom, dragging a list puts the keyboard away so more of it shows.
+    LaunchedEffect(fieldAtBottom) {
+        if (!fieldAtBottom) return@LaunchedEffect
+        for (state in listOf(groupsState, resultsState)) {
+            launch { state.interactionSource.interactions.collect { if (it is DragInteraction.Start) keyboard?.hide() } }
+        }
     }
 
     // Phase 6: a pick while a Home or Work chip is waiting sets that shortcut first.
@@ -135,103 +161,159 @@ fun SearchPanel(
         onPick(result)
     }
 
+    // The Search key: the top result for what is typed now, once it is in.
+    LaunchedEffect(pickWhenReady, resultsFor) {
+        if (pickWhenReady && resultsFor == query) {
+            pickWhenReady = false
+            results.firstOrNull()?.let(pick)
+        }
+    }
+    fun searchKey() {
+        keyboard?.hide()
+        if (resultsFor == query) {
+            results.firstOrNull()?.let(pick)
+        } else {
+            pickWhenReady = true
+        }
+    }
+
+    val field: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.search_back))
+            }
+            TextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    pickWhenReady = false
+                },
+                placeholder = { Text(stringResource(R.string.search_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { searchKey() }),
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.search_clear))
+                        }
+                    }
+                },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+                modifier = Modifier.weight(1f).focusRequester(focus),
+            )
+        }
+    }
+    // Phase 6: Home and Work chips while the box is empty.
+    val chips: @Composable () -> Unit = {
+        if (query.isBlank() && onOpenShortcut != null) {
+            ShortcutChips(
+                home = home,
+                work = work,
+                pending = settingSlot,
+                onTap = { slot, place ->
+                    if (place != null) {
+                        keyboard?.hide()
+                        onOpenShortcut(place)
+                    } else {
+                        settingSlot = slot
+                        focus.requestFocus()
+                    }
+                },
+            )
+        }
+    }
+    val note: @Composable () -> Unit = {
+        if (query.isBlank() && unreadableNote != null) {
+            Text(
+                unreadableNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+
     Surface(modifier.fillMaxSize()) {
         Column(Modifier.safeDrawingPadding().imePadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.search_back))
-                }
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text(stringResource(R.string.search_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        keyboard?.hide()
-                        results.firstOrNull()?.let(pick)
-                    }),
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.search_clear))
+            if (!fieldAtBottom) {
+                field()
+                HorizontalDivider()
+                chips()
+                note()
+            }
+            // The lists and messages: running down from the field at the top, or growing up from it at the bottom.
+            Box(
+                Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = if (fieldAtBottom) Alignment.BottomStart else Alignment.TopStart,
+            ) {
+                when {
+                    query.isBlank() && groups.any { it.places.isNotEmpty() } -> LazyColumn(
+                        Modifier.fillMaxWidth(),
+                        state = groupsState,
+                        reverseLayout = fieldAtBottom,
+                    ) {
+                        // At the bottom the recents come nearest the field, each group's title above its places.
+                        val shown = groups.filter { it.places.isNotEmpty() }
+                            .let { g -> if (fieldAtBottom) g.sortedByDescending { it.recents } else g }
+                        for (group in shown) {
+                            if (!fieldAtBottom) item(key = "title:${group.title}") { GroupTitle(group, onClearRecents) }
+                            // Keyed by position: several places can share a point (Overture puts a building's
+                            // businesses on one coordinate, and pins have no osmRef), and a repeated key crashes.
+                            itemsIndexed(group.places, key = { i, _ -> "${group.title}:$i" }) { _, place ->
+                                ResultRow(
+                                    SearchResult(place, near?.let { SearchRanking.distanceMeters(it, place.lat, place.lon) }),
+                                    now = now,
+                                    icon = if (group.recents) Icons.Filled.History else Icons.Filled.Bookmark,
+                                    onClick = {
+                                        keyboard?.hide()
+                                        pick(SearchResult(place, null))
+                                    },
+                                )
                             }
+                            if (fieldAtBottom) item(key = "title:${group.title}") { GroupTitle(group, onClearRecents) }
                         }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                    ),
-                    modifier = Modifier.weight(1f).focusRequester(focus),
-                )
-            }
-            HorizontalDivider()
-            // Phase 6: Home and Work chips while the box is empty.
-            if (query.isBlank() && onOpenShortcut != null) {
-                ShortcutChips(
-                    home = home,
-                    work = work,
-                    pending = settingSlot,
-                    onTap = { slot, place ->
-                        if (place != null) {
-                            keyboard?.hide()
-                            onOpenShortcut(place)
-                        } else {
-                            settingSlot = slot
-                            focus.requestFocus()
-                        }
-                    },
-                )
-            }
-            if (query.isBlank() && unreadableNote != null) {
-                Text(
-                    unreadableNote,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            when {
-                query.isBlank() && groups.any { it.places.isNotEmpty() } -> LazyColumn(Modifier.fillMaxWidth()) {
-                    for (group in groups.filter { it.places.isNotEmpty() }) {
-                        item(key = "title:${group.title}") {
-                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(group.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                                if (group.recents && onClearRecents != null) {
-                                    TextButton(onClick = onClearRecents) { Text(stringResource(R.string.search_clear_recents)) }
-                                }
-                            }
-                        }
-                        // Keyed by position: several places can share a point (Overture puts a building's
-                        // businesses on one coordinate, and pins have no osmRef), and a repeated key crashes.
-                        itemsIndexed(group.places, key = { i, _ -> "${group.title}:$i" }) { _, place ->
-                            ResultRow(
-                                SearchResult(place, near?.let { SearchRanking.distanceMeters(it, place.lat, place.lon) }),
-                                now = now,
-                                icon = if (group.recents) Icons.Filled.History else Icons.Filled.Bookmark,
-                                onClick = {
+                    }
+                    index == null -> Message(stringResource(R.string.search_no_pack))
+                    error != null -> Message(stringResource(R.string.search_failed, error!!))
+                    query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
+                    else -> {
+                        // At the bottom the list starts at the field: the best match stays there as the results change.
+                        if (fieldAtBottom) LaunchedEffect(results) { resultsState.scrollToItem(0) }
+                        LazyColumn(Modifier.fillMaxWidth(), state = resultsState, reverseLayout = fieldAtBottom) {
+                            // A weather search shows each town's weather in its row.
+                            val asksWeather = weatherFor != null && SearchQuery.parse(query).asksWeather
+                            items(results, key = { it.place.id }) { result ->
+                                val weather = weatherFor?.takeIf { asksWeather && result.place.kind == PlaceKind.LOCALITY }
+                                ResultRow(result, now = now, onClick = {
                                     keyboard?.hide()
-                                    pick(SearchResult(place, null))
-                                },
-                            )
+                                    pick(result)
+                                }, weather = weather?.let { w -> { w(result.place) } })
+                            }
                         }
                     }
                 }
-                index == null -> Message(stringResource(R.string.search_no_pack))
-                error != null -> Message(stringResource(R.string.search_failed, error!!))
-                query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
-                else -> LazyColumn(Modifier.fillMaxWidth()) {
-                    // A weather search shows each town's weather in its row.
-                    val asksWeather = weatherFor != null && SearchQuery.parse(query).asksWeather
-                    items(results, key = { it.place.id }) { result ->
-                        val weather = weatherFor?.takeIf { asksWeather && result.place.kind == PlaceKind.LOCALITY }
-                        ResultRow(result, now = now, onClick = {
-                            keyboard?.hide()
-                            pick(result)
-                        }, weather = weather?.let { w -> { w(result.place) } })
-                    }
-                }
             }
+            if (fieldAtBottom) {
+                note()
+                chips()
+                HorizontalDivider()
+                field()
+            }
+        }
+    }
+}
+
+/** A saved list's or the recents' title, with Clear for the recents. */
+@Composable
+private fun GroupTitle(group: PlaceGroup, onClearRecents: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(group.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+        if (group.recents && onClearRecents != null) {
+            TextButton(onClick = onClearRecents) { Text(stringResource(R.string.search_clear_recents)) }
         }
     }
 }
