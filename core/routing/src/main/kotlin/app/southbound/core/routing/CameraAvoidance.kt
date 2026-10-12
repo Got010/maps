@@ -71,6 +71,30 @@ object CameraAvoidance {
     fun clearOfWaypoints(spot: Spot, waypoints: List<Spot>): Boolean =
         waypoints.none { distanceMeters(spot, it) < WAYPOINT_CLEARANCE_METERS }
 
+    /**
+     * The spots a routing from where the car is may exclude: those at least [WAYPOINT_CLEARANCE_METERS] from [car]. A
+     * reroute starts where the car is, which can be the very road a spot excludes (a driver who missed the detour), and
+     * excluding the road the start snaps to makes routing fail, as for the waypoints.
+     */
+    fun clearOfCar(spots: List<Spot>, car: Spot): List<Spot> =
+        spots.filter { distanceMeters(it, car) >= WAYPOINT_CLEARANCE_METERS }
+
+    /**
+     * Routes from where the car is with [route], given the spots to exclude: first with the spots clear of [car]
+     * ([clearOfCar]), and when that finds no route ([RoutingException]), once more with none. A driver still on an
+     * excluded road gets a route, instead of "Rerouting." on every fix until past the camera. Only the trip's own
+     * reroutes use this: in a preview, no route is how [passable] finds the camera on the only way.
+     */
+    inline fun <R> fromCar(spots: List<Spot>, car: Spot, route: (List<Spot>) -> R): R {
+        val clear = clearOfCar(spots, car)
+        return try {
+            route(clear)
+        } catch (e: RoutingException) {
+            if (clear.isEmpty()) throw e
+            route(emptyList())
+        }
+    }
+
     /** What [passable] found: the items of a batch that can be excluded together, and the ones that shut the only way. */
     class Split<T>(val kept: List<T>, val dropped: List<T>)
 

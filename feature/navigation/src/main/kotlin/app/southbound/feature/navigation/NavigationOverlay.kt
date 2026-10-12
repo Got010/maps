@@ -84,6 +84,11 @@ fun NavigationOverlay(
     onVoiceLongPress: () -> Unit = {},
     /** Pause the trip: guidance stops, the destination and stops are kept to resume. Null hides the button. */
     onPause: (() -> Unit)? = null,
+    /**
+     * Arrived while Ferrostar still navigates (the route's end a few metres away with a poor fix): the arrival card
+     * shows as on Ferrostar's own arrival, until the trip ends.
+     */
+    arrived: Boolean = false,
 ) {
     KeepScreenOnDisposableEffect()
     // Phase 6: light phone theme but after sunset: the overlay goes dark with the map.
@@ -93,13 +98,16 @@ fun NavigationOverlay(
     if (rememberDrivingLandscape()) {
         NavigationLandscape(
             state, voiceMode, onVoiceModeChange, onEnd, modifier, speedMph, onSkipStop, delaySeconds,
-            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress, onPause,
+            fasterRoute, arrivalSide, parkingNearby, mutedUntilNextTurn, onVoiceLongPress, onPause, arrived,
         )
         return@MaterialTheme
     }
     Box(modifier.fillMaxSize().safeDrawingPadding()) {
-        when (val trip = state.tripState) {
-            is TripState.Navigating -> {
+        val trip = state.tripState
+        when {
+            trip is TripState.Complete || (arrived && trip is TripState.Navigating) ->
+                ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+            trip is TripState.Navigating -> {
                 Column(
                     Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -143,8 +151,7 @@ fun NavigationOverlay(
                     EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd, onPause)
                 }
             }
-            is TripState.Complete -> ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier.align(Alignment.BottomCenter).padding(16.dp))
-            is TripState.Idle -> Unit
+            else -> Unit
         }
     }
     }
