@@ -55,11 +55,25 @@ object ClosureAvoidance {
     fun polygons(closures: List<Incident>, from: GeoPoint, to: GeoPoint, max: Int = MAX_POLYGONS): List<List<Pair<Double, Double>>> =
         relevant(closures, from, to, max).map { square(it.location) }
 
-    /** Polygons for closures already known to sit on a route, e.g. for a reroute. */
-    fun polygons(closures: List<Incident>): List<List<Pair<Double, Double>>> =
-        closures.filter { it.isClosure }.take(MAX_POLYGONS).map { square(it.location) }
+    /**
+     * The polygons for a reroute around [ahead] (closures just found on the route, see [ahead]) on top of [current]
+     * (what the trip already avoids: the preview's closures near the trip), each once, those ahead first, at most
+     * [max]. Not the first closures the state feeds list: 511NY alone carries a couple of hundred, and a closure
+     * in Pennsylvania would never make the cut.
+     */
+    fun forReroute(ahead: List<Incident>, current: List<List<Pair<Double, Double>>>, max: Int = MAX_POLYGONS): List<List<Pair<Double, Double>>> =
+        (ahead.filter { it.isClosure }.map { square(it.location) } + current).distinct().take(max)
 
-    /** The closures within [withinMeters] of the route [line]. */
+    /**
+     * The closures within [withinMeters] of [line] (what is left of the route, from the driver on), nearest first
+     * along the way. One whose direction ("Southbound") runs against the route there is on the other carriageway,
+     * 10 to 30 m off on a divided highway, and left out, as for police ([PoliceAlerts.onRoute]).
+     */
     fun onRoute(closures: List<Incident>, line: List<GeoPoint>, withinMeters: Double = ON_ROUTE_METERS): List<Incident> =
-        closures.filter { it.isClosure && Geo.distanceToLineMeters(it.location, line) <= withinMeters }
+        PoliceAlerts.onRoute(line, closures.filter { it.isClosure }, routeMeters = withinMeters) { Double.POSITIVE_INFINITY }
+            .map { it.first }
+
+    /** The closures on what is left of [route] from [here] on ([onRoute]): one behind the driver is no reason to reroute. */
+    fun ahead(closures: List<Incident>, route: List<GeoPoint>, here: GeoPoint, withinMeters: Double = ON_ROUTE_METERS): List<Incident> =
+        onRoute(closures, RouteTraffic.remaining(route, here), withinMeters)
 }
