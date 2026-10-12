@@ -2,6 +2,7 @@ package app.southbound.core.export
 
 import app.southbound.core.export.fwx.FwxHeader
 import app.southbound.core.network.NetworkFeature
+import app.southbound.core.userdata.UserData
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,6 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 
 /** The stores an export reads and an import replaces. The Android implementation is [AndroidBackupStores]. */
 interface BackupStores {
@@ -135,8 +137,11 @@ class BackupService(
             val data = SouthboundBundle.decode(entries)
             val counts = data.counts()
             val turnedOn = turnedOn(data)
+            // The places as they are before the import, kept with it: a resume at start goes ahead only while the
+            // places are these or the import's own ([resume]).
+            val before = placesPrint { stores.read().userData }
             // The commit point. If this throws, nothing has changed.
-            journal.write(entries)
+            journal.write(entries, before)
             try {
                 stores.apply(data)
                 journal.clear()
@@ -151,8 +156,14 @@ class BackupService(
         }
     }
 
-    /** Finishes a kept import. Call it at start and from the "try again" button. */
-    suspend fun resume(): ResumeOutcome = lock.withLock {
+    /**
+     * Finishes a kept import. Call it at start with [automatic], and from the "try again" button without.
+     *
+     * At start nobody asked, so it goes ahead only while the saved places are the ones the import found or the ones
+     * it brings (it stopped before or after replacing them). Places saved or changed since would be deleted by
+     * applying it again: then it waits, [CHANGED_REASON], for the person to finish or discard it in Settings.
+     */
+    suspend fun resume(automatic: Boolean = false): ResumeOutcome = lock.withLock {
         if (!journal.exists()) return@withLock ResumeOutcome.NothingPending
         val entries = try {
             journal.read() ?: return@withLock ResumeOutcome.NothingPending
@@ -163,6 +174,12 @@ class BackupService(
             val data = SouthboundBundle.decode(entries)
             // The same refusal as a fresh import: never overwrite what can't be read.
             stores.ensureReadable()
+            if (automatic) {
+                val now = placesPrint { stores.read().userData }
+                if (now == null || now !in setOfNotNull(journal.mark(), placesPrint { data.userData })) {
+                    return@withLock ResumeOutcome.Failed(CHANGED_REASON, unreadable = false)
+                }
+            }
             val turnedOn = turnedOn(data)
             stores.apply(data)
             journal.clear()
@@ -185,10 +202,22 @@ class BackupService(
         return NetworkFeature.entries.filter { data.settings.network[it] == true && now[it] != true }
     }
 
+    /** A digest of [places] as an export would write them, or null when they can't be read. */
+    private suspend fun placesPrint(places: suspend () -> UserData): String? = try {
+        val bytes = PlacesEntry.encode(places())
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }.also { bytes.fill(0) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
     /** A short reason that holds no contents: the exception's own message, or its kind. */
     private fun reasonOf(e: Throwable): String = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
 
     companion object {
         const val PENDING_REASON = "An earlier import has not finished applying. Finish or discard it first."
+        const val CHANGED_REASON =
+            "Saved places changed after this import stopped. Finish it to replace them with the backup's, or discard it."
     }
 }

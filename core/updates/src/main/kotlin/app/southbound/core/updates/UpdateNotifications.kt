@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 
 /** The updater's notifications: download progress, and "tap to install" when Android wants a confirmation. */
 object UpdateNotifications {
@@ -67,6 +68,12 @@ object UpdateNotifications {
         context.getSystemService(NotificationManager::class.java).cancel(CONFIRM_ID)
     }
 
+    // Android 12 and 12L have no notification permission (asking for it answers "denied"): there, only whether the
+    // user turned the app's notifications off.
     private fun allowed(context: Context): Boolean =
-        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+        }
 }

@@ -18,7 +18,8 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             runCatching { setForeground(foregroundInfo(0, plan.bytes)) }
         })
         return when {
-            result is UpdateState.Failed && !result.needsToken && runAttemptCount < MAX_ATTEMPTS -> Result.retry()
+            // Only when the connection failed: a missing pack, no space or a refused APK won't change in a minute.
+            result is UpdateState.Failed && result.retry && runAttemptCount < MAX_ATTEMPTS -> Result.retry()
             else -> Result.success()
         }
     }

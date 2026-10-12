@@ -90,6 +90,17 @@ class ReleaseManifestTest {
     }
 
     @Test
+    fun `only a v2 routing pack may name several regions`() {
+        val routing = """{"kind":"routing","region":"ct-hudson","file":"routing-ct-hudson.tar","size":5,"sha256":"$sha","regions":["ct","hudson"]}"""
+        val search = """{"kind":"search","region":"ct-hudson","file":"search-ct-hudson.sqlite","size":5,"sha256":"$sha"}"""
+        val v2 = ReleaseManifest.parseV2(doc(schema = 2, packs = "[$routing,$search]"))
+        // The search pack would be stored as search-ct-hudson.sqlite, which PackStore never reads back: skipped.
+        assertEquals(listOf(PackKind.ROUTING to "ct-hudson"), v2.packs.map { it.kind to it.region })
+        val v1 = ReleaseManifest.parse(doc(packs = "[$search]"))
+        assertTrue(v1.packs.isEmpty())
+    }
+
+    @Test
     fun `skips kinds this app doesn't know`() {
         val m = ReleaseManifest.parse(doc(packs = """[{"kind":"terrain","region":"nyc","file":"terrain-nyc.bin","size":5,"sha256":"$sha"}]"""))
         assertTrue(m.packs.isEmpty())

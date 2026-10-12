@@ -389,6 +389,60 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `at start a kept import finishes over the places it left`() {
+        val file = export(filled())
+        val b = device("b")
+        b.stores.failSettings = true
+        import(b, file)
+        // The places landed, the preferences did not; nothing else changed since.
+        b.stores.failSettings = false
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertEquals(Samples.settings(), b.stores.settings)
+        assertFalse(b.journal.exists())
+        assertNull(b.journal.mark())
+    }
+
+    @Test
+    fun `at start a kept import finishes over the places it found`() {
+        val file = export(filled())
+        val b = device("b")
+        b.stores.places.update { it.recordRecent(Samples.cafe, 5) }
+        val before = b.stores.places.data.value
+        b.stores.failApply = true
+        import(b, file)
+        // As if the process stopped before the places were written: they are still the ones the import found.
+        b.stores.places.update(explicit = false) { before }
+        b.stores.failApply = false
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertEquals(Samples.userData(), b.stores.places.data.value)
+    }
+
+    @Test
+    fun `at start a kept import never replaces places saved since it stopped`() {
+        val file = export(filled())
+        val b = device("b")
+        b.stores.failSettings = true
+        import(b, file)
+        b.stores.failSettings = false
+        // The person saved a place after the import stopped.
+        b.stores.places.update { it.recordRecent(Samples.pin, 9) }
+        val saved = b.stores.places.data.value
+        val applied = b.stores.applyCalls
+
+        val outcome = runBlocking { b.service.resume(automatic = true) }
+
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), outcome)
+        assertEquals(saved, b.stores.places.data.value)
+        assertEquals(applied, b.stores.applyCalls)
+        assertTrue(b.journal.exists())
+        // Asked for in Settings, it goes ahead.
+        assertTrue(runBlocking { b.service.resume() } is ResumeOutcome.Applied)
+        assertEquals(Samples.userData(), b.stores.places.data.value)
+    }
+
+    @Test
     fun `applying twice leaves the same state`() {
         val file = export(filled())
         val b = device("b")
@@ -449,7 +503,11 @@ class BackupServiceTest {
         assertFalse(Samples.contains(kept, Samples.CAFE_NAME))
         assertFalse(Samples.contains(kept, Samples.BUS_KEY))
         assertFalse(Samples.contains(kept, "southbound"))
-        assertEquals(listOf("import.pending"), File(dir, "").list()!!.filter { it.startsWith("import") })
+        // Beside it only the mark of the places the import found, sealed too.
+        assertEquals(listOf("import.pending", "import.pending.mark"), File(dir, "").list()!!.filter { it.startsWith("import") }.sorted())
+        val mark = d.journal.mark()!!
+        assertEquals(64, mark.length)
+        assertFalse(Samples.contains(File(dir, "import.pending.mark").readBytes(), mark))
         // The saved places file is the store's own plain test file here; only the journal is under test.
         assertTrue(File(dir, "places.sealed").exists())
     }

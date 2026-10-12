@@ -66,16 +66,25 @@ class TileFolder(filesDir: File) {
     }
 
     /**
-     * Deletes every generation but the current one, [inUse] (the folder an open router reads, which may be
-     * older: a trip keeps its router) and those a round in this process is still filling ([begin]); an unfinished
-     * one a stopped process left behind goes too. The router opens on the map screen while the updater runs in
-     * the same process with a TileFolder of its own, so the round's generation must survive the router's prune.
+     * Deletes every generation but the current one, [inUse], the one the open router reads ([reading]: older than
+     * the current one while a trip keeps its router) and those a round in this process is still filling ([begin]);
+     * an unfinished one a stopped process left behind goes too. The router opens on the map screen while the
+     * updater runs in the same process with a TileFolder of its own, so the round's generation must survive the
+     * router's prune, and the router's generation the round's, however many rounds a trip spans.
      */
     fun prune(inUse: File? = null) {
         val keep = setOfNotNull(current()?.name, inUse?.name)
         root.listFiles()?.forEach { f ->
-            if (f.isDirectory && GENERATION.matches(f.name) && f.name !in keep && !isBuilding(f)) f.deleteRecursively()
+            if (f.isDirectory && GENERATION.matches(f.name) && f.name !in keep && !isBuilding(f) && !isRead(f)) f.deleteRecursively()
         }
+    }
+
+    /**
+     * Records [dir] as the generation the open router reads (null: none, or a one-graph pack), for every
+     * TileFolder in the process: no [prune] deletes it until another takes its place.
+     */
+    fun reading(dir: File?) {
+        synchronized(building) { readPath = dir?.absolutePath }
     }
 
     /** Deletes every generation and the pointer: no routing from packs. */
@@ -99,9 +108,13 @@ class TileFolder(filesDir: File) {
         fun keep(name: String, sha256: String): Boolean {
             val record = previousRecords[name]?.takeIf { it.sha256 == sha256 } ?: return false
             val from = previous ?: return false
-            for (tile in record.tiles) {
+            for ((i, tile) in record.tiles.withIndex()) {
                 val source = File(from, tile)
-                if (!source.isFile) return false
+                if (!source.isFile) {
+                    // Unlink what was linked: [unpack] is next, and must not find the current generation's files here.
+                    for (linked in record.tiles.subList(0, i)) File(dir, linked).delete()
+                    return false
+                }
                 val target = File(dir, tile)
                 target.parentFile?.mkdirs()
                 target.delete()
@@ -159,11 +172,16 @@ class TileFolder(filesDir: File) {
 
     private fun isBuilding(dir: File): Boolean = synchronized(building) { dir.absolutePath in building }
 
+    private fun isRead(dir: File): Boolean = synchronized(building) { dir.absolutePath == readPath }
+
     companion object {
         const val DIR = "routing"
 
         /** Generations a round in this process is filling ([begin]), by path, for every TileFolder. */
         private val building = HashSet<String>()
+
+        /** The generation the open router reads ([reading]), by path; guarded by [building]'s lock. */
+        private var readPath: String? = null
 
         private const val POINTER = "current"
         private const val RECORDS = "packs.tsv"
@@ -187,13 +205,16 @@ class TileFolder(filesDir: File) {
                 val name = field(header, 0, 100)
                 val prefix = field(header, 345, 155)
                 val path = if (prefix.isEmpty()) name else "$prefix/$name"
-                val size = field(header, 124, 12).trim().ifEmpty { "0" }.toLong(8)
+                val size = field(header, 124, 12).trim().ifEmpty { "0" }.toLongOrNull(8)
+                    ?: throw UnrecognizedPackException("A routing pack has a damaged file header")
                 val type = header[156]
                 val regular = type == '0'.code.toByte() || type == 0.toByte()
                 if (regular) {
                     if (!TILE.matches(path)) throw UnrecognizedPackException("Unexpected file $path in a routing pack")
                     val target = File(dir, path)
                     target.parentFile?.mkdirs()
+                    // A new file, never through a hard link into another generation's copy.
+                    target.delete()
                     target.outputStream().use { out -> copyExactly(input, out, size) }
                     tiles += path
                 } else {
