@@ -59,7 +59,8 @@ SUBWAY = {
         "SHORT,101S,09:00:00,09:00:00,1", "SHORT,102S,09:05:00,09:05:00,2",
         "N1,102N,09:00:00,09:00:00,1", "N1,101N,09:05:00,09:05:00,2",
     ],
-    "transfers.txt": ["from_stop_id,to_stop_id,transfer_type,min_transfer_time", "101,101,2,180", "102,103,2,300"],
+    # 101S to 102S: a transfer with no time given (walked, never 0 seconds).
+    "transfers.txt": ["from_stop_id,to_stop_id,transfer_type,min_transfer_time", "101,101,2,180", "102,103,2,300", "101S,102S,0,"],
 }
 
 BUS_HEADER = {
@@ -107,6 +108,21 @@ class EncodingTest(unittest.TestCase):
     def test_fill_missing_interpolates(self):
         self.assertEqual(bt.fill_missing([0, None, None, 300]), [0, 100, 200, 300])
         self.assertIsNone(bt.fill_missing([None, 10]))
+
+
+class WalkingTransferTest(unittest.TestCase):
+    def test_stops_east_west_within_the_radius_are_linked(self):
+        # 351 m apart east-west at 40.7 N: once two longitude cells apart, so never linked.
+        lon = -74.0 + 351 / (111_000 * __import__("math").cos(__import__("math").radians(40.7)))
+        stops = [{"id": 1, "lat": 40.7, "lon": -74.0}, {"id": 2, "lat": 40.7, "lon": lon}]
+        links = bt.Compiler().walking_transfers(stops)
+        self.assertIn((1, 2), links)
+        self.assertIn((2, 1), links)
+        self.assertEqual(bt.walk_seconds(bt.distance_m(40.7, -74.0, 40.7, lon)), links[(1, 2)])
+
+    def test_far_stops_are_not(self):
+        stops = [{"id": 1, "lat": 40.7, "lon": -74.0}, {"id": 2, "lat": 40.7, "lon": -73.99}]  # about 840 m
+        self.assertEqual({}, bt.Compiler().walking_transfers(stops))
 
 
 class BuildTest(unittest.TestCase):
@@ -197,3 +213,5 @@ class BuildTest(unittest.TestCase):
         # A bus stop 10 m from a platform gets a short walk; one 3 km away doesn't.
         self.assertLess(links[(self.stop_id("500"), self.stop_id("101S"))], 30)
         self.assertNotIn((self.stop_id("501"), self.stop_id("101S")), links)
+        # A transfer the feed gives no time for is walked: it used to take 0 seconds.
+        self.assertEqual(links[(self.stop_id("101S"), self.stop_id("102S"))], bt.walk_seconds(bt.distance_m(40.70, -74.0, 40.71, -74.0)))

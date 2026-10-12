@@ -99,6 +99,10 @@ def covered(points, regions):
     ]
 
 
+# How long a point /points answered 404 for is left alone before it is asked again.
+MISS_DAYS = 7
+
+
 def get_json(url, tries=3):
     """The parsed JSON, or None for a 404 (no forecast there). Retries other errors."""
     for attempt in range(tries):
@@ -170,28 +174,41 @@ def periods_of(forecast_json):
     return out
 
 
-def build(points, cache, fetch=get_json, workers=WORKERS):
-    """{"points": [...]} for the lattice, using and filling cache ({"lat,lon": [office, x, y] or None})."""
+def build(points, cache, fetch=get_json, workers=WORKERS, now=None):
+    """{"points": [...]} for the lattice, using and filling cache.
+
+    The cache maps "lat,lon" to the point's grid cell, [office, x, y], or to {"miss": epoch seconds} when /points
+    answered 404 (over a lake, say). A miss is asked again after MISS_DAYS: a one-off 404 used to be kept for good,
+    and its points never had a forecast again. The old form of a miss, null, is asked again at once.
+    """
+    now = time.time() if now is None else now
+
     def look_up(pt):
         key = f"{pt[0]},{pt[1]}"
-        if key in cache:
-            return pt, cache[key]
+        known = cache.get(key)
+        if isinstance(known, list):
+            return pt, known, False
+        if isinstance(known, dict) and now - known.get("miss", 0) < MISS_DAYS * 86_400:
+            return pt, None, False
         try:
             grid = grid_of(fetch(f"{API}/points/{pt[0]},{pt[1]}"))
         except Exception as e:  # noqa: BLE001 - one point's failure must not stop the pack
             print(f"points {key}: {type(e).__name__}: {e}", file=sys.stderr)
-            return pt, "error"
-        return pt, list(grid) if grid else None
+            return pt, "error", True
+        return pt, list(grid) if grid else None, True
 
     with concurrent.futures.ThreadPoolExecutor(workers) as pool:
         looked = list(pool.map(look_up, points))
     cells = {}
-    for pt, grid in looked:
+    for pt, grid, asked in looked:
         if grid == "error":
             continue
-        cache[f"{pt[0]},{pt[1]}"] = grid
+        key = f"{pt[0]},{pt[1]}"
         if grid:
+            cache[key] = grid
             cells.setdefault(tuple(grid), []).append(pt)
+        elif asked:
+            cache[key] = {"miss": int(now)}
 
     def forecast(cell):
         office, x, y = cell
@@ -203,6 +220,11 @@ def build(points, cache, fetch=get_json, workers=WORKERS):
 
     with concurrent.futures.ThreadPoolExecutor(workers) as pool:
         forecasts = dict(pool.map(forecast, list(cells)))
+    # A cell whose forecast failed every try leaves its points out of this pack: said, not silent.
+    failed = sum(1 for cell in cells if not forecasts.get(cell))
+    if failed:
+        print(f"::warning::{failed} of {len(cells)} grid cells had no forecast this run; their points are left out",
+              file=sys.stderr)
     out = []
     for cell, pts in cells.items():
         periods = forecasts.get(cell) or []
@@ -211,7 +233,7 @@ def build(points, cache, fetch=get_json, workers=WORKERS):
         for lat, lon in pts:
             out.append({"lat": lat, "lon": lon, "periods": periods})
     out.sort(key=lambda p: (p["lat"], p["lon"]))
-    return {"points": out, "cells": len(cells), "looked_up": len(points)}
+    return {"points": out, "cells": len(cells), "looked_up": len(points), "failed_cells": failed}
 
 
 def main():

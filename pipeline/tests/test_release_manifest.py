@@ -67,6 +67,25 @@ class ReleaseManifestTest(unittest.TestCase):
         self.assertNotIn("regions", packs["basemap-ct.pmtiles"])
         self.assertNotIn("regions", packs["transit-nyc.sqlite"])
 
+    def test_v2_refuses_a_release_without_routing_packs(self):
+        regions = os.path.join(HERE, "..", "regions.json")
+        with tempfile.TemporaryDirectory() as d:
+            self.files(d, ["southbound-1.2.3.apk", "basemap-nyc.pmtiles", "routing-main.tar"])
+            with self.assertRaises(SystemExit):
+                release_manifest.manifest(d, "1.2.3", v2=True, regions_json=regions)
+            with open(os.path.join(d, "routing-packs.json"), "w") as f:
+                json.dump({}, f)
+            with self.assertRaises(SystemExit):
+                release_manifest.manifest(d, "1.2.3", v2=True, regions_json=regions)
+            # The older manifest never needed it.
+            self.assertEqual(1, release_manifest.manifest(d, "1.2.3")["schema"])
+
+    def test_each_version_part_is_two_digits_at_most(self):
+        self.assertEqual(10203, release_manifest.version_code("1.2.3"))
+        self.assertEqual(9999, release_manifest.version_code("0.99.99"))
+        with self.assertRaises(SystemExit):
+            release_manifest.version_code("0.1.100")
+
     def test_the_release_lists_the_search_packs_cut_from_search_nys(self):
         # release.yml uploads, carries over and checks NYS_SEARCH_PACKS; split_search.py writes one per region.
         with open(os.path.join(HERE, "..", "regions.json")) as f:

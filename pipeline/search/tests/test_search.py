@@ -122,7 +122,7 @@ class BuildTest(unittest.TestCase):
         self.assertEqual([], search("rumpy"))
 
     def test_landmarks(self):
-        rows = self.db.execute("SELECT category, name, lat, lon, direction FROM landmark ORDER BY lat").fetchall()
+        rows = self.db.execute("SELECT category, name, lat, lon, direction FROM landmark ORDER BY lat, category").fetchall()
         self.assertEqual(
             [
                 # The fixture tags a direction on the stop sign and a camera:direction on the gas station: only cameras keep one.
@@ -140,6 +140,16 @@ class BuildTest(unittest.TestCase):
                 ("school_zone", None, 40.746, -73.99, None),
                 # The start of a road with a school speed limit.
                 ("school_zone", None, 40.747, -73.99, None),
+                # A speed camera node tagged speed_camera=traffic_signals is a red light camera.
+                ("red_light_camera", None, 40.749, -73.99, 0),
+                # A signal with a school crossing sign: the alert and the light both.
+                ("school_zone", None, 40.75, -73.99, None),
+                ("traffic_signals", None, 40.75, -73.99, None),
+                # "school_bus" isn't a school zone sign: only the light.
+                ("traffic_signals", None, 40.751, -73.99, None),
+                # The school plaza (a closed road) once, where it starts; the hazard-only closed way at its centre.
+                ("school_zone", None, 40.752, -73.99, None),
+                ("school_zone", None, 40.75225, -73.9895, None),
             ],
             rows,
         )
@@ -253,7 +263,25 @@ class BuildTest(unittest.TestCase):
         self.assertIsNone(cat({"amenity": "place_of_worship", "religion": "jewish"}))
         self.assertEqual("pharmacy", cat({"shop": "chemist", "name": "CVS"}))
         self.assertEqual("school_zone", cat({"traffic_sign": "US:S5-1"}))
+        self.assertEqual("school_zone", cat({"traffic_sign": "US:R2-1[20];US:S5-1"}))
+        self.assertEqual("traffic_signals", cat({"highway": "traffic_signals", "traffic_sign": "school_bus"}))
         self.assertIsNone(cat({"amenity": "cafe"}))
+
+    def test_red_light_cameras(self):
+        cat = build_search.landmark_category
+        self.assertEqual("red_light_camera", cat({"highway": "speed_camera", "speed_camera": "traffic_signals"}))
+        self.assertEqual("red_light_camera", cat({"highway": "red_light_camera"}))
+        self.assertEqual("red_light_camera", cat({"enforcement": "traffic_signals"}))
+        self.assertEqual("speed_camera", cat({"highway": "speed_camera"}))
+        self.assertEqual("speed_camera", cat({"enforcement": "maxspeed"}))
+        # Spoken by category, and its direction kept like a speed camera's.
+        self.assertIsNone(build_search.landmark_name({"highway": "red_light_camera", "operator": "City"}, "red_light_camera"))
+        self.assertEqual(90, build_search.landmark_direction({"direction": "E"}, "red_light_camera"))
+
+    def test_sign_codes(self):
+        self.assertEqual(["s1-1", "r2-1"], build_search.sign_codes("US:S1-1;US:R2-1[25]"))
+        self.assertEqual(["school"], build_search.sign_codes(" school "))
+        self.assertEqual([], build_search.sign_codes(None))
 
     def test_meta(self):
         meta = dict(self.db.execute("SELECT key, value FROM meta"))

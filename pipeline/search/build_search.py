@@ -126,7 +126,8 @@ LANDMARK_POIS = {
 }
 # Signals and signs: position only, no name.
 LANDMARK_SIGNS = {"traffic_signals": "traffic_signals", "stop": "stop"}
-SCHOOL_SIGNS = ("S5-1", "S1-1", "school")
+# traffic_sign codes (without their country prefix) that mark a school zone, matched whole: "US:S1-1", "school".
+SCHOOL_SIGNS = {"s5-1", "s1-1", "school"}
 STREET_CELL_DEGREES = 0.02  # about 2 km; one search row per street name per cell
 
 # The town an untagged address or a street is in: the nearest locality, with
@@ -261,8 +262,10 @@ def landmark_category(tags):
     """What guidance would call this object, e.g. "traffic_signals", or None.
 
     Alerts come first: a camera mapped on a signal pole is worth a warning
-    more than a landmark.
+    more than a landmark (Collector.landmark keeps the signal too).
     """
+    if is_red_light_camera(tags):
+        return "red_light_camera"
     if tags.get("highway") == "speed_camera" or tags.get("enforcement") == "maxspeed":
         return "speed_camera"
     if is_alpr(tags):
@@ -280,7 +283,7 @@ def landmark_category(tags):
     return None
 
 
-DIRECTION_CATEGORIES = ("alpr_camera", "speed_camera")
+DIRECTION_CATEGORIES = ("alpr_camera", "speed_camera", "red_light_camera")
 # The 16 compass names in whole degrees (22.5 steps, truncated: NNE is 22).
 COMPASS = {
     "N": 0, "NNE": 22, "NE": 45, "ENE": 67, "E": 90, "ESE": 112, "SE": 135, "SSE": 157,
@@ -332,12 +335,38 @@ def is_alpr(tags):
     return kind == "ALPR" or camera == "ALPR" or "flock" in operator
 
 
+def is_red_light_camera(tags):
+    """A red light camera as OSM usually maps one.
+
+    There is no settled tag (docs/review-2026-10.md section 2.2): the device is most often a
+    highway=speed_camera node with speed_camera=traffic_signals, sometimes highway=red_light_camera, and
+    enforcement=traffic_signals where the enforcement relation's tags were put on a node. Announcing these as
+    speed cameras was wrong; they get their own category, which apps that don't know it leave out.
+    """
+    if tags.get("highway") == "red_light_camera" or tags.get("enforcement") == "traffic_signals":
+        return True
+    return tags.get("highway") == "speed_camera" and tags.get("speed_camera") == "traffic_signals"
+
+
+def sign_codes(value):
+    """traffic_sign's codes in lower case without their country prefix: "US:S1-1;US:R2-1[25]" -> s1-1, r2-1."""
+    codes = []
+    for part in re.split(r"[;,]", value or ""):
+        code = part.strip().split(":", 1)[-1]
+        code = re.split(r"[\[(]", code, maxsplit=1)[0].strip().lower()
+        if code:
+            codes.append(code)
+    return codes
+
+
 def is_school_zone(tags):
-    """A mapped school zone: hazard=school_zone, or a school warning or speed sign."""
+    """A mapped school zone: hazard=school_zone, or a school warning or speed sign.
+
+    A sign counts by its whole code: a sign value that only mentions a school ("school_bus") is not one.
+    """
     if tags.get("hazard") == "school_zone":
         return True
-    sign = tags.get("traffic_sign") or ""
-    if sign and any(s.lower() in sign.lower() for s in SCHOOL_SIGNS):
+    if any(code in SCHOOL_SIGNS for code in sign_codes(tags.get("traffic_sign"))):
         return True
     return "school" in (tags.get("maxspeed:conditional") or "").lower()
 
@@ -362,7 +391,7 @@ def landmark_name(tags, category):
     """
     if category == "alpr_camera":
         return alpr_name(tags)
-    if category in ("traffic_signals", "stop", "speed_camera", "school_zone"):
+    if category in ("traffic_signals", "stop", "speed_camera", "red_light_camera", "school_zone"):
         return None
     return tags.get("brand") or tags.get("name")
 
@@ -547,17 +576,26 @@ class Collector:
             self.landmarks.clear()
 
     def landmark(self, tags, lat, lon, nodes_only=False):
-        """Adds a landmark row if the object is one. Signals and signs count only as nodes."""
+        """Adds a landmark row if the object is one. Signals and signs count only as nodes.
+
+        A signal or stop sign that also carries an alert (a school sign, a camera tagged on the pole) gives both
+        rows: the alert is spoken, and the light is still the one guidance turns at.
+        """
         category = landmark_category(tags)
         if category is None:
             return
-        if nodes_only and category in ("traffic_signals", "stop"):
-            return
-        self.landmarks.append((
-            category, landmark_name(tags, category), round(lat, 6), round(lon, 6),
-            landmark_direction(tags, category),
-        ))
-        self.landmark_count += 1
+        categories = [category]
+        sign = LANDMARK_SIGNS.get(tags.get("highway"))
+        if sign and sign != category:
+            categories.append(sign)
+        for category in categories:
+            if nodes_only and category in ("traffic_signals", "stop"):
+                continue
+            self.landmarks.append((
+                category, landmark_name(tags, category), round(lat, 6), round(lon, 6),
+                landmark_direction(tags, category),
+            ))
+            self.landmark_count += 1
         if len(self.landmarks) >= 50_000:
             self.flush()
 
@@ -776,17 +814,25 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
             if centre:
                 prefix = "w" if obj.from_way() else "r"
                 collector.point(tags, *centre, f"{prefix}{obj.orig_id()}")
-                collector.landmark(tags, *centre, nodes_only=True)
+                # A closed road's school zone was placed where it starts, with the ways: not again at its centre.
+                if not (obj.from_way() and "highway" in tags):
+                    collector.landmark(tags, *centre, nodes_only=True)
     attribution = "© OpenStreetMap contributors, ODbL"
     if address_points:
         import addresses  # only needed with a state file
 
-        addresses.load(collector, address_points, SOURCE_STATE, bounds=bounds)
+        # A state file that gives no point at all has changed under the reader (a renamed column, say): a pack
+        # without its addresses would ship silently until the next monthly rebuild, so the build stops.
+        if addresses.load(collector, address_points, SOURCE_STATE, bounds=bounds) == 0:
+            raise SystemExit(f"No address points read from {address_points}: has the file's layout changed?")
         attribution += "; NYS Address Points, NYS GIS Program Office, CC0"
     if dot_cameras:
         import dot_cameras as dot  # only needed with a camera list
 
-        dot.load(collector, dot_cameras, bounds=bounds)
+        # None is allowed (a state that fails is left out, never the pack) but said loudly: "Avoid DOT cameras"
+        # would do nothing on this pack.
+        if dot.load(collector, dot_cameras, bounds=bounds) == 0:
+            print(f"::warning::No DOT cameras inside {region} from {dot_cameras}", file=sys.stderr)
         attribution += "; " + dot.ATTRIBUTION
     collector.flush()
     overture_kept = overture_skipped = 0
@@ -794,6 +840,9 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
         import overture as overture_places  # only needed with Overture rows
 
         overture_kept, overture_skipped = overture_places.load(db, overture, overture_places.region_scopes(region))
+        # As with addresses: none kept means the staging file changed under the reader.
+        if overture_kept == 0:
+            raise SystemExit(f"No Overture places kept from {overture} ({overture_skipped} skipped): has its layout changed?")
         attribution += "; " + overture_places.ATTRIBUTION
 
     finder = LocalityFinder(collector.localities)

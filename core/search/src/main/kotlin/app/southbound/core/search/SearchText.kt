@@ -41,6 +41,9 @@ object SearchText {
     )
 
     private val COMBINING_MARKS = Regex("\\p{Mn}+")
+
+    /** The straight apostrophe, the right and left single quotes, and the modifier letter apostrophe. */
+    private val APOSTROPHE = Regex("['\u2019\u2018\u02BC]")
     private val NOT_WORD = Regex("[^0-9a-z]+")
     private val ORDINAL = Regex("\\b(\\d+)(st|nd|rd|th)\\b")
 
@@ -48,7 +51,8 @@ object SearchText {
     fun normalize(text: String): String {
         var s = Normalizer.normalize(text, Normalizer.Form.NFKD)
         s = COMBINING_MARKS.replace(s, "")
-        s = s.lowercase(Locale.ROOT).replace("&", " and ").replace("'", "")
+        // Apostrophes go, the typed one and the curly ones OSM editors type ("McDonald’s"), as in normalize.py.
+        s = APOSTROPHE.replace(s.lowercase(Locale.ROOT).replace("&", " and "), "")
         s = NOT_WORD.replace(s, " ")
         s = ORDINAL.replace(s, "$1")
         return s.split(' ').filter { it.isNotEmpty() }.joinToString(" ") { ABBREVIATIONS[it] ?: it }
