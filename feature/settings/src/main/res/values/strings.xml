@@ -109,6 +109,10 @@
     <string name="live_midrive_note">MDOT\'s crashes, closures and work zones across Michigan, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras on the map (a camera\'s picture is fetched when you open it; message signs are not read, their text is one page per sign). No key needed: these are the lists Mi Drive\'s own map reads.</string>
     <string name="live_ohgo">Incidents and closures in Ohio (OHGO)</string>
     <string name="live_ohgo_note">ODOT\'s crashes, closures and construction across Ohio, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. Needs a free OHGO key: register at publicapi.ohgo.com, paste the key below. The key is stored encrypted and sent only to publicapi.ohgo.com.</string>
+    <string name="settings_number_saved_as">Out of range: saved as %1$s</string>
+    <string name="live_tomtom_old">TomTom traffic</string>
+    <string name="live_tomtom_old_note">Turned on by an older backup. Southbound has no TomTom layer: turn it off.</string>
+    <string name="live_511_key_old">A 511NY key is saved, from before 511NY stopped needing one.</string>
     <string name="live_ohgo_key">OHGO key</string>
     <string name="live_ohgo_key_saved">OHGO key saved (type to replace)</string>
     <string name="live_dot">Traffic speeds (NYC DOT)</string>

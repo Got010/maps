@@ -83,6 +83,7 @@
         "mimeType=application/vnd.sqlite3",
         "mimeType=application/x-sqlite3",
         "mimeType=application/x-tar",
+        "mimeType=application/zip",
         "scheme=content"
       ]
     },

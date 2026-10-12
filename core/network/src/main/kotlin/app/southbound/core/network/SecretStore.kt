@@ -4,6 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -39,6 +42,21 @@ class SecretStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("secrets", Context.MODE_PRIVATE)
 
+    init {
+        synchronized(Companion) {
+            if (!loaded) {
+                savedNow.value = ApiKey.entries.filter { prefs.contains(it.name) }.toSet()
+                loaded = true
+            }
+        }
+    }
+
+    /**
+     * The keys saved now, for a screen that says whether one is set, updated as keys are saved, removed or imported;
+     * the same for every SecretStore in the process (they share one preferences file).
+     */
+    val saved: StateFlow<Set<ApiKey>> = savedNow.asStateFlow()
+
     @Synchronized
     fun get(key: ApiKey): String? {
         val stored = prefs.getString(key.name, null) ?: return null
@@ -50,9 +68,11 @@ class SecretStore(context: Context) {
         val trimmed = value?.trim().orEmpty()
         if (trimmed.isEmpty()) {
             prefs.edit().remove(key.name).apply()
+            savedNow.value = savedNow.value - key
             return
         }
         prefs.edit().putString(key.name, seal(trimmed)).apply()
+        savedNow.value = savedNow.value + key
     }
 
     /**
@@ -86,9 +106,14 @@ class SecretStore(context: Context) {
             if (text == null) edit.remove(key.name) else edit.putString(key.name, text)
         }
         if (!edit.commit()) throw java.io.IOException("Couldn't save the API keys")
+        savedNow.value = sealed.keys
     }
 
-    fun has(key: ApiKey): Boolean = prefs.contains(key.name)
+    /**
+     * Whether [key] is saved and can be read. A key the Keystore can't decrypt counts as missing, as [get] treats it
+     * (the feeds run without it): the screen then asks for it again rather than saying it is saved.
+     */
+    fun has(key: ApiKey): Boolean = get(key) != null
 
     private fun seal(plain: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -119,6 +144,11 @@ class SecretStore(context: Context) {
     }
 
     private companion object {
+        val savedNow = MutableStateFlow<Set<ApiKey>>(emptySet())
+
+        @Volatile
+        var loaded = false
+
         const val KEYSTORE = "AndroidKeyStore"
         const val ALIAS = "southbound-api-keys"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

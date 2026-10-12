@@ -1,6 +1,7 @@
 package app.southbound.core.map
 
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -11,9 +12,23 @@ object Eta {
     /** Delay beyond this many seconds turns the ETA red and shows "+X min". */
     const val LATE_SECONDS = 120.0
 
-    /** "3:42 PM": the clock time [secondsAhead] seconds after [nowMillis]. */
-    fun clock(nowMillis: Long, secondsAhead: Double, locale: Locale = Locale.getDefault(), zone: TimeZone = TimeZone.getDefault()): String {
-        val format = DateFormat.getTimeInstance(DateFormat.SHORT, locale)
+    /**
+     * "3:42 PM" (or "15:42"): the clock time [secondsAhead] seconds after [nowMillis]. [use24h] is the phone's
+     * 12/24-hour setting (android.text.format.DateFormat.is24HourFormat), which the locale's own pattern ignores;
+     * null keeps the locale's.
+     */
+    fun clock(
+        nowMillis: Long,
+        secondsAhead: Double,
+        locale: Locale = Locale.getDefault(),
+        zone: TimeZone = TimeZone.getDefault(),
+        use24h: Boolean? = null,
+    ): String {
+        val format = when (use24h) {
+            null -> DateFormat.getTimeInstance(DateFormat.SHORT, locale)
+            true -> SimpleDateFormat("HH:mm", locale)
+            false -> SimpleDateFormat("h:mm a", locale)
+        }
         format.timeZone = zone
         return format.format(Date(nowMillis + (secondsAhead * 1000).toLong()))
     }

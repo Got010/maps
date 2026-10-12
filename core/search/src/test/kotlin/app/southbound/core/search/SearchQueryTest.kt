@@ -30,6 +30,21 @@ class SearchQueryTest {
     }
 
     @Test
+    fun everyCoveredStateIsSoft() {
+        // Place text never carries the state: "Hartford CT" used to look for streets containing "ct".
+        assertEquals(listOf("hartford") to listOf("ct"), SearchQuery.parse("Hartford CT").let { it.tokens to it.soft })
+        assertEquals(listOf("joes", "pizza", "scranton") to listOf("pa"), SearchQuery.parse("Joe's Pizza Scranton PA").let { it.tokens to it.soft })
+        assertEquals(listOf("columbus") to listOf("oh", "43215"), SearchQuery.parse("Columbus OH 43215").let { it.tokens to it.soft })
+        // A name after a comma, as an address writes it.
+        assertEquals(listOf("hartford") to listOf("connecticut"), SearchQuery.parse("Hartford, Connecticut").let { it.tokens to it.soft })
+        assertEquals(listOf("newark") to listOf("new", "jersey", "07102"), SearchQuery.parse("Newark, New Jersey 07102").let { it.tokens to it.soft })
+        // Without one, a state's name may be the place's own.
+        assertEquals(listOf("lake", "michigan") to emptyList<String>(), SearchQuery.parse("Lake Michigan").let { it.tokens to it.soft })
+        assertEquals(listOf("indiana") to emptyList<String>(), SearchQuery.parse("Indiana").let { it.tokens to it.soft })
+        assertEquals(listOf("pa") to emptyList<String>(), SearchQuery.parse("PA").let { it.tokens to it.soft })
+    }
+
+    @Test
     fun repeatedTrigramsAppearOnce() {
         assertEquals("\"aaa\"", SearchQuery.parse("aaaaa").ftsMatch)
     }

@@ -40,8 +40,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // After process death Android re-delivers the original intent; it was already imported.
-        if (savedInstanceState == null) sharedPack = intent.sharedPackUri()
+        // After process death Android re-delivers the intent: imported already, unless the import was still running
+        // when the process went (then it is imported again, rather than dropped without a word).
+        if (savedInstanceState == null || savedInstanceState.getBoolean(KEY_PACK_PENDING)) sharedPack = intent.sharedPackUri()
         showInstallPrompts()
         // An import that was checked and kept but stopped before it was applied finishes now.
         ExploreServices.get(this).finishPendingImport { settingsEpoch++ }
@@ -94,7 +95,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.sharedPackUri()?.let { sharedPack = it }
+        intent.sharedPackUri()?.let {
+            // Kept as the activity's intent, so a process death mid-import re-delivers this pack, not the first one.
+            setIntent(intent)
+            sharedPack = it
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_PACK_PENDING, sharedPack != null)
     }
 }
 
@@ -105,3 +115,6 @@ private fun Intent.sharedPackUri(): Uri? = when (action) {
     Intent.ACTION_VIEW -> data
     else -> null
 }
+
+/** Saved state: a shared pack was still being imported. */
+private const val KEY_PACK_PENDING = "shared_pack_pending"

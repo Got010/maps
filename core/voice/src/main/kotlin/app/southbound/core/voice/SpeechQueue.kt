@@ -27,6 +27,8 @@ class SpeechQueue(private val maxWaitMillis: Long = MAX_WAIT_MS) {
         val utteranceId: String? = null,
         val onStart: (() -> Unit)? = null,
         val onDone: (() -> Unit)? = null,
+        /** How many times the queue had been cleared when this was queued: a clear since (Mute, End) drops it. */
+        val generation: Int = 0,
     )
 
     private val waiting = ArrayDeque<Item>()
