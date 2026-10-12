@@ -22,8 +22,18 @@ class ImportJournal(private val file: File, private val sealer: Sealer) {
 
     fun exists(): Boolean = file.exists()
 
-    /** Writes [entries] (the verified bundle entries) as the pending import; the rename is the commit. */
-    fun write(entries: Map<String, ByteArray>) {
+    /**
+     * Writes [entries] (the verified bundle entries) as the pending import; the rename is the commit. [mark] (a
+     * digest of the saved places before the import, BackupService) is kept beside it, sealed too, and written first,
+     * so a pending import always has the mark it was written with.
+     */
+    fun write(entries: Map<String, ByteArray>, mark: String? = null) {
+        val markFile = markFile()
+        if (mark == null) {
+            markFile.delete()
+        } else {
+            writeAtomically(markFile, sealer.seal(mark.toByteArray(Charsets.US_ASCII)))
+        }
         val names = entries.keys.associateWith { it.toByteArray(Charsets.US_ASCII) }
         // Framed straight into one array, which is zeroed once sealed (a stream's internal copy could not be).
         val framed = ByteArray(8 + entries.entries.sumOf { (name, bytes) -> 2 + names.getValue(name).size + 4 + bytes.size })
@@ -41,15 +51,29 @@ class ImportJournal(private val file: File, private val sealer: Sealer) {
         }
         // A sealer that returns its input (the tests' PlainSealer) must not have it zeroed.
         if (sealed !== framed) framed.fill(0)
-        file.parentFile?.mkdirs()
-        val temp = File(file.parentFile, "${file.name}.part")
+        writeAtomically(file, sealed)
+    }
+
+    /** The [write] mark of the pending import, or null when there is none or it can't be opened. */
+    fun mark(): String? = try {
+        markFile().takeIf { it.exists() }?.let { String(sealer.open(it.readBytes()), Charsets.US_ASCII) }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun markFile() = File(file.parentFile, "${file.name}.mark")
+
+    /** [bytes] into [target] by a temp file, fsync and atomic rename. */
+    private fun writeAtomically(target: File, bytes: ByteArray) {
+        target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, "${target.name}.part")
         try {
             FileOutputStream(temp).use { out ->
-                out.write(sealed)
+                out.write(bytes)
                 out.fd.sync()
             }
-            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
-            syncDirectory(file.parentFile)
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            syncDirectory(target.parentFile)
         } catch (e: Exception) {
             temp.delete()
             throw if (e is IOException) e else IOException("Couldn't save the pending import", e)
@@ -92,6 +116,7 @@ class ImportJournal(private val file: File, private val sealer: Sealer) {
     fun clear() {
         if (file.exists() && !file.delete()) throw IOException("Couldn't remove the pending import")
         File(file.parentFile, "${file.name}.part").delete()
+        markFile().delete()
     }
 
     private fun syncDirectory(dir: File?) {

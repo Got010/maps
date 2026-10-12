@@ -24,11 +24,14 @@ import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.UnrecognizedPackException
 import app.southbound.core.packs.UpdatePlan
 import app.southbound.core.packs.VoiceSelection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.security.MessageDigest
 
 /**
@@ -62,8 +65,21 @@ class Updater(context: Context) {
      * Runs one round and returns how it ended (also published to [UpdateStatus]).
      * [beforeDownload] runs once there's something to fetch, so a worker can go
      * to the foreground first.
+     *
+     * One round at a time in the process: "Check now" and the daily job are separate works, and two rounds at once
+     * would write the same download files and each start a tile generation. A round asked for while one runs leaves
+     * it to finish and returns where that one is.
      */
-    suspend fun run(beforeDownload: suspend (UpdatePlan) -> Unit = {}): UpdateState = withContext(Dispatchers.IO) {
+    suspend fun run(beforeDownload: suspend (UpdatePlan) -> Unit = {}): UpdateState {
+        if (!ROUND.tryLock()) return UpdateStatus.state.value
+        try {
+            return round(beforeDownload)
+        } finally {
+            ROUND.unlock()
+        }
+    }
+
+    private suspend fun round(beforeDownload: suspend (UpdatePlan) -> Unit): UpdateState = withContext(Dispatchers.IO) {
         val packsOn = gate.isAllowed(NetworkFeature.PACK_DOWNLOADS)
         val appOn = gate.isAllowed(NetworkFeature.APP_UPDATES)
         if (!packsOn && !appOn) return@withContext publish(UpdateState.Idle)
@@ -92,9 +108,11 @@ class Updater(context: Context) {
                 // A voice pack only for the voice picked in Settings > Voice.
                 voices = voices.voices.value,
             )
-            // v2 routing packs go into the tile folder together; see the class comment.
+            // v2 routing packs go into the tile folder together; see the class comment. A v2 release always lists some
+            // (routing-main.tar at least): none means a packaging slip, and switching to an empty generation would
+            // delete the phone's offline routing. The tiles stay as they are until a release lists packs again.
             val routing = if (v2) UpdatePlan.wanted(manifest, picked, wantedKinds).filter { it.kind == PackKind.ROUTING } else emptyList()
-            val routingChanged = v2 && packsOn && routing.associate { it.file.name to it.file.sha256 } != tiles.installed()
+            val routingChanged = v2 && packsOn && routing.isNotEmpty() && routing.associate { it.file.name to it.file.sha256 } != tiles.installed()
             val others = plan.packs.filterNot { v2 && it.kind == PackKind.ROUTING }
             if (others.isEmpty() && plan.app == null && !routingChanged) {
                 if (v2 && packsOn) dropUnwanted(manifest, picked)
@@ -113,8 +131,13 @@ class Updater(context: Context) {
                 // Routing first, its generation in before any map: a region's map arriving means its directions
                 // work too, so a route preview waiting on a trip region can route as soon as the map is there.
                 val downloads = UpdatePlan(routingDownloads + others, plan.app)
+                // What an earlier, stopped round fetched of these packs is carried on; any other leftover goes.
+                val downloadDir = packStore.downloadDir.apply { mkdirs() }
+                val parts = downloads.packs.map { partName(it) }.toSet()
+                downloadDir.listFiles()?.filter { it.name !in parts }?.forEach { it.deleteRecursively() }
+                val fetched = downloadDir.listFiles()?.sumOf { it.length() } ?: 0L
                 // A routing pack is unpacked beside its download, then the download goes.
-                requireSpace(downloads.bytes + (routingDownloads.maxOfOrNull { it.file.size } ?: 0L))
+                requireSpace(downloads.bytes - fetched + (routingDownloads.maxOfOrNull { it.file.size } ?: 0L))
                 beforeDownload(downloads)
 
                 fun commitRouting() {
@@ -123,7 +146,8 @@ class Updater(context: Context) {
                     val replaced = tiles.current()
                     g.commit()
                     committed = true
-                    // A trip may still read the generation just replaced; anything older goes.
+                    // A trip may still read the generation just replaced, or an older one it opened on
+                    // (TileFolder.reading); anything else goes.
                     tiles.prune(inUse = replaced)
                     PackEvents.emit(ImportedPack(PackKind.ROUTING, TILES_REGION, g.dir))
                 }
@@ -133,11 +157,20 @@ class Updater(context: Context) {
                 for (pack in downloads.packs) {
                     if (pack !in routingDownloads) commitRouting()
                     val asset = release.asset(pack.file.name) ?: throw IOException("The release is missing ${pack.file.name}")
-                    val part = File(packStore.downloadDir.apply { mkdirs() }, "${pack.file.name}.part")
+                    val part = File(downloadDir, partName(pack))
+                    // Android stops a background job after about ten minutes, and a connection can drop: what came by
+                    // then stays for the next round to carry on from. Anything else wrong with it, it starts over.
+                    var keepPart = false
                     try {
-                        val sha = client.download(NetworkFeature.PACK_DOWNLOADS, asset, part, onProgress = { done ->
-                            progress(pack.file.name, done, pack.file.size, overall + done, downloads.bytes)
-                        }, cancelled = { !isActive })
+                        val sha = try {
+                            client.download(NetworkFeature.PACK_DOWNLOADS, asset, part, onProgress = { done ->
+                                progress(pack.file.name, done, pack.file.size, overall + done, downloads.bytes)
+                            }, cancelled = { !isActive }, resume = true)
+                        } catch (e: IOException) {
+                            keepPart = !isActive || e is InterruptedIOException || e is GitHubReleases.IncompleteException ||
+                                e is java.net.SocketException || e is java.net.UnknownHostException
+                            throw e
+                        }
                         if (sha != pack.file.sha256) throw IOException("${pack.file.name} doesn't match its published checksum")
                         val g = generation
                         if (g != null && pack.kind == PackKind.ROUTING) {
@@ -148,7 +181,7 @@ class Updater(context: Context) {
                             if (!v2) packStore.deleteOtherRegions(pack.kind, pack.region)
                         }
                     } finally {
-                        part.delete()
+                        if (!keepPart) part.delete()
                     }
                     overall += pack.file.size
                     installedNames += pack.file.name
@@ -187,10 +220,17 @@ class Updater(context: Context) {
         } catch (e: UnrecognizedPackException) {
             publish(UpdateState.Failed(e.message ?: "A download wasn't a Southbound pack."))
         } catch (e: IOException) {
-            // Stopped (the job was cancelled): the next round starts over.
+            // Stopped (the job was cancelled): the next round carries on.
             if (!isActive) return@withContext publish(UpdateState.Idle)
             val offline = e is java.net.UnknownHostException || e is java.net.SocketException || e is java.net.SocketTimeoutException
-            publish(UpdateState.Failed(e.message?.takeIf { it.isNotBlank() && !offline } ?: UpdateErrors.NO_CONNECTION))
+            // Worth another try soon: the connection, not the release or the phone (space, a wrong file).
+            val retry = offline || e is InterruptedIOException || e is GitHubReleases.IncompleteException
+            publish(UpdateState.Failed(e.message?.takeIf { it.isNotBlank() && !offline } ?: UpdateErrors.NO_CONNECTION, retry = retry))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything else (a malformed pack's header, the installer refusing): say so rather than stay "Downloading".
+            publish(UpdateState.Failed("The update stopped: ${e.message ?: e::class.simpleName}"))
         } finally {
             UpdateNotifications.cancelProgress(app)
         }
@@ -289,7 +329,13 @@ class Updater(context: Context) {
 
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256").digest(this).joinToString("") { "%02x".format(it) }
 
+    /** A pack's download file, named for its checksum: a part of another build's pack is never carried on. */
+    private fun partName(pack: ReleasePack) = "${pack.file.name}.${pack.file.sha256.take(16)}.part"
+
     private companion object {
+        /** Held while a round runs; see [run]. */
+        val ROUND = Mutex()
+
         /** The region an installed tile folder is announced under (PackEvents). */
         const val TILES_REGION = "tiles"
         const val MB = 1L shl 20

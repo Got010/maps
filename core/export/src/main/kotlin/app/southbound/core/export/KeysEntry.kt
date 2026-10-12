@@ -11,6 +11,9 @@ import app.southbound.core.network.MiniJson
 internal object KeysEntry {
     const val MAX_VALUE = 1_024
 
+    /** The schema each key arrived in, when after 1 (docs/EXPORT.md). */
+    private val SINCE = mapOf(ApiKey.OHGO to 6L)
+
     fun encode(keys: Map<ApiKey, String>): ByteArray {
         check(keys)
         val ordered = LinkedHashMap<String, Any?>()
@@ -18,11 +21,13 @@ internal object KeysEntry {
         return MiniJson.stringify(ordered).toByteArray(Charsets.UTF_8)
     }
 
-    fun decode(bytes: ByteArray): Map<ApiKey, String> {
+    /** The keys of a bundle of [schema]: only the names that schema has (an OHGO key in a schema 5 bundle is refused). */
+    fun decode(bytes: ByteArray, schema: Long): Map<ApiKey, String> {
         val raw = Obj.open(parseJson(bytes, "api-keys.json"), "api-keys.json")
         val out = LinkedHashMap<ApiKey, String>()
         for ((name, value) in raw) {
-            val key = ApiKey.entries.firstOrNull { it.name == name } ?: invalid("an API key name schema 1 does not have")
+            val key = ApiKey.entries.firstOrNull { it.name == name && (SINCE[it] ?: 1L) <= schema }
+                ?: invalid("an API key name schema $schema does not have")
             out[key] = value as? String ?: invalid("an API key value is not text")
         }
         check(out)

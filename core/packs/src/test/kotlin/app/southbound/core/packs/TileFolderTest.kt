@@ -117,6 +117,41 @@ class TileFolderTest {
     }
 
     @Test
+    fun `the generation a trip's router reads survives every round's prune`() {
+        val files = tmp.newFolder()
+        val updater = TileFolder(files)
+        val first = updater.begin().apply { unpack("routing-main.tar", "a".repeat(64), sample); commit() }
+        // The map opened its router on the first generation; a trip is on.
+        TileFolder(files).reading(first.dir)
+        // Two rounds during the trip: each prunes keeping only the generation it replaced.
+        val second = updater.begin().apply { unpack("routing-main.tar", "b".repeat(64), sample); commit() }
+        updater.prune(inUse = first.dir)
+        val third = updater.begin().apply { unpack("routing-main.tar", "c".repeat(64), sample); commit() }
+        updater.prune(inUse = second.dir)
+        assertTrue(File(first.dir, "0/002/906.gph").isFile)
+        // The trip over, the router reopens on the current one, and the old ones can go.
+        TileFolder(files).reading(third.dir)
+        updater.prune()
+        assertFalse(first.dir.exists())
+        assertFalse(second.dir.exists())
+        assertTrue(third.dir.isDirectory)
+        TileFolder(files).reading(null)
+    }
+
+    @Test
+    fun `a pack half linked then unpacked never writes into the current generation`() {
+        val folder = TileFolder(tmp.newFolder())
+        val first = folder.begin().apply { unpack("routing-main.tar", "a".repeat(64), sample); commit() }
+        // One of the pack's two tiles has gone from the current generation: keep() links the other, then gives up.
+        File(first.dir, "2/000/756/425.gph").delete()
+        val second = folder.begin()
+        assertFalse(second.keep("routing-main.tar", "a".repeat(64)))
+        second.unpack("routing-main.tar", "b".repeat(64), tar("0/002/906.gph", "a newer level zero tile".toByteArray()))
+        assertEquals("level zero tile", File(first.dir, "0/002/906.gph").readText())
+        assertEquals("a newer level zero tile", File(second.dir, "0/002/906.gph").readText())
+    }
+
+    @Test
     fun `a generation missing tiles is never switched in`() {
         val folder = TileFolder(tmp.newFolder())
         val first = folder.begin().apply { unpack("routing-main.tar", "a".repeat(64), sample); commit() }

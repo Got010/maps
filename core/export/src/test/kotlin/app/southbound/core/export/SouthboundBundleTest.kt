@@ -287,6 +287,22 @@ class SouthboundBundleTest {
         assertEquals(Samples.data().userData, data.userData)
     }
 
+    @Test
+    fun `a key newer than the bundle's schema is refused`() {
+        val bytes = "{\"OHGO\":\"ohgo-key\"}".toByteArray()
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { KeysEntry.decode(bytes, 5) })
+        assertEquals(mapOf(ApiKey.OHGO to "ohgo-key"), KeysEntry.decode(bytes, 6))
+        assertEquals(mapOf(ApiKey.EIA to "eia-key"), KeysEntry.decode("{\"EIA\":\"eia-key\"}".toByteArray(), 1))
+    }
+
+    @Test
+    fun `a file whose header and manifest name different schemas is refused`() {
+        // A schema 7 manifest in a file whose header says 6: the dialog would show one schema and the body be read as another.
+        val seven = SouthboundBundle.encode(Samples.data(), "0.1.43")
+        val bytes = raw(*seven.map { it.key to it.value }.toTypedArray(), schema = 6)
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { read(bytes) })
+    }
+
     /** The toggles newer than a schema 3 bundle, plus [also], all off. */
     private fun newerOff(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> =
         (listOf(NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT,

@@ -37,6 +37,48 @@ class GitHubReleasesTest {
     }
 
     @Test
+    fun aStoppedDownloadCarriesOnWithTheWholeFilesChecksum() {
+        val bytes = ByteArray(300_000) { (it * 31 % 251).toByte() }
+        val asset = ReleaseAsset(7, "search-hudson.sqlite", bytes.size.toLong())
+        val whole = sha256(bytes)
+        val target = File.createTempFile("southbound", ".part")
+        // The first run stopped after 100 000 bytes; the next one gets the rest (an HTTP range).
+        target.writeBytes(bytes.copyOfRange(0, 100_000))
+        val progress = mutableListOf<Long>()
+        val sha = GitHubReleases.receive(bytes.copyOfRange(100_000, bytes.size).inputStream(), target, 100_000, asset, { progress += it })
+        assertEquals(whole, sha)
+        assertTrue(bytes.contentEquals(target.readBytes()))
+        assertEquals(bytes.size.toLong(), progress.last())
+        assertTrue(progress.first() > 100_000)
+    }
+
+    @Test
+    fun aFreshDownloadReplacesWhatWasThere() {
+        val bytes = ByteArray(1_000) { it.toByte() }
+        val asset = ReleaseAsset(7, "transit-nyc.sqlite", bytes.size.toLong())
+        val target = File.createTempFile("southbound", ".part")
+        target.writeBytes(ByteArray(5_000) { 9 })
+        val sha = GitHubReleases.receive(bytes.inputStream(), target, 0, asset)
+        assertEquals(sha256(bytes), sha)
+        assertTrue(bytes.contentEquals(target.readBytes()))
+    }
+
+    @Test
+    fun theSizeStillHasToMatchTheRelease() {
+        val asset = ReleaseAsset(7, "routing-main.tar", 10)
+        val target = File.createTempFile("southbound", ".part")
+        target.writeBytes(ByteArray(4))
+        val longer = runCatching { GitHubReleases.receive(ByteArray(7).inputStream(), target, 4, asset) }.exceptionOrNull()
+        assertTrue("$longer", longer?.message?.contains("larger") == true)
+        target.writeBytes(ByteArray(4))
+        val shorter = runCatching { GitHubReleases.receive(ByteArray(3).inputStream(), target, 4, asset) }.exceptionOrNull()
+        assertTrue("$shorter", shorter?.message?.contains("stopped after 7 of 10") == true)
+    }
+
+    private fun sha256(bytes: ByteArray) =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    @Test
     fun turnedOffMeansNoRequest() {
         val toggles = InMemoryNetworkToggles(mapOf(NetworkFeature.PACK_DOWNLOADS to false))
         val client = GitHubReleases(NetworkGate(toggles), { "token" })

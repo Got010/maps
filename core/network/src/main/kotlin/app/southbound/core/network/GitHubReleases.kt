@@ -34,6 +34,9 @@ class GitHubReleases(
 ) {
     class HttpException(val code: Int) : IOException("GitHub answered HTTP $code")
 
+    /** The connection ended before the whole file came: what did come is right, and a resumed download goes on from it. */
+    class IncompleteException(message: String) : IOException(message)
+
     /** The newest full release (GitHub skips drafts and pre-releases here). */
     fun latest(feature: NetworkFeature): GitHubRelease = gate.request(feature) {
         val conn = open("https://$API_HOST/repos/$owner/$repo/releases/latest", "application/vnd.github+json")
@@ -80,8 +83,12 @@ class GitHubReleases(
     }
 
     /**
-     * Streams [asset] into [target] and returns its SHA-256 (lower-case hex).
+     * Streams [asset] into [target] and returns its SHA-256 (lower-case hex) of the whole file.
      * The size must match the release's. [cancelled] is polled between reads.
+     *
+     * With [resume], a shorter [target] left by an earlier, stopped download is carried on from where it ended (an
+     * HTTP range request) rather than fetched again: a job stopped by Android's time limit gets further each run.
+     * The caller makes sure [target] can only hold this asset's bytes (its name carries the expected checksum).
      */
     fun download(
         feature: NetworkFeature,
@@ -89,29 +96,22 @@ class GitHubReleases(
         target: File,
         onProgress: (done: Long) -> Unit = {},
         cancelled: () -> Boolean = { false },
+        resume: Boolean = false,
     ): String = gate.request(feature) {
-        val conn = open(assetUrl(asset), "application/octet-stream")
+        val have = if (resume && target.isFile) target.length().takeIf { asset.size > 0 && it in 1 until asset.size } ?: 0L else 0L
+        val conn = open(assetUrl(asset), "application/octet-stream", rangeFrom = have.takeIf { it > 0 })
         try {
-            if (conn.responseCode != HttpURLConnection.HTTP_OK) throw HttpException(conn.responseCode)
-            val digest = MessageDigest.getInstance("SHA-256")
-            var done = 0L
-            conn.inputStream.use { input ->
-                target.outputStream().use { out ->
-                    val buffer = ByteArray(BUFFER_BYTES)
-                    while (true) {
-                        if (cancelled()) throw InterruptedIOException("Cancelled")
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        done += n
-                        if (asset.size in 1 until done) throw IOException("${asset.name} is larger than the release says")
-                        digest.update(buffer, 0, n)
-                        out.write(buffer, 0, n)
-                        onProgress(done)
-                    }
+            val from = when (conn.responseCode) {
+                HttpURLConnection.HTTP_OK -> 0L
+                // Only the range asked for: anything else would splice two different files.
+                HTTP_PARTIAL -> if (conn.getHeaderField("Content-Range")?.startsWith("bytes $have-") == true) {
+                    have
+                } else {
+                    throw IOException("GitHub sent the wrong part of ${asset.name}")
                 }
+                else -> throw HttpException(conn.responseCode)
             }
-            if (asset.size > 0 && done != asset.size) throw IOException("${asset.name} stopped after $done of ${asset.size} bytes")
-            digest.digest().joinToString("") { "%02x".format(it) }
+            conn.inputStream.use { input -> receive(input, target, from, asset, onProgress, cancelled) }
         } finally {
             conn.disconnect()
         }
@@ -119,7 +119,7 @@ class GitHubReleases(
 
     private fun assetUrl(asset: ReleaseAsset) = "https://$API_HOST/repos/$owner/$repo/releases/assets/${asset.id}"
 
-    private fun open(start: String, accept: String): HttpURLConnection {
+    private fun open(start: String, accept: String, rangeFrom: Long? = null): HttpURLConnection {
         var url = URL(start)
         repeat(MAX_REDIRECTS + 1) {
             if (!isAllowed(url.protocol, url.host)) throw IOException("Refused to connect to ${url.host}: not GitHub over HTTPS")
@@ -130,6 +130,7 @@ class GitHubReleases(
                 useCaches = false
                 setRequestProperty("Accept", accept)
                 setRequestProperty("User-Agent", NetworkGate.USER_AGENT)
+                if (rangeFrom != null) setRequestProperty("Range", "bytes=$rangeFrom-")
                 if (url.host.equals(API_HOST, ignoreCase = true)) {
                     setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
                     token()?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
@@ -155,6 +156,7 @@ class GitHubReleases(
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 60_000
         private const val BUFFER_BYTES = 64 * 1024
+        private const val HTTP_PARTIAL = 206
         const val MAX_JSON_BYTES = 4 * 1024 * 1024
 
         /** Hosts a request may reach, including GitHub's download redirects. HTTPS only, checked on every hop. */
@@ -175,6 +177,50 @@ class GitHubReleases(
                 ReleaseAsset(id, name, (m["size"] as? Number)?.toLong() ?: -1L)
             }
             return GitHubRelease(tag, assets)
+        }
+
+        /**
+         * Writes [input] into [target] after its first [from] bytes (0: a fresh file) and returns the SHA-256 of the
+         * whole file: the bytes already there are read back into the digest first. [done] counts from [from].
+         */
+        internal fun receive(
+            input: InputStream,
+            target: File,
+            from: Long,
+            asset: ReleaseAsset,
+            onProgress: (done: Long) -> Unit = {},
+            cancelled: () -> Boolean = { false },
+        ): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(BUFFER_BYTES)
+            if (from > 0) {
+                target.inputStream().use { kept ->
+                    var left = from
+                    while (left > 0) {
+                        val n = kept.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                        if (n < 0) throw IOException("${target.name} is shorter than it was")
+                        digest.update(buffer, 0, n)
+                        left -= n
+                    }
+                }
+            }
+            var done = from
+            java.io.RandomAccessFile(target, "rw").use { file ->
+                file.setLength(from)
+                file.seek(from)
+                while (true) {
+                    if (cancelled()) throw InterruptedIOException("Cancelled")
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    done += n
+                    if (asset.size in 1 until done) throw IOException("${asset.name} is larger than the release says")
+                    digest.update(buffer, 0, n)
+                    file.write(buffer, 0, n)
+                    onProgress(done)
+                }
+            }
+            if (asset.size > 0 && done != asset.size) throw IncompleteException("${asset.name} stopped after $done of ${asset.size} bytes")
+            return digest.digest().joinToString("") { "%02x".format(it) }
         }
 
         private fun readCapped(input: InputStream, max: Int): String = readBytesCapped(input, max).toString(Charsets.UTF_8)

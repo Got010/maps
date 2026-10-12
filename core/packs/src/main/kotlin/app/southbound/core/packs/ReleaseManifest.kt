@@ -78,6 +78,10 @@ data class ReleaseManifest(
                 val kind = PackKind.entries.firstOrNull { it.prefix == p["kind"] } ?: return@mapNotNull null
                 val region = p["region"] as? String
                 if (region == null || !REGION.matches(region)) throw ManifestException("bad region '$region'")
+                // Only a v2 routing pack (unpacked into the tile folder) may name several regions. Any other pack is
+                // stored as <kind>-<region>, which PackStore reads back with a one-word region: one with a hyphen
+                // would never be found installed and would download again every round. Skipped, as an unknown kind.
+                if (!(kind == PackKind.ROUTING && expectedSchema == SCHEMA_V2) && !REGION_ID.matches(region)) return@mapNotNull null
                 val f = file(p)
                 // The name decides where the file lands, so it must be exactly the expected one.
                 if (f.name != kind.fileName(region)) throw ManifestException("unexpected pack name ${f.name}")
