@@ -58,6 +58,9 @@ MAIN_PACK = "main"
 MAIN_GROUP = "east"
 PACKS_JSON = "routing-packs.json"
 SAMPLES = 9
+# How far inside a tile's edges its outermost samples sit, in degrees: about 1 mm, so a box ending on the edge
+# doesn't count while anything reaching past it does.
+EDGE_INSET = 1e-8
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REGIONS_JSON = os.path.join(HERE, "..", "regions.json")
@@ -172,8 +175,14 @@ def regions_in_groups(regions, groups):
 
 
 def regions_for_tile(regions, level, tile_id):
-    """The regions a tile covers, in regions.json's order ([] for none)."""
+    """The regions a tile covers, in regions.json's order ([] for none).
+
+    The samples run from just inside one edge to just inside the other: a region whose box ends exactly on the
+    tile's edge (Hudson and Western meet at 75.5 W, on the tile grid) doesn't cover the tile beyond it, which
+    put that tile in a shared pack and a column of Hudson in every Western phone's download.
+    """
     minlon, minlat, maxlon, maxlat = tile_bounds(level, tile_id)
+    minlon, minlat, maxlon, maxlat = minlon + EDGE_INSET, minlat + EDGE_INSET, maxlon - EDGE_INSET, maxlat - EDGE_INSET
     found = []
     for i in range(SAMPLES):
         lat = minlat + (maxlat - minlat) * i / (SAMPLES - 1)

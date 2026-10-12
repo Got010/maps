@@ -34,6 +34,9 @@ import urllib.request
 CATEGORY = "dot_camera"
 
 ATTRIBUTION = "Traffic camera locations: the states' 511 services"
+# Fewer cameras than this in one state's list is worth a warning in the build log: each state that publishes one
+# lists hundreds or thousands.
+MIN_CAMERAS = 10
 
 UA = "Southbound data build (+https://github.com/StrongHorse44/maps)"
 
@@ -247,6 +250,9 @@ def fetch_region(region, regions, out_path, fetchers=None):
             continue
         counts[state] = len(rows)
         print(f"    {state}: {len(rows)} cameras", file=sys.stderr)
+        # A list that answers with next to nothing has most likely changed shape under the reader.
+        if len(rows) < MIN_CAMERAS:
+            print(f"::warning::{state} DOT cameras: only {len(rows)} in its list (has the feed changed?)", file=sys.stderr)
         for name, lat, lon in rows:
             features.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]},
                              "properties": {"name": name, "state": state}})

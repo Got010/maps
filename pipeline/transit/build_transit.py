@@ -423,7 +423,8 @@ class Compiler:
                 if seconds is not None:
                     self.station_changes[source["id"]] = seconds
             else:
-                self.gtfs_transfers.append((source["id"], target["id"], seconds or 0))
+                # None: the feed allows the transfer without saying how long it takes (write() walks it).
+                self.gtfs_transfers.append((source["id"], target["id"], seconds))
 
     # ------------------------------------------------------------ output
 
@@ -450,14 +451,21 @@ class Compiler:
         return result
 
     def walking_transfers(self, stops):
-        """Links between stops within WALK_RADIUS_M, using a grid to find neighbours."""
-        cell = WALK_RADIUS_M / 111_000
+        """Links between stops within WALK_RADIUS_M, using a grid to find neighbours.
+
+        A cell is WALK_RADIUS_M on each side: a degree of longitude is shorter than one of latitude away from the
+        equator (about 84 km at 40.7 N), so its cells are wider in degrees, sized for the stop farthest from the
+        equator so no pair within the radius is ever two cells apart.
+        """
+        cell_lat = WALK_RADIUS_M / 111_000
+        far = max((abs(s["lat"]) for s in stops), default=0.0)
+        cell_lon = WALK_RADIUS_M / (111_000 * max(math.cos(math.radians(far)), 0.01))
         grid = defaultdict(list)
         for s in stops:
-            grid[(int(s["lat"] / cell), int(s["lon"] / cell))].append(s)
+            grid[(int(s["lat"] / cell_lat), int(s["lon"] / cell_lon))].append(s)
         links = {}
         for s in stops:
-            cy, cx = int(s["lat"] / cell), int(s["lon"] / cell)
+            cy, cx = int(s["lat"] / cell_lat), int(s["lon"] / cell_lon)
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     for t in grid.get((cy + dy, cx + dx), ()):
@@ -535,9 +543,22 @@ class Compiler:
             db.executemany("INSERT INTO trip VALUES (?,?,?,?,?,?,?,?)", rows)
 
         links = self.walking_transfers(stops)
+        by_id = {s["id"]: s for s in stops}
+
+        def transfer_seconds(source, target, seconds):
+            """The feed's time, else the walk the grid found, else the walk between the two (never 0 seconds)."""
+            if seconds is not None:
+                return seconds
+            if (source, target) in links:
+                return links[(source, target)]
+            a, b = by_id.get(source), by_id.get(target)
+            if a is None or b is None:
+                return DEFAULT_STATION_CHANGE_SECONDS
+            return walk_seconds(distance_m(a["lat"], a["lon"], b["lat"], b["lon"]))
+
         for source, target, seconds in self.gtfs_transfers:
             if source in used and target in used:
-                links[(source, target)] = seconds
+                links[(source, target)] = transfer_seconds(source, target, seconds)
         # GTFS transfers between stations apply to their platforms too.
         children = defaultdict(list)
         for s in stops:
@@ -546,7 +567,7 @@ class Compiler:
         for source, target, seconds in self.gtfs_transfers:
             for a in children.get(source, ()):
                 for b in children.get(target, ()):
-                    links[(a, b)] = seconds
+                    links[(a, b)] = transfer_seconds(a, b, seconds)
         db.executemany("INSERT INTO transfer VALUES (?,?,?)",
                        [(a, b, s) for (a, b), s in links.items()])
 

@@ -45,7 +45,10 @@ def sha256(path):
 
 
 def version_code(version):
+    """1.2.3 -> 10203. Each part 0 to 99: 0.1.100 would make 200, the code of 0.2.0."""
     major, minor, patch = (int(p) for p in version.split("."))
+    if not all(0 <= part <= 99 for part in (major, minor, patch)):
+        raise SystemExit(f"Version {version}: each part must be 0 to 99")
     return major * 10_000 + minor * 100 + patch
 
 
@@ -65,9 +68,15 @@ def manifest(directory, version, only=None, v2=False, regions_json=None):
     names = sorted(os.listdir(directory))
     apk = f"southbound-{version}.apk"
     routing = {}
-    if v2 and ROUTING_PACKS in names:
+    if v2:
+        # Every v2 release routes from tiles: no routing-packs.json, or one listing nothing, is a packaging slip, and
+        # a manifest without routing packs would make the phones drop their offline routing.
+        if ROUTING_PACKS not in names:
+            raise SystemExit(f"{ROUTING_PACKS} is missing: southbound-v2.json would list no routing packs")
         with open(os.path.join(directory, ROUTING_PACKS)) as f:
             routing = json.load(f)
+        if not routing:
+            raise SystemExit(f"{ROUTING_PACKS} lists no routing packs")
     searches = search_regions(regions_json) if v2 else {}
     packs = []
     for name in names:
