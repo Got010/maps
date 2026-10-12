@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 
 class TileFolderTest {
     @get:Rule
@@ -88,6 +89,48 @@ class TileFolderTest {
         second.abandon()
         assertEquals(first.dir, folder.current())
         assertNotEquals(first.dir, second.dir)
+    }
+
+    @Test
+    fun `a generation being filled survives a prune from anywhere`() {
+        val files = tmp.newFolder()
+        val updater = TileFolder(files)
+        val first = updater.begin().apply { unpack("routing-main.tar", "a".repeat(64), sample); commit() }
+        val second = updater.begin()
+        assertTrue(second.keep("routing-main.tar", "a".repeat(64)))
+        // Mid-round, the map opens a router: its own TileFolder prunes what no router reads. That used to take
+        // the unfinished generation, and the commit then switched in one without the main roads.
+        TileFolder(files).prune(inUse = first.dir)
+        assertTrue(File(second.dir, "0/002/906.gph").isFile)
+        second.unpack("routing-ct.tar", "b".repeat(64), tar("2/000/700/001.gph", "ct".toByteArray()))
+        second.commit()
+        assertEquals(second.dir, updater.current())
+        assertEquals(setOf("routing-main.tar", "routing-ct.tar"), updater.installed().keys)
+
+        // Once in, pruning works as before; so does an abandoned round's, and one a killed process left behind.
+        updater.begin().abandon()
+        val leftover = File(updater.root, "g1").apply { mkdirs() }
+        TileFolder(files).prune()
+        assertFalse(first.dir.exists())
+        assertFalse(leftover.exists())
+        assertTrue(second.dir.isDirectory)
+    }
+
+    @Test
+    fun `a generation missing tiles is never switched in`() {
+        val folder = TileFolder(tmp.newFolder())
+        val first = folder.begin().apply { unpack("routing-main.tar", "a".repeat(64), sample); commit() }
+        val second = folder.begin()
+        second.unpack("routing-ct.tar", "b".repeat(64), tar("2/000/700/001.gph", "ct".toByteArray()))
+        File(second.dir, "2/000/700/001.gph").delete()
+        try {
+            second.commit()
+            fail("switched in a generation missing a tile")
+        } catch (e: IOException) {
+            // expected: the round fails and the next one tries again
+        }
+        assertEquals(first.dir, folder.current())
+        second.abandon()
     }
 
     @Test

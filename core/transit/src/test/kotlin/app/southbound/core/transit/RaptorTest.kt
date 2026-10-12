@@ -56,6 +56,17 @@ class RaptorTest {
         assertTrue(search(network(), hm(9, 0)).isEmpty())
     }
 
+    @Test
+    fun `a stop near both ends is never a journey without a ride`() {
+        // The destination is a minute's walk from stop 1, where the trip starts: walking through the stop is no
+        // transit trip (the planner offers the walk itself), and counting it as one cut every ride short.
+        val net = network()
+        val tt = Timetable.build(net.build(), mapOf(0 to net.trips))
+        val results = Raptor(tt).search(listOf(StopAccess(1, 0)), listOf(StopAccess(1, 60), StopAccess(4, 0)), hm(7, 55))
+        assertTrue(results.all { it.rides > 0 })
+        assertEquals(listOf(1 to hm(8, 50), 2 to hm(8, 30)), results.map { it.rides to it.arrival })
+    }
+
     private fun planner(net: TestNetwork) = TransitPlanner(net.build(), net.source())
 
     private val tuesday = LocalDate.of(2026, 9, 8)
@@ -136,6 +147,17 @@ class RaptorTest {
         val journeys = planner(net).plan(s1.lat, s1.lon, s2.lat, s2.lon, tuesday, hm(0, 20))
         assertEquals(hm(0, 30), journeys.single().depart)
         assertEquals(hm(0, 50), journeys.single().arrive)
+    }
+
+    @Test
+    fun `a short trip whose ends share a stop still plans`() {
+        // Both ends within 800 m of stop 1 (true of most trips under 1.6 km): this threw before, and the app
+        // showed no trips at all.
+        val net = network()
+        val s1 = net.build().stop(1)!!
+        val journeys = planner(net).plan(s1.lat, s1.lon, s1.lat + 0.005, s1.lon, tuesday, hm(7, 55))
+        assertTrue(journeys.any { it.rides.isEmpty() && it.legs.single() is JourneyLeg.Walk })
+        assertTrue(journeys.all { it.legs.isNotEmpty() })
     }
 
     @Test

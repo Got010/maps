@@ -39,9 +39,15 @@ object PoliceAlerts {
      * Any of [incidents] on [route] (what is left of it, starting at the driver) within its own
      * [withinMeters] of the driver, with its distance along, nearest first. An incident whose
      * direction ("Northbound") runs against the route there is left out. Used for police and, by
-     * [IncidentAlerts], for crashes and lane closures.
+     * [IncidentAlerts], for crashes and lane closures, and by [ClosureAvoidance] for closures. An incident
+     * further than [routeMeters] from the line is not on it.
      */
-    fun onRoute(route: List<GeoPoint>, incidents: List<Incident>, withinMeters: (Incident) -> Double): List<Pair<Incident, Double>> {
+    fun onRoute(
+        route: List<GeoPoint>,
+        incidents: List<Incident>,
+        routeMeters: Double = ROUTE_METERS,
+        withinMeters: (Incident) -> Double,
+    ): List<Pair<Incident, Double>> {
         if (route.size < 2 || incidents.isEmpty()) return emptyList()
         val cumulative = DoubleArray(route.size)
         for (i in 1 until route.size) cumulative[i] = cumulative[i - 1] + Geo.distanceMeters(route[i - 1], route[i])
@@ -65,7 +71,7 @@ object PoliceAlerts {
                     heading = bearing(dx, dy)
                 }
             }
-            if (bestDistance > ROUTE_METERS || along > withinMeters(incident)) return@mapNotNull null
+            if (bestDistance > routeMeters || along > withinMeters(incident)) return@mapNotNull null
             val bound = boundHeading(incident.direction)
             if (bound != null && angleBetween(bound, heading) > OPPOSITE_DEGREES) return@mapNotNull null
             incident to along

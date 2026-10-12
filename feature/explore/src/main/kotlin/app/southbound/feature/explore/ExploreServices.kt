@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import uniffi.ferrostar.TripState
 import java.io.File
 
 /**
@@ -177,12 +178,16 @@ class ExploreServices private constructor(context: Context) {
 
     /**
      * The navigator for the routing tiles, else the installed one-graph pack. A newer one takes over only
-     * between trips, never mid-navigation; the tiles it replaces are deleted then.
+     * between trips, never mid-navigation; the tiles it replaces are deleted then. Whether a trip is on is read
+     * from the open navigator itself: a map screen rebuilt mid-trip (a region's map arrived, maybe with new
+     * tiles) has no navigator of its own yet, and must get the trip's back, not a fresh idle one beside it while
+     * the trip goes on speaking with its router closed.
      */
     @Synchronized
-    fun openNavigator(navigating: Boolean = false): Navigator? {
+    fun openNavigator(): Navigator? {
         val file = routingSource() ?: return routing?.value?.second
         val current = routing
+        val navigating = current?.value?.second?.state?.value?.tripState.let { it != null && it !is TripState.Idle }
         if (current != null && (current.matches(file) || navigating)) return current.value.second
         current?.value?.first?.close()
         routing = null

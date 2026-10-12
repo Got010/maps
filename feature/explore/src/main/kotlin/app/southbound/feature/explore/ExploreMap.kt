@@ -292,10 +292,10 @@ internal fun ExploreMap(
     var hasRouting by remember { mutableStateOf(false) }
     var transitPack by remember { mutableStateOf<TransitPack?>(null) }
     LaunchedEffect(packGeneration, resumes) {
-        val inTrip = navigator?.state?.value?.tripState.let { it != null && it !is TripState.Idle }
         withContext(Dispatchers.IO) {
             searchIndex = services.openSearch()
-            navigator = services.openNavigator(navigating = inTrip)
+            // The trip's navigator while one is on, even to a map screen just rebuilt around new regions.
+            navigator = services.openNavigator()
             hasRouting = services.hasPack(PackKind.ROUTING)
             transitPack = services.openTransit()
         }
@@ -581,7 +581,7 @@ internal fun ExploreMap(
             preview = RoutePreviewState.Failed(RoutePreviewState.Reason.NO_ROUTE)
         } else {
             val delays = slow.map { it.delaySeconds }
-            val shorterIndex = shorter?.takeIf { it in found }?.let { ranked.indexOf(it) }?.takeIf { it >= 0 }
+            val shorterIndex = ShorterRoute.indexIn(ranked, shorter)
             preview = RoutePreviewState.Ready(
                 // The shorter way says which road makes it so ("via Old Temple Hill Road"), not the one it shares.
                 summaries = ranked.mapIndexed { i, route ->
@@ -664,19 +664,25 @@ internal fun ExploreMap(
             delay(TRAFFIC_POLL_MS)
         }
     }
-    // A closure that appears on the route ahead: say so and route around it.
+    // A closure that appears on the route ahead: say so and route around it. Only on what is left of the route and
+    // on our side of the road: a closure behind us, or on the other carriageway of a divided highway, is not ours.
     val closureSpoken = stringResource(R.string.explore_closure_spoken)
     val announcedClosures = remember { mutableSetOf<String>() }
     LaunchedEffect(inTrip) { if (!inTrip) announcedClosures.clear() }
     LaunchedEffect(traffic, inTrip) {
         val nav = navigator ?: return@LaunchedEffect
-        if (!inTrip || traffic.closures.isEmpty()) return@LaunchedEffect
-        val ahead = ClosureAvoidance.onRoute(traffic.closures, navState.routeGeometry.map { GeoPoint(it.lat, it.lng) })
-            .filter { it.id !in announcedClosures }
+        val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
+        if (traffic.closures.isEmpty()) return@LaunchedEffect
+        val here = navigating.snappedUserLocation.coordinates
+        val geometry = navState.routeGeometry
+        val ahead = withContext(Dispatchers.Default) {
+            ClosureAvoidance.ahead(traffic.closures, geometry.map { GeoPoint(it.lat, it.lng) }, GeoPoint(here.lat, here.lng))
+        }.filter { it.id !in announcedClosures }
         if (ahead.isEmpty()) return@LaunchedEffect
         announcedClosures += ahead.map { it.id }
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, closureSpoken.format(ahead.first().title))
-        nav.rerouteAround(ClosureAvoidance.polygons(traffic.closures))
+        // Around the closures just found, keeping the ones the trip already avoids.
+        nav.rerouteAround(ClosureAvoidance.forReroute(ahead, nav.avoid))
     }
 
     // --- Phase 5 (map): re-center timer, route traffic, faster route, arrival ---

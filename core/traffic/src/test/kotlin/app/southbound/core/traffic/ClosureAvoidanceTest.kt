@@ -48,6 +48,42 @@ class ClosureAvoidanceTest {
     }
 
     @Test
+    fun `a closure on the other carriageway is not on the route`() {
+        // Northbound along a meridian; the southbound carriageway about 20 m east, inside the 50 m reach.
+        val route = listOf(GeoPoint(40.70, -74.00), GeoPoint(40.80, -74.00))
+        fun at(id: String, direction: String?) =
+            Incident(id, IncidentKind.CLOSURE, "I-87", direction, "Road closed", GeoPoint(40.75, -73.99976), null, null, null)
+        val found = ClosureAvoidance.onRoute(listOf(at("sb", "Southbound"), at("nb", "Northbound"), at("both", "Both Directions"), at("none", null)), route)
+        assertEquals(setOf("nb", "both", "none"), found.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `only closures on what is left of the route count`() {
+        val route = listOf(GeoPoint(40.70, -74.00), GeoPoint(40.80, -74.00))
+        val behind = closure("behind", 40.72, -74.0)
+        val farther = closure("farther", 40.79, -74.0)
+        val next = closure("next", 40.76, -74.0)
+        // Nearest first along the way, so the alert names the one coming up.
+        assertEquals(listOf("next", "farther"), ClosureAvoidance.ahead(listOf(behind, farther, next), route, GeoPoint(40.75, -74.0)).map { it.id })
+    }
+
+    @Test
+    fun `a reroute goes around the closures ahead and keeps what the trip already avoids`() {
+        val trip = listOf(ClosureAvoidance.square(GeoPoint(40.0, -74.0)))
+        // Driving in Pennsylvania: the closure ahead is sent, not the first 25 the state feeds list.
+        val pa = closure("pa", 41.0, -77.0)
+        assertEquals(listOf(ClosureAvoidance.square(pa.location)) + trip, ClosureAvoidance.forReroute(listOf(pa), trip))
+        // One the trip already avoids isn't sent twice, and a non-closure isn't sent at all.
+        assertEquals(trip, ClosureAvoidance.forReroute(listOf(closure("again", 40.0, -74.0)), trip))
+        assertEquals(trip, ClosureAvoidance.forReroute(listOf(closure("work", 41.0, -77.0, IncidentKind.ROADWORK)), trip))
+        // Never past Valhalla's perimeter budget, the closures ahead first.
+        val many = (0 until 30).map { closure("c$it", 40.0 + it * 0.01, -75.0) }
+        val capped = ClosureAvoidance.forReroute(many, trip)
+        assertEquals(ClosureAvoidance.MAX_POLYGONS, capped.size)
+        assertEquals(ClosureAvoidance.square(many.first().location), capped.first())
+    }
+
+    @Test
     fun `distances are about right`() {
         // Columbus Circle to Grand Army Plaza: roughly 1.1 km.
         val d = Geo.distanceMeters(GeoPoint(40.7681, -73.9819), GeoPoint(40.7644, -73.9735))
