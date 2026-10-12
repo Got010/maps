@@ -64,6 +64,7 @@ object Samples {
         voice = VoiceSettings(),
         regions = setOf("nyc"),
         allowMobileData = false,
+        searchAtBottom = true,
     )
 
     /** Every setting away from its default, with values that are floats in the real stores. */
@@ -85,6 +86,7 @@ object Samples {
         ),
         regions = setOf("nyc", "li", "njn"),
         allowMobileData = true,
+        searchAtBottom = false,
     )
 
     fun data() = BackupData(userData(), keys(), settings())

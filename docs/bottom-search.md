@@ -2,7 +2,8 @@
 
 Owner, October 2026: "I like the idea of the search bar being on the bottom. Work out the UI and UX on
 this." This page is that design: what moves where, how search behaves with the keyboard, and what it
-takes to build. Nothing here is built yet.
+takes to build. Built in October 2026 as designed here, not yet run on a phone; "As built" below says where the
+code differs from the sketches.
 
 Mockups of every screen below, today's top bar beside them: <https://claude.ai/artifact/K9urGdaszF2wW8i5xgVKoc>
 (private to the owner's account).
@@ -148,8 +149,18 @@ no gate baseline change and no data rebuild.
 - `feature/settings` `DrivingSection` and the driving preferences store: the toggle; `core/export`: schema 7
   (see Decisions).
 
-About two days with the setting. It is worth building after the picked screenshot tests, so both
-layouts have a check in CI from the first pull request.
+### As built
+
+- The dock is `ExploreMap`'s `Panel.Browse` branch; its measured height (`dockHeight`) lifts the map's buttons (when
+  the dock spans the width), the Re-center pill, the traffic notes and the map's attribution. From 672 dp wide the
+  dock keeps to the left at 560 dp, with the buttons beside it.
+- `SearchPanel(fieldAtBottom = true)` puts the field under the lists, which run `reverseLayout` so the first result
+  and the latest recent sit nearest it; a drag on either list hides the keyboard; the results list goes back to
+  its start when new results come in.
+- The Search key in both layouts opens the top result only for what is typed now: pressed mid-debounce, it opens
+  the one that comes in next (the review's search finding).
+- The top layout is today's, with the start-point chip and Home and Work under the bar.
+- No screenshot tests yet: the picked screenshot-test item would give both layouts a check in CI.
 
 ## Decisions (owner, 12 October 2026)
 

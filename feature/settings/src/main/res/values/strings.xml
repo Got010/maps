@@ -152,6 +152,8 @@
     <string name="settings_driving">Driving</string>
     <string name="driving_night">Night mode by sunset while navigating</string>
     <string name="driving_night_note">After sunset at your location the map and navigation screen turn dark, even if the phone is in light theme. Worked out on the phone from your GPS fix.</string>
+    <string name="driving_search_bottom">Search bar at the bottom</string>
+    <string name="driving_search_bottom_note">Search, Home, Work and the map\'s banners sit at the bottom of the screen, within your thumb\'s reach. Off puts them at the top.</string>
     <string name="driving_mpg">Fuel economy (mpg)</string>
     <string name="driving_gas_price">Gas price ($ per gallon)</string>
     <string name="driving_fuel_note">Used to estimate what each route costs in gas.</string>

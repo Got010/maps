@@ -19,14 +19,33 @@ class DrivingPrefs private constructor(context: Context) {
         _nightBySunset.value = on
     }
 
-    /** [setNightBySunset] with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
-    fun replaceNightBySunset(on: Boolean) {
-        if (!prefs.edit().putBoolean(KEY_NIGHT, on).commit()) throw java.io.IOException("Couldn't save the driving options")
-        _nightBySunset.value = on
+    private val _searchAtBottom = MutableStateFlow(prefs.getBoolean(KEY_SEARCH_AT_BOTTOM, true))
+
+    /**
+     * The map's search bar, chips and banners at the bottom of the screen, within the thumb's reach; off puts them at
+     * the top, as before October 2026 (docs/bottom-search.md).
+     */
+    val searchAtBottom: StateFlow<Boolean> = _searchAtBottom.asStateFlow()
+
+    fun setSearchAtBottom(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SEARCH_AT_BOTTOM, on).apply()
+        _searchAtBottom.value = on
+    }
+
+    /** Both settings at once, with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replace(nightBySunset: Boolean, searchAtBottom: Boolean) {
+        val saved = prefs.edit()
+            .putBoolean(KEY_NIGHT, nightBySunset)
+            .putBoolean(KEY_SEARCH_AT_BOTTOM, searchAtBottom)
+            .commit()
+        if (!saved) throw java.io.IOException("Couldn't save the driving options")
+        _nightBySunset.value = nightBySunset
+        _searchAtBottom.value = searchAtBottom
     }
 
     companion object {
         private const val KEY_NIGHT = "night_by_sunset"
+        private const val KEY_SEARCH_AT_BOTTOM = "search_at_bottom"
 
         @Volatile
         private var instance: DrivingPrefs? = null
