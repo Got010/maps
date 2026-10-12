@@ -78,43 +78,53 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
         }
     }
 
-    Section(R.string.settings_updates)
-    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(versionLine(context), style = MaterialTheme.typography.bodyMedium)
-        if (!networkPermitted) {
-            Text(UpdateScheduler.NO_NETWORK_PERMISSION, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    SettingsCard(R.string.settings_updates) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(versionLine(context), style = MaterialTheme.typography.bodyMedium)
+            if (!networkPermitted) {
+                Text(UpdateScheduler.NO_NETWORK_PERMISSION, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            UpdateProgress(state)
+            if (queue == UpdateScheduler.Queue.WAITING && state !is UpdateState.Downloading && state != UpdateState.Checking) {
+                Text(stringResource(R.string.updates_waiting), style = MaterialTheme.typography.bodySmall)
+            }
+            JumpTarget(R.string.updates_check_now) {
+                Button(
+                    onClick = { UpdateScheduler.checkNow(context, anyNetwork = true) },
+                    enabled = state !is UpdateState.Downloading && state != UpdateState.Checking,
+                ) { Text(stringResource(R.string.updates_check_now)) }
+            }
         }
-        UpdateProgress(state)
-        if (queue == UpdateScheduler.Queue.WAITING && state !is UpdateState.Downloading && state != UpdateState.Checking) {
-            Text(stringResource(R.string.updates_waiting), style = MaterialTheme.typography.bodySmall)
-        }
-        Button(
-            onClick = { UpdateScheduler.checkNow(context, anyNetwork = true) },
-            enabled = state !is UpdateState.Downloading && state != UpdateState.Checking,
-        ) { Text(stringResource(R.string.updates_check_now)) }
-    }
 
-    Toggle(R.string.updates_packs, toggles.getValue(NetworkFeature.PACK_DOWNLOADS), R.string.updates_packs_note) {
-        network.set(NetworkFeature.PACK_DOWNLOADS, it)
+        Toggle(R.string.updates_packs, toggles.getValue(NetworkFeature.PACK_DOWNLOADS), R.string.updates_packs_note) {
+            network.set(NetworkFeature.PACK_DOWNLOADS, it)
+        }
+        Toggle(R.string.updates_app, toggles.getValue(NetworkFeature.APP_UPDATES), R.string.updates_app_note) {
+            network.set(NetworkFeature.APP_UPDATES, it)
+            if (it) UpdateScheduler.checkNow(context, anyNetwork = false)
+        }
+        if (toggles.getValue(NetworkFeature.APP_UPDATES) && !canInstall) {
+            OutlinedButton(
+                onClick = { context.openInstallPermission() },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) { Text(stringResource(R.string.updates_allow_install)) }
+        }
+        Toggle(R.string.updates_mobile, mobileData, R.string.updates_mobile_note) {
+            mobileData = it
+            UpdateScheduler.setAllowMobileData(context, it)
+        }
+        GitHubToken(secrets)
     }
-    Toggle(R.string.updates_app, toggles.getValue(NetworkFeature.APP_UPDATES), R.string.updates_app_note) {
-        network.set(NetworkFeature.APP_UPDATES, it)
-        if (it) UpdateScheduler.checkNow(context, anyNetwork = false)
+    JumpTarget(R.string.regions_title) {
+        SettingsCard(R.string.regions_title) { RegionPicker(packStore, colors = rowColors()) }
     }
-    if (toggles.getValue(NetworkFeature.APP_UPDATES) && !canInstall) {
-        OutlinedButton(
-            onClick = { context.openInstallPermission() },
-            modifier = Modifier.padding(horizontal = 16.dp),
-        ) { Text(stringResource(R.string.updates_allow_install)) }
+    SettingsGroup(
+        title = R.string.updates_packs_installed,
+        summary = stringResource(R.string.updates_packs_count, packs.size, packs.sumOf { it.sizeMb }.toInt()),
+        titles = setOf(R.string.updates_packs_installed),
+    ) {
+        InstalledPacks(packs)
     }
-    Toggle(R.string.updates_mobile, mobileData, R.string.updates_mobile_note) {
-        mobileData = it
-        UpdateScheduler.setAllowMobileData(context, it)
-    }
-    GitHubToken(secrets)
-    Section(R.string.regions_title)
-    RegionPicker(packStore)
-    InstalledPacks(packs)
 }
 
 private data class PackLine(val name: String, val sizeMb: Long, val modified: Long)
@@ -128,7 +138,6 @@ private fun installedPacks(store: PackStore, tiles: TileFolder): List<PackLine> 
 @Composable
 private fun InstalledPacks(packs: List<PackLine>) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(stringResource(R.string.updates_packs_installed), style = MaterialTheme.typography.labelLarge)
         if (packs.isEmpty()) {
             Text(stringResource(R.string.updates_packs_none), style = MaterialTheme.typography.bodySmall)
         }
@@ -174,16 +183,29 @@ private fun UpdateProgress(state: UpdateState) {
     }
 }
 
-/** An optional GitHub token (the repository is public; one only lifts the rate limit). Stored encrypted. */
+/**
+ * An optional GitHub token (the repository is public; one only lifts the rate limit). Stored encrypted. Rarely
+ * wanted, so it is a closed group saying whether one is saved.
+ */
 @Composable
 private fun GitHubToken(secrets: SecretStore) {
     var hasToken by remember { mutableStateOf(secrets.has(ApiKey.GITHUB_RELEASES)) }
     var draft by remember { mutableStateOf("") }
+    SettingsGroup(
+        title = R.string.updates_token,
+        summary = stringResource(if (hasToken) R.string.updates_token_set else R.string.updates_token_unset),
+        titles = setOf(R.string.updates_token),
+        inCard = true,
+    ) { TokenField(secrets, hasToken, { hasToken = it }, draft) { draft = it } }
+}
+
+@Composable
+private fun TokenField(secrets: SecretStore, hasToken: Boolean, onHasToken: (Boolean) -> Unit, draft: String, onDraft: (String) -> Unit) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.updates_token_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Note(stringResource(R.string.updates_token_note))
         OutlinedTextField(
             value = draft,
-            onValueChange = { draft = it },
+            onValueChange = onDraft,
             label = { Text(stringResource(if (hasToken) R.string.updates_token_saved else R.string.updates_token)) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -194,14 +216,14 @@ private fun GitHubToken(secrets: SecretStore) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 secrets.set(ApiKey.GITHUB_RELEASES, draft)
-                hasToken = secrets.has(ApiKey.GITHUB_RELEASES)
-                draft = ""
+                onHasToken(secrets.has(ApiKey.GITHUB_RELEASES))
+                onDraft("")
                 UpdateScheduler.checkNow(context, anyNetwork = false)
             }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.updates_token_save)) }
             if (hasToken) {
                 TextButton(onClick = {
                     secrets.set(ApiKey.GITHUB_RELEASES, null)
-                    hasToken = false
+                    onHasToken(false)
                 }) { Text(stringResource(R.string.updates_token_remove)) }
             }
         }

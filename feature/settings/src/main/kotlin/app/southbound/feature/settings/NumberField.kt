@@ -25,10 +25,22 @@ import kotlin.math.abs
 @Composable
 internal fun SettingsNumberField(@StringRes label: Int, value: Double, decimals: Int, onValue: (Double) -> Unit) {
     var text by remember { mutableStateOf(show(value, decimals)) }
+    JumpTarget(label) { NumberTextField(label, value, decimals, text, { text = it }, onValue) }
+}
+
+@Composable
+private fun NumberTextField(
+    @StringRes label: Int,
+    value: Double,
+    decimals: Int,
+    text: String,
+    onText: (String) -> Unit,
+    onValue: (Double) -> Unit,
+) {
     OutlinedTextField(
         value = text,
         onValueChange = { typed ->
-            text = typed
+            onText(typed)
             typed.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let(onValue)
         },
         label = { Text(stringResource(label)) },
