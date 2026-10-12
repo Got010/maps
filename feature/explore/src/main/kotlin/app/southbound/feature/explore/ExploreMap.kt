@@ -27,20 +27,26 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
 import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
+import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,10 +69,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -381,6 +394,8 @@ internal fun ExploreMap(
     var resumeWhenReady by remember { mutableStateOf(false) }
     val drivingPrefs = remember { DrivingPrefs.get(context) }
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
+    // Settings > Driving: the search bar, chips and banners at the bottom, within the thumb's reach (docs/bottom-search.md).
+    val searchAtBottom by drivingPrefs.searchAtBottom.collectAsState()
     // Fuel economy and gas price for the cost on route cards; changing them never recomputes routes.
     val fuel by services.fuelPrefs.settings.collectAsState()
     var clockMs by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -1125,6 +1140,24 @@ internal fun ExploreMap(
     } else {
         systemBars
     }
+    // The bottom search bar's dock (docs/bottom-search.md), measured: the map's buttons, the Re-center pill, the traffic
+    // notes and the map's attribution sit above it, whatever the font size or the banners in it. A tapped pin's card
+    // takes its place, so it shows only while nothing else holds the bottom.
+    var dockHeight by remember { mutableStateOf(0.dp) }
+    val dockShown = searchAtBottom && !inTrip && panel == Panel.Browse && shownThing == null
+    // Wide enough (landscape, a tablet) for the dock to keep to the left, with the buttons beside it rather than above.
+    val dockBeside = LocalConfiguration.current.screenWidthDp >= DOCK_BESIDE_MIN_WIDTH_DP
+    val density = LocalDensity.current
+    val mapContentPadding = if (dockShown) {
+        PaddingValues(
+            start = mapPadding.calculateStartPadding(layoutDirection),
+            top = mapPadding.calculateTopPadding(),
+            end = mapPadding.calculateEndPadding(layoutDirection),
+            bottom = mapPadding.calculateBottomPadding() + DOCK_MARGIN + dockHeight,
+        )
+    } else {
+        mapPadding
+    }
     val droppedPin = stringResource(R.string.explore_dropped_pin)
 
     // Open on the installed regions: Manhattan for NYC alone, the whole state zoomed out for more.
@@ -1198,7 +1231,7 @@ internal fun ExploreMap(
             following = following,
             onFollowingDismissed = { following = false },
             modifier = if (drivingLandscape) Modifier.fillMaxSize().padding(start = drivingPanelWidth) else Modifier.fillMaxSize(),
-            contentPadding = mapPadding,
+            contentPadding = mapContentPadding,
             overlays = overlays.copy(
                 cameras = cameraPins,
                 trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
@@ -1272,20 +1305,22 @@ internal fun ExploreMap(
             )
         }
 
-        // A paused trip: where it was going, End (X) and Resume on the far right, over the browsing map.
+        // A paused trip: where it was going, End (X) and Resume on the far right, over the browsing map. With the search
+        // bar at the bottom it sits in the dock, just above the bar, while browsing (below).
+        val resumePausedTrip: (PausedTrip) -> Unit = { paused ->
+            pausedTrip = null
+            // Wait for a new route from here, not the one the trip started with.
+            routes = emptyList()
+            preview = RoutePreviewState.Loading
+            resumeWhenReady = true
+            panel = Panel.Directions(paused.place, paused.mode, stops = paused.stops)
+        }
         val paused = pausedTrip
-        if (!inTrip && paused != null && panel !is Panel.Directions) {
+        if (!inTrip && paused != null && panel !is Panel.Directions && !(searchAtBottom && panel == Panel.Browse)) {
             PausedTripBar(
                 paused.place.name,
                 onEnd = { pausedTrip = null },
-                onResume = {
-                    pausedTrip = null
-                    // Wait for a new route from here, not the one the trip started with.
-                    routes = emptyList()
-                    preview = RoutePreviewState.Loading
-                    resumeWhenReady = true
-                    panel = Panel.Directions(paused.place, paused.mode, stops = paused.stops)
-                },
+                onResume = { resumePausedTrip(paused) },
                 modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 8.dp, end = 88.dp, bottom = 8.dp),
             )
         }
@@ -1345,27 +1380,69 @@ internal fun ExploreMap(
         } else {
             when (val current = panel) {
                 Panel.Browse -> {
-                    Column(
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .safeDrawingPadding()
-                            .padding(top = 12.dp, start = 16.dp, end = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        SearchBar(onSearch = { panel = Panel.Search }, onOpenSettings = onOpenSettings)
-                        startPlace?.let { StartChip(it.name, onClear = { startPlace = null }) }
-                        LocationStatus(hasPermission, location, asked, ::requestPermission)
-                        // With the weather layer: now and today where the user is (nearest station, forecast pack).
-                        val here = location
+                    val homePlace = userData.home?.toPlace()
+                    val workPlace = userData.work?.toPlace()
+                    val openShortcut: (Place) -> Unit = { place -> panel = Panel.Directions(place, TravelMode.DRIVE, transit = !hasRouting) }
+                    // With the weather layer: now and today where the user is (nearest station, forecast pack).
+                    val here = location
+                    if (searchAtBottom) {
+                        // Only the read-only weather chip stays at the top; everything touched is in the dock.
                         if (weatherOn && weatherVisible && here != null) {
                             val point = GeoPoint(here.latitude, here.longitude)
                             TodayHereChip(
                                 Metar.nearest(weather.conditions, point),
                                 weather.forecast?.nearest(point)?.let { Forecasts.days(it, clockMs, count = 1).firstOrNull() },
+                                Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(top = 12.dp, start = 16.dp, end = 72.dp),
                             )
                         }
+                        if (shownThing == null) {
+                            Column(
+                                Modifier
+                                    .align(if (dockBeside) Alignment.BottomStart else Alignment.BottomCenter)
+                                    .safeDrawingPadding()
+                                    .padding(start = DOCK_MARGIN, end = DOCK_MARGIN, bottom = DOCK_MARGIN)
+                                    .then(if (dockBeside) Modifier.width(DOCK_MAX_WIDTH) else Modifier.fillMaxWidth())
+                                    .onSizeChanged { dockHeight = with(density) { it.height.toDp() } }
+                                    // TalkBack reaches search first, not after the map's buttons.
+                                    .semantics {
+                                        isTraversalGroup = true
+                                        traversalIndex = -1f
+                                    },
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ShortcutChips(startPlace, onClearStart = { startPlace = null }, home = homePlace, work = workPlace, onOpen = openShortcut)
+                                LocationStatus(hasPermission, location, asked, ::requestPermission)
+                                pausedTrip?.let { pausedNow ->
+                                    PausedTripBar(pausedNow.place.name, onEnd = { pausedTrip = null }, onResume = { resumePausedTrip(pausedNow) }, modifier = Modifier)
+                                }
+                                SearchBar(onSearch = { panel = Panel.Search }, onOpenSettings = onOpenSettings)
+                            }
+                        }
+                    } else {
+                        Column(
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .safeDrawingPadding()
+                                .padding(top = 12.dp, start = 16.dp, end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SearchBar(onSearch = { panel = Panel.Search }, onOpenSettings = onOpenSettings)
+                            ShortcutChips(startPlace, onClearStart = { startPlace = null }, home = homePlace, work = workPlace, onOpen = openShortcut)
+                            LocationStatus(hasPermission, location, asked, ::requestPermission)
+                            if (weatherOn && weatherVisible && here != null) {
+                                val point = GeoPoint(here.latitude, here.longitude)
+                                TodayHereChip(
+                                    Metar.nearest(weather.conditions, point),
+                                    weather.forecast?.nearest(point)?.let { Forecasts.days(it, clockMs, count = 1).firstOrNull() },
+                                )
+                            }
+                        }
                     }
-                    Column(Modifier.align(Alignment.BottomEnd), horizontalAlignment = Alignment.End) {
+                    // The map's buttons: above the dock when it spans the width, beside it when it keeps to the left.
+                    Column(
+                        Modifier.align(Alignment.BottomEnd).padding(bottom = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) {
                         if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
                         if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
                         if (location != null) RecenterButton(following, { following = true }, Modifier)
@@ -1374,11 +1451,15 @@ internal fun ExploreMap(
                         RecenterPill(
                             { following = true },
                             Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(
-                                bottom = when (shownThing) {
-                                    null, is ShownThing.PlateReader, is ShownThing.WeatherStation -> 28.dp
-                                    is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown -> 400.dp
-                                    is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
-                                } + if (pausedTrip != null) PAUSED_BAR_CLEARANCE else 0.dp, // above the paused trip's bar
+                                bottom = if (dockShown) {
+                                    dockHeight + DOCK_MARGIN + 12.dp
+                                } else {
+                                    when (shownThing) {
+                                        null, is ShownThing.PlateReader, is ShownThing.WeatherStation -> 28.dp
+                                        is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown -> 400.dp
+                                        is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
+                                    } + if (pausedTrip != null && !searchAtBottom) PAUSED_BAR_CLEARANCE else 0.dp // above the paused trip's bar
+                                },
                             ),
                         )
                     }
@@ -1391,7 +1472,11 @@ internal fun ExploreMap(
                     }
                     if (trafficVisible && (traffic.errors.isNotEmpty() || trafficNote != null)) {
                         Column(
-                            Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 16.dp, bottom = 96.dp, end = 96.dp),
+                            Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(
+                                start = 16.dp,
+                                bottom = if (dockShown) dockHeight + DOCK_MARGIN + 12.dp else 96.dp,
+                                end = 96.dp,
+                            ),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             if (traffic.errors.isNotEmpty()) {
@@ -1415,6 +1500,9 @@ internal fun ExploreMap(
                     }
                 }
                 Panel.Search -> SearchPanel(
+                    // The field on the keyboard with the best match right above it (docs/bottom-search.md).
+                    fieldAtBottom = searchAtBottom,
+                    modifier = if (searchAtBottom && dockBeside) Modifier.align(Alignment.TopStart).width(DOCK_MAX_WIDTH) else Modifier,
                     // A weather search ("weather albany") shows each town's weather in its row.
                     weatherFor = if (weatherOn) {
                         { place ->
@@ -1623,8 +1711,8 @@ internal fun ExploreMap(
 
 /** The chosen start point, while one is set instead of GPS. */
 @Composable
-private fun StartChip(name: String, onClear: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+private fun StartChip(name: String, onClear: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.large, tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(R.string.explore_start_from, name),
@@ -1692,6 +1780,36 @@ private const val TRAFFIC_POLL_MS = 60_000L
 
 /** How far Re-center moves up while the paused trip's bar is at the bottom of the map. */
 private val PAUSED_BAR_CLEARANCE = 72.dp
+
+/** The bottom search bar's dock: its margin from the screen's edges, and its width when it keeps to the left. */
+private val DOCK_MARGIN = 12.dp
+private val DOCK_MAX_WIDTH = 560.dp
+
+/** The screen width (dp) from which the dock keeps to the left with the map's buttons beside it: dock, margins, buttons. */
+private const val DOCK_BESIDE_MIN_WIDTH_DP = 672
+
+/**
+ * The chips by the search bar: the start point picked with Start here (with its X), then Home and Work once set, one tap
+ * to directions (docs/bottom-search.md). Nothing when none applies.
+ */
+@Composable
+private fun ShortcutChips(start: Place?, onClearStart: () -> Unit, home: Place?, work: Place?, onOpen: (Place) -> Unit) {
+    if (start == null && home == null && work == null) return
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        start?.let { StartChip(it.name, onClear = onClearStart, modifier = Modifier.weight(1f, fill = false)) }
+        home?.let { place -> PlaceChip(stringResource(R.string.explore_home), Icons.Filled.Home) { onOpen(place) } }
+        work?.let { place -> PlaceChip(stringResource(R.string.explore_work), Icons.Filled.Work) { onOpen(place) } }
+    }
+}
+
+@Composable
+private fun PlaceChip(label: String, icon: ImageVector, onClick: () -> Unit) {
+    ElevatedAssistChip(
+        onClick = onClick,
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, contentDescription = null, Modifier.size(18.dp)) },
+    )
+}
 
 // The weather feed keeps its own five-minute cache; this only decides how often to ask it.
 private const val WEATHER_POLL_MS = 60_000L

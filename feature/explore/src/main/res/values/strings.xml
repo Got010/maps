@@ -115,6 +115,8 @@
     <string name="explore_shortcut_set_work">Set as Work</string>
     <string name="explore_shortcut_clear_home">Remove as Home</string>
     <string name="explore_shortcut_clear_work">Remove as Work</string>
+    <string name="explore_home">Home</string>
+    <string name="explore_work">Work</string>
     <string name="explore_recenter">Re-center</string>
     <!-- Spoken as a trip starts: arrival clock time (as on the trip screen), then the distance ("12 miles"). -->
     <string name="explore_trip_start_spoken">Starting. You\'ll arrive at about %1$s, %2$s.</string>
