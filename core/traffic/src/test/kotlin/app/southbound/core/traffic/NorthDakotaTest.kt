@@ -17,7 +17,8 @@ class NorthDakotaTest {
 
     @Test
     fun `alerts are read at their centre`() {
-        val alerts = NorthDakota.parseAlerts(res("alerts.json"))
+        // As on 27 April 2026, when all three were in effect.
+        val alerts = NorthDakota.parseAlerts(res("alerts.json"), now = 1_777_286_230_440L)
         assertEquals(listOf("nd:alert-39884", "nd:alert-40290", "nd:alert-40563"), alerts.map { it.id })
         val pavement = alerts[0]
         assertEquals(IncidentKind.OTHER, pavement.kind)
@@ -36,6 +37,14 @@ class NorthDakotaTest {
         assertTrue(closed.isClosure)
         assertEquals("I-29", closed.roadway)
         assertEquals("Southbound", closed.direction)
+    }
+
+    @Test
+    fun `alerts past their end are left out`() {
+        // The sample was fetched on 8 October 2026: the first two had ended in June and July, the third ran to 14:45.
+        val fetched = NorthDakota.parseAlerts(res("alerts.json"), now = 1_791_417_600_000L)
+        assertEquals(listOf("nd:alert-40563"), fetched.map { it.id })
+        assertEquals(emptyList<Incident>(), NorthDakota.parseAlerts(res("alerts.json"), now = 1_791_800_000_000L))
     }
 
     @Test

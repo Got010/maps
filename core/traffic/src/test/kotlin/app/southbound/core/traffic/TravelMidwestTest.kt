@@ -57,13 +57,23 @@ class TravelMidwestTest {
         assertEquals("2 left lanes closed", bridge.lanesStatus)
         assertEquals("Bridge repair, two left lanes closed: NB I-90/I-94 (Dan Ryan Expy) from 31st St to I-55", bridge.description)
         assertEquals(central(2026, 10, 10, 6, 15), bridge.updatedAt)
-        // `lanes` full shuts the ramp whatever the wording; no last update, so the span's start.
+        // `lanes` full, but it is the ramp that is closed: I-88 stays open, so road work. No last update, so the span's start.
         val ramp = work[1]
-        assertEquals(IncidentKind.CLOSURE, ramp.kind)
+        assertEquals(IncidentKind.ROADWORK, ramp.kind)
         assertEquals(central(2026, 10, 9, 21, 0), ramp.updatedAt)
-        assertEquals("All lanes closed", ramp.lanesStatus)
         assertEquals("I-88", ramp.roadway)
         assertEquals("Eastbound", ramp.direction)
+    }
+
+    @Test
+    fun `road work that isn't under way is left out`() {
+        fun row(id: String, a: String) = """{"type":"Feature","geometry":{"type":"Point","coordinates":[-89.6,40.7]},
+            "properties":{"id":"$id",$a"desc":"Road closed","locDesc":"NB I-55 at Exit 92","lanes":"full"}}"""
+        val json = """{"type":"FeatureCollection","features":[${row("IL-IDOTD4-1", "\"a\":false,")},
+            ${row("IL-IDOTD4-2", "\"a\":true,")},${row("IL-IDOTD4-3", "")}]}"""
+        val work = TravelMidwest.parseConstruction(json)
+        assertEquals(listOf("il:IL-IDOTD4-2", "il:IL-IDOTD4-3"), work.map { it.id })
+        assertTrue(work.all { it.isClosure })
     }
 
     @Test

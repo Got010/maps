@@ -17,8 +17,9 @@ object MarylandChart {
 
     /**
      * The events: incidents (crashes are "Property Damage", "Personal Injury", "Fatality"; "Disabled In Roadway",
-     * "Debris In Roadway"...) and CHART's own action events (a signal on flash), each at a point. One marked
-     * `closed` is a closure; its lanes ([lanes]) say when every lane is shut.
+     * "Debris In Roadway"...) and CHART's own action events (a signal on flash), each at a point. Its lanes
+     * ([lanes]) say when every lane is shut, which makes it a closure. The `closed` flag isn't read: it is the
+     * event's own lifecycle in CHART (resolved), not the road's, and no probe has caught one set to tell.
      *
      * @throws IllegalArgumentException when it isn't CHART's export.
      */
@@ -45,19 +46,15 @@ object MarylandChart {
         val description = m.text("description") ?: m.text("name") ?: type ?: "Incident"
         val direction = direction(m.text("direction"))
         val lanes = lanes(m["lanes"] as? List<*>, m.text("direction"))
-        val kind = when {
-            m["closed"] == true -> IncidentKind.CLOSURE
-            else -> kindOf(type, description)
-        }
         return Incident(
             id = TrafficSource.MD_CHART.idPrefix + id,
-            kind = kind,
+            kind = kindOf(type, description),
             roadway = routeIn(description),
             direction = direction,
             description = description,
             location = at,
             severity = null,
-            lanesStatus = if (kind == IncidentKind.CLOSURE) "All lanes closed" else lanes,
+            lanesStatus = lanes,
             updatedAt = (m["createTime"] as? Number)?.toLong()?.takeIf { it > 0 },
             source = TrafficSource.MD_CHART,
         )

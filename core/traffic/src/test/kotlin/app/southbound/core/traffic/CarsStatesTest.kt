@@ -115,12 +115,13 @@ class CarsStatesEventsTest {
         val events = CarsStates.parseEvents(res("in-events.json"), CarsStates.IN)
         assertEquals(listOf("in:CARSx-469755", "in:CARSy-33", "in:MSPCAD-148630", "in:CARSx-43373"), events.map { it.id })
         val ramp = events[0]
-        // In two layers (a closure icon and a warning icon): the closure wins.
-        assertEquals(IncidentKind.CLOSURE, ramp.kind)
+        // Under the closure icon, but only the exit ramp is closed: I-80 stays open, so road work (its words), not a
+        // closure that would put an exclusion square across the interstate at the gore.
+        assertEquals(IncidentKind.ROADWORK, ramp.kind)
         assertEquals("I-80", ramp.roadway)
         assertEquals("Eastbound", ramp.direction)
         assertEquals("I-80 eastbound: Exit ramp closed, because of roadwork.", ramp.description)
-        assertEquals("All lanes closed", ramp.lanesStatus)
+        assertEquals("Exit ramp closed", ramp.lanesStatus)
         assertEquals("Critical", ramp.severity)
         assertEquals(GeoPoint(41.56734, -87.33501), ramp.location)
         assertNull(ramp.updatedAt)
