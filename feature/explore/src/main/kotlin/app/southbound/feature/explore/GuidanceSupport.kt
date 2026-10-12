@@ -28,6 +28,7 @@ import app.southbound.core.voice.TurnTiming
 import app.southbound.core.voice.UtteranceKind
 import app.southbound.core.voice.VoiceSettings
 import com.stadiamaps.ferrostar.core.NavigationState
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,13 +75,24 @@ class GuidanceSupport(
 ) : GuidanceContext {
 
     private val appContext = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // A failure in one job (the landmarks read from a search pack an update just closed, say) ends that job, never the
+    // app mid-trip. Nothing is logged: the app keeps no logs.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, _ -> })
     private var watching: Job? = null
 
     private val _routeAlerts = MutableStateFlow<List<RouteAlert>>(emptyList())
 
     /** Cameras and school zones on the active route, in driving order; empty between trips. */
     val routeAlerts: StateFlow<List<RouteAlert>> = _routeAlerts.asStateFlow()
+
+    private val _arrived = MutableStateFlow(false)
+
+    /**
+     * The trip has arrived and is about to end: Ferrostar completed it, or the route's end is a few metres away though
+     * Ferrostar still navigates (a poor fix between buildings). The trip screen shows the arrival card from here,
+     * not only on Ferrostar's own arrival. False again once the trip has ended.
+     */
+    val arrived: StateFlow<Boolean> = _arrived.asStateFlow()
 
     /** The trip's remaining steps, as of the latest navigation state. */
     @Volatile
@@ -180,17 +192,18 @@ class GuidanceSupport(
             arrivalSaid.set(false)
             ending.set(false)
             arrivalSpeech = null
+            _arrived.value = false
         }
         voice.guidanceContext = this
         distanceToManeuver = trip.progress.distanceToNextManeuver
         speedMps = trip.userLocation.speed?.value
         steps = trip.remainingSteps
 
-        // Passing a maneuver ends "mute until the next turn".
-        if (stepCount >= 0 && trip.remainingSteps.size < stepCount) voice.maneuverPassed()
+        val key = RouteKey.of(state)
+        // Passing a maneuver ends "mute until the next turn". A new route with fewer steps (a reroute) passed none.
+        if (stepCount >= 0 && key == routeKey && trip.remainingSteps.size < stepCount) voice.maneuverPassed()
         stepCount = trip.remainingSteps.size
 
-        val key = RouteKey.of(state)
         // A stop reached on the same route; a skipped stop comes with a new route and says nothing.
         val left = trip.remainingWaypoints.size
         if (key != null && key == routeKey && waypointsLeft > left) stopReached(waypointsLeft, left)
@@ -233,6 +246,7 @@ class GuidanceSupport(
         speedMps = null
         waypointsLeft = -1
         _routeAlerts.value = emptyList()
+        _arrived.value = false
         voice.guidanceContext = null
         voice.maneuverPassed()
     }
@@ -263,7 +277,9 @@ class GuidanceSupport(
             }
             arrivalSpeech = scope.launch { voice.announceAndWait(UtteranceKind.ARRIVAL, text, ARRIVAL_SPEECH_TIMEOUT_MS) }
         }
-        if (!end || !ending.compareAndSet(false, true)) return
+        if (!end) return
+        _arrived.value = true
+        if (!ending.compareAndSet(false, true)) return
         val serial = tripSerial
         val speech = arrivalSpeech
         scope.launch {

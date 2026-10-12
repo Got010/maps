@@ -59,8 +59,15 @@ class Navigator(context: Context, private val router: OfflineRouter) {
 
     private val core = FerrostarCore(
         customRouteProvider = object : CustomRouteProvider {
+            // A preview, or Ferrostar rerouting a trip the driver strayed from: that one starts where the car is.
             override suspend fun getRoutes(userLocation: UserLocation, waypoints: List<Waypoint>): List<Route> =
-                withContext(Dispatchers.Default) { router.routes(userLocation, waypoints, mode, avoid, cameraAvoid, prefs) }
+                withContext(Dispatchers.Default) {
+                    if (state.value.tripState is TripState.Navigating) {
+                        routesFromCar(userLocation, waypoints, avoid)
+                    } else {
+                        router.routes(userLocation, waypoints, mode, avoid, cameraAvoid, prefs)
+                    }
+                }
         },
         httpClient = NoNetworkHttpClient,
         locationProvider = GpsLocationProvider(context.applicationContext),
@@ -121,19 +128,19 @@ class Navigator(context: Context, private val router: OfflineRouter) {
     /**
      * Mid-trip, routes again from where the user is to the remaining waypoints
      * around [avoid] (a closure that just appeared on the route) and switches
-     * to the new route. The plate readers in [cameraAvoid] stay avoided.
+     * to the new route. The plate readers in [cameraAvoid] stay avoided, but
+     * for those beside the car ([CameraAvoidance.fromCar]).
      * False when not navigating or no route was found.
      */
     suspend fun rerouteAround(avoid: List<List<Pair<Double, Double>>>): Boolean {
         val trip = state.value.tripState as? TripState.Navigating ?: return false
         this.avoid = avoid
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid, cameraAvoid, prefs) }
+            withContext(Dispatchers.Default) { routesFromCar(trip.snappedUserLocation, trip.remainingWaypoints, avoid) }
         } catch (e: RoutingException) {
             return false
         }
-        core.replaceRoute(routes.first(), controllerConfig(mode))
-        return true
+        return replaceIfNavigating(routes.first())
     }
 
     // Phase 6: skip the next stop of a multi-stop trip.
@@ -147,12 +154,11 @@ class Navigator(context: Context, private val router: OfflineRouter) {
         if (!TripStops.canSkip(trip.remainingWaypoints.size)) return false
         val remaining = TripStops.skipNext(trip.remainingWaypoints)
         val routes = try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, remaining, mode, avoid, cameraAvoid, prefs) }
+            withContext(Dispatchers.Default) { routesFromCar(trip.snappedUserLocation, remaining, avoid) }
         } catch (e: RoutingException) {
             return false
         }
-        core.replaceRoute(routes.first(), controllerConfig(mode))
-        return true
+        return replaceIfNavigating(routes.first())
     }
 
     /**
@@ -164,17 +170,34 @@ class Navigator(context: Context, private val router: OfflineRouter) {
      */
     suspend fun freshRoute(extraAvoid: List<List<Pair<Double, Double>>> = emptyList()): Route? {
         val trip = state.value.tripState as? TripState.Navigating ?: return null
+        // Only the plate readers clear of the car are left out; a route through the rest is no offer worth making.
+        val spots = CameraAvoidance.clearOfCar(cameraAvoid, trip.snappedUserLocation.spot())
         return try {
-            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid + extraAvoid, cameraAvoid, prefs) }.firstOrNull()
+            withContext(Dispatchers.Default) { router.routes(trip.snappedUserLocation, trip.remainingWaypoints, mode, avoid + extraAvoid, spots, prefs) }.firstOrNull()
         } catch (e: RoutingException) {
             null
         }
     }
 
-    /** Switches the trip to [route] (one from [freshRoute]), keeping the travel mode. */
-    fun switchTo(route: Route) {
+    /** Switches the trip to [route] (one from [freshRoute]), keeping the travel mode. False when the trip has ended. */
+    fun switchTo(route: Route): Boolean = replaceIfNavigating(route)
+
+    /**
+     * Routes from [from] (where the car is) to [waypoints] around [avoid] and the plate readers, dropping the ones the
+     * car is on or beside ([CameraAvoidance.fromCar]).
+     */
+    private fun routesFromCar(from: UserLocation, waypoints: List<Waypoint>, avoid: List<List<Pair<Double, Double>>>): List<Route> =
+        CameraAvoidance.fromCar(cameraAvoid, from.spot()) { spots -> router.routes(from, waypoints, mode, avoid, spots, prefs) }
+
+    // A routing takes a second or more: the trip may have been ended or paused meanwhile, and a route put in then
+    // would start a trip nobody asked for.
+    private fun replaceIfNavigating(route: Route): Boolean {
+        if (state.value.tripState !is TripState.Navigating) return false
         core.replaceRoute(route, controllerConfig(mode))
+        return true
     }
+
+    private fun UserLocation.spot() = CameraAvoidance.Spot(coordinates.lat, coordinates.lng)
 
     fun stop() = core.stopNavigation()
 

@@ -203,7 +203,7 @@ import uniffi.ferrostar.WaypointKind
 import kotlin.math.log2
 
 /** What is open over the map, outside of a trip. */
-private sealed interface Panel {
+internal sealed interface Panel {
     data object Browse : Panel
     data object Search : Panel
     data class PlaceShown(val place: Place) : Panel
@@ -232,7 +232,7 @@ private sealed interface ShownThing {
 }
 
 /** A paused trip: guidance stopped, what was left of it kept so Resume can route there again from here. */
-private data class PausedTrip(val place: Place, val stops: List<Place>, val mode: TravelMode)
+internal data class PausedTrip(val place: Place, val stops: List<Place>, val mode: TravelMode)
 
 private const val PLACE_ZOOM = 16.0
 
@@ -389,8 +389,9 @@ internal fun ExploreMap(
     var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
 
     // Pause: the plan the running trip came from, the trip once paused, and a Resume waiting for its new route.
-    var tripPlan by remember { mutableStateOf<Panel.Directions?>(null) }
-    var pausedTrip by remember { mutableStateOf<PausedTrip?>(null) }
+    // Kept by the services, so a map region arriving mid-trip (which rebuilds this screen) keeps Pause and the paused trip.
+    var tripPlan by services.tripMemory::plan
+    var pausedTrip by services.tripMemory::paused
     var resumeWhenReady by remember { mutableStateOf(false) }
     val drivingPrefs = remember { DrivingPrefs.get(context) }
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
@@ -474,7 +475,7 @@ internal fun ExploreMap(
     var tripAlong by remember { mutableDoubleStateOf(0.0) }
     var routeIncidents by remember { mutableStateOf<List<Incident>>(emptyList()) }
     var fasterOffer by remember { mutableStateOf<FasterOffer?>(null) }
-    val dismissedRoutes = remember { FasterRoute.Dismissals() }
+    val dismissedRoutes = services.tripMemory.dismissedRoutes
     var arrivalSide by remember { mutableStateOf<ArrivalSide?>(null) }
     var arrivalPoint by remember { mutableStateOf<MapPoint?>(null) }
     var parkingNearby by remember { mutableStateOf(false) }
@@ -682,7 +683,7 @@ internal fun ExploreMap(
     // A closure that appears on the route ahead: say so and route around it. Only on what is left of the route and
     // on our side of the road: a closure behind us, or on the other carriageway of a divided highway, is not ours.
     val closureSpoken = stringResource(R.string.explore_closure_spoken)
-    val announcedClosures = remember { mutableSetOf<String>() }
+    val announcedClosures = services.tripMemory.announcedClosures
     LaunchedEffect(inTrip) { if (!inTrip) announcedClosures.clear() }
     LaunchedEffect(traffic, inTrip) {
         val nav = navigator ?: return@LaunchedEffect
@@ -696,8 +697,9 @@ internal fun ExploreMap(
         if (ahead.isEmpty()) return@LaunchedEffect
         announcedClosures += ahead.map { it.id }
         services.voice.announce(UtteranceKind.TRAFFIC_ALERT, closureSpoken.format(ahead.first().title))
-        // Around the closures just found, keeping the ones the trip already avoids.
-        nav.rerouteAround(ClosureAvoidance.forReroute(ahead, nav.avoid))
+        // Around the closures just found, keeping the ones the trip already avoids. A failure (a router closed by an
+        // update) leaves the trip on its route.
+        attempt { nav.rerouteAround(ClosureAvoidance.forReroute(ahead, nav.avoid)) }
     }
 
     // --- Phase 5 (map): re-center timer, route traffic, faster route, arrival ---
@@ -767,7 +769,7 @@ internal fun ExploreMap(
     // so this works with the traffic layer hidden. The voice policy applies the traffic-alert toggle and chime.
     val policeSpoken = stringResource(R.string.explore_police_spoken)
     val policeSpokenNoRoad = stringResource(R.string.explore_police_spoken_no_road)
-    val announcedPolice = remember { mutableSetOf<String>() }
+    val announcedPolice = services.tripMemory.announcedPolice
     LaunchedEffect(inTrip) { if (!inTrip) announcedPolice.clear() }
     LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
         val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
@@ -795,7 +797,7 @@ internal fun ExploreMap(
     val roadworkSpokenNoRoad = stringResource(R.string.explore_roadwork_spoken_no_road)
     val lanesSpoken = stringResource(R.string.explore_lanes_spoken)
     val lanesSpokenNoRoad = stringResource(R.string.explore_lanes_spoken_no_road)
-    val announcedIncidents = remember { mutableSetOf<String>() }
+    val announcedIncidents = services.tripMemory.announcedIncidents
     LaunchedEffect(inTrip) { if (!inTrip) announcedIncidents.clear() }
     LaunchedEffect(inTrip, navState.routeGeometry.size, traffic, tripProgressBucket) {
         val navigating = trip as? TripState.Navigating ?: return@LaunchedEffect
@@ -863,7 +865,7 @@ internal fun ExploreMap(
     val weatherHereFromSpoken = stringResource(R.string.explore_weather_here_from_spoken)
     val weatherAheadFromSpoken = stringResource(R.string.explore_weather_ahead_from_spoken)
     val spokenContext = LocalContext.current
-    val announcedWeather = remember { mutableSetOf<String>() }
+    val announcedWeather = services.tripMemory.announcedWeather
     LaunchedEffect(inTrip) { if (!inTrip) announcedWeather.clear() }
     LaunchedEffect(routeWeather, inTrip) {
         if (!inTrip) return@LaunchedEffect
@@ -926,7 +928,7 @@ internal fun ExploreMap(
                     candidateDelay,
                 )
                 val minutes = FasterRoute.offerMinutes(saving) ?: continue
-                if (best == null || minutes > best.savesMinutes) best = FasterOffer(candidate, points, minutes)
+                if (best == null || minutes > best.savesMinutes) best = FasterOffer(candidate, points, minutes, extra)
             }
             fasterOffer = best
         }
@@ -947,8 +949,11 @@ internal fun ExploreMap(
         arrivalPoint = destination
         arrivalSide = Arrival.side(navState.routeGeometry.takeLast(30).map { MapPoint(it.lat, it.lng) }, destination)
     }
-    LaunchedEffect(trip is TripState.Complete) {
-        if (trip !is TripState.Complete) {
+    // Arrived: Ferrostar's own arrival, or GuidanceSupport's a few metres from the end with a poor fix.
+    val arrivedEarly by services.guidance.arrived.collectAsState()
+    val arrivedNow = trip is TripState.Complete || (arrivedEarly && trip is TripState.Navigating)
+    LaunchedEffect(arrivedNow) {
+        if (!arrivedNow) {
             parkingNearby = false
             if (!inTrip) arrivalSide = null
             return@LaunchedEffect
@@ -989,6 +994,8 @@ internal fun ExploreMap(
     val notificationPermission = rememberLauncherForActivityResult(RequestPermission()) { }
     fun startTrip() {
         val target = directions ?: return
+        // A route from a start picked on the map is for looking at: the trip would begin from where the car isn't.
+        if (startPlace != null) return
         val ready = preview as? RoutePreviewState.Ready ?: return
         val route = routes.getOrNull(ready.selected) ?: return
         val nav = navigator ?: return
@@ -1033,7 +1040,11 @@ internal fun ExploreMap(
             return@BackHandler
         }
         panel = when (val current = panel) {
-            is Panel.Directions -> Panel.PlaceShown(current.place)
+            is Panel.Directions -> {
+                // As the preview's close button: a later map arriving doesn't reopen it.
+                services.tripWait = null
+                Panel.PlaceShown(current.place)
+            }
             else -> Panel.Browse
         }
     }
@@ -1167,7 +1178,9 @@ internal fun ExploreMap(
     val installedRegions = remember(basemaps) { basemaps.map { it.region }.toSet() }
     val selectedRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
     val noRoute = (preview as? RoutePreviewState.Failed)?.reason == RoutePreviewState.Reason.NO_ROUTE
-    val missingRegions = remember(selectedRoute, noRoute, directions, installedRegions) {
+    // Keyed on having a start too: before the first fix there is none, and its region joins when the fix comes.
+    val hasOrigin = startPlace != null || location != null
+    val missingRegions = remember(selectedRoute, noRoute, directions, installedRegions, hasOrigin, startPlace) {
         val target = directions?.takeIf { !it.transit }
         when {
             selectedRoute != null -> RouteRegions.missing(selectedRoute.geometry.map { p -> p.lat to p.lng }, installedRegions)
@@ -1309,6 +1322,8 @@ internal fun ExploreMap(
         // bar at the bottom it sits in the dock, just above the bar, while browsing (below).
         val resumePausedTrip: (PausedTrip) -> Unit = { paused ->
             pausedTrip = null
+            // From here: a start picked on the map can't be driven from (Start is off for it), and Resume starts at once.
+            startPlace = null
             // Wait for a new route from here, not the one the trip started with.
             routes = emptyList()
             preview = RoutePreviewState.Loading
@@ -1334,15 +1349,21 @@ internal fun ExploreMap(
                 onEnd = { navigator?.stop() },
                 speedMph = speedMph,
                 // Phase 6: skip stop, after-sunset dark overlay, clock for the arrival time.
-                onSkipStop = { scope.launch { navigator?.skipNextStop() } },
+                onSkipStop = { scope.launch { attempt { navigator?.skipNextStop() } } },
                 darkOverlay = darkTheme && !systemDark,
                 delaySeconds = tripTraffic.delaySeconds,
                 fasterRoute = fasterOffer?.let { offer ->
                     FasterRouteOffer(
                         savesMinutes = offer.savesMinutes,
                         onAccept = {
-                            navigator?.switchTo(offer.route)
                             fasterOffer = null
+                            val nav = navigator
+                            scope.launch {
+                                // The offer was routed from where the car was when it was found, up to a minute and a half
+                                // ago: route again from here the same way, and fall back on the offer if that finds none.
+                                val fresh = attempt { nav?.freshRoute(offer.extra) }
+                                nav?.switchTo(fresh ?: offer.route)
+                            }
                         },
                         onDismiss = {
                             dismissedRoutes.dismiss(offer.points, System.currentTimeMillis())
@@ -1352,6 +1373,7 @@ internal fun ExploreMap(
                 },
                 arrivalSide = arrivalSide,
                 parkingNearby = parkingNearby,
+                arrived = arrivedEarly,
                 mutedUntilNextTurn = mutedUntilTurn,
                 onVoiceLongPress = { if (mutedUntilTurn) services.voice.resumeVoice() else services.voice.muteUntilNextTurn() },
                 // Pause keeps what is left of the trip (the destination and the stops not yet reached) and ends
@@ -1828,8 +1850,11 @@ private const val DETOUR_MAX_SPOTS = 3
 // How long a route preview waits for the search pack to open before going without plate readers.
 private const val SEARCH_WAIT_MS = 5_000L
 
-/** A faster route found mid-trip, with its points for telling it apart later. */
-private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int)
+/**
+ * A faster route found mid-trip, with its points for telling it apart later and [extra], the squares it was routed
+ * around (none for a plain fresh route).
+ */
+private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int, val extra: List<List<Pair<Double, Double>>>)
 
 /** The cameras on a route option that the driver asked to avoid (plate readers, DOT cameras or both); none when unknown. */
 private fun RouteExposure?.avoided(prefs: RoutePrefs): Int =
