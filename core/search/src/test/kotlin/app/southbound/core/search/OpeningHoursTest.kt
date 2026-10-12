@@ -221,6 +221,20 @@ class OpeningHoursTest {
     }
 
     @Test
+    fun offAfterACommaClosesItsDays() {
+        val h = hours("Mo-Fr 09:00-17:00, We off")
+        assertEquals(closed(DayOfWeek.THURSDAY, 9), h.status(at(DayOfWeek.WEDNESDAY, 11)))
+        assertEquals(open("17:00"), h.status(at(DayOfWeek.TUESDAY, 11)))
+        assertEquals(open("17:00"), h.status(at(DayOfWeek.THURSDAY, 11)))
+        // Closed in a list of additive rules too, and a later one still adds.
+        val list = hours("Mo-Sa 08:00-12:00, We,Sa closed, Sa 14:00-16:00")
+        assertTrue(list.status(at(DayOfWeek.WEDNESDAY, 9)) is Status.Closed)
+        assertTrue(list.status(at(DayOfWeek.SATURDAY, 9)) is Status.Closed)
+        assertEquals(open("16:00"), list.status(at(DayOfWeek.SATURDAY, 15)))
+        assertEquals(open("12:00"), list.status(at(DayOfWeek.FRIDAY, 9)))
+    }
+
+    @Test
     fun noWeekdaySelectorMeansEveryDay() {
         val h = hours("08:00-20:00")
         assertEquals(open("20:00"), h.status(at(DayOfWeek.SUNDAY, 9)))

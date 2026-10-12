@@ -1,5 +1,6 @@
 package app.southbound.core.map
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngQuad
@@ -278,7 +279,7 @@ internal object OverlayLayers {
         )
     }
 
-    /** [darkTheme] is the loaded basemap's theme; it picks the route colours. */
+    /** [darkTheme] is the loaded basemap's theme; it picks the route colours. The radar is [updateRadar]'s. */
     fun update(style: Style, overlays: MapOverlays, darkTheme: Boolean) {
         style.getSourceAs<GeoJsonSource>(ROUTES)?.setGeoJson(OverlayGeoJson.routes(overlays.routes, darkTheme))
         style.getSourceAs<GeoJsonSource>(PINS)?.setGeoJson(OverlayGeoJson.pins(overlays.pin, overlays.destination))
@@ -289,43 +290,78 @@ internal object OverlayLayers {
         trafficCamerasSource.update(style, overlays.trafficCameras) { OverlayGeoJson.trafficCameras(it) }
         messageSignsSource.update(style, overlays.messageSigns) { OverlayGeoJson.messageSigns(it) }
         weatherAreasSource.update(style, overlays.weather.areas) { OverlayGeoJson.weatherAreas(it) }
-        for (pin in overlays.weather.stations) {
-            val name = pin.imageName
-            if (style.getImage(name) == null) style.addImage(name, WeatherIcons.badge(pin.sky, pin.night, pin.tempF))
-        }
+        updateBadges(style, overlays.weather.stations)
         weatherStationsSource.update(style, overlays.weather.stations) { OverlayGeoJson.weatherStations(it) }
-        updateRadar(style, overlays.weather.radar)
     }
 
     private val weatherAreasSource = ListSource<WeatherArea>(WEATHER_AREAS)
     private val weatherStationsSource = ListSource<WeatherStationPin>(WEATHER_STATIONS)
 
-    // The radar picture is decoded and handed to the map only when a new one arrives.
-    private var radarShown: RadarPicture? = null
+    // The station badge images on the style. Each look is drawn once; a look no longer shown is removed, or a long
+    // session would keep a bitmap for every sky, day or night and temperature it has seen. The previous list's looks
+    // stay one round more, since the map may still be drawing that list until the new one reaches it.
+    private val badges = HashSet<String>()
+    private var badgesShown: Set<String> = emptySet()
+    private var badgesFor: List<WeatherStationPin>? = null
+    private var badgesStyle: WeakReference<Style>? = null
+
+    private fun updateBadges(style: Style, pins: List<WeatherStationPin>) {
+        if (badgesStyle?.get() !== style) {
+            // A new style starts with none of them.
+            badges.clear()
+            badgesShown = emptySet()
+            badgesFor = null
+            badgesStyle = WeakReference(style)
+        }
+        if (badgesFor === pins) return
+        val wanted = pins.mapTo(HashSet()) { it.imageName }
+        for (pin in pins) {
+            if (badges.add(pin.imageName)) style.addImage(pin.imageName, WeatherIcons.badge(pin.sky, pin.night, pin.tempF))
+        }
+        val unused = badges.filter { it !in wanted && it !in badgesShown }
+        for (name in unused) style.removeImage(name)
+        badges.removeAll(unused.toSet())
+        badgesShown = wanted
+        badgesFor = pins
+    }
+
+    /** A radar picture decoded for the map, with the picture it came from (for its corners). */
+    class RadarBitmap(val picture: RadarPicture, val bitmap: Bitmap)
+
+    /**
+     * Decodes the radar PNG, 2400 by 1360 pixels: a few hundred milliseconds, so it is called off the main thread.
+     * Null when it isn't an image.
+     */
+    fun decodeRadar(radar: RadarPicture): RadarBitmap? =
+        BitmapFactory.decodeByteArray(radar.png, 0, radar.png.size)?.let { RadarBitmap(radar, it) }
+
+    // The decoded picture last handed to the map, and the style it went to. Weak, so a closed map lets both go.
+    private var radarShown: WeakReference<RadarBitmap>? = null
     private var radarStyle: WeakReference<Style>? = null
 
-    private fun updateRadar(style: Style, radar: RadarPicture?) {
+    /** Shows [radar] under the alert areas, or removes the radar when it is null. On the main thread. */
+    fun updateRadar(style: Style, radar: RadarBitmap?) {
         if (radar == null) {
             style.getLayer(RADAR)?.let { style.removeLayer(it) }
             style.getSource(RADAR)?.let { style.removeSource(it) }
             radarShown = null
             return
         }
-        if (radarShown === radar && radarStyle?.get() === style && style.getSource(RADAR) != null) return
-        val bitmap = BitmapFactory.decodeByteArray(radar.png, 0, radar.png.size) ?: return
+        if (radarShown?.get() === radar && radarStyle?.get() === style && style.getSource(RADAR) != null) return
         val source = style.getSourceAs<ImageSource>(RADAR)
         if (source != null) {
-            source.setImage(bitmap)
+            source.setImage(radar.bitmap)
         } else {
+            val corners = radar.picture
             val quad = LatLngQuad(
-                LatLng(radar.north, radar.west), LatLng(radar.north, radar.east),
-                LatLng(radar.south, radar.east), LatLng(radar.south, radar.west),
+                LatLng(corners.north, corners.west), LatLng(corners.north, corners.east),
+                LatLng(corners.south, corners.east), LatLng(corners.south, corners.west),
             )
-            style.addSource(ImageSource(RADAR, quad, bitmap))
+            style.addSource(ImageSource(RADAR, quad, radar.bitmap))
             // Under the alert areas, and so under the routes and labels.
             style.addLayerBelow(RasterLayer(RADAR, RADAR).withProperties(rasterOpacity(0.6f)), WEATHER_AREAS)
         }
-        radarShown = radar
+        radarShown = WeakReference(radar)
         radarStyle = WeakReference(style)
     }
 

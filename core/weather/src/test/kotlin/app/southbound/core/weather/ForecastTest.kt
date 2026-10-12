@@ -6,6 +6,7 @@ import app.southbound.core.network.NetworkGate
 import app.southbound.core.traffic.GeoPoint
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -111,7 +112,7 @@ class ForecastTest {
 
     // --- The feed: the release asked at most hourly, the file downloaded only when it changed, kept on disk.
 
-    private class FakeSource(var id: Long?, val bytes: ByteArray) : ForecastSource {
+    private class FakeSource(var id: Long?, var bytes: ByteArray) : ForecastSource {
         val calls = ArrayList<String>()
         var fail = false
         override fun latestId(): Long? {
@@ -164,5 +165,56 @@ class ForecastTest {
         val dir = tmp.newFolder()
         val f = feed(FakeSource(7, bytes), dir) { 1791420092_000L + Forecasts.MAX_AGE_MILLIS + 1 }
         assertNull(f.refresh(withForecast = true).forecast)
+    }
+
+    @Test
+    fun `the release is asked at most hourly, with a pack on the phone or without`() {
+        val at = 1791420092_000L
+        assertTrue(WeatherFeed.forecastDue(at, checkedAt = null, force = false))
+        assertFalse(WeatherFeed.forecastDue(at + WeatherFeed.FORECAST_CHECK_MILLIS - 1, checkedAt = at, force = false))
+        assertTrue(WeatherFeed.forecastDue(at + WeatherFeed.FORECAST_CHECK_MILLIS, checkedAt = at, force = false))
+        assertTrue(WeatherFeed.forecastDue(at + 1, checkedAt = at, force = true))
+    }
+
+    @Test
+    fun `a pack that doesn't read is downloaded once, not at every refresh`() = runBlocking {
+        val source = FakeSource(8, "not a pack".toByteArray())
+        var now = 1791420092_000L + 3_600_000L
+        val f = feed(source, tmp.newFolder()) { now }
+        val first = f.refresh(withForecast = true)
+        assertNull(first.forecast)
+        assertTrue(first.errors.single().startsWith("Forecast"))
+        assertEquals(listOf("latest", "download 8"), source.calls)
+        source.calls.clear()
+        // The next poll, a minute on: nothing is asked.
+        now += 60_000L
+        assertTrue(f.refresh(withForecast = true).errors.isEmpty())
+        assertTrue(source.calls.isEmpty())
+        // An hour on, the release still has the same file: it isn't downloaded again.
+        now += WeatherFeed.FORECAST_CHECK_MILLIS
+        f.refresh(withForecast = true)
+        assertEquals(listOf("latest"), source.calls)
+        source.calls.clear()
+        // A new upload is.
+        source.id = 9
+        source.bytes = bytes
+        now += WeatherFeed.FORECAST_CHECK_MILLIS
+        assertNotNull(f.refresh(withForecast = true).forecast)
+        assertEquals(listOf("latest", "download 9"), source.calls)
+    }
+
+    @Test
+    fun `no release yet is asked about hourly, not at every refresh`() = runBlocking {
+        val source = FakeSource(null, bytes)
+        var now = 1791420092_000L
+        val f = feed(source, tmp.newFolder()) { now }
+        assertNull(f.refresh(withForecast = true).forecast)
+        assertEquals(listOf("latest"), source.calls)
+        now += 60_000L
+        f.refresh(withForecast = true)
+        assertEquals(listOf("latest"), source.calls)
+        now += WeatherFeed.FORECAST_CHECK_MILLIS
+        f.refresh(withForecast = true)
+        assertEquals(listOf("latest", "latest"), source.calls)
     }
 }

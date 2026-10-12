@@ -154,15 +154,19 @@ object GuidancePolicy {
         UtteranceKind.REROUTE, UtteranceKind.TRANSIT_STOP, UtteranceKind.TRIP_START -> null
     }
 
-    /** Valhalla sentences carry street names after "onto", "on", "toward" or "at". */
+    /**
+     * Valhalla sentences carry street names after "onto", "on", "toward" or "at", and so do the app's alerts ("Crash
+     * ahead on I 87 in 1.8 miles."). A name ends at "for" or "in" and a number (the distance stays), at a comma or
+     * semicolon, or at a full stop that isn't a decimal point.
+     */
     private val STREET_TAIL = Regex(
-        """\s+(onto|on|toward|towards|at|to stay on)\s+.+?(?=\s+for\s|[.,;]|$)""",
+        """\s+(onto|on|toward|towards|at|to stay on)\s+.+?(?=\s+for\s|\s+in\s+\d|[,;]|\.(?!\d)|$)""",
         RegexOption.IGNORE_CASE,
     )
 
     /**
-     * "Turn left onto West 20th Street." -> "Turn left."; leaves distances such
-     * as "In 500 feet," and road-free sentences alone.
+     * "Turn left onto West 20th Street." -> "Turn left."; "Crash ahead on I 87 in 1.8 miles." -> "Crash ahead in 1.8
+     * miles."; leaves distances such as "In 500 feet," and road-free sentences alone.
      */
     fun withoutStreetNames(text: String): String =
         STREET_TAIL.replace(text, "").replace(Regex("""\s+([.,;])"""), "$1").trim()

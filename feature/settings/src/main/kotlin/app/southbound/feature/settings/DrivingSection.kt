@@ -43,6 +43,9 @@ private fun FuelEstimate(network: PreferenceNetworkToggles?, secrets: SecretStor
     val noToggles = remember { MutableStateFlow<Map<NetworkFeature, Boolean>>(emptyMap()) }
     val toggles by (network?.state ?: noToggles).collectAsState()
     val eiaOn = toggles[NetworkFeature.GAS_PRICES] == true
+    // Followed as state: saving the key in Settings > API keys takes the "no key" note away at once.
+    val noKeys = remember { MutableStateFlow<Set<ApiKey>>(emptySet()) }
+    val savedKeys by (secrets?.saved ?: noKeys).collectAsState()
 
     SettingsNumberField(R.string.driving_mpg, fuel.mpg, decimals = 0) { fuelPrefs.setMpg(it) }
     SettingsNumberField(R.string.driving_gas_price, fuel.pricePerGallon, decimals = 2) { fuelPrefs.setPricePerGallon(it) }
@@ -57,7 +60,7 @@ private fun FuelEstimate(network: PreferenceNetworkToggles?, secrets: SecretStor
     val eia = fuel.eiaPrice
     val period = fuel.fetchedPeriod
     val status = when {
-        secrets?.has(ApiKey.EIA) != true -> stringResource(R.string.driving_eia_no_key)
+        ApiKey.EIA !in savedKeys -> stringResource(R.string.driving_eia_no_key)
         eia == null -> stringResource(R.string.driving_eia_waiting)
         else -> stringResource(
             R.string.driving_eia_price,

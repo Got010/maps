@@ -12,6 +12,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -223,6 +224,22 @@ fun SouthboundMap(
         OverlayLayers.update(loaded, overlays, darkTheme)
     }
 
+    // The radar picture is 2400 by 1360 pixels, a few hundred milliseconds to decode, so it is decoded off the main
+    // thread, once per picture; a style reload (night mode at sunset) hands the same bitmap to the new style. A
+    // picture that doesn't decode leaves the last one up.
+    val radar = overlays.weather.radar
+    val radarBitmap by produceState<OverlayLayers.RadarBitmap?>(null, radar) {
+        if (radar == null) {
+            value = null
+            return@produceState
+        }
+        withContext(Dispatchers.Default) { OverlayLayers.decodeRadar(radar) }?.let { value = it }
+    }
+    LaunchedEffect(style, radarBitmap) {
+        val loaded = style ?: return@LaunchedEffect
+        OverlayLayers.updateRadar(loaded, radarBitmap)
+    }
+
     // 511NY cameras and signs: their own listener, added first, since their icons draw on top of
     // everything. Where several are under the finger, the one nearest the tap wins.
     val currentOnTrafficCameraTap by rememberUpdatedState(onTrafficCameraTap)
@@ -349,10 +366,14 @@ fun SouthboundMap(
 
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
+    // The serial of the last request applied. This effect also runs on a style reload (night mode at sunset and
+    // sunrise), and replaying the request then would end following mid-drive: only a new request moves the camera.
+    val appliedCameraSerial = remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(style, cameraRequest) {
         val loadedMap = map ?: return@LaunchedEffect
         val request = cameraRequest ?: return@LaunchedEffect
-        if (style == null) return@LaunchedEffect
+        if (style == null || request.serial == appliedCameraSerial.value) return@LaunchedEffect
+        appliedCameraSerial.value = request.serial
         // An explicit move ends following; the recenter button brings it back.
         if (loadedMap.locationComponent.isLocationComponentActivated) {
             loadedMap.locationComponent.cameraMode = CameraMode.NONE

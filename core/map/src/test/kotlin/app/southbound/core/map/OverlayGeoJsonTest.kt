@@ -1,5 +1,6 @@
 package app.southbound.core.map
 
+import app.southbound.core.network.MiniJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -188,5 +189,34 @@ class OverlayGeoJsonTest {
                 """{"type":"Feature","properties":{"id":"KART","kind":"weather","icon":"southbound-wx-CLEAR-n-x"},"geometry":{"type":"Point","coordinates":[-76.030000,43.990000]}}]}""",
             json,
         )
+    }
+
+    @Test
+    fun controlCharactersInNamesAreEscaped() {
+        val name = "Acme\r\n\tCo\u0001"
+        val json = OverlayGeoJson.cameras(listOf(CameraPin("alpr:9", MapPoint(40.744, -73.99), name)))
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"alpr:9","name":"Acme\r\n\tCo\u0001"},"geometry":{"type":"Point","coordinates":[-73.990000,40.744000]}}]}""",
+            json,
+        )
+        // It reads back, with the name as it was.
+        val feature = ((MiniJson.parse(json) as Map<*, *>)["features"] as List<*>).single() as Map<*, *>
+        assertEquals(name, (feature["properties"] as Map<*, *>)["name"])
+    }
+
+    @Test
+    fun featuresWithoutFiniteCoordinatesAreLeftOut() {
+        val good = MapPoint(40.7, -74.0)
+        val bad = MapPoint(Double.NaN, -74.0)
+        val empty = """{"type":"FeatureCollection","features":[]}"""
+        assertEquals(empty, OverlayGeoJson.routes(listOf(MapLine(listOf(good, bad), MapLine.Role.LEADER)), darkTheme = true))
+        assertEquals(empty, OverlayGeoJson.speeds(listOf(SpeedLine(listOf(good, good.copy(lat = 40.8)), Double.NaN))))
+        assertEquals(empty, OverlayGeoJson.pins(bad, MapPoint(41.0, Double.POSITIVE_INFINITY)))
+        assertEquals(empty, OverlayGeoJson.incidents(listOf(IncidentPin("i", bad, "CLOSURE", closure = true))))
+        assertEquals(empty, OverlayGeoJson.weatherAreas(listOf(WeatherArea("w", listOf(listOf(good, bad, good.copy(lon = -73.0))), "SEVERE"))))
+        // The rest of the list still goes.
+        val cameras = MiniJson.parse(OverlayGeoJson.cameras(listOf(CameraPin("a", bad), CameraPin("b", good)))) as Map<*, *>
+        assertEquals(listOf("b"), (cameras["features"] as List<*>).map { ((it as Map<*, *>)["properties"] as Map<*, *>)["id"] })
     }
 }

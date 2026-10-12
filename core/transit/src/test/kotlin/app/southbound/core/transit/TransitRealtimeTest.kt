@@ -10,6 +10,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.util.Collections
 
 class TransitRealtimeTest {
@@ -103,5 +107,110 @@ class TransitRealtimeTest {
         // Same route id, other agency: not this alert.
         assertTrue(snapshot.alertsFor(route(TransitSystem.BUS, "A"), now).isEmpty())
         assertTrue(snapshot.alertsFor(route(TransitSystem.SUBWAY, "A"), now + 7200).isEmpty())
+    }
+
+    private fun alert(id: String, header: String?, description: String?) =
+        ServiceAlert(id, emptyList(), setOf(AlertRoute("LI", "1")), emptySet(), header, description, null)
+
+    private fun alertsOnLine(vararg alerts: ServiceAlert): List<ServiceAlert> {
+        val snapshot = RealtimeSnapshot(mapOf(TransitSystem.LIRR to listOf(RealtimeFeed(0, emptyList(), alerts.toList()))), fetchedAt = 0)
+        return snapshot.alertsFor(TransitRoute(1, TransitSystem.LIRR, "1", "1", null, 2, null, null, null), 0)
+    }
+
+    @Test
+    fun `alerts without a header are not all one alert`() {
+        assertEquals(listOf("a", "b"), alertsOnLine(alert("a", null, "Track work"), alert("b", null, "Shuttle buses")).map { it.id })
+        assertEquals(listOf("a", "b"), alertsOnLine(alert("a", null, null), alert("b", null, null)).map { it.id })
+        // The same text twice is still one.
+        assertEquals(listOf("a"), alertsOnLine(alert("a", null, "Track work"), alert("b", null, "Track work")).map { it.id })
+        assertEquals(listOf("a"), alertsOnLine(alert("a", "Delays", "x"), alert("b", "Delays", "y")).map { it.id })
+        // A header and another alert's description that read alike are two alerts.
+        assertEquals(2, alertsOnLine(alert("a", "Delays", null), alert("b", null, "Delays")).size)
+    }
+
+    // A rail line over stops 1 to 5, ten minutes apart from 8:00.
+    private val line = TestNetwork().apply {
+        (1..5).forEach { stop(it) }
+        route(1, listOf(1, 2, 3, 4, 5), listOf(TestNetwork.hm(8, 0), TestNetwork.hm(8, 10), TestNetwork.hm(8, 20), TestNetwork.hm(8, 30), TestNetwork.hm(8, 40)))
+    }
+    private val network = line.build()
+    private val train = line.trips.single()
+
+    private fun update(vararg stops: StopTimeUpdate, delay: Int? = null, on: LocalDate = date) =
+        TripUpdate(TripDescriptor(train.gtfsId, "1", null, null, on.toString().replace("-", ""), false), stops.toList(), delay, null)
+
+    private fun at(stop: Int, arrivalDelay: Int? = null, departureDelay: Int? = null, departureTime: Long? = null, skipped: Boolean = false) =
+        StopTimeUpdate(
+            null,
+            "$stop",
+            arrivalDelay?.let { StopTimeEvent(it, null) },
+            if (departureDelay != null || departureTime != null) StopTimeEvent(departureDelay, departureTime) else null,
+            skipped,
+        )
+
+    private fun snapshotOf(update: TripUpdate) =
+        RealtimeSnapshot(mapOf(TransitSystem.LIRR to listOf(RealtimeFeed(0, listOf(update), emptyList()))), fetchedAt = 0)
+
+    /** The predicted time at stop [stop] (scheduled ten minutes apart from 8:00), with the network. */
+    private fun RealtimeSnapshot.timeAt(stop: Int, on: LocalDate = date, withNetwork: Boolean = true): Int? =
+        predict(TransitSystem.LIRR, train, network.stop(stop)!!, on, TestNetwork.hm(8, 0) + (stop - 1) * 600,
+            network = network.takeIf { withNetwork })?.time
+
+    @Test
+    fun `a delay carries to later stops until the next update`() {
+        val snapshot = snapshotOf(update(at(2, arrivalDelay = 120), at(4, departureDelay = 300)))
+        assertEquals(TestNetwork.hm(8, 10) + 120, snapshot.timeAt(2))
+        assertEquals(TestNetwork.hm(8, 20) + 120, snapshot.timeAt(3))
+        assertEquals(TestNetwork.hm(8, 30) + 300, snapshot.timeAt(4))
+        assertEquals(TestNetwork.hm(8, 40) + 300, snapshot.timeAt(5))
+        // Nothing before the first update, and nothing carried without the trip's stops.
+        assertNull(snapshot.timeAt(1))
+        assertNull(snapshot.timeAt(3, withNetwork = false))
+    }
+
+    @Test
+    fun `a predicted time carries as its delay`() {
+        val leaves = GtfsTime.dayStart(date) + TestNetwork.hm(8, 13) // three minutes late leaving stop 2
+        val snapshot = snapshotOf(update(at(2, departureTime = leaves)))
+        assertEquals(TestNetwork.hm(8, 13), snapshot.timeAt(2))
+        assertEquals(TestNetwork.hm(8, 30) + 180, snapshot.timeAt(4))
+    }
+
+    @Test
+    fun `a skipped stop passes the delay on, a stop with no data stops it`() {
+        assertEquals(TestNetwork.hm(8, 20) + 60, snapshotOf(update(at(1, departureDelay = 60), at(2, skipped = true))).timeAt(3))
+        val noData = StopTimeUpdate(null, "2", null, null, false)
+        assertNull(snapshotOf(update(at(1, departureDelay = 60), noData)).timeAt(3))
+        // The trip-wide delay still applies where nothing else does.
+        assertEquals(TestNetwork.hm(8, 20) + 30, snapshotOf(update(at(1, departureDelay = 60), noData, delay = 30)).timeAt(3))
+        assertEquals(TestNetwork.hm(8, 20) + 30, snapshotOf(update(at(4, departureDelay = 60), delay = 30)).timeAt(3))
+    }
+
+    @Test
+    fun `gtfs times count from noon minus twelve hours`() {
+        val newYork = RealtimeSnapshot.NEW_YORK
+        // An ordinary day: midnight.
+        assertEquals(date.atStartOfDay(newYork).toEpochSecond(), GtfsTime.dayStart(date))
+        // Spring forward, 2026-03-08: 23:00 the evening before, so 08:00:00 is 8 am EDT.
+        val spring = LocalDate.of(2026, 3, 8)
+        assertEquals(OffsetDateTime.of(2026, 3, 7, 23, 0, 0, 0, ZoneOffset.ofHours(-5)).toEpochSecond(), GtfsTime.dayStart(spring))
+        assertEquals(ZonedDateTime.of(2026, 3, 8, 8, 0, 0, 0, newYork).toEpochSecond(), GtfsTime.dayStart(spring) + 8 * 3600)
+        // Fall back, 2026-11-01: the first 01:00 (EDT), so 08:00:00 is 8 am EST.
+        val fall = LocalDate.of(2026, 11, 1)
+        assertEquals(OffsetDateTime.of(2026, 11, 1, 1, 0, 0, 0, ZoneOffset.ofHours(-4)).toEpochSecond(), GtfsTime.dayStart(fall))
+        assertEquals(ZonedDateTime.of(2026, 11, 1, 8, 0, 0, 0, newYork).toEpochSecond(), GtfsTime.dayStart(fall) + 8 * 3600)
+        assertEquals(8 * 3600 + 300, GtfsTime.secondsOf(ZonedDateTime.of(2026, 11, 1, 8, 5, 0, 0, newYork).toEpochSecond(), fall))
+    }
+
+    @Test
+    fun `predicted times match the timetable on the days the clocks change`() {
+        for (day in listOf(LocalDate.of(2026, 3, 8), LocalDate.of(2026, 11, 1))) {
+            // Five minutes late at stop 3, due 8:20 on the wall clock.
+            val due = ZonedDateTime.of(day, LocalTime.of(8, 25), RealtimeSnapshot.NEW_YORK).toEpochSecond()
+            val snapshot = snapshotOf(update(at(3, departureTime = due), on = day))
+            assertEquals("$day", TestNetwork.hm(8, 25), snapshot.timeAt(3, on = day))
+            // And the delay it carries is five minutes, not an hour and five.
+            assertEquals("$day", TestNetwork.hm(8, 35), snapshot.timeAt(4, on = day))
+        }
     }
 }

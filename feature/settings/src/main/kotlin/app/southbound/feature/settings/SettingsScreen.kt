@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -74,8 +75,10 @@ import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.updates.UpdateScheduler
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import java.util.Locale
 
 /**
@@ -97,8 +100,9 @@ fun SettingsScreen(
     onImported: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    // Writes outlive the screen: Back cancels its scope, and a slider drag's last writes may still be queued then.
     fun update(transform: (VoiceSettings) -> VoiceSettings) {
-        scope.launch { store.update(transform) }
+        scope.launch(NonCancellable) { store.update(transform) }
     }
     var systemEngine by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(voice) { systemEngine = voice.systemEngineAvailable() }
@@ -122,10 +126,13 @@ fun SettingsScreen(
         voiceSelection.choose(picked.takeUnless { it.bundled }?.id)
         if (!picked.bundled && picked !in installedVoices) UpdateScheduler.checkNow(context, anyNetwork = false)
         if (previous != picked && !previous.bundled) {
-            // Unpicked: give its space back. Picking it again downloads it again.
-            scope.launch(Dispatchers.IO) {
+            // Unpicked: give its space back. Picking it again downloads it again: picked back while this ran (Norman,
+            // Amy, Norman), the voice now chosen is missing, so its download is queued here.
+            scope.launch(Dispatchers.IO + NonCancellable) {
                 voice.deleteVoice(previous)
                 PackEvents.emitRemoved(PackKind.VOICE, previous.id)
+                val chosen = BuiltInVoice.entries.firstOrNull { it.id in voiceSelection.voices.value }
+                if (chosen != null && !voice.isVoiceInstalled(chosen)) UpdateScheduler.checkNow(context, anyNetwork = false)
                 refreshVoices()
             }
         }
@@ -237,7 +244,8 @@ fun SettingsScreen(
                         Text(String.format(Locale.US, "%.1f×", settings.speechRate))
                         Slider(
                             value = settings.speechRate,
-                            onValueChange = { r -> update { it.copy(speechRate = (r * 10).toInt() / 10f) } },
+                            // To the nearest tenth: a tick can land at 1.1999, which truncating stored as 1.1.
+                            onValueChange = { r -> update { it.copy(speechRate = (r * 10).roundToInt() / 10f) } },
                             valueRange = VoiceSettings.MIN_SPEECH_RATE..VoiceSettings.MAX_SPEECH_RATE,
                             steps = 14,
                         )
@@ -366,6 +374,19 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
+    // Left from older versions and shown only while set, so they can be cleared and stop riding along in every
+    // export: the TomTom toggle (only a backup can turn it on; no version has the layer) and the 511NY key (511NY
+    // has needed none since October 2026).
+    if (toggles.getValue(NetworkFeature.TRAFFIC_TOMTOM)) {
+        Toggle(R.string.live_tomtom_old, true, R.string.live_tomtom_old_note) { network.set(NetworkFeature.TRAFFIC_TOMTOM, it) }
+    }
+    val savedKeys by secrets.saved.collectAsState()
+    if (ApiKey.NY_511 in savedKeys) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.live_511_key_old), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { secrets.set(ApiKey.NY_511, null) }) { Text(stringResource(R.string.live_key_remove)) }
+        }
+    }
 
     Subheading(R.string.live_weather_heading)
     Toggle(R.string.live_weather, toggles.getValue(NetworkFeature.WEATHER), R.string.live_weather_note) {
@@ -396,7 +417,9 @@ private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretSt
 /** A password-style field that saves an API key encrypted, with Remove once one is saved. */
 @Composable
 private fun KeyField(secrets: SecretStore, key: ApiKey, @StringRes label: Int, @StringRes savedLabel: Int) {
+    // Saved and readable; a saved key the Keystore can't open asks to be typed again, and can still be removed.
     var hasKey by remember { mutableStateOf(secrets.has(key)) }
+    val saved by secrets.saved.collectAsState()
     var draft by remember { mutableStateOf("") }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -414,7 +437,7 @@ private fun KeyField(secrets: SecretStore, key: ApiKey, @StringRes label: Int, @
                 hasKey = secrets.has(key)
                 draft = ""
             }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.live_key_save)) }
-            if (hasKey) {
+            if (hasKey || key in saved) {
                 TextButton(onClick = {
                     secrets.set(key, null)
                     hasKey = false

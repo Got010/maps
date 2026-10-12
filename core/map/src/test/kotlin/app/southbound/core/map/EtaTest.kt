@@ -20,6 +20,17 @@ class EtaTest {
     }
 
     @Test
+    fun clockFollowsThePhones24HourSetting() {
+        // 2026-10-03 19:00:00 UTC is 15:00 in New York (EDT).
+        val afternoon = 1_791_054_000_000L
+        val ny = TimeZone.getTimeZone("America/New_York")
+        assertEquals("15:42", Eta.clock(afternoon, 42 * 60.0, Locale.US, ny, use24h = true))
+        assertEquals("3:42 PM", Eta.clock(afternoon, 42 * 60.0, Locale.US, ny, use24h = false).replace('\u202F', ' '))
+        // A 24-hour locale with the phone set to 12 hours.
+        assertTrue(Eta.clock(afternoon, 42 * 60.0, Locale.GERMANY, ny, use24h = false).startsWith("3:42"))
+    }
+
+    @Test
     fun lateMeansMoreThanTwoMinutes() {
         assertFalse(Eta.isLate(120.0))
         assertTrue(Eta.isLate(121.0))

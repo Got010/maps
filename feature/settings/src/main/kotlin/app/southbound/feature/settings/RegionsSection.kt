@@ -31,6 +31,7 @@ import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.Regions
 import app.southbound.core.updates.UpdateScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -110,16 +111,20 @@ fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: 
                             checked = checked,
                             onCheckedChange = { on ->
                                 selection.set(region.id, on)
-                                if (!on) {
-                                    scope.launch {
+                                if (on) {
+                                    // Ticked: its packs download.
+                                    UpdateScheduler.checkNow(context, anyNetwork = false)
+                                } else {
+                                    // Unticked: the map goes and the map screen is told, even if Settings is left at
+                                    // once; then the round drops its directions and search (the updater keeps only
+                                    // the picked regions' packs), after the delete rather than racing it.
+                                    scope.launch(NonCancellable) {
                                         withContext(Dispatchers.IO) { packStore.delete(PackKind.BASEMAP, region.id) }
-                                        installed = withContext(Dispatchers.IO) { packStore.installedBasemaps() }
                                         PackEvents.emitRemoved(PackKind.BASEMAP, region.id)
+                                        UpdateScheduler.checkNow(context, anyNetwork = false)
+                                        installed = withContext(Dispatchers.IO) { packStore.installedBasemaps() }
                                     }
                                 }
-                                // Ticked: its packs download. Unticked: its directions and search go in the same
-                                // round (the updater keeps only the picked regions' packs).
-                                UpdateScheduler.checkNow(context, anyNetwork = false)
                             },
                         )
                     },

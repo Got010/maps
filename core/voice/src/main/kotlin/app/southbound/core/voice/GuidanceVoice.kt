@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import com.stadiamaps.ferrostar.core.SpokenInstructionObserver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -61,8 +62,14 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
 
     private val speech = SpeechQueue()
     private val wake = Channel<Unit>(Channel.CONFLATED)
-    private val system by lazy { SystemTtsEngine(appContext) }
-    private val builtIn by lazy { PiperEngine(appContext) }
+    private val systemEngine = lazy { SystemTtsEngine(appContext) }
+    private val builtInEngine = lazy { PiperEngine(appContext) }
+    private val system by systemEngine
+    private val builtIn by builtInEngine
+
+    /** Counts [clearQueue]s; see [SpeechQueue.Item.generation]. */
+    @Volatile
+    private var clears = 0
     private val player = GuidancePlayer(appContext)
     private val _muteState = MutableStateFlow(false)
     private val _mutedUntilNextTurn = MutableStateFlow(false)
@@ -247,7 +254,6 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         val decision = decide(kind, text, triggerDistance, instruction)
         when (val action = decision.action) {
             is GuidanceAction.Speak -> {
-                if (action.vibrate) vibrate()
                 // Once a chained prompt is heard, the turn after it isn't announced again in full.
                 val context = guidanceContext
                 val chained = instruction.takeIf { decision.followUp != null }
@@ -263,6 +269,7 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
                     instruction?.utteranceId?.toString(),
                     onStart,
                     onDone,
+                    clears,
                 )
                 if (speech.offer(item)) player.stop()
                 wake.trySend(Unit)
@@ -284,10 +291,15 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         }
         val ready = synchronized(prepared) { prepared.remove(cacheKey(action.text, current)) }
         val pcm = ready?.await() ?: synthesize(action.text, current) ?: return
-        // Making the audio takes a moment: a turn reached meanwhile isn't announced during it.
+        // Making the audio takes a moment (up to seconds): a turn reached meanwhile isn't announced during it, and
+        // nothing is once the voice was muted or the queue cleared (Mute, End) while it was being made.
         val id = item.utteranceId
         if (item.kind == UtteranceKind.INSTRUCTION && id != null && !isCurrent(id)) return
+        if (item.generation != clears) return
+        if (item.kind != UtteranceKind.TEST && (_muteState.value || _mutedUntilNextTurn.value)) return
         item.onStart?.invoke()
+        // The haptic buzz with the words, not when they were queued: a prompt dropped never buzzes.
+        if (action.vibrate) vibrate()
         player.play(action.chime?.let { Chime.before(it, pcm) } ?: pcm, current)
     }
 
@@ -296,9 +308,17 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         return when (current.engine) {
             VoiceEngine.BUILT_IN -> builtIn.synthesize(text, rate, current.builtInVoice)
             // System, or the default "System if one is active". If the system
-            // engine fails, fall back so directions still speak.
-            VoiceEngine.SYSTEM, null -> system.synthesize(text, rate) ?: builtIn.synthesize(text, rate, current.builtInVoice)
+            // engine fails (no audio, or audio it wrote that can't be read), fall back so directions still speak.
+            VoiceEngine.SYSTEM, null -> systemAudio(text, rate) ?: builtIn.synthesize(text, rate, current.builtInVoice)
         }
+    }
+
+    private suspend fun systemAudio(text: String, rate: Float): Pcm? = try {
+        system.synthesize(text, rate)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     /** Audio depends on the words, the rate, and which engine and voice speak them. */
@@ -318,6 +338,7 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
     }
 
     private fun clearQueue() {
+        clears++
         speech.clear()
         player.stop()
     }
@@ -349,8 +370,9 @@ class GuidanceVoice(context: Context, private val settings: StateFlow<VoiceSetti
         synth.cancel()
         playback.cancel()
         wake.close()
-        system.shutdown()
-        builtIn.release()
+        // Only what was started: making an engine just to stop it would load a voice model for nothing.
+        if (systemEngine.isInitialized()) system.shutdown()
+        if (builtInEngine.isInitialized()) builtIn.release()
     }
 
     companion object {

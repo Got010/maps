@@ -11,8 +11,10 @@ import androidx.lifecycle.LifecycleOwner
 import app.southbound.core.routing.TripBroadcast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -28,6 +30,10 @@ internal class TripReporter(private val carContext: CarContext, lifecycle: Lifec
     private val manager = carContext.getCarService(NavigationManager::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var started = false
+
+    // The latest display, and a retry of a refused start waiting to run.
+    private var latest: CarTripDisplay? = null
+    private var retry: Job? = null
 
     init {
         // The callback must be set before navigationStarted().
@@ -59,6 +65,7 @@ internal class TripReporter(private val carContext: CarContext, lifecycle: Lifec
 
     // The host can refuse a call (not the active navigation app, say); the car's screen still works then.
     private fun report(display: CarTripDisplay?) {
+        latest = display
         if (display == null) {
             if (started) runCatching { manager.navigationEnded() }
             started = false
@@ -67,7 +74,17 @@ internal class TripReporter(private val carContext: CarContext, lifecycle: Lifec
         if (!started) {
             runCatching { manager.navigationStarted() }.onSuccess { started = true }
         }
-        if (!started) return
+        if (!started) {
+            // Refused for now: try again shortly with the latest turn, not only once the next one comes (a minute on
+            // a long road, with the cluster empty meanwhile).
+            if (retry?.isActive != true) {
+                retry = scope.launch {
+                    delay(START_RETRY_MS)
+                    report(latest)
+                }
+            }
+            return
+        }
         runCatching { manager.updateTrip(trip(display)) }
     }
 
@@ -84,3 +101,6 @@ internal class TripReporter(private val carContext: CarContext, lifecycle: Lifec
         return builder.setLoading(false).build()
     }
 }
+
+/** How soon a start the car's host refused is tried again. */
+private const val START_RETRY_MS = 5_000L

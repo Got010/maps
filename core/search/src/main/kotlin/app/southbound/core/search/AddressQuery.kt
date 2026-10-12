@@ -66,6 +66,9 @@ data class AddressQuery(
         private val COUNTRY = setOf("usa", "us")
         private val UNIT_WORDS = setOf("apt", "apartment", "unit", "ste", "suite", "fl", "floor", "rm", "room")
 
+        /** What names a unit after its word: "4", "200", "4b", "b", "b4", "ph2". */
+        private val UNIT_ID = Regex("\\d+[a-z]?|[a-z]\\d*|[a-z]{2}\\d+")
+
         /** Null when [raw] doesn't start with a house number followed by a street. */
         fun parse(raw: String): AddressQuery? {
             val match = NUMBER.find(raw) ?: return null
@@ -135,13 +138,20 @@ data class AddressQuery(
         /** "12 - 34" -> "12-34", "5a" -> "5A", like the pipeline's clean_number. */
         fun tidyNumber(number: String): String = number.trim().replace(SPACES_AROUND_HYPHEN, "-").uppercase()
 
-        /** "apt 4b", "suite 200": the word and what follows it. */
+        /**
+         * "apt 4b", "suite 200", "unit c": a unit word and the unit after it. A unit word is part of the
+         * street's name and stays when it starts the street, when no unit follows it ("123 Old Unit Rd"), or
+         * when the street's type word comes right after the unit and not before the word: a unit is written
+         * after the street.
+         */
         private fun dropUnits(tokens: MutableList<String>) {
-            var i = 0
-            while (i < tokens.size) {
-                if (tokens[i] in UNIT_WORDS && i > 0) {
+            var i = 1
+            while (i < tokens.size - 1) {
+                val isUnit = tokens[i] in UNIT_WORDS && UNIT_ID.matches(tokens[i + 1]) &&
+                    !(tokens.getOrNull(i + 2) in STREET_TYPES && (1 until i).none { tokens[it] in STREET_TYPES })
+                if (isUnit) {
                     tokens.removeAt(i)
-                    if (i < tokens.size) tokens.removeAt(i)
+                    tokens.removeAt(i)
                 } else {
                     i++
                 }
