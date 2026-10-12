@@ -160,6 +160,10 @@ no gate baseline change and no data rebuild.
 - The Search key in both layouts opens the top result only for what is typed now: pressed mid-debounce, it opens
   the one that comes in next (the review's search finding).
 - The top layout is today's, with the start-point chip and Home and Work under the bar.
+- The activity sets `windowSoftInputMode="adjustResize"`. Without it Android also panned the whole window when the
+  keyboard came up, so on the phone (0.1.43) the field sat a keyboard's height above the keyboard, with the lists
+  pushed up under the status bar. Settings' content pads for the keyboard itself now (`Scaffold`'s
+  `contentWindowInsets` with the IME), since Android no longer pans it to a focused field.
 - No screenshot tests yet: the picked screenshot-test item would give both layouts a check in CI.
 
 ## Decisions (owner, 12 October 2026)
