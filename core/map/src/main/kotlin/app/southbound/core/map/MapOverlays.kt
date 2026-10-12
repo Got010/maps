@@ -1,5 +1,6 @@
 package app.southbound.core.map
 
+import app.southbound.core.network.MiniJson
 import java.util.Locale
 
 /** A point on the map, in WGS84 degrees. */
@@ -131,7 +132,11 @@ sealed interface CameraRequest {
     }
 }
 
-/** GeoJSON for the overlay sources, built by hand to keep the dependency surface small. */
+/**
+ * GeoJSON for the overlay sources, built by hand to keep the dependency surface small. A feature with a coordinate
+ * that isn't a number (NaN or infinite) is left out: it would make the whole collection unreadable, and the map would
+ * keep drawing the layer's old data.
+ */
 internal object OverlayGeoJson {
 
     /**
@@ -140,7 +145,7 @@ internal object OverlayGeoJson {
      * higher ranks come first so the faster routes draw on top.
      */
     fun routes(lines: List<MapLine>, darkTheme: Boolean): String = featureCollection(
-        lines.filter { it.points.size >= 2 }
+        lines.filter { it.points.size >= 2 && it.points.all { p -> p.isFinite } }
             .sortedWith(compareBy<MapLine>({ it.role.ordinal }, { -it.rank }))
             .map { line ->
                 val coordinates = line.points.joinToString(",") { coordinate(it) }
@@ -154,13 +159,13 @@ internal object OverlayGeoJson {
 
     fun pins(pin: MapPoint?, destination: MapPoint?): String = featureCollection(
         listOfNotNull(
-            destination?.takeIf { it != pin }?.let { point("destination", it) },
-            pin?.let { point("pin", it) },
+            destination?.takeIf { it != pin && it.isFinite }?.let { point("destination", it) },
+            pin?.takeIf { it.isFinite }?.let { point("pin", it) },
         ),
     )
 
     fun speeds(lines: List<SpeedLine>): String = featureCollection(
-        lines.filter { it.points.size >= 2 }.map { line ->
+        lines.filter { it.points.size >= 2 && it.speedMph.isFinite() && it.points.all { p -> p.isFinite } }.map { line ->
             val coordinates = line.points.joinToString(",") { coordinate(it) }
             String.format(Locale.ROOT, """{"type":"Feature","properties":{"speed":%.1f},""", line.speedMph) +
                 """"geometry":{"type":"LineString","coordinates":[$coordinates]}}"""
@@ -169,14 +174,14 @@ internal object OverlayGeoJson {
 
     fun incidents(pins: List<IncidentPin>): String = featureCollection(
         // Closures last, so they draw on top of lesser incidents.
-        pins.sortedBy { it.closure }.map { pin ->
+        pins.filter { it.point.isFinite }.sortedBy { it.closure }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":${quote(pin.kind)},"closure":${pin.closure}},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )
 
     fun cameras(pins: List<CameraPin>): String = featureCollection(
-        pins.map { pin ->
+        pins.filter { it.point.isFinite }.map { pin ->
             val name = pin.name?.let { ""","name":${quote(it)}""" } ?: ""
             """{"type":"Feature","properties":{"id":${quote(pin.id)}$name},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
@@ -185,14 +190,14 @@ internal object OverlayGeoJson {
 
     fun trafficCameras(pins: List<TrafficCameraPin>): String = featureCollection(
         // Live cameras last, so they draw over offline ones.
-        pins.sortedBy { !it.offline }.map { pin ->
+        pins.filter { it.point.isFinite }.sortedBy { !it.offline }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"camera","offline":${pin.offline}},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )
 
     fun messageSigns(pins: List<MessageSignPin>): String = featureCollection(
-        pins.map { pin ->
+        pins.filter { it.point.isFinite }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"sign"},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
@@ -201,7 +206,7 @@ internal object OverlayGeoJson {
     fun weatherAreas(areas: List<WeatherArea>): String = featureCollection(
         // The least severe first, so the worst alert draws on top.
         areas.sortedByDescending { SEVERITY_ORDER.indexOf(it.severity) }.flatMap { area ->
-            area.rings.filter { it.size >= 3 }.map { ring ->
+            area.rings.filter { it.size >= 3 && it.all { p -> p.isFinite } }.map { ring ->
                 val closed = if (ring.first() == ring.last()) ring else ring + ring.first()
                 """{"type":"Feature","properties":{"id":${quote(area.id)},"severity":${quote(area.severity)}},""" +
                     """"geometry":{"type":"Polygon","coordinates":[[${closed.joinToString(",") { coordinate(it) }}]]}}"""
@@ -210,7 +215,7 @@ internal object OverlayGeoJson {
     )
 
     fun weatherStations(pins: List<WeatherStationPin>): String = featureCollection(
-        pins.map { pin ->
+        pins.filter { it.point.isFinite }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"kind":"weather","icon":${quote(pin.imageName)}},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
@@ -218,11 +223,17 @@ internal object OverlayGeoJson {
 
     private val SEVERITY_ORDER = listOf("EXTREME", "SEVERE", "MODERATE", "MINOR", "UNKNOWN")
 
-    private fun quote(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""
+    // Every control character escaped as JSON asks: a CR or a TAB in an OSM operator's name would otherwise make the
+    // whole collection unreadable.
+    private fun quote(s: String): String = MiniJson.stringify(s)
+
+    private val MapPoint.isFinite: Boolean
+        get() = lat.isFinite() && lon.isFinite()
 
     private fun point(role: String, p: MapPoint) =
         """{"type":"Feature","properties":{"role":"$role"},"geometry":{"type":"Point","coordinates":${coordinate(p)}}}"""
 
+    // Only for finite points: %.6f writes NaN, which isn't JSON.
     private fun coordinate(p: MapPoint) = String.format(Locale.ROOT, "[%.6f,%.6f]", p.lon, p.lat)
 
     private fun featureCollection(features: List<String>) =
