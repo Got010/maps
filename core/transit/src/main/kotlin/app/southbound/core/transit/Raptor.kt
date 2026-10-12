@@ -36,6 +36,9 @@ internal class Raptor(private val tt: Timetable, private val maxRides: Int = MAX
     private val accessSeconds = IntArray(stops)
     private val best = IntArray(stops) { INF }
 
+    /** Whether a stop's best label came by a ride (and maybe a walk after it), not straight from the origin. */
+    private val rode = BooleanArray(stops)
+
     fun search(access: List<StopAccess>, egress: List<StopAccess>, departAt: Int): List<RawJourney> {
         var marked = BooleanArray(stops)
         for (a in access) {
@@ -87,6 +90,7 @@ internal class Raptor(private val tt: Timetable, private val maxRides: Int = MAX
                         if (time < best[s] && time < target) {
                             cur[s] = time
                             best[s] = time
+                            rode[s] = true
                             kind[k][s] = RIDE
                             byRide[k][s] = true
                             rideArrival[k][s] = time
@@ -124,6 +128,7 @@ internal class Raptor(private val tt: Timetable, private val maxRides: Int = MAX
                     if (time < best[to] && time < target) {
                         cur[to] = time
                         best[to] = time
+                        rode[to] = true
                         kind[k][to] = WALK
                         byRide[k][to] = false
                         walkFrom[k][to] = s
@@ -135,7 +140,9 @@ internal class Raptor(private val tt: Timetable, private val maxRides: Int = MAX
 
             var bestStop = -1
             for ((stop, seconds) in egressSeconds) {
-                if (cur[stop] == INF) continue
+                // A stop near both ends, reached on foot from the origin, is no transit trip: the planner offers the
+                // walk itself, and taking it here as the target would cut short every ride.
+                if (cur[stop] == INF || !rode[stop]) continue
                 val time = cur[stop] + seconds
                 if (time < target) {
                     target = time
