@@ -130,7 +130,8 @@ fun SearchPanel(
     val resultsState = rememberLazyListState()
 
     LaunchedEffect(Unit) { focus.requestFocus() }
-    LaunchedEffect(query, index) {
+    // Again once there is a position: results looked up before the first fix carry no distances and rank as if far.
+    LaunchedEffect(query, index, near != null) {
         val asked = query
         if (index == null || asked.isBlank()) {
             results = emptyList()

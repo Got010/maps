@@ -67,34 +67,34 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
 
     val settings: StateFlow<FuelSettings> = _settings.asStateFlow()
 
-    fun setMpg(mpg: Double) = update(_settings.value.copy(mpg = mpg))
+    fun setMpg(mpg: Double) = update { it.copy(mpg = mpg) }
 
     /** The manual price, also the fallback when no fetched price is available. */
-    fun setPricePerGallon(price: Double) = update(_settings.value.copy(pricePerGallon = price))
+    fun setPricePerGallon(price: Double) = update { it.copy(pricePerGallon = price) }
 
-    fun setPriceSource(source: PriceSource) = update(_settings.value.copy(priceSource = source))
+    fun setPriceSource(source: PriceSource) = update { it.copy(priceSource = source) }
 
-    fun setRegion(region: GasRegion) = update(_settings.value.copy(region = region))
+    fun setRegion(region: GasRegion) = update { it.copy(region = region) }
 
     /**
      * The four things the driver chose, all in one synchronous commit (an import). The fetched price stays as it is.
      * Throws [java.io.IOException] if the write fails.
      */
     fun setChoices(mpg: Double, pricePerGallon: Double, source: PriceSource, region: GasRegion) =
-        update(_settings.value.copy(mpg = mpg, pricePerGallon = pricePerGallon, priceSource = source, region = region), durable = true)
+        update(durable = true) { it.copy(mpg = mpg, pricePerGallon = pricePerGallon, priceSource = source, region = region) }
 
     override val region: GasRegion get() = _settings.value.region
     override val fetchedRegion: GasRegion? get() = _settings.value.fetchedRegion
     override val fetchedAtMillis: Long get() = _settings.value.fetchedAtMillis
 
-    override fun saveFetched(price: GasPrice, region: GasRegion, atMillis: Long) = update(
-        _settings.value.copy(
+    override fun saveFetched(price: GasPrice, region: GasRegion, atMillis: Long) = update {
+        it.copy(
             fetchedPrice = price.pricePerGallon,
             fetchedPeriod = price.periodIso,
             fetchedRegion = region,
             fetchedAtMillis = atMillis,
-        ),
-    )
+        )
+    }
 
     private fun read() = FuelSettings(
         mpg = prefs.getFloat(KEY_MPG, FuelSettings.DEFAULT_MPG.toFloat()).toDouble(),
@@ -107,9 +107,11 @@ class FuelPrefs private constructor(context: Context) : GasPriceStore {
         fetchedAtMillis = prefs.getLong(KEY_FETCHED_AT, 0L),
     ).sanitized()
 
+    // The change is made to the settings as they are inside the lock: a price fetched while a Settings edit lands keeps
+    // both, where reading them first lost one.
     @Synchronized
-    private fun update(next: FuelSettings, durable: Boolean = false) {
-        val clean = next.sanitized()
+    private fun update(durable: Boolean = false, change: (FuelSettings) -> FuelSettings) {
+        val clean = change(_settings.value).sanitized()
         val edit = prefs.edit()
         edit
             .putFloat(KEY_MPG, clean.mpg.toFloat())

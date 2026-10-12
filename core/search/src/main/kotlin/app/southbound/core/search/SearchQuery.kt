@@ -14,7 +14,10 @@ package app.southbound.core.search
  *
  * Trailing state words and a ZIP ("..., Brooklyn NY 11201") are [soft]:
  * they raise the rows that have them but never drop a row that lacks them,
- * since most rows carry neither.
+ * since most rows carry neither. A state is any the packs cover, by its
+ * two-letter code ("Hartford CT", "Scranton PA") or, after a comma as an
+ * address writes it, by its name ("Hartford, Connecticut"); without the
+ * comma a name may be part of the place's own ("Lake Michigan").
  *
  * "weather albany", "albany weather", "weather in Nyack" search for the place and set [asksWeather], so the
  * app can show that place's current weather (worked out on the phone; the query never leaves it).
@@ -36,7 +39,15 @@ data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyL
     fun softMatches(searchText: String): Int = soft.count { searchText.contains(" $it") }
 
     companion object {
-        private val SOFT_WORDS = setOf("ny", "nj", "usa", "us")
+        /** The states the packs cover (core:packs Regions), and DC. */
+        private val STATE_CODES = setOf(
+            "ny", "nj", "ct", "pa", "md", "de", "dc", "oh", "in", "il", "mi", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks",
+        )
+        private val STATE_NAMES = listOf(
+            "new york", "new jersey", "connecticut", "pennsylvania", "maryland", "delaware", "ohio", "indiana", "illinois",
+            "michigan", "wisconsin", "minnesota", "iowa", "missouri", "north dakota", "south dakota", "nebraska", "kansas",
+        ).map { it.split(' ') }
+        private val SOFT_WORDS = STATE_CODES + setOf("usa", "us")
         private val ZIP = Regex("\\d{5}")
         private val ZIP_PLUS_FOUR = Regex("\\d{4}")
 
@@ -56,11 +67,19 @@ data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyL
                 asksWeather = true
             }
             val soft = ArrayList<String>()
+            // A state's name right after the last comma ("..., New Jersey 07102").
+            val afterComma = if (',' in raw) SearchText.normalize(raw.substringAfterLast(',')).split(' ').filter { it.isNotEmpty() } else emptyList()
+            val stateName = STATE_NAMES.firstOrNull { afterComma.take(it.size) == it }
+            var nameLeft = stateName?.size ?: 0
             // Keep at least one required word: "NY" alone is still a search for "ny".
             while (tokens.size > 1) {
                 val last = tokens[tokens.lastIndex]
                 when {
                     last in SOFT_WORDS || ZIP.matches(last) -> soft.add(0, tokens.removeAt(tokens.lastIndex))
+                    stateName != null && nameLeft > 0 && last == stateName[nameLeft - 1] -> {
+                        soft.add(0, tokens.removeAt(tokens.lastIndex))
+                        nameLeft--
+                    }
                     ZIP_PLUS_FOUR.matches(last) && tokens.size > 2 && ZIP.matches(tokens[tokens.lastIndex - 1]) -> {
                         tokens.removeAt(tokens.lastIndex)
                         soft.add(0, tokens.removeAt(tokens.lastIndex))

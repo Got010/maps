@@ -174,7 +174,7 @@ class GuidanceSupport(
         val announcement = appContext.getString(
             R.string.explore_trip_start_spoken,
             // The same clock time the trip screen shows.
-            Eta.clock(System.currentTimeMillis(), durationSeconds),
+            Eta.clock(System.currentTimeMillis(), durationSeconds, use24h = android.text.format.DateFormat.is24HourFormat(appContext)),
             SpokenUnits.distance(distanceMeters),
         )
         voice.startTrip(announcement) { navigator.start(route, mode) }

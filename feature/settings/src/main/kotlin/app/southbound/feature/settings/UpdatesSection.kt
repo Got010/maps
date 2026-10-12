@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,12 +36,17 @@ import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
+import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackStore
 import app.southbound.core.packs.Regions
 import app.southbound.core.packs.TileFolder
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.updates.UpdateState
 import app.southbound.core.updates.UpdateStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.withContext
 
 /**
  * Updates from Southbound's GitHub releases: map data (on by default), the
@@ -64,6 +70,12 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
         networkPermitted = UpdateScheduler.networkPermitted(context)
         packs = installedPacks(packStore, tiles)
         onPauseOrDispose { }
+    }
+    // A pack that lands or goes while Settings is open (an update round, an import, a region unticked) shows at once.
+    LaunchedEffect(Unit) {
+        merge(PackEvents.installed.map { }, PackEvents.removed.map { }).collect {
+            packs = withContext(Dispatchers.IO) { installedPacks(packStore, tiles) }
+        }
     }
 
     Section(R.string.settings_updates)

@@ -105,9 +105,17 @@ internal object PlateReaders {
             var batch = fresh
             var next = routesAvoiding(batch.map { it.second })
             if (next.isEmpty()) {
+                var outOfRoutings = false
                 val split = CameraAvoidance.passable(batch) { part ->
-                    routings < CameraAvoidance.MAX_ROUTINGS && routesAvoiding(part.map { it.second }).isNotEmpty()
+                    if (routings >= CameraAvoidance.MAX_ROUTINGS) {
+                        outOfRoutings = true
+                        false
+                    } else {
+                        routesAvoiding(part.map { it.second }).isNotEmpty()
+                    }
                 }
+                // Out of routings, "dropped" only means not tried: none of those is known to be on the only way.
+                if (outOfRoutings) break
                 split.dropped.forEach { unavoidable += it.first }
                 batch = split.kept
                 // Every new camera is on the only way: the next pass meets whatever else is there.

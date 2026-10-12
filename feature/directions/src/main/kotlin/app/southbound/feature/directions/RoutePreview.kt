@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -48,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -65,6 +67,7 @@ import app.southbound.core.routing.FuelSettings
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.search.RouteExposure
+import kotlinx.coroutines.delay
 
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
 sealed interface RoutePreviewState {
@@ -396,8 +399,15 @@ private fun RouteOption(
                         )
                     }
                 }
-                // The clock time is read when the sheet is composed; it follows the route list as it refreshes.
-                val arrival = remember(total) { Eta.clock(System.currentTimeMillis(), total) }
+                // The clock time moves on with the minute while the sheet is open, in the phone's 12/24-hour style.
+                val use24h = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+                val minute by produceState(System.currentTimeMillis()) {
+                    while (true) {
+                        delay(MINUTE_MS - System.currentTimeMillis() % MINUTE_MS)
+                        value = System.currentTimeMillis()
+                    }
+                }
+                val arrival = remember(total, minute, use24h) { Eta.clock(minute, total, use24h = use24h) }
                 Text(
                     stringResource(R.string.directions_arrive, arrival),
                     style = MaterialTheme.typography.bodySmall,
@@ -486,3 +496,6 @@ fun TravelMode.icon(): ImageVector = when (this) {
     TravelMode.WALK -> Icons.Filled.DirectionsWalk
     TravelMode.BIKE -> Icons.Filled.DirectionsBike
 }
+
+/** A minute in milliseconds, for the arrival clock that moves on while the sheet is open. */
+private const val MINUTE_MS = 60_000L
