@@ -5,7 +5,8 @@
 # update check (both read the latest full release) never see it.
 #
 # On main: every six hours, or Actions > Weather forecast pack > Run workflow. On a branch push that touches the
-# pack's code: the tests and a quick build of a few points, printed to the log, nothing published.
+# pack's code: the tests and a quick build of a few points, printed to the log, nothing published. The job that runs
+# the code has read access only; the one that publishes runs none of it (as in release.yml).
 name: Weather forecast pack
 
 on:
@@ -25,12 +26,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs the branch's own code (the tests, forecast_pack.py), so it gets no write access: a branch push could
+  # otherwise upload anything over the published release. Publishing is the next job's, which runs no repository code.
   pack:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      # Publishing the pack to the "weather" prerelease (main only; a branch push publishes nothing).
-      contents: write
+      contents: read
     env:
       GH_TOKEN: ${{ github.token }}
       PUBLISH: ${{ github.ref == 'refs/heads/main' }}
@@ -56,8 +58,34 @@ jobs:
           python3 -u pipeline/weather/forecast_pack.py --out "$RUNNER_TEMP/forecast-ny.json.gz" \
             --cache "$RUNNER_TEMP/points-cache.json" "${extra[@]}"
 
-      - name: Publish
+      - name: Keep the pack for publishing
         if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: forecast
+          path: |
+            ${{ runner.temp }}/forecast-ny.json.gz
+            ${{ runner.temp }}/points-cache.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: pack
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Checks out nothing and runs no repository code: gh uploads the files the pack job made.
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: forecast
+          path: ${{ runner.temp }}/forecast
+
+      - name: Publish
         run: |
           if ! gh release view weather --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create weather --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
@@ -65,4 +93,4 @@ jobs:
               --notes "forecast-ny.json.gz: the National Weather Service 7-day forecast for a fixed grid over every state Southbound covers, read by the app's weather layer. Not an app release."
           fi
           gh release upload weather --repo "$GITHUB_REPOSITORY" --clobber \
-            "$RUNNER_TEMP/forecast-ny.json.gz" "$RUNNER_TEMP/points-cache.json"
+            "$RUNNER_TEMP/forecast/forecast-ny.json.gz" "$RUNNER_TEMP/forecast/points-cache.json"

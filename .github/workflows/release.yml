@@ -148,15 +148,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REBUILD: ${{ inputs.rebuild_data }}
         run: |
-          previous="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
+          # Release tags only: vX.Y.Z with each part 0-99 (the versionCode gives each two digits). Any other tag, such
+          # as a stray v1.2.3.4, is left out rather than stopping every later release.
+          release_tags() { git tag -l 'v*' --sort=-v:refname | { grep -E '^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$' || true; }; }
+          previous="$(release_tags | head -1)"
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
             tag="$GITHUB_REF_NAME"
-            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::Tag must look like v1.2.3, got $tag"
+            if [[ ! "$tag" =~ ^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+              echo "::error::Tag must look like v1.2.3, each part 0 to 99, got $tag"
               exit 1
             fi
             # The previous release is the newest tag other than this one.
-            previous="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -vx "$tag" | head -1)"
+            previous="$(release_tags | { grep -vx "$tag" || true; } | head -1)"
+            # Versions only go up: a tag below the newest release would be published as latest, Obtainium would offer
+            # it as a downgrade, and the manifest's versionCode would go down.
+            if [[ -n "$previous" && "$(printf '%s\n%s\n' "$previous" "$tag" | sort -V | tail -1)" != "$tag" ]]; then
+              echo "::error::$tag is below the newest release, $previous: versions only go up."
+              exit 1
+            fi
           else
             # Next patch version; versionCode allows 0-99 per part.
             IFS=. read -r major minor patch <<< "${previous#v}"
@@ -756,6 +765,10 @@ jobs:
           for pack in $(jq -r 'keys[]' out/routing-packs.json); do
             gh release download "$PREVIOUS" --repo "$GITHUB_REPOSITORY" --dir out \
               --pattern "$pack" --pattern "$pack.sha256"
+          done
+          # Every file carried over is checked: one without its .sha256 (a hand upload) is not passed on unverified.
+          for file in out/*; do
+            [[ "$file" == *.sha256 || -f "$file.sha256" ]] || { echo "::error::$PREVIOUS has ${file#out/} without its .sha256"; exit 1; }
           done
           (cd out && sha256sum -c ./*.sha256)
           gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber
