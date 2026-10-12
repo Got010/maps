@@ -28,8 +28,10 @@ internal fun DrivingSection(network: PreferenceNetworkToggles? = null, secrets: 
     val context = LocalContext.current
     val prefs = DrivingPrefs.get(context)
     val night by prefs.nightBySunset.collectAsState()
+    val searchAtBottom by prefs.searchAtBottom.collectAsState()
     Section(R.string.settings_driving)
     Toggle(R.string.driving_night, night, R.string.driving_night_note) { prefs.setNightBySunset(it) }
+    Toggle(R.string.driving_search_bottom, searchAtBottom, R.string.driving_search_bottom_note) { prefs.setSearchAtBottom(it) }
     FuelEstimate(network, secrets)
 }
 
