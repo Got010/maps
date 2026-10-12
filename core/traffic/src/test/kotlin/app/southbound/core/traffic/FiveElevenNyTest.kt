@@ -35,7 +35,9 @@ class FiveElevenNyTest {
         assertEquals(GeoPoint(40.7995, -73.9685), work.location) // numbers as strings
 
         val ramp = events[2]
-        assertEquals(IncidentKind.CLOSURE, ramp.kind)
+        // Filed under closures, but a ramp: NY-17 itself stays open.
+        assertEquals(IncidentKind.OTHER, ramp.kind)
+        assertFalse(ramp.isClosure)
         assertNull(ramp.updatedAt)
 
         val parade = events[3]

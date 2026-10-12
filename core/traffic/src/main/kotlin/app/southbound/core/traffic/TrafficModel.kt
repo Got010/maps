@@ -1,7 +1,6 @@
 package app.southbound.core.traffic
 
 import app.southbound.core.network.NetworkFeature
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sqrt
 
@@ -186,19 +185,5 @@ object Geo {
         val cx = ax + t * dx; val cy = ay + t * dy
         val ddx = (px - cx) * DEG; val ddy = (py - cy) * DEG
         return sqrt(ddx * ddx + ddy * ddy) * EARTH_RADIUS_M
-    }
-
-    /** Metres from [p] to the polyline [line]; infinity for an empty line. */
-    fun distanceToLineMeters(p: GeoPoint, line: List<GeoPoint>): Double {
-        if (line.isEmpty()) return Double.POSITIVE_INFINITY
-        if (line.size == 1) return distanceMeters(p, line[0])
-        var best = Double.POSITIVE_INFINITY
-        for (i in 0 until line.size - 1) {
-            // Skip segments whose box is far away; cheap, and routes have thousands of points.
-            val a = line[i]; val b = line[i + 1]
-            if (abs(p.lat - a.lat) > 0.05 && abs(p.lat - b.lat) > 0.05) continue
-            best = minOf(best, distanceToSegmentMeters(p, a, b))
-        }
-        return best
     }
 }

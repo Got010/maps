@@ -74,6 +74,9 @@ class Ibi511Test {
     private fun eastern(y: Int, mo: Int, d: Int, h: Int, mi: Int) =
         ZonedDateTime.of(y, mo, d, h, mi, 0, 0, ZoneId.of("America/New_York")).toInstant().toEpochMilli()
 
+    private fun central(y: Int, mo: Int, d: Int, h: Int, mi: Int) =
+        ZonedDateTime.of(y, mo, d, h, mi, 0, 0, ZoneId.of("America/Chicago")).toInstant().toEpochMilli()
+
     @Test
     fun `511PA events join their icons to their rows`() {
         val events = Ibi511Client(Ibi511.PA, site(paIcons, paLists)).events(0L).associateBy { it.id }
@@ -146,6 +149,8 @@ class Ibi511Test {
         assertTrue(work.description.startsWith("Roadwork - Mainline Right Lane Closed on I-94 WB"))
         assertFalse(work.isClosure)
         assertEquals(TrafficSource.WI_511, work.source)
+        // "3/5/26, 2:58 PM": Wisconsin writes its own (Central) time.
+        assertEquals(central(2026, 3, 5, 14, 58), work.updatedAt)
         val closed = events.getValue("wi:566098")
         assertEquals(IncidentKind.CLOSURE, closed.kind)
         assertEquals("French Rd", closed.roadway)
