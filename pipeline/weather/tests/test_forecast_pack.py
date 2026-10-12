@@ -101,15 +101,34 @@ class ForecastPackTest(unittest.TestCase):
             return answers[url]
 
         cache = {}
-        result = fp.build([(42.6, -73.8), (42.6, -73.7), (43.5, -77.5)], cache, fetch=fetch, workers=1)
+        day = 86_400
+        result = fp.build([(42.6, -73.8), (42.6, -73.7), (43.5, -77.5)], cache, fetch=fetch, workers=1, now=100 * day)
         self.assertEqual(2, len(result["points"]))
         self.assertEqual(1, result["cells"])
         self.assertEqual(1, asked.count("https://api.weather.gov/gridpoints/ALY/72,63/forecast"))
-        self.assertEqual({"42.6,-73.8": ["ALY", 72, 63], "42.6,-73.7": ["ALY", 72, 63], "43.5,-77.5": None}, cache)
-        # A second run asks only for forecasts: the cells come from the cache.
+        self.assertEqual(
+            {"42.6,-73.8": ["ALY", 72, 63], "42.6,-73.7": ["ALY", 72, 63], "43.5,-77.5": {"miss": 100 * day}}, cache)
+        # A second run asks only for forecasts: the cells and the miss come from the cache.
         asked.clear()
-        fp.build([(42.6, -73.8), (43.5, -77.5)], cache, fetch=fetch, workers=1)
+        fp.build([(42.6, -73.8), (43.5, -77.5)], cache, fetch=fetch, workers=1, now=101 * day)
         self.assertEqual(["https://api.weather.gov/gridpoints/ALY/72,63/forecast"], asked)
+        # A week on, the miss is asked again (a one-off 404 isn't kept for good); so is the old form, null.
+        asked.clear()
+        cache["42.6,-73.7"] = None
+        fp.build([(42.6, -73.7), (43.5, -77.5)], cache, fetch=fetch, workers=1, now=108 * day)
+        self.assertIn("https://api.weather.gov/points/43.5,-77.5", asked)
+        self.assertIn("https://api.weather.gov/points/42.6,-73.7", asked)
+        self.assertEqual({"miss": 108 * day}, cache["43.5,-77.5"])
+
+    def test_a_cell_without_a_forecast_is_counted(self):
+        def fetch(url):
+            if "/points/" in url:
+                return {"properties": {"gridId": "ALY", "gridX": 72, "gridY": 63}}
+            raise TimeoutError("slow")
+
+        result = fp.build([(42.6, -73.8)], {}, fetch=fetch, workers=1)
+        self.assertEqual([], result["points"])
+        self.assertEqual(1, result["failed_cells"])
 
     def test_a_failing_point_is_retried_next_run(self):
         def fetch(url):

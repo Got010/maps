@@ -186,6 +186,16 @@ class PackTest(unittest.TestCase):
         finally:
             db.close()
 
+    def test_a_staging_file_that_gives_no_place_stops_the_build(self):
+        empty = os.path.join(self.tmp.name, "empty.csv")
+        with open(STAGING) as f:
+            header = f.readline()
+        with open(empty, "w") as f:
+            f.write(header)
+        out = os.path.join(self.tmp.name, "no-overture.sqlite")
+        with self.assertRaises(SystemExit):
+            build_search.build(os.path.join(HERE, "fixture.osm"), out, "test", overture=empty)
+
     def test_size_guard(self):
         out = os.path.join(self.tmp.name, "guarded.sqlite")
         with self.assertRaises(SystemExit):

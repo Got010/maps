@@ -40,6 +40,8 @@ ABBREVIATIONS = {
 }
 
 ORDINAL = re.compile(r"\b(\d+)(st|nd|rd|th)\b")
+# The straight apostrophe, the right and left single quotes, and the modifier letter apostrophe.
+APOSTROPHES = ("'", "\u2019", "\u2018", "\u02bc")
 NOT_WORD = re.compile(r"[^0-9a-z]+")
 # "123", "123A", "12-34" (Queens), "123 1/2": the leading number, and the
 # second half of a hyphenated one.
@@ -53,7 +55,10 @@ def normalize(text: str) -> str:
     """
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = text.lower().replace("&", " and ").replace("'", "")
+    # Apostrophes go, the typed one and the curly ones OSM editors type ("McDonald’s"), so "mcdonalds" finds both.
+    text = text.lower().replace("&", " and ")
+    for apostrophe in APOSTROPHES:
+        text = text.replace(apostrophe, "")
     text = NOT_WORD.sub(" ", text)
     text = ORDINAL.sub(r"\1", text)
     return " ".join(ABBREVIATIONS.get(token, token) for token in text.split())
