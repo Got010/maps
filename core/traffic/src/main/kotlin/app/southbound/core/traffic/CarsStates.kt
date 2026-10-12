@@ -157,7 +157,8 @@ object CarsStates {
     fun kindOf(icon: String, words: String): IncidentKind {
         val w = words.lowercase(Locale.US)
         return when {
-            "tg_closure" in icon -> IncidentKind.CLOSURE
+            // A closed ramp under the closure icon leaves the road open (RampClosure): road work or other by its words.
+            "tg_closure" in icon && !RampClosure.matches(words) -> IncidentKind.CLOSURE
             "tg_crash" in icon || "tg_accident" in icon -> IncidentKind.ACCIDENT
             w.startsWith("road closed") || w.startsWith("bridge closed") || w.startsWith("railroad crossing closed") -> IncidentKind.CLOSURE
             "crash" in w || "accident" in w || "stalled" in w || "disabled vehicle" in w -> IncidentKind.ACCIDENT

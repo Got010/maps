@@ -24,12 +24,15 @@ object NorthDakota {
     private const val STILL_HOST = "www.dot.nd.gov"
 
     /**
-     * The alerts: each a `ConditionDesc` ("Warning", "Road Surface in Poor Condition") with its `Comment` on a
-     * highway (`HwyDesc` "ND 89", `Direction` "E") at `CenterLat`/`CenterLong`.
+     * The alerts in effect at [now] (epoch ms): each a `ConditionDesc` ("Warning", "Road Surface in Poor Condition")
+     * with its `Comment` on a highway (`HwyDesc` "ND 89", `Direction` "E") at `CenterLat`/`CenterLong`. The layer
+     * keeps alerts past their `EffectiveUntil` (the 2026-10-08 sample's first two had ended in June and July): those
+     * are left out, or an ended closure would be spoken and routed around.
      *
      * @throws IllegalArgumentException when it isn't the service's answer.
      */
-    fun parseAlerts(json: String): List<Incident> = rows(json).mapNotNull(::alert)
+    fun parseAlerts(json: String, now: Long = System.currentTimeMillis()): List<Incident> =
+        rows(json).filter { r -> r.attributes.number("EffectiveUntil")?.toLong()?.let { it <= 0 || it > now } ?: true }.mapNotNull(::alert)
 
     /** The work zones, points and lines alike: `WorkType`, `LaneReduction`, `Comments`, at the zone's centre. */
     fun parseWorkZones(json: String): List<Incident> = rows(json).mapNotNull(::workZone)
@@ -172,7 +175,7 @@ object NorthDakota {
         override val source: TrafficSource get() = TrafficSource.ND_DOT
 
         override fun events(now: Long): List<Incident> =
-            parseAlerts(fetch(ALERTS_URL).decodeToString()) + parseWorkZones(fetch(WORK_ZONE_POINTS_URL).decodeToString()) +
+            parseAlerts(fetch(ALERTS_URL).decodeToString(), now) + parseWorkZones(fetch(WORK_ZONE_POINTS_URL).decodeToString()) +
                 parseWorkZones(fetch(WORK_ZONE_LINES_URL).decodeToString())
 
         override fun cameras(): List<TrafficCamera> = parseCameras(fetch(CAMERAS_URL).decodeToString())

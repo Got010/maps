@@ -48,7 +48,8 @@ object TravelMidwest {
 
     /**
      * The road work (708 features on 2026-10-11, 266 of them Illinois'), the same shape with the work zone's encoded
-     * polylines beside its point; `a` marks one under way, `lanes` full (135 that day) shuts the road.
+     * polylines beside its point; `a` marks one under way (one with `a` false is planned or done, and left out),
+     * `lanes` full (135 that day) shuts the road.
      */
     fun parseConstruction(json: String): List<Incident> = features(json).mapNotNull { incident(it, roadwork = true) }
 
@@ -93,6 +94,7 @@ object TravelMidwest {
     private fun incident(f: Feature, roadwork: Boolean): Incident? {
         val at = f.point ?: return null
         val p = f.properties
+        if (p["a"] == false) return null
         val what = p.text("desc")
         val where = p.text("locDesc")
         val lanes = p.text("closure")?.takeUnless { it.equals("None", ignoreCase = true) || it.equals("N/A", ignoreCase = true) }
@@ -119,9 +121,13 @@ object TravelMidwest {
     fun kindOf(roadwork: Boolean, what: String?, closure: String?, lanes: String?): IncidentKind {
         val c = closure.orEmpty().lowercase(Locale.US)
         val w = what.orEmpty().lowercase(Locale.US)
+        // A closed ramp, `lanes` full or not, leaves the road open (RampClosure).
+        val ramp = RampClosure.matches(what) || RampClosure.matches(closure)
         return when {
-            lanes.equals("full", ignoreCase = true) || ("all lanes" in c && "closed" in c) || c.startsWith("road closed") ||
-                c.startsWith("ramp closed") || w.startsWith("road closed") || w.startsWith("ramp closed") -> IncidentKind.CLOSURE
+            !ramp && (
+                lanes.equals("full", ignoreCase = true) || ("all lanes" in c && "closed" in c) || c.startsWith("road closed") ||
+                    w.startsWith("road closed")
+                ) -> IncidentKind.CLOSURE
             roadwork -> IncidentKind.ROADWORK
             "crash" in w || "accident" in w || "collision" in w || "stall" in w || "disabled" in w -> IncidentKind.ACCIDENT
             "police" in w || "enforcement" in w -> IncidentKind.POLICE
