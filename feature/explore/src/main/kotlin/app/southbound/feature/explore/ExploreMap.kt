@@ -292,10 +292,10 @@ internal fun ExploreMap(
     var hasRouting by remember { mutableStateOf(false) }
     var transitPack by remember { mutableStateOf<TransitPack?>(null) }
     LaunchedEffect(packGeneration, resumes) {
-        val inTrip = navigator?.state?.value?.tripState.let { it != null && it !is TripState.Idle }
         withContext(Dispatchers.IO) {
             searchIndex = services.openSearch()
-            navigator = services.openNavigator(navigating = inTrip)
+            // The trip's navigator while one is on, even to a map screen just rebuilt around new regions.
+            navigator = services.openNavigator()
             hasRouting = services.hasPack(PackKind.ROUTING)
             transitPack = services.openTransit()
         }
