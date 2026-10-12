@@ -22,7 +22,8 @@ sealed interface UpdateState {
     /** Finished a round: what was installed. */
     data class Updated(val packs: List<String>, val appVersion: String?) : UpdateState
 
-    data class Failed(val message: String, val needsToken: Boolean = false) : UpdateState
+    /** [retry]: the connection failed, so the job tries again soon; otherwise the next daily round does. */
+    data class Failed(val message: String, val needsToken: Boolean = false, val retry: Boolean = false) : UpdateState
 }
 
 /** Plain words for failures, shown in Settings. */
@@ -35,7 +36,7 @@ object UpdateErrors {
         code == 401 -> UpdateState.Failed("GitHub refused the token. It may have expired: remove it (updates need none) or paste a new one.", needsToken = true)
         code == 403 && !hasToken -> UpdateState.Failed("GitHub turned the request away (its limit without a token). Try again in an hour.")
         code == 403 -> UpdateState.Failed("GitHub refused the token. Updates need none: remove it (Settings > Updates).", needsToken = true)
-        code in 500..599 -> UpdateState.Failed("GitHub had a problem ($code). Southbound will try again later.")
+        code in 500..599 -> UpdateState.Failed("GitHub had a problem ($code). Southbound will try again later.", retry = true)
         else -> UpdateState.Failed("GitHub answered $code.")
     }
 

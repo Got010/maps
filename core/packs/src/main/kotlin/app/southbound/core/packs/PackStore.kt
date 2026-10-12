@@ -107,7 +107,11 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
      */
     fun importPack(source: InputStream, displayName: String?, fallbackRegion: String = DEFAULT_REGION): ImportedPack {
         packsDir.mkdirs()
-        val temp = File(packsDir, "import.part")
+        // A name of its own: two imports at once (two packs shared in a row) must not write into one file. One a
+        // stopped import left behind goes once it is a day old.
+        packsDir.listFiles()?.filter { STALE_IMPORT.matches(it.name) && System.currentTimeMillis() - it.lastModified() > DAY_MS }
+            ?.forEach { it.delete() }
+        val temp = File.createTempFile("import-", ".part", packsDir)
         try {
             val sha256 = copy(source, temp)
             val kind = PackKind.detect(temp) ?: throw UnrecognizedPackException()
@@ -130,7 +134,7 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
     fun importBasemap(region: String, source: InputStream): PackStatus.Installed {
         packsDir.mkdirs()
         val target = File(packsDir, PackKind.BASEMAP.fileName(region))
-        val temp = File(packsDir, "${target.name}.part")
+        val temp = File.createTempFile("${target.name}-", ".part", packsDir)
         try {
             val sha256 = copy(source, temp)
             if (!PackKind.BASEMAP.matches(temp)) throw NotAPmtilesFileException()
@@ -210,6 +214,10 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         const val DEFAULT_REGION = "nyc"
         private const val COPY_BUFFER_BYTES = 1 shl 20
         private val CHECKSUM_LINE = Regex("^[0-9a-f]{64}")
+
+        /** [importPack]'s and [importBasemap]'s temp files. */
+        private val STALE_IMPORT = Regex("(import|basemap-[a-z0-9]+\\.pmtiles)-[0-9]+\\.part")
+        private const val DAY_MS = 24L * 60 * 60 * 1000
 
         private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 

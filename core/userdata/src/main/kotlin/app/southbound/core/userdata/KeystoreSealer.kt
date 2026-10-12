@@ -26,9 +26,11 @@ class KeystoreSealer : Sealer {
         return cipher.doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
     }
 
-    private fun key(): SecretKey {
+    // One at a time: two sealers sealing at once on first use would each make a key, and what the first sealed
+    // with its key could never be opened again.
+    private fun key(): SecretKey = synchronized(KeystoreSealer::class.java) {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (keyStore.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(ALIAS, null) as? SecretKey)?.let { return@synchronized it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
         generator.init(
             KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
@@ -37,7 +39,7 @@ class KeystoreSealer : Sealer {
                 .setKeySize(256)
                 .build(),
         )
-        return generator.generateKey()
+        generator.generateKey()
     }
 
     private companion object {
