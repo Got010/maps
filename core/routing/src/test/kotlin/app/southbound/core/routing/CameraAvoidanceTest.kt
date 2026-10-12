@@ -25,6 +25,45 @@ class CameraAvoidanceTest {
     }
 
     @Test
+    fun `a reroute leaves out the spots beside the car, not the ones ahead`() {
+        val car = Spot(40.70, -74.00)
+        val beside = Spot(40.7005, -74.00) // ~55 m: the road the car is on
+        val ahead = Spot(40.72, -74.00) // ~2.2 km
+        assertEquals(listOf(ahead), CameraAvoidance.clearOfCar(listOf(beside, ahead), car))
+    }
+
+    @Test
+    fun `a reroute that finds no road with the spots routes once more without them`() {
+        val car = Spot(40.70, -74.00)
+        val ahead = Spot(40.72, -74.00)
+        val asked = mutableListOf<List<Spot>>()
+        // The car is on an excluded road farther than the clearance: no route with any spot.
+        val route = CameraAvoidance.fromCar(listOf(ahead), car) { spots ->
+            asked += spots
+            if (spots.isNotEmpty()) throw RoutingException("No path could be found for input")
+            "plain"
+        }
+        assertEquals("plain", route)
+        assertEquals(listOf(listOf(ahead), emptyList()), asked)
+    }
+
+    @Test
+    fun `a reroute that routes with the spots keeps them, and one with no spots to drop still fails`() {
+        val car = Spot(40.70, -74.00)
+        val ahead = Spot(40.72, -74.00)
+        assertEquals(listOf(ahead), CameraAvoidance.fromCar(listOf(ahead), car) { it })
+        var calls = 0
+        val failed = runCatching {
+            CameraAvoidance.fromCar(emptyList(), car) { _ ->
+                calls++
+                throw RoutingException("No path could be found for input")
+            }
+        }
+        assertTrue(failed.exceptionOrNull() is RoutingException)
+        assertEquals(1, calls)
+    }
+
+    @Test
     fun `a batch that fits is kept whole with one routing`() = runBlocking {
         var calls = 0
         val split = CameraAvoidance.passable(listOf("a", "b", "c")) { calls++; true }
