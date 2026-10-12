@@ -357,6 +357,16 @@ Exit test: a camera still opens from the traffic layer; the app runs on a car sc
 - [ ] To check on the phone: the Avoid plate readers toggle on and off on a known route changes the count; the "Couldn't avoid every plate reader" note appears when a reader sits on the only way in; the exposure line; and, after a data rebuild brings the `direction` column, that a camera facing across a road no longer counts for a route along it (nothing changes before then). None of this has been run on a phone, and the first real use of the squares on a statewide pack is unverified.
 - [ ] Open: the pipeline's `direction` step (separate PR; a rebuild of every pack), and whether the soft-penalty trial above is wanted.
 
+**Review fixes** (October 2026; `docs/review-2026-10.md` reads every module for bugs; its six Highs are fixed in PR #54, built, not yet run on a phone)
+
+- [x] Routing tiles: a router opening on the map screen no longer prunes the generation an update round is filling (`TileFolder` registers it from `begin` to `commit`/`abandon`, for every instance in the process), and `commit` refuses a generation missing a tile, so a loss fails the round instead of leaving directions without the main roads for good.
+- [x] Closures mid-trip: `ClosureAvoidance.ahead` looks only at what is left of the route and skips the other carriageway (the police alerts' heading test); `forReroute` sends the closures ahead plus what the trip already avoids, instead of the first 25 closures any state lists.
+- [x] Route preview: `ShorterRoute.indexIn` finds the shorter way by identity, so a copy of the only route is no longer taken for it (an `IndexOutOfBoundsException`).
+- [x] Transit: RAPTOR never ends a journey at a stop no ride reached, so a short trip whose ends share a stop plans again (it threw, and the app showed no trips).
+- [x] Navigation: `ExploreServices.openNavigator` reads whether a trip is on from its own navigator, so a map rebuilt mid-trip by an arriving region gets the trip back instead of closing its router.
+- [ ] To check on the phone: a transit plan of a few blocks shows the walk and rides; a drive with Get for this trip keeps its overlay and End button when the region lands; a route preview with Shorter way on a short local trip.
+- [ ] The review's Mediums and Lows, grouped into PRs in its section 1.2 (pipeline fixes together, as each costs a data rebuild).
+
 ## Repo layout and distribution
 
 One GitHub repo holds the app, the data pipeline and the map styles. APKs and data packs ship as GitHub Release assets, and Obtainium on the phone tracks new APK releases.
