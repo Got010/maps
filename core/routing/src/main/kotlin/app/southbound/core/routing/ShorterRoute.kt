@@ -42,6 +42,17 @@ object ShorterRoute {
         return options.take(MAX_OPTIONS - 1) + shorter
     }
 
+    /**
+     * Where [shorter] sits in [ranked] (what [merge] returned, maybe reordered) when merge added it; null when it
+     * didn't. Found by identity, not equality: Valhalla's distance-weighted answer can equal the first route, which
+     * merge refuses, and an equal copy is no shorter way. Never the only option, as the preview tells the shorter
+     * way apart from another one.
+     */
+    fun <T> indexIn(ranked: List<T>, shorter: T?): Int? {
+        if (shorter == null || ranked.size < 2) return null
+        return ranked.indexOfFirst { it === shorter }.takeIf { it >= 0 }
+    }
+
     /** True when at least [SAME_SHARE] of [a]'s length lies within [SAME_METERS] of the line [b]. */
     fun same(a: List<Pair<Double, Double>>, b: List<Pair<Double, Double>>): Boolean {
         if (a.size < 2) return true
