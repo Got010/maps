@@ -22,6 +22,7 @@
     <string name="transit_late">%1$d min late</string>
     <string name="transit_walk_total">walk %1$d min</string>
     <string name="transit_in_minutes">in %1$d min</string>
+    <string name="transit_leaving_now">leaving now</string>
     <string name="transit_step_walk">Walk %1$d min to %2$s</string>
     <string name="transit_destination">your destination</string>
     <string name="transit_toward">toward %1$s</string>

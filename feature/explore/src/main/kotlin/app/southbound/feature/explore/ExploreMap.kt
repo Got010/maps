@@ -639,7 +639,7 @@ internal fun ExploreMap(
         val snapshot = withContext(Dispatchers.IO) {
             attempt { services.realtime.snapshot(includeBus = ready.journeys.any { it.usesBus() }) }
         } ?: return@LaunchedEffect
-        transitPlan = ready.copy(live = liveFor(snapshot, ready.journeys))
+        transitPlan = ready.copy(live = liveFor(snapshot, ready.journeys, pack.network))
     }
 
     // Departure boards for the place on the card, refreshed with the clock.

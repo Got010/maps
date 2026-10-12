@@ -93,6 +93,20 @@ class GuidancePolicyTest {
     }
 
     @Test
+    fun streetNamesOffKeepsAnAlertsDistance() {
+        val noNames = defaults.copy(streetNames = false)
+        // The decimal point used to end the street name: "Crash ahead.8 miles."
+        assertEquals(Speak("Crash ahead in 1.8 miles."), decide(noNames, kind = TRAFFIC_ALERT, text = "Crash ahead on I 87 in 1.8 miles."))
+        assertEquals(Speak("Roadwork ahead in 500 feet."), decide(noNames, kind = TRAFFIC_ALERT, text = "Roadwork ahead on Route 9 in 500 feet."))
+        assertEquals(
+            Speak("Road closed ahead. Finding another way."),
+            decide(noNames, kind = TRAFFIC_ALERT, text = "Road closed ahead on I 87. Finding another way."),
+        )
+        // "Snow on your route in 12 miles." used to come out as "Snow."
+        assertEquals(Speak("Snow in 12 miles."), decide(noNames, kind = TRAFFIC_ALERT, text = "Snow on your route in 12 miles."))
+    }
+
+    @Test
     fun alertToggles() {
         assertEquals(Silent, decide(defaults.copy(rerouteAnnouncement = false), kind = REROUTE))
         assertEquals(Silent, decide(defaults.copy(trafficAlerts = false), kind = TRAFFIC_ALERT))

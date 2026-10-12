@@ -18,7 +18,8 @@ import java.util.Locale
  *  - several spans per day: `09:00-12:00,13:00-17:00`
  *  - rules separated by `;`; a later rule replaces the earlier ones for the
  *    days it names (`Mo-Sa 08:00-20:00; Su off`)
- *  - an additive rule after a comma: `Mo-Fr 09:00-17:00, Sa 10:00-14:00`
+ *  - an additive rule after a comma: `Mo-Fr 09:00-17:00, Sa 10:00-14:00`;
+ *    one that is `off` still closes its days (`Mo-Fr 09:00-17:00, We off`)
  *  - `off` and `closed`
  *  - spans past midnight: `22:00-02:00` (or `22:00-26:00`), and `24:00` as an end
  *  - `PH` and `SH` (public and school holidays) are accepted and IGNORED: we
@@ -203,7 +204,8 @@ class OpeningHours private constructor(
                     }
                     any = true
                     for (d in rule.days) {
-                        if (!rule.additive) days[d].clear()
+                        // A rule after a comma adds to the day's spans, except "off", which closes the day either way.
+                        if (!rule.additive || rule.spans.isEmpty()) days[d].clear()
                         days[d] += rule.spans
                     }
                 }

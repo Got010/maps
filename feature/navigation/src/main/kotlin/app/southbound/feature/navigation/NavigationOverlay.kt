@@ -272,8 +272,9 @@ internal fun EtaLine(
 ) {
     val late = Eta.isLate(delaySeconds)
     val leftSeconds = remainingSeconds + delaySeconds
-    // Recomputed whenever Ferrostar updates the remaining time (about once a second).
-    val arrival = remember(remainingSeconds, delaySeconds) { Eta.clock(System.currentTimeMillis(), leftSeconds) }
+    // Recomputed whenever Ferrostar updates the remaining time (about once a second), in the phone's 12/24-hour style.
+    val use24h = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+    val arrival = remember(remainingSeconds, delaySeconds, use24h) { Eta.clock(System.currentTimeMillis(), leftSeconds, use24h = use24h) }
     val color = if (late) Color(0xFFD93025) else MaterialTheme.colorScheme.onSurface
     val arriveText = stringResource(R.string.navigation_arrive_clock, arrival)
     val typicalText = if (delaySeconds >= 60) stringResource(R.string.navigation_typical, Units.duration(remainingSeconds)) else null

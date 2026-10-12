@@ -38,16 +38,8 @@ internal class GuidancePlayer(context: Context) {
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
             },
         ).setAudioAttributes(attributes).build()
-        audioManager.requestAudioFocus(focus)
 
-        val bluetoothCall = if (callChannel) {
-            audioManager.availableCommunicationDevices
-                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-                ?.also { audioManager.setCommunicationDevice(it) }
-        } else {
-            null
-        }
-
+        // The track first: if it can't be made, no other app is left ducked and no call device held.
         val track = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(
@@ -60,8 +52,15 @@ internal class GuidancePlayer(context: Context) {
             .setTransferMode(AudioTrack.MODE_STATIC)
             .setBufferSizeInBytes(pcm.samples.size * 2)
             .build()
+        audioManager.requestAudioFocus(focus)
+        var bluetoothCall: AudioDeviceInfo? = null
         var enhancer: LoudnessEnhancer? = null
         try {
+            if (callChannel) {
+                bluetoothCall = audioManager.availableCommunicationDevices
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
+                    ?.also { audioManager.setCommunicationDevice(it) }
+            }
             track.write(pcm.samples, 0, pcm.samples.size)
             track.setVolume(settings.volume.gain)
             if (settings.output == AudioOutput.PHONE_SPEAKER) {

@@ -58,32 +58,78 @@ class RealtimeSnapshot(
 
     /**
      * The prediction for [trip] at [stop], on the service day [serviceDate].
-     * [scheduled] is the timetable time there, in seconds after midnight of
-     * that day; [shift] converts the answer to another day's clock (as in
-     * [Timetable]).
+     * [scheduled] is the timetable time there, in GTFS seconds of that day
+     * ([GtfsTime]); [shift] converts the answer to another day's clock (as in
+     * [Timetable]). With [network], a stop the update says nothing about takes
+     * the delay of the trip's nearest earlier stop it does cover.
      */
-    fun predict(system: TransitSystem?, trip: TripRow, stop: TransitStop, serviceDate: LocalDate, scheduled: Int, shift: Int = 0): Prediction? {
+    fun predict(
+        system: TransitSystem?,
+        trip: TripRow,
+        stop: TransitStop,
+        serviceDate: LocalDate,
+        scheduled: Int,
+        shift: Int = 0,
+        network: TransitNetwork? = null,
+    ): Prediction? {
         system ?: return null
         val candidates = updates[system]?.get(key(system, trip.gtfsId, fromRealtime = false)) ?: return null
         val wanted = serviceDate.toKey().toString()
         val update = candidates.firstOrNull { it.trip.startDate == null || it.trip.startDate == wanted } ?: return null
         if (update.trip.canceled) return Prediction(null, canceled = true)
-        val midnight = serviceDate.atStartOfDay(NEW_YORK).toEpochSecond()
         val atStop = update.stopTimeUpdates.firstOrNull { it.stopId == stop.gtfsId }
         if (atStop?.skipped == true) return Prediction(null, skipped = true)
         val event = atStop?.departure ?: atStop?.arrival
-        event?.time?.let { return Prediction((it - midnight).toInt() + shift) }
-        val delay = event?.delay ?: update.delay ?: return null
+        event?.time?.let { return Prediction(GtfsTime.secondsOf(it, serviceDate) + shift) }
+        val carried = if (atStop == null && network != null) carriedDelay(update, trip, stop, serviceDate, network) else null
+        val delay = event?.delay ?: carried ?: update.delay ?: return null
         return Prediction(scheduled + delay + shift)
     }
 
-    /** Alerts naming [route], active at [nowSeconds]. */
+    /**
+     * GTFS-realtime's delay propagation: a stop with no update of its own runs as late as the nearest earlier
+     * stop of the trip that has one. That stop's departure delay counts, else its arrival delay, else its
+     * predicted time against the timetable. A skipped stop is passed over; an earlier update with no times (no
+     * data) ends the search. Null when [network] doesn't know the trip's stops or no earlier stop has an update.
+     */
+    private fun carriedDelay(update: TripUpdate, trip: TripRow, stop: TransitStop, serviceDate: LocalDate, network: TransitNetwork): Int? {
+        val pattern = network.pattern(trip.pattern) ?: return null
+        val here = pattern.stops.indexOf(stop.id)
+        if (here <= 0) return null
+        val ids = pattern.stops.map { network.stop(it)?.gtfsId }
+        // Each update for a stop before this one, with that stop's place in the trip, nearest first.
+        val earlier = update.stopTimeUpdates.mapNotNull { u ->
+            val at = u.stopId?.let { ids.indexOf(it) } ?: -1
+            if (at in 0 until here) at to u else null
+        }.sortedByDescending { it.first }
+        for ((at, u) in earlier) {
+            if (u.skipped) continue
+            u.departure?.delay?.let { return it }
+            u.arrival?.delay?.let { return it }
+            val time = u.departure?.time ?: u.arrival?.time ?: return null
+            val arrivals = IntArray(pattern.stops.size)
+            val departures = IntArray(pattern.stops.size)
+            if (TransitCodec.times(trip.start, trip.times, arrivals, departures) <= at) return null
+            val planned = if (u.departure?.time != null) departures[at] else arrivals[at]
+            return GtfsTime.secondsOf(time, serviceDate) - planned
+        }
+        return null
+    }
+
+    /** Alerts naming [route], active at [nowSeconds], each once ([sameAlertKey]). */
     fun alertsFor(route: TransitRoute, nowSeconds: Long): List<ServiceAlert> =
         alerts.filter { (feedSystem, alert) ->
             alert.isActive(nowSeconds) && alert.routes.any { named ->
                 named.routeId == route.gtfsId && (agencySystem(named.agencyId) ?: feedSystem) == route.system
             }
-        }.map { it.second }.distinctBy { it.header }
+        }.map { it.second }.distinctBy { it.sameAlertKey() }
+
+    /**
+     * What tells one alert from another. Alerts with the same header read the same in the list (one alert in two
+     * feeds, say), so the header; one without a header goes by its description, and failing both by its id, so
+     * header-less alerts don't all count as one.
+     */
+    private fun ServiceAlert.sameAlertKey(): Any = header ?: description?.let { "description" to it } ?: ("id" to id)
 
     private fun key(system: TransitSystem, tripId: String, fromRealtime: Boolean): String =
         // Subway realtime ids are the tail of the schedule's: "050950_R..N93R"
