@@ -99,6 +99,23 @@ class AddressQueryTest {
         val q = parse("123 Main St Apt 4B Nyack")
         assertEquals(listOf("main", "st"), q.streetTokens)
         assertEquals(listOf("nyack"), q.cityTokens)
+        assertEquals(listOf("main", "st"), parse("123 Main St Apt 4B").streetTokens)
+        assertEquals(listOf("main", "st"), parse("123 Main St, Suite 200").placeTokens)
+        assertEquals(listOf("main", "st", "nyack"), parse("123 Main St Unit C, Nyack NY").placeTokens)
+        assertEquals(listOf("route", "9", "nyack"), parse("40 Route 9 Fl 2 Nyack").placeTokens)
+    }
+
+    @Test
+    fun aUnitWordInTheStreetNameStays() {
+        val q = parse("123 Old Unit Rd")
+        assertEquals(listOf("old", "unit", "rd"), q.streetTokens)
+        assertFalse(q.streetEndUnknown)
+        assertEquals(listOf("old", "unit", "rd"), parse("123 Old Unit Rd Apt 2").streetTokens)
+        assertEquals(listOf("suite", "st"), parse("5 Suite St").streetTokens)
+        // No unit after the word: nothing to drop.
+        assertEquals(listOf("main", "st", "apt"), parse("123 Main St Apt").placeTokens)
+        // The type word right after the "unit" and none before: still the street's name.
+        assertEquals(listOf("old", "unit", "b", "rd"), parse("9 Old Unit B Rd").streetTokens)
     }
 
     @Test

@@ -5,6 +5,7 @@ import app.southbound.core.map.MapPoint
 import app.southbound.core.transit.Journey
 import app.southbound.core.transit.JourneyLeg
 import app.southbound.core.transit.RealtimeSnapshot
+import app.southbound.core.transit.TransitNetwork
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.transit.TransitSystem
 import app.southbound.feature.transit.LiveDeparture
@@ -19,6 +20,12 @@ import java.time.ZonedDateTime
 /** Transit runs on New York time, whatever the phone's zone. */
 internal fun transitNow(): ZonedDateTime = ZonedDateTime.now(RealtimeSnapshot.NEW_YORK)
 
+/**
+ * [now] on New York's wall clock, in seconds after midnight. That is GTFS time (counted from noon minus 12 hours,
+ * see GtfsTime) at every hour except those before the 2 am change on the two days the clocks change. In those
+ * hours it matches yesterday's late trips, which the timetable moves by a whole day, and today's earliest trips
+ * show an hour off.
+ */
 internal fun secondsOfDay(now: ZonedDateTime = transitNow()): Int = now.toLocalTime().toSecondOfDay()
 
 private fun LocalDate.key(): Int = year * 10_000 + monthValue * 100 + dayOfMonth
@@ -47,14 +54,17 @@ internal fun planTransit(
     }
 }
 
-/** Live times at each option's first boarding, and alerts on its lines. */
-internal fun liveFor(snapshot: RealtimeSnapshot, journeys: List<Journey>): TransitLive {
+/**
+ * Live times at each option's first boarding, and alerts on its lines. [network] is the pack's: it gives each
+ * trip's stops, so a delay reported at an earlier stop carries to the boarding stop.
+ */
+internal fun liveFor(snapshot: RealtimeSnapshot, journeys: List<Journey>, network: TransitNetwork): TransitLive {
     val date = transitNow().toLocalDate()
     val nowEpoch = System.currentTimeMillis() / 1000
     val boarding = journeys.mapNotNull { journey ->
         val ride = journey.rides.firstOrNull() ?: return@mapNotNull null
         val serviceDate = date.plusDays((ride.shift / 86_400).toLong())
-        snapshot.predict(ride.route.system, ride.trip, ride.from, serviceDate, ride.depart - ride.shift, ride.shift)
+        snapshot.predict(ride.route.system, ride.trip, ride.from, serviceDate, ride.depart - ride.shift, ride.shift, network)
             ?.let { ride.trip.id to it }
     }.toMap()
     val alerts = journeys.flatMap { it.rides }.map { it.route }.distinctBy { it.id }
@@ -75,6 +85,7 @@ internal fun boardsNear(pack: TransitPack, lat: Double, lon: Double, snapshot: R
             departures.map { d ->
                 val prediction = snapshot?.predict(
                     d.route.system, d.trip, d.stop, date.plusDays((d.shift / 86_400).toLong()), d.time - d.shift, d.shift,
+                    pack.network,
                 )
                 LiveDeparture(d, prediction)
             }.filter { it.time >= seconds - 30 },
