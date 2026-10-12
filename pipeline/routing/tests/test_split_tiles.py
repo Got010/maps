@@ -43,6 +43,11 @@ class AssignmentTest(unittest.TestCase):
     def packs_at(self, lat, lon, level=2):
         return st.regions_for_tile(self.regions, level, st.tile_id_at(level, lat, lon))
 
+    def test_a_region_ending_on_a_tile_edge_does_not_take_the_tile_beyond(self):
+        # Hudson and Western meet at 75.5 W, a level 2 tile edge: each side's column is its own region's.
+        self.assertEqual(["hudson"], self.packs_at(42.1, -75.4))
+        self.assertEqual(["western"], self.packs_at(42.1, -75.6))
+
     def test_packs_are_named_by_the_regions_they_serve(self):
         self.assertEqual("main", st.pack_for(0, ["nyc"]))
         self.assertEqual("main", st.pack_for(0, [], groups=["east"]))

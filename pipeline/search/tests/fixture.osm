@@ -94,4 +94,22 @@
     <tag k="highway" v="residential"/><tag k="name" v="School Lane"/>
     <tag k="maxspeed:conditional" v="15 mph @ (Mo-Fr 07:00-16:00; school)"/>
   </way>
+  <!-- A red light camera tagged the usual way, a signal with a school crossing sign, a signal with a sign that only
+       mentions school buses, a school zone mapped as a closed way, and a plaza (a closed road) in a school zone. -->
+  <node id="42" version="1" lat="40.7490" lon="-73.9900">
+    <tag k="highway" v="speed_camera"/><tag k="speed_camera" v="traffic_signals"/><tag k="direction" v="0"/>
+  </node>
+  <node id="43" version="1" lat="40.7500" lon="-73.9900"><tag k="highway" v="traffic_signals"/><tag k="traffic_sign" v="US:S1-1"/></node>
+  <node id="44" version="1" lat="40.7510" lon="-73.9900"><tag k="highway" v="traffic_signals"/><tag k="traffic_sign" v="school_bus"/></node>
+  <node id="45" version="1" lat="40.7520" lon="-73.9900"/>
+  <node id="46" version="1" lat="40.7520" lon="-73.9890"/>
+  <node id="47" version="1" lat="40.7530" lon="-73.9890"/>
+  <way id="205" version="1">
+    <nd ref="45"/><nd ref="46"/><nd ref="47"/><nd ref="45"/>
+    <tag k="hazard" v="school_zone"/>
+  </way>
+  <way id="206" version="1">
+    <nd ref="45"/><nd ref="47"/><nd ref="46"/><nd ref="45"/>
+    <tag k="highway" v="pedestrian"/><tag k="area" v="yes"/><tag k="name" v="School Plaza"/><tag k="hazard" v="school_zone"/>
+  </way>
 </osm>

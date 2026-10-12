@@ -209,7 +209,8 @@ clip_extract() {
     CLIPPED="$DATA_DIR/tmp/$region.osm.pbf"
     # shellcheck disable=SC2034  # read by the build scripts that source this file
     CLIPPED_IN_DOCKER="/data/tmp/$region.osm.pbf"
-    if fresh_against "$CLIPPED" "${inputs[0]}"; then
+    # Newer than regions.json too: a box moved there is cut again, not reused on a machine that keeps data/tmp.
+    if fresh_against "$CLIPPED" "${inputs[0]}" "$REGIONS_JSON"; then
       echo "==> Reusing $CLIPPED"
       return
     fi
@@ -223,7 +224,7 @@ clip_extract() {
   # Several sources: cut each, then merge.
   CLIPPED="$DATA_DIR/tmp/$region.osm.pbf"
   CLIPPED_IN_DOCKER="/data/tmp/$region.osm.pbf"
-  if fresh_against "$CLIPPED" "${inputs[@]}"; then
+  if fresh_against "$CLIPPED" "${inputs[@]}" "$REGIONS_JSON"; then
     echo "==> Reusing $CLIPPED"
     return
   fi

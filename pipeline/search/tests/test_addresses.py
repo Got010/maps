@@ -166,6 +166,17 @@ class AddressPackTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_search.build(os.path.join(HERE, "addresses.osm"), out, "test", max_mb=0.001)
 
+    def test_a_state_file_that_gives_no_address_stops_the_build(self):
+        # The file's header with a column renamed: every row is skipped, which used to ship a pack without addresses.
+        empty = os.path.join(self.tmp.name, "renamed.csv")
+        with open(os.path.join(HERE, "address_points.csv")) as f:
+            rows = f.read().splitlines()
+        with open(empty, "w") as f:
+            f.write("\n".join([rows[0].replace("X,Y,", "EASTING,NORTHING,")] + rows[1:]) + "\n")
+        out = os.path.join(self.tmp.name, "no-addresses.sqlite")
+        with self.assertRaises(SystemExit):
+            build_search.build(os.path.join(HERE, "addresses.osm"), out, "test", address_points=empty)
+
     def test_state_override(self):
         out = os.path.join(self.tmp.name, "nj.sqlite")
         build_search.build(os.path.join(HERE, "addresses.osm"), out, "test", state="NJ")
