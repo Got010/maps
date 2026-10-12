@@ -119,8 +119,12 @@ internal fun NavigationLandscape(
     mutedUntilNextTurn: Boolean,
     onVoiceLongPress: () -> Unit,
     onPause: (() -> Unit)?,
+    arrived: Boolean,
 ) {
     val panelWidth = rememberDrivingPanelWidth()
+    val trip = state.tripState
+    // NavigationOverlay's [arrived]: the arrival card, as on Ferrostar's own arrival.
+    val arrivedNow = trip is TripState.Complete || (arrived && trip is TripState.Navigating)
     Box(modifier.fillMaxSize()) {
         // The column's background runs under the system bars; its content stays clear of them.
         Column(
@@ -133,8 +137,12 @@ internal fun NavigationLandscape(
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            when (val trip = state.tripState) {
-                is TripState.Navigating -> {
+            when {
+                arrivedNow -> {
+                    Box(Modifier.weight(1f))
+                    ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier)
+                }
+                trip is TripState.Navigating -> {
                     // What doesn't fit on a short screen is cut off at the bottom (the road name goes
                     // first), never drawn over the arrival time below.
                     Column(Modifier.weight(1f).fillMaxWidth().clipToBounds(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -159,15 +167,11 @@ internal fun NavigationLandscape(
                     }
                     EtaLine(trip.progress.durationRemaining, delaySeconds, trip.progress.distanceRemaining, onEnd, onPause)
                 }
-                is TripState.Complete -> {
-                    Box(Modifier.weight(1f))
-                    ArrivedCard(onEnd, arrivalSide, parkingNearby, Modifier)
-                }
-                is TripState.Idle -> Unit
+                else -> Unit
             }
         }
 
-        if (state.tripState is TripState.Navigating) {
+        if (trip is TripState.Navigating && !arrivedNow) {
             // Over the map: speed limit top-left (the attribution button owns the bottom-left corner),
             // voice button bottom-right, the rerouting notice top-centre (the compass is top-right).
             Box(

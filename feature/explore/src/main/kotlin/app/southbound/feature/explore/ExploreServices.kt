@@ -135,6 +135,9 @@ class ExploreServices private constructor(context: Context) {
 
     data class TripWait(val place: Place, val mode: TravelMode, val stops: List<Place>, val start: Place?, val atMs: Long)
 
+    /** What the trip keeps while the map screen is rebuilt under it (a map region arriving mid-trip). */
+    internal val tripMemory = TripMemory()
+
     private var search: Pair<String, PlaceSearch>? = null
     private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
