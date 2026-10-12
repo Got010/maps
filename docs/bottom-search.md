@@ -144,19 +144,26 @@ no gate baseline change and no data rebuild.
   ordered nearest-first. A nested-scroll connection hides the keyboard when the list is dragged. The
   Search key waits for results that match the current query.
 - `SearchBar` (the pill) keeps its look; its settings gear stays at its end.
-- Strings: none new beyond content descriptions.
+- Strings: the setting's label ("Search bar at the bottom") and content descriptions.
+- `feature/settings` `DrivingSection` and the driving preferences store: the toggle; `core/export`: schema 7
+  (see Decisions).
 
-About a day and a half. It is worth building after the picked screenshot tests, so the layout has a
-check in CI from the first pull request.
+About two days with the setting. It is worth building after the picked screenshot tests, so both
+layouts have a check in CI from the first pull request.
 
-## Decisions for the owner
+## Decisions (owner, 12 October 2026)
 
-The design above takes the first option of each; any can change before it is built.
+1. **Results order: best match nearest the field**, as drawn above.
+2. **Home and Work on the map**, as chips above the search pill once set.
+3. **A setting for where the bar sits.** Settings > Driving gets "Search bar at the bottom", on by default.
+   Off is today's layout as it is now: the bar at the top, results top-down under it, the banners and the
+   start-point chip under the bar. The one change in the top layout is that Home and Work chips sit under
+   the bar too, so the two layouts offer the same one-tap trips.
 
-1. **Results order:** best match nearest the field (reversed, as above), or top-down like today.
-2. **Home and Work on the map:** as chips above the search pill when set, or only inside search.
-3. **A setting to put the bar back at the top:** none (bottom only), or a toggle in Settings. A toggle is
-   a new setting, so it bumps the backup bundle's schema (`docs/EXPORT.md`).
+   The toggle is a new setting, so per CLAUDE.md the backup bundle's schema goes from 6 to 7: the
+   setting joins `settings.json`'s driving group, `docs/EXPORT.md` and the schema pin test
+   (`SouthboundBundleTest`) change with it, and a schema 6 bundle imports with the bar at the bottom. The
+   toggle and the schema change add about half a day.
 
 ## To check on the phone, once built
 
@@ -165,3 +172,5 @@ The design above takes the first option of each; any can change before it is bui
 - Large font (Settings > Display > Font size, largest): nothing overlaps at the bottom.
 - The paused-trip bar, the location prompt and Start here all show in the dock and push the buttons up.
 - Landscape: the dock on the left, the buttons on the right, search beside the map.
+- Settings > Driving > Search bar at the bottom, off: today's layout comes back, with Home and Work under
+  the bar; a backup made either way restores the choice.
