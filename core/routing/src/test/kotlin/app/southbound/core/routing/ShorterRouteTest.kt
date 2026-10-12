@@ -39,6 +39,22 @@ class ShorterRouteTest {
     }
 
     @Test
+    fun `the shorter way is only where merge put it`() {
+        val merged = merge(listOf(windsor, forgeHill), oldTempleHill)
+        assertEquals(2, ShorterRoute.indexIn(merged, oldTempleHill))
+        // Traffic may reorder the options; the shorter way is found wherever it went.
+        assertEquals(0, ShorterRoute.indexIn(listOf(oldTempleHill, windsor, forgeHill), oldTempleHill))
+        // Valhalla's distance-weighted answer can be the first route itself. Merge refuses it, and an equal copy is
+        // no shorter way: before, it was found "in" the one option and the preview crashed telling it apart.
+        val again = windsor.copy()
+        assertEquals(listOf(windsor), merge(listOf(windsor), again))
+        assertNull(ShorterRoute.indexIn(listOf(windsor), again))
+        // Nor is an alternative it happens to equal.
+        assertNull(ShorterRoute.indexIn(listOf(windsor, forgeHill), forgeHill.copy()))
+        assertNull(ShorterRoute.indexIn(listOf(windsor), null))
+    }
+
+    @Test
     fun `same means most of the length runs along the other line`() {
         val line = listOf(40.0 to -74.0, 40.0 to -73.99, 40.0 to -73.98)
         assertTrue(ShorterRoute.same(line, line))
