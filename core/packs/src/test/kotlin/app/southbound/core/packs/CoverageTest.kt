@@ -79,6 +79,18 @@ class CoverageTest {
     }
 
     @Test
+    fun `the states a phone's regions cover, Maryland's with Delaware and DC`() {
+        fun codes(vararg ids: String) = Coverage.statesWithRegions(ids.toSet()).map { it.code }
+        assertEquals(listOf("NY"), codes("nyc", "li"))
+        assertEquals(listOf("MD", "DE", "DC"), codes("md"))
+        assertEquals(listOf("NY", "NJ", "OH"), codes("ohs", "njn", "western"))
+        assertEquals(emptyList<String>(), codes())
+        assertEquals(emptyList<String>(), codes("nys", "unknown"))
+        // Every state has a region, so every state can come first.
+        assertEquals(Coverage.STATES.map { it.code }, codes(*Regions.basemaps.map { it.id }.toTypedArray()))
+    }
+
+    @Test
     fun `the summary and the picker's notes`() {
         assertEquals(
             listOf(

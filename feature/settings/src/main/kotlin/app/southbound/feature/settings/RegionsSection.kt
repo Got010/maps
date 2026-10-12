@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemColors
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,7 +46,12 @@ import kotlinx.coroutines.withContext
  * Settings > Updates.
  */
 @Composable
-fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: Boolean = true) {
+fun RegionPicker(
+    packStore: PackStore,
+    modifier: Modifier = Modifier,
+    showNote: Boolean = true,
+    colors: ListItemColors = ListItemDefaults.colors(),
+) {
     val context = LocalContext.current
     val selection = remember { RegionSelection.get(context) }
     val selected by selection.regions.collectAsState()
@@ -88,6 +95,7 @@ fun RegionPicker(packStore: PackStore, modifier: Modifier = Modifier, showNote: 
                 val pack = installed.firstOrNull { it.region == region.id }
                 val checked = region.id in selected
                 ListItem(
+                    colors = colors,
                     headlineContent = { Text(region.name) },
                     supportingContent = {
                         Column {

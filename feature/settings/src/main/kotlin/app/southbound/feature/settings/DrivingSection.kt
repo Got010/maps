@@ -29,10 +29,11 @@ internal fun DrivingSection(network: PreferenceNetworkToggles? = null, secrets: 
     val prefs = DrivingPrefs.get(context)
     val night by prefs.nightBySunset.collectAsState()
     val searchAtBottom by prefs.searchAtBottom.collectAsState()
-    Section(R.string.settings_driving)
-    Toggle(R.string.driving_night, night, R.string.driving_night_note) { prefs.setNightBySunset(it) }
-    Toggle(R.string.driving_search_bottom, searchAtBottom, R.string.driving_search_bottom_note) { prefs.setSearchAtBottom(it) }
-    FuelEstimate(network, secrets)
+    SettingsCard(R.string.settings_driving) {
+        Toggle(R.string.driving_night, night, R.string.driving_night_note) { prefs.setNightBySunset(it) }
+        Toggle(R.string.driving_search_bottom, searchAtBottom, R.string.driving_search_bottom_note) { prefs.setSearchAtBottom(it) }
+    }
+    SettingsCard(R.string.driving_fuel_heading) { FuelEstimate(network, secrets) }
 }
 
 /** Fuel economy and gas price, for the "about $4 in gas" on each route. Nothing here goes online by itself. */
@@ -49,12 +50,7 @@ private fun FuelEstimate(network: PreferenceNetworkToggles?, secrets: SecretStor
 
     SettingsNumberField(R.string.driving_mpg, fuel.mpg, decimals = 0) { fuelPrefs.setMpg(it) }
     SettingsNumberField(R.string.driving_gas_price, fuel.pricePerGallon, decimals = 2) { fuelPrefs.setPricePerGallon(it) }
-    Text(
-        stringResource(R.string.driving_fuel_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
+    CardNote(stringResource(R.string.driving_fuel_note))
     if (!eiaOn) return
 
     val eia = fuel.eiaPrice

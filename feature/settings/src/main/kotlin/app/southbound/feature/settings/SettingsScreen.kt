@@ -1,62 +1,71 @@
 package app.southbound.feature.settings
 
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import app.southbound.core.packs.Coverage
-import app.southbound.core.export.BackupService
-import app.southbound.core.network.ApiKey
-import app.southbound.core.routing.FuelPrefs
-import app.southbound.core.routing.GasRegion
-import app.southbound.core.routing.PriceSource
-import app.southbound.core.network.NetworkFeature
-import app.southbound.core.network.PreferenceNetworkToggles
-import app.southbound.core.network.SecretStore
-import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
+import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import app.southbound.core.export.BackupService
+import app.southbound.core.network.PreferenceNetworkToggles
+import app.southbound.core.network.SecretStore
+import app.southbound.core.packs.PackEvents
+import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.voice.AudioOutput
 import app.southbound.core.voice.BuiltInVoice
 import app.southbound.core.voice.DetailLevel
@@ -69,23 +78,26 @@ import app.southbound.core.voice.VoiceEngine
 import app.southbound.core.voice.VoiceMode
 import app.southbound.core.voice.VoiceSettings
 import app.southbound.core.voice.VoiceSettingsStore
-import app.southbound.core.packs.PackEvents
-import app.southbound.core.packs.PackKind
-import app.southbound.core.packs.VoiceSelection
-import app.southbound.core.updates.UpdateScheduler
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 import java.util.Locale
+import kotlin.math.roundToInt
+
+/** Screen state kept on the phone and out of backups: the tab Settings opened on last. Not a setting. */
+private const val UI_PREFS = "settings_ui"
+private const val KEY_TAB = "tab"
+
+/** How long a search's jump waits for its row before letting go. */
+private const val JUMP_FORGET_MS = 4_000L
 
 /**
- * Settings > Navigation > Voice, every toggle from HANDOFF.md, plus About.
- * Changes save immediately to [store]; [voice] speaks the Test sentence. [backup] adds the
- * Backup section; [onImported] is called once an import has replaced the settings shown here,
- * so the caller can rebuild this screen.
+ * Settings, in five tabs (Voice, Driving, Live, Maps, Backup) with a search over every setting; it opens on the tab
+ * used last (docs/settings-tabs.md). Changes save immediately to [store]; [voice] speaks the Test sentence. [backup]
+ * adds the Backup card; [onImported] is called once an import has replaced the settings shown here, so the caller
+ * can rebuild this screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +111,180 @@ fun SettingsScreen(
     backup: BackupService? = null,
     onImported: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val uiPrefs = remember { context.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE) }
+    val pager = rememberPagerState(
+        initialPage = remember { SettingsTab.entries.firstOrNull { it.name == uiPrefs.getString(KEY_TAB, null) }?.ordinal ?: 0 },
+    ) { SettingsTab.entries.size }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.currentPage }.collect { uiPrefs.edit().putString(KEY_TAB, SettingsTab.entries[it].name).apply() }
+    }
+    val jump = remember { SettingsJump() }
+    // A jump to a row that isn't shown (a key field while its feed is off) lets go after a while.
+    val target = jump.target
+    LaunchedEffect(target) {
+        if (target != null) {
+            delay(JUMP_FORGET_MS)
+            if (jump.target == target) jump.target = null
+        }
+    }
+    // Keeps the updater's voice list in step with the setting, e.g. after a backup restore, whichever tab is open.
+    val voiceSelection = remember { VoiceSelection.get(context) }
+    LaunchedEffect(settings.builtInVoice) { voiceSelection.choose(settings.builtInVoice.takeUnless { it.bundled }?.id) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    fun closeSearch() {
+        searching = false
+        query = ""
+    }
+    BackHandler(enabled = searching) { closeSearch() }
+
+    CompositionLocalProvider(LocalSettingsJump provides jump) {
+        Scaffold(
+            // The keyboard too: the app moves its own content clear of it (adjustResize), so a field it would cover scrolls up.
+            contentWindowInsets = ScaffoldDefaults.contentWindowInsets.union(WindowInsets.ime),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (searching) SearchField(query) { query = it } else Text(stringResource(R.string.settings_title))
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { if (searching) closeSearch() else onBack() }) {
+                            Icon(
+                                Icons.Filled.ArrowBack,
+                                contentDescription = stringResource(if (searching) R.string.settings_search_close else R.string.settings_back),
+                            )
+                        }
+                    },
+                    actions = {
+                        if (!searching) {
+                            IconButton(onClick = { searching = true }) {
+                                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.settings_search))
+                            }
+                        } else if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.settings_search_clear))
+                            }
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                if (searching) {
+                    SearchResults(query) { entry ->
+                        closeSearch()
+                        jump.target = entry.title
+                        scope.launch { pager.scrollToPage(entry.tab.ordinal) }
+                    }
+                } else {
+                    Tabs(pager) { page -> scope.launch { pager.animateScrollToPage(page) } }
+                    HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.Top) { page ->
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 6.dp, bottom = 32.dp)) {
+                            when (SettingsTab.entries[page]) {
+                                SettingsTab.VOICE -> VoiceTab(store, settings, voice)
+                                SettingsTab.DRIVING -> DrivingSection(network, secrets)
+                                SettingsTab.LIVE -> if (network != null && secrets != null) LiveDataTab(network, secrets)
+                                SettingsTab.MAPS -> {
+                                    if (network != null && secrets != null) UpdatesSection(network, secrets)
+                                    CoverageSection()
+                                }
+                                SettingsTab.BACKUP -> {
+                                    if (backup != null) BackupSection(backup, onImported)
+                                    JumpTarget(R.string.settings_about) {
+                                        SettingsCard(R.string.settings_about) {
+                                            Text(
+                                                stringResource(R.string.settings_about_body),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The tabs: an icon over each name, the open one underlined. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Tabs(pager: PagerState, onSelect: (Int) -> Unit) {
+    PrimaryTabRow(selectedTabIndex = pager.currentPage) {
+        for (tab in SettingsTab.entries) {
+            Tab(
+                selected = pager.currentPage == tab.ordinal,
+                onClick = { onSelect(tab.ordinal) },
+                text = { Text(stringResource(tab.title), maxLines = 1) },
+                icon = { Icon(tab.icon, contentDescription = null) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchField(query: String, onQuery: (String) -> Unit) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    TextField(
+        value = query,
+        onValueChange = onQuery,
+        placeholder = { Text(stringResource(R.string.settings_search)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = {}),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        ),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+    )
+}
+
+/** What matches the search, each with where it lives ("Voice › Alerts"); picking one jumps there. */
+@Composable
+private fun SearchResults(query: String, onPick: (SettingEntry) -> Unit) {
+    val resources = LocalResources.current
+    val results = remember(query, resources) { SettingsIndex.search(query) { resources.getString(it) } }
+    val hint = when {
+        query.isBlank() -> stringResource(R.string.settings_search_empty)
+        results.isEmpty() -> stringResource(R.string.settings_search_none, query.trim())
+        else -> null
+    }
+    if (hint != null) {
+        Text(
+            hint,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(16.dp),
+        )
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(results, key = { it.title }) { entry ->
+            val where = listOfNotNull(stringResource(entry.tab.title), entry.place?.let { stringResource(it) }).joinToString(" › ")
+            ListItem(
+                headlineContent = { Text(stringResource(entry.title)) },
+                supportingContent = { Text(where) },
+                modifier = Modifier.clickable { onPick(entry) },
+            )
+        }
+    }
+}
+
+/**
+ * Settings > Voice: what is changed often on top, then the alerts and the rest of the voice options in two closed
+ * groups, each saying what's set inside (owner, October 2026: "Essentials + More").
+ */
+@Composable
+private fun VoiceTab(store: VoiceSettingsStore, settings: VoiceSettings, voice: GuidanceVoice) {
     val scope = rememberCoroutineScope()
     // Writes outlive the screen: Back cancels its scope, and a slider drag's last writes may still be queued then.
     fun update(transform: (VoiceSettings) -> VoiceSettings) {
@@ -118,8 +304,6 @@ fun SettingsScreen(
         refreshVoices()
         PackEvents.installed.collect { if (it.kind == PackKind.VOICE) refreshVoices() }
     }
-    // Keeps the updater's list in step with the setting, e.g. after a backup restore.
-    LaunchedEffect(settings.builtInVoice) { voiceSelection.choose(settings.builtInVoice.takeUnless { it.bundled }?.id) }
     fun pickVoice(picked: BuiltInVoice) {
         val previous = settings.builtInVoice
         update { it.copy(builtInVoice = picked) }
@@ -138,105 +322,14 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(
-        // The keyboard too: the app moves its own content clear of it (adjustResize), so a field it would cover scrolls up.
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.union(WindowInsets.ime),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.settings_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 32.dp),
-        ) {
-            Section(R.string.settings_voice)
-            Choice(
-                R.string.voice_guidance,
-                VoiceMode.entries,
-                settings.mode,
-                { stringResource(it.label()) },
-            ) { m -> update { it.copy(mode = m) } }
-
-            Subheading(R.string.voice_per_mode)
-            Toggle(R.string.voice_driving, settings.driving) { v -> update { it.copy(driving = v) } }
-            Toggle(R.string.voice_cycling, settings.cycling) { v -> update { it.copy(cycling = v) } }
-            Toggle(R.string.voice_walking, settings.walking, R.string.voice_walking_note) { v -> update { it.copy(walking = v) } }
-            Toggle(R.string.voice_transit, settings.transit) { v -> update { it.copy(transit = v) } }
-
-            Choice(
-                R.string.voice_engine,
-                listOf<VoiceEngine?>(null, VoiceEngine.SYSTEM, VoiceEngine.BUILT_IN),
-                settings.engine,
-                { stringResource(engineLabel(it)) },
-                note = stringResource(
-                    when (systemEngine) {
-                        null -> R.string.voice_engine_checking
-                        true -> R.string.voice_engine_system_found
-                        false -> R.string.voice_engine_system_missing
-                    },
-                ),
-            ) { e -> update { it.copy(engine = e) } }
-            Choice(
-                R.string.voice_built_in_voice,
-                BuiltInVoice.entries,
-                settings.builtInVoice,
-                { stringResource(it.label()) },
-                note = when {
-                    settings.builtInVoice.bundled -> stringResource(R.string.voice_built_in_voice_note)
-                    settings.builtInVoice in installedVoices -> stringResource(R.string.voice_pack_installed)
-                    else -> stringResource(R.string.voice_pack_not_downloaded)
-                },
-                onSelect = ::pickVoice,
-            )
-
-            Toggle(R.string.voice_street_names, settings.streetNames) { v -> update { it.copy(streetNames = v) } }
-            Choice(R.string.voice_detail, DetailLevel.entries, settings.detail, { stringResource(it.label()) }) { d ->
-                update { it.copy(detail = d) }
-            }
-            Choice(
-                R.string.voice_distance_style,
-                DistanceStyle.entries,
-                settings.distanceStyle,
-                { stringResource(it.label()) },
-                note = stringResource(R.string.voice_distance_style_note),
-            ) { d -> update { it.copy(distanceStyle = d) } }
-            Toggle(R.string.voice_instruction_chime, settings.instructionChime) { v -> update { it.copy(instructionChime = v) } }
-            Toggle(R.string.voice_alert_chime, settings.alertChime) { v -> update { it.copy(alertChime = v) } }
-            Toggle(R.string.voice_haptic_turns, settings.hapticTurns, R.string.voice_haptic_turns_note) { v ->
-                update { it.copy(hapticTurns = v) }
-            }
-            Toggle(R.string.voice_traffic, settings.trafficAlerts) { v -> update { it.copy(trafficAlerts = v) } }
-            Choice(
-                R.string.voice_speed_limits,
-                SpeedAlertMode.entries,
-                settings.speedAlerts,
-                { stringResource(it.label()) },
-                note = stringResource(R.string.voice_speed_limits_note),
-            ) { m -> update { it.copy(speedAlerts = m) } }
-            Subheading(R.string.voice_road_alerts)
-            Toggle(R.string.voice_speed_cameras, settings.speedCameraAlerts) { v -> update { it.copy(speedCameraAlerts = v) } }
-            Toggle(R.string.voice_alpr_cameras, settings.alprCameraAlerts, R.string.voice_alpr_cameras_note) { v ->
-                update { it.copy(alprCameraAlerts = v) }
-            }
-            Toggle(R.string.voice_school_zones, settings.schoolZoneAlerts) { v -> update { it.copy(schoolZoneAlerts = v) } }
-            Toggle(R.string.voice_reroute, settings.rerouteAnnouncement) { v -> update { it.copy(rerouteAnnouncement = v) } }
-            Toggle(R.string.voice_transit_stops, settings.transitStopAlerts) { v -> update { it.copy(transitStopAlerts = v) } }
-            Choice(R.string.voice_volume, GuidanceVolume.entries, settings.volume, { stringResource(it.label()) }) { v ->
-                update { it.copy(volume = v) }
-            }
-            Choice(R.string.voice_other_audio, OtherAudio.entries, settings.otherAudio, { stringResource(it.label()) }) { o ->
-                update { it.copy(otherAudio = o) }
-            }
-            Choice(R.string.voice_output, AudioOutput.entries, settings.output, { stringResource(it.label()) }) { o ->
-                update { it.copy(output = o) }
-            }
-
+    SettingsCard(R.string.settings_voice) {
+        Choice(R.string.voice_guidance, VoiceMode.entries, settings.mode, { stringResource(it.label()) }) { m ->
+            update { it.copy(mode = m) }
+        }
+        Choice(R.string.voice_volume, GuidanceVolume.entries, settings.volume, { stringResource(it.label()) }) { v ->
+            update { it.copy(volume = v) }
+        }
+        JumpTarget(R.string.voice_rate) {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.voice_rate)) },
                 supportingContent = {
@@ -251,253 +344,123 @@ fun SettingsScreen(
                         )
                     }
                 },
+                colors = rowColors(),
             )
-            Button(onClick = { voice.test() }, modifier = Modifier.padding(horizontal = 16.dp)) {
+        }
+        Toggle(R.string.voice_street_names, settings.streetNames) { v -> update { it.copy(streetNames = v) } }
+        JumpTarget(R.string.voice_test) {
+            Button(onClick = { voice.test() }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Icon(Icons.Filled.RecordVoiceOver, contentDescription = null)
                 Text(stringResource(R.string.voice_test), Modifier.padding(start = 8.dp))
             }
-
-            // Phase 6: driving options.
-            HorizontalDivider(Modifier.padding(top = 24.dp))
-            DrivingSection(network, secrets)
-
-            if (network != null && secrets != null) {
-                HorizontalDivider(Modifier.padding(top = 24.dp))
-                UpdatesSection(network, secrets)
-                HorizontalDivider(Modifier.padding(top = 24.dp))
-                CoverageSection()
-                HorizontalDivider(Modifier.padding(top = 24.dp))
-                LiveDataSection(network, secrets)
-            }
-
-            if (backup != null) {
-                HorizontalDivider(Modifier.padding(top = 24.dp))
-                BackupSection(backup, onImported)
-            }
-
-            HorizontalDivider(Modifier.padding(top = 24.dp))
-            Section(R.string.settings_about)
-            Text(
-                stringResource(R.string.settings_about_body),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-    }
-}
-
-/**
- * Online extras, each off until turned on. Requests fetch whole feeds, so
- * they never carry your location, searches or routes.
- */
-@Composable
-private fun LiveDataSection(network: PreferenceNetworkToggles, secrets: SecretStore) {
-    val toggles by network.state.collectAsState()
-    Section(R.string.settings_live)
-    Text(
-        stringResource(R.string.settings_live_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
-    Toggle(R.string.live_transit, toggles.getValue(NetworkFeature.TRANSIT_REALTIME), R.string.live_transit_note) {
-        network.set(NetworkFeature.TRANSIT_REALTIME, it)
-    }
-    Toggle(R.string.live_bus, toggles.getValue(NetworkFeature.TRANSIT_BUS_TIME), R.string.live_bus_note) {
-        network.set(NetworkFeature.TRANSIT_BUS_TIME, it)
-    }
-    KeyField(secrets, ApiKey.MTA_BUS_TIME, R.string.live_bus_key, R.string.live_bus_key_saved)
-
-    Subheading(R.string.live_traffic)
-    Toggle(R.string.live_511, toggles.getValue(NetworkFeature.TRAFFIC_511NY), R.string.live_511_note) {
-        network.set(NetworkFeature.TRAFFIC_511NY, it)
-    }
-    Toggle(R.string.live_511pa, toggles.getValue(NetworkFeature.TRAFFIC_511PA), R.string.live_511pa_note) {
-        network.set(NetworkFeature.TRAFFIC_511PA, it)
-    }
-    Toggle(R.string.live_ctroads, toggles.getValue(NetworkFeature.TRAFFIC_CTROADS), R.string.live_ctroads_note) {
-        network.set(NetworkFeature.TRAFFIC_CTROADS, it)
-    }
-    Toggle(R.string.live_chart_md, toggles.getValue(NetworkFeature.TRAFFIC_CHART_MD), R.string.live_chart_md_note) {
-        network.set(NetworkFeature.TRAFFIC_CHART_MD, it)
-    }
-    Toggle(R.string.live_deldot, toggles.getValue(NetworkFeature.TRAFFIC_DELDOT), R.string.live_deldot_note) {
-        network.set(NetworkFeature.TRAFFIC_DELDOT, it)
-    }
-    Toggle(R.string.live_511wi, toggles.getValue(NetworkFeature.TRAFFIC_511WI), R.string.live_511wi_note) {
-        network.set(NetworkFeature.TRAFFIC_511WI, it)
-    }
-    Toggle(R.string.live_travel_midwest, toggles.getValue(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST), R.string.live_travel_midwest_note) {
-        network.set(NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, it)
-    }
-    Toggle(R.string.live_nddot, toggles.getValue(NetworkFeature.TRAFFIC_NDDOT), R.string.live_nddot_note) {
-        network.set(NetworkFeature.TRAFFIC_NDDOT, it)
-    }
-    Toggle(R.string.live_sd511, toggles.getValue(NetworkFeature.TRAFFIC_SD511), R.string.live_sd511_note) {
-        network.set(NetworkFeature.TRAFFIC_SD511, it)
-    }
-    Toggle(R.string.live_511in, toggles.getValue(NetworkFeature.TRAFFIC_511IN), R.string.live_511in_note) {
-        network.set(NetworkFeature.TRAFFIC_511IN, it)
-    }
-    Toggle(R.string.live_511mn, toggles.getValue(NetworkFeature.TRAFFIC_511MN), R.string.live_511mn_note) {
-        network.set(NetworkFeature.TRAFFIC_511MN, it)
-    }
-    Toggle(R.string.live_511ia, toggles.getValue(NetworkFeature.TRAFFIC_511IA), R.string.live_511ia_note) {
-        network.set(NetworkFeature.TRAFFIC_511IA, it)
-    }
-    Toggle(R.string.live_511ne, toggles.getValue(NetworkFeature.TRAFFIC_511NE), R.string.live_511ne_note) {
-        network.set(NetworkFeature.TRAFFIC_511NE, it)
-    }
-    Toggle(R.string.live_kandrive, toggles.getValue(NetworkFeature.TRAFFIC_KANDRIVE), R.string.live_kandrive_note) {
-        network.set(NetworkFeature.TRAFFIC_KANDRIVE, it)
-    }
-    Toggle(R.string.live_midrive, toggles.getValue(NetworkFeature.TRAFFIC_MIDRIVE), R.string.live_midrive_note) {
-        network.set(NetworkFeature.TRAFFIC_MIDRIVE, it)
-    }
-    Toggle(R.string.live_ohgo, toggles.getValue(NetworkFeature.TRAFFIC_OHGO), R.string.live_ohgo_note) {
-        network.set(NetworkFeature.TRAFFIC_OHGO, it)
-    }
-    if (toggles.getValue(NetworkFeature.TRAFFIC_OHGO)) KeyField(secrets, ApiKey.OHGO, R.string.live_ohgo_key, R.string.live_ohgo_key_saved)
-    Toggle(R.string.live_dot, toggles.getValue(NetworkFeature.TRAFFIC_NYC_DOT), R.string.live_dot_note) {
-        network.set(NetworkFeature.TRAFFIC_NYC_DOT, it)
-    }
-    Text(
-        stringResource(R.string.live_traffic_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-    // The states whose traffic isn't here, so an empty traffic layer there is never a mystery.
-    Text(
-        Coverage.summary().first(),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-    // Left from older versions and shown only while set, so they can be cleared and stop riding along in every
-    // export: the TomTom toggle (only a backup can turn it on; no version has the layer) and the 511NY key (511NY
-    // has needed none since October 2026).
-    if (toggles.getValue(NetworkFeature.TRAFFIC_TOMTOM)) {
-        Toggle(R.string.live_tomtom_old, true, R.string.live_tomtom_old_note) { network.set(NetworkFeature.TRAFFIC_TOMTOM, it) }
-    }
-    val savedKeys by secrets.saved.collectAsState()
-    if (ApiKey.NY_511 in savedKeys) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.live_511_key_old), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { secrets.set(ApiKey.NY_511, null) }) { Text(stringResource(R.string.live_key_remove)) }
         }
     }
 
-    Subheading(R.string.live_weather_heading)
-    Toggle(R.string.live_weather, toggles.getValue(NetworkFeature.WEATHER), R.string.live_weather_note) {
-        network.set(NetworkFeature.WEATHER, it)
-    }
-
-    // Gas price for the fuel estimate on route cards. The state is a choice made here, never worked out from GPS.
-    val fuelPrefs = FuelPrefs.get(LocalContext.current)
-    val fuel by fuelPrefs.settings.collectAsState()
-    Subheading(R.string.live_fuel)
-    Toggle(R.string.live_gas, toggles.getValue(NetworkFeature.GAS_PRICES), R.string.live_gas_note) { on ->
-        network.set(NetworkFeature.GAS_PRICES, on)
-        // Off means the typed-in price again, even though an old fetched one is kept.
-        if (!on) fuelPrefs.setPriceSource(PriceSource.MANUAL)
-    }
-    KeyField(secrets, ApiKey.EIA, R.string.live_gas_key, R.string.live_gas_key_saved)
-    if (toggles.getValue(NetworkFeature.GAS_PRICES)) {
+    SettingsGroup(
+        title = R.string.settings_voice_alerts,
+        summary = alertsSummary(settings),
+        titles = SettingsIndex.entries.filter { it.place == R.string.settings_voice_alerts }.map { it.title }.toSet(),
+    ) {
+        Toggle(R.string.voice_traffic, settings.trafficAlerts) { v -> update { it.copy(trafficAlerts = v) } }
         Choice(
-            title = R.string.live_gas_state,
-            options = GasRegion.entries,
-            selected = fuel.region,
-            label = { it.name },
-            note = if (fuel.region == GasRegion.NJ) stringResource(R.string.live_gas_nj_note) else null,
-        ) { fuelPrefs.setRegion(it) }
+            R.string.voice_speed_limits,
+            SpeedAlertMode.entries,
+            settings.speedAlerts,
+            { stringResource(it.label()) },
+            note = stringResource(R.string.voice_speed_limits_note),
+        ) { m -> update { it.copy(speedAlerts = m) } }
+        Subheading(R.string.voice_road_alerts)
+        Toggle(R.string.voice_speed_cameras, settings.speedCameraAlerts) { v -> update { it.copy(speedCameraAlerts = v) } }
+        Toggle(R.string.voice_alpr_cameras, settings.alprCameraAlerts, R.string.voice_alpr_cameras_note) { v ->
+            update { it.copy(alprCameraAlerts = v) }
+        }
+        Toggle(R.string.voice_school_zones, settings.schoolZoneAlerts) { v -> update { it.copy(schoolZoneAlerts = v) } }
+        Toggle(R.string.voice_reroute, settings.rerouteAnnouncement) { v -> update { it.copy(rerouteAnnouncement = v) } }
+        Toggle(R.string.voice_transit_stops, settings.transitStopAlerts) { v -> update { it.copy(transitStopAlerts = v) } }
     }
-}
 
-/** A password-style field that saves an API key encrypted, with Remove once one is saved. */
-@Composable
-private fun KeyField(secrets: SecretStore, key: ApiKey, @StringRes label: Int, @StringRes savedLabel: Int) {
-    // Saved and readable; a saved key the Keystore can't open asks to be typed again, and can still be removed.
-    var hasKey by remember { mutableStateOf(secrets.has(key)) }
-    val saved by secrets.saved.collectAsState()
-    var draft by remember { mutableStateOf("") }
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            label = { Text(stringResource(if (hasKey) savedLabel else label)) },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
+    val chimes = settings.instructionChime || settings.alertChime
+    SettingsGroup(
+        title = R.string.settings_voice_more,
+        summary = listOf(
+            stringResource(engineLabel(settings.engine)),
+            stringResource(settings.builtInVoice.label()),
+            stringResource(if (chimes) R.string.settings_chimes_on else R.string.settings_chimes_off),
+        ).joinToString(" · "),
+        titles = SettingsIndex.entries.filter { it.place == R.string.settings_voice_more }.map { it.title }.toSet(),
+    ) {
+        Subheading(R.string.voice_per_mode)
+        Toggle(R.string.voice_driving, settings.driving) { v -> update { it.copy(driving = v) } }
+        Toggle(R.string.voice_cycling, settings.cycling) { v -> update { it.copy(cycling = v) } }
+        Toggle(R.string.voice_walking, settings.walking, R.string.voice_walking_note) { v -> update { it.copy(walking = v) } }
+        Toggle(R.string.voice_transit, settings.transit) { v -> update { it.copy(transit = v) } }
+        Choice(
+            R.string.voice_engine,
+            listOf<VoiceEngine?>(null, VoiceEngine.SYSTEM, VoiceEngine.BUILT_IN),
+            settings.engine,
+            { stringResource(engineLabel(it)) },
+            note = stringResource(
+                when (systemEngine) {
+                    null -> R.string.voice_engine_checking
+                    true -> R.string.voice_engine_system_found
+                    false -> R.string.voice_engine_system_missing
+                },
+            ),
+            menu = true,
+        ) { e -> update { it.copy(engine = e) } }
+        Choice(
+            R.string.voice_built_in_voice,
+            BuiltInVoice.entries,
+            settings.builtInVoice,
+            { stringResource(it.label()) },
+            note = when {
+                settings.builtInVoice.bundled -> stringResource(R.string.voice_built_in_voice_note)
+                settings.builtInVoice in installedVoices -> stringResource(R.string.voice_pack_installed)
+                else -> stringResource(R.string.voice_pack_not_downloaded)
+            },
+            menu = true,
+            onSelect = ::pickVoice,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                secrets.set(key, draft)
-                hasKey = secrets.has(key)
-                draft = ""
-            }, enabled = draft.isNotBlank()) { Text(stringResource(R.string.live_key_save)) }
-            if (hasKey || key in saved) {
-                TextButton(onClick = {
-                    secrets.set(key, null)
-                    hasKey = false
-                }) { Text(stringResource(R.string.live_key_remove)) }
-            }
+        Choice(R.string.voice_detail, DetailLevel.entries, settings.detail, { stringResource(it.label()) }) { d ->
+            update { it.copy(detail = d) }
+        }
+        Choice(
+            R.string.voice_distance_style,
+            DistanceStyle.entries,
+            settings.distanceStyle,
+            { stringResource(it.label()) },
+            note = stringResource(R.string.voice_distance_style_note),
+        ) { d -> update { it.copy(distanceStyle = d) } }
+        Toggle(R.string.voice_instruction_chime, settings.instructionChime) { v -> update { it.copy(instructionChime = v) } }
+        Toggle(R.string.voice_alert_chime, settings.alertChime) { v -> update { it.copy(alertChime = v) } }
+        Toggle(R.string.voice_haptic_turns, settings.hapticTurns, R.string.voice_haptic_turns_note) { v ->
+            update { it.copy(hapticTurns = v) }
+        }
+        Choice(R.string.voice_other_audio, OtherAudio.entries, settings.otherAudio, { stringResource(it.label()) }) { o ->
+            update { it.copy(otherAudio = o) }
+        }
+        Choice(R.string.voice_output, AudioOutput.entries, settings.output, { stringResource(it.label()) }, menu = true) { o ->
+            update { it.copy(output = o) }
         }
     }
 }
 
+/** The alerts that are on, by name ("Speed cameras, plate readers, school zones"), or "All off". */
 @Composable
-internal fun Section(@StringRes title: Int) {
-    Text(
-        stringResource(title),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-    )
-}
-
-@Composable
-private fun Subheading(@StringRes title: Int) {
-    Text(
-        stringResource(title),
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(start = 16.dp, top = 12.dp),
-    )
-}
-
-@Composable
-internal fun Toggle(@StringRes title: Int, checked: Boolean, @StringRes note: Int? = null, onChange: (Boolean) -> Unit) {
-    ListItem(
-        headlineContent = { Text(stringResource(title)) },
-        supportingContent = note?.let { { Text(stringResource(it)) } },
-        trailingContent = { Switch(checked = checked, onCheckedChange = onChange) },
-    )
-}
-
-@Composable
-internal fun <T> Choice(
-    @StringRes title: Int,
-    options: List<T>,
-    selected: T,
-    label: @Composable (T) -> String,
-    note: String? = null,
-    onSelect: (T) -> Unit,
-) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            options.forEachIndexed { i, option ->
-                SegmentedButton(
-                    selected = option == selected,
-                    onClick = { onSelect(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),
-                ) { Text(label(option), maxLines = 1) }
-            }
-        }
-        note?.let {
-            Row { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
+private fun alertsSummary(settings: VoiceSettings): String {
+    val on = listOfNotNull(
+        R.string.settings_alerts_traffic.takeIf { settings.trafficAlerts },
+        R.string.settings_alerts_speed.takeIf { settings.speedAlerts != SpeedAlertMode.OFF },
+        R.string.settings_alerts_cameras.takeIf { settings.speedCameraAlerts },
+        R.string.settings_alerts_readers.takeIf { settings.alprCameraAlerts },
+        R.string.settings_alerts_schools.takeIf { settings.schoolZoneAlerts },
+        R.string.settings_alerts_reroutes.takeIf { settings.rerouteAnnouncement },
+        R.string.settings_alerts_transit.takeIf { settings.transitStopAlerts },
+    ).map { stringResource(it) }
+    return if (on.isEmpty()) {
+        stringResource(R.string.settings_alerts_none)
+    } else {
+        on.joinToString(", ").replaceFirstChar { it.titlecase(Locale.getDefault()) }
     }
 }
 
