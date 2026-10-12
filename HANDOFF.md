@@ -366,6 +366,7 @@ Exit test: a camera still opens from the traffic layer; the app runs on a car sc
 - [x] Navigation: `ExploreServices.openNavigator` reads whether a trip is on from its own navigator, so a map rebuilt mid-trip by an arriving region gets the trip back instead of closing its router.
 - [ ] To check on the phone: a transit plan of a few blocks shows the walk and rides; a drive with Get for this trip keeps its overlay and End button when the region lands; a route preview with Shorter way on a short local trip.
 - [ ] The review's Mediums and Lows, grouped into PRs in its section 1.2 (pipeline fixes together, as each costs a data rebuild).
+- [ ] New features (owner, 12 October 2026, picked one by one from the review's suggestions): 28 of 44, listed in `docs/review-2026-10.md` section 3.0, among them red light cameras from open data only (Philadelphia, Chicago, DC; section 2.5), lane guidance, NJ and PA transit, a network log and a crash log viewer. Not started.
 
 ## Repo layout and distribution
 
