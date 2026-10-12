@@ -100,45 +100,50 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
         }
     }
 
-    Section(R.string.backup_title)
-    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.backup_body), style = MaterialTheme.typography.bodyMedium)
-        if (pending) {
-            Text(stringResource(R.string.backup_pending), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    step = Step.Working(R.string.backup_finishing)
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.IO) { service.resume() }
-                        pending = service.hasPending()
-                        step = when (outcome) {
-                            is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts), networkSentence(resources, outcome.turnedOn, done = true)), applied = true)
-                            is ResumeOutcome.Failed -> Step.Message(resources.getString(R.string.backup_finish_failed, outcome.reason))
-                            ResumeOutcome.NothingPending -> Step.Idle
+    SettingsCard(R.string.backup_title) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Note(stringResource(R.string.backup_body))
+            if (pending) {
+                Text(stringResource(R.string.backup_pending), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        step = Step.Working(R.string.backup_finishing)
+                        scope.launch {
+                            val outcome = withContext(Dispatchers.IO) { service.resume() }
+                            pending = service.hasPending()
+                            step = when (outcome) {
+                                is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts), networkSentence(resources, outcome.turnedOn, done = true)), applied = true)
+                                is ResumeOutcome.Failed -> Step.Message(resources.getString(R.string.backup_finish_failed, outcome.reason))
+                                ResumeOutcome.NothingPending -> Step.Idle
+                            }
                         }
-                    }
-                }) { Text(stringResource(R.string.backup_finish)) }
-                TextButton(onClick = {
-                    scope.launch {
-                        withContext(Dispatchers.IO) { runCatching { service.discardPending() } }
-                        pending = service.hasPending()
-                    }
-                }) { Text(stringResource(R.string.backup_discard)) }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                val reason = service.blocker()
-                if (reason != null) {
-                    step = Step.Message(resources.getString(R.string.backup_refused, reason))
-                } else {
-                    createDocument.launch(SouthboundBundle.fileName(System.currentTimeMillis()))
+                    }) { Text(stringResource(R.string.backup_finish)) }
+                    TextButton(onClick = {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { runCatching { service.discardPending() } }
+                            pending = service.hasPending()
+                        }
+                    }) { Text(stringResource(R.string.backup_discard)) }
                 }
-            }) { Text(stringResource(R.string.backup_export)) }
-            OutlinedButton(onClick = {
-                val reason = service.blocker()
-                step = if (reason != null) Step.Message(resources.getString(R.string.backup_refused, reason)) else Step.ImportNotice
-            }) { Text(stringResource(R.string.backup_import)) }
+            }
+            JumpTarget(R.string.backup_export) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val reason = service.blocker()
+                        if (reason != null) {
+                            step = Step.Message(resources.getString(R.string.backup_refused, reason))
+                        } else {
+                            createDocument.launch(SouthboundBundle.fileName(System.currentTimeMillis()))
+                        }
+                    }) { Text(stringResource(R.string.backup_export)) }
+                    JumpTarget(R.string.backup_import, Modifier) {
+                        OutlinedButton(onClick = {
+                            val reason = service.blocker()
+                            step = if (reason != null) Step.Message(resources.getString(R.string.backup_refused, reason)) else Step.ImportNotice
+                        }) { Text(stringResource(R.string.backup_import)) }
+                    }
+                }
+            }
         }
     }
 

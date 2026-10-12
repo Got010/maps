@@ -159,8 +159,23 @@ object Coverage {
      * A line for the region picker under a heading or a one-region state ("Maryland, Delaware and DC" -> "No traffic
      * feed for DC"), or null when every state under it has its traffic.
      */
+    /**
+     * The states (and DC) a heading of the region picker ([Regions.byState]) covers: "Maryland, Delaware and DC"
+     * is three.
+     */
+    fun statesIn(heading: String): List<State> = STATES.filter { it.name in heading }
+
+    /**
+     * The states (and DC) the phone has map regions for, in [STATES] order: Settings > Live data lists their
+     * traffic feeds first. Maryland's region brings Delaware and DC along.
+     */
+    fun statesWithRegions(regionIds: Set<String>): List<State> {
+        val headings = Regions.byState.filter { (_, regions) -> regions.any { it.id in regionIds } }.map { it.first }
+        return STATES.filter { state -> headings.any { state.name in it } }
+    }
+
     fun pickerNote(heading: String): String? {
-        val states = STATES.filter { it.name in heading }
+        val states = statesIn(heading)
         val noFeed = states.filter { it.trafficFeed == null }
         val keyed = states.filter { it.trafficFeed != null && it.entry(Item.INCIDENTS).level == Level.PARTIAL }
         return when {
