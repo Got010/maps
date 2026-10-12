@@ -32,9 +32,16 @@ object Ibi511 {
 
     /**
      * [videoHosts]: the end of the host names a camera row's `videoUrl` may name (511WI's cctv1.dot.wi.gov), for a
-     * camera the card may show a frame of when its still fails; empty keeps the video out.
+     * camera the card may show a frame of when its still fails; empty keeps the video out. [zone]: the time zone its
+     * rows' `lastUpdated` is written in, the site's own.
      */
-    class Site(val source: TrafficSource, val base: String, val eventLayers: List<EventLayer>, val videoHosts: List<String> = emptyList()) {
+    class Site(
+        val source: TrafficSource,
+        val base: String,
+        val eventLayers: List<EventLayer>,
+        val videoHosts: List<String> = emptyList(),
+        val zone: ZoneId = ZoneId.of("America/New_York"),
+    ) {
         fun iconsUrl(layer: String): String = "$base/map/mapIcons/$layer"
 
         fun listUrl(list: String, start: Int): String =
@@ -89,6 +96,7 @@ object Ibi511 {
             EventLayer("Construction", "traffic", IncidentKind.ROADWORK),
         ),
         videoHosts = listOf(".dot.wi.gov"),
+        zone = ZoneId.of("America/Chicago"),
     )
 
     val SITES: List<Site> = listOf(PA, CT, WI)
@@ -163,7 +171,7 @@ object Ibi511 {
             // 511PA sends a number or nothing; only words mean something on a card.
             severity = row.text("severity")?.takeIf { s -> s.none(Char::isDigit) },
             lanesStatus = lanes,
-            updatedAt = parseUpdated(row.text("lastUpdated")),
+            updatedAt = parseUpdated(row.text("lastUpdated"), site.zone),
             source = site.source,
         )
     }
@@ -234,7 +242,7 @@ object Ibi511 {
             lines = FiveElevenNy.signLines(listOf(pages.joinToString("[np]"))),
             roadway = row.text("roadwayName"),
             direction = direction(row.text("direction")),
-            updatedAt = parseUpdated(row.text("lastUpdated")),
+            updatedAt = parseUpdated(row.text("lastUpdated"), site.zone),
             source = site.source,
         )
     }
@@ -264,16 +272,15 @@ object Ibi511 {
     private val STATE_ROUTE = Regex("""^\(\d+\)\s*""")
     private val KEEP_UPPER = setOf("US", "PA", "SR", "CT", "NY", "NJ", "MD", "DE", "DC", "I", "N", "S", "E", "W", "NE", "NW", "SE", "SW", "II", "III")
 
-    // "9/30/26, 6:39 PM": both sites write Eastern time.
+    // "9/30/26, 6:39 PM", in the site's own time (Site.zone).
     private val UPDATED = DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US)
-    private val EASTERN: ZoneId = ZoneId.of("America/New_York")
     private val SPACES = Regex("""\s+""")
 
-    /** A row's `lastUpdated` as POSIX millis; null when unreadable. */
-    fun parseUpdated(text: String?): Long? {
+    /** A row's `lastUpdated`, written in [zone], as POSIX millis; null when unreadable. */
+    fun parseUpdated(text: String?, zone: ZoneId): Long? {
         val t = text?.trim()?.replace(SPACES, " ")?.takeIf { it.isNotEmpty() } ?: return null
         return try {
-            LocalDateTime.parse(t, UPDATED).atZone(EASTERN).toInstant().toEpochMilli()
+            LocalDateTime.parse(t, UPDATED).atZone(zone).toInstant().toEpochMilli()
         } catch (e: DateTimeParseException) {
             null
         }

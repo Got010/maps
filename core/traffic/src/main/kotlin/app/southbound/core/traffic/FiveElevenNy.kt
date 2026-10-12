@@ -87,10 +87,14 @@ object FiveElevenNy {
         val sub = subType?.lowercase().orEmpty()
         val lanesLower = lanes?.lowercase().orEmpty()
         val d = description.lowercase()
+        // A closed ramp leaves the road open (RampClosure): whatever else it is, it isn't a closure.
+        val ramp = RampClosure.matches(subType) || RampClosure.matches(description)
         return when {
-            t.startsWith("closure") || sub.contains("closure") || sub.contains("closed") ||
-                ("all lanes" in lanesLower && "closed" in lanesLower) ||
-                d.startsWith("road closed") || d.startsWith("ramp closed") || " is closed" in d.replace(LANE_CLOSED, "") -> IncidentKind.CLOSURE
+            !ramp && (
+                t.startsWith("closure") || sub.contains("closure") || sub.contains("closed") ||
+                    ("all lanes" in lanesLower && "closed" in lanesLower) ||
+                    d.startsWith("road closed") || " is closed" in d.replace(LANE_CLOSED, "")
+                ) -> IncidentKind.CLOSURE
             // Before accidents: the feed files police activity under accidentsAndIncidents.
             isPolice(t) || isPolice(sub) -> IncidentKind.POLICE
             t.startsWith("accident") || sub.contains("accident") || sub.contains("crash") || sub.contains("disabled") -> IncidentKind.ACCIDENT

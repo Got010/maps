@@ -58,14 +58,22 @@ class MarylandChartTest {
     }
 
     @Test
-    fun `a closed event is a closure`() {
-        val json = """{"data":[{"id":"x1","lat":39.0,"lon":-76.5,"closed":true,"incidentType":"Property Damage",
-            "description":"Incident @ I-695 INNER LOOP AT EXIT 4","direction":"North","lanes":[]}],"success":true}"""
-        val e = MarylandChart.parseEvents(json).single()
-        assertEquals(IncidentKind.CLOSURE, e.kind)
-        assertEquals("All lanes closed", e.lanesStatus)
-        assertEquals("I-695", e.roadway)
-        assertTrue(e.isClosure)
+    fun `an event is a closure when its lanes are all shut, not by its closed flag`() {
+        val lane = """{"laneType":"Traffic Lane","laneDirection":"north","laneStatus":"closed","laneTrafficFlowDirection":"primary"}"""
+        val json = """{"data":[
+            {"id":"x1","lat":39.0,"lon":-76.5,"closed":true,"incidentType":"Property Damage",
+             "description":"Incident @ I-695 INNER LOOP AT EXIT 4","direction":"North","lanes":[]},
+            {"id":"x2","lat":39.1,"lon":-76.6,"closed":false,"incidentType":"Property Damage",
+             "description":"Incident @ I-695 INNER LOOP AT EXIT 5","direction":"North","lanes":[$lane,$lane]}
+            ],"success":true}"""
+        val (flagged, shut) = MarylandChart.parseEvents(json)
+        assertEquals(IncidentKind.ACCIDENT, flagged.kind)
+        assertNull(flagged.lanesStatus)
+        assertFalse(flagged.isClosure)
+        assertEquals(IncidentKind.ACCIDENT, shut.kind)
+        assertEquals("All lanes closed", shut.lanesStatus)
+        assertEquals("I-695", shut.roadway)
+        assertTrue(shut.isClosure)
     }
 
     @Test

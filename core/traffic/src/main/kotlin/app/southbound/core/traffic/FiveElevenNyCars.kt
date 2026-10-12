@@ -102,7 +102,8 @@ object FiveElevenNyCars {
         val lanes = lanesStatus(details) ?: lanesFromImpacts(report?.get("laneImpacts") as? Map<*, *>)
         val wordingKind = FiveElevenNy.kindOf(null, headline, lanes, description)
         val kind = when (layer) {
-            EventLayer.CLOSURES -> IncidentKind.CLOSURE
+            // The closures layer holds ramp closures too, which leave the road open (RampClosure).
+            EventLayer.CLOSURES -> if (RampClosure.matches(headline) || RampClosure.matches(tooltip)) wordingKind else IncidentKind.CLOSURE
             EventLayer.CONSTRUCTION -> if (wordingKind == IncidentKind.CLOSURE) IncidentKind.CLOSURE else IncidentKind.ROADWORK
             EventLayer.INCIDENTS -> wordingKind
         }
