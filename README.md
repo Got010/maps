@@ -120,8 +120,12 @@ the only way a copy leaves.
 
 ## Driving
 
-Save a place as Home or Work from its card and both appear as one-tap chips in
-the search box. Driving routes may include a **Shorter way**: a side street that
+The search bar sits at the bottom of the map, within the thumb's reach, with the
+map's banners (a paused trip, the location prompt) and chips just above it: the
+start point picked with Start here, and Home and Work once you save a place as
+either from its card, each one tap to directions. Searching puts the field on the
+keyboard with the best match right above it. Settings > Driving > Search bar at
+the bottom turns it off, putting the bar back at the top. Driving routes may include a **Shorter way**: a side street that
 is shorter and faster than the first route, which the router's preference for
 main roads would otherwise leave out (it names the street, e.g. "via Old Temple
 Hill Road"). In route preview, Options avoids tolls, highways and ferries
