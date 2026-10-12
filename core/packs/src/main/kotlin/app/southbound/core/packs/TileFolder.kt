@@ -44,7 +44,10 @@ class TileFolder(filesDir: File) {
 
     data class Summary(val packs: Int, val bytes: Long, val modified: Long)
 
-    /** Starts a new generation next to the current one; [Generation.commit] makes it current. */
+    /**
+     * Starts a new generation next to the current one; [Generation.commit] makes it current, [Generation.abandon]
+     * drops it. Until then no [prune] deletes it, from this TileFolder or another on the same folder.
+     */
     fun begin(): Generation {
         root.mkdirs()
         var n = System.currentTimeMillis()
@@ -52,19 +55,26 @@ class TileFolder(filesDir: File) {
         do {
             dir = File(root, "g${n++}")
         } while (dir.exists())
-        if (!dir.mkdirs()) throw IOException("Couldn't make $dir")
+        // Registered before the folder exists, so a prune listing the folder in between can't take it.
+        synchronized(building) { building += dir.absolutePath }
+        if (!dir.mkdirs()) {
+            synchronized(building) { building -= dir.absolutePath }
+            throw IOException("Couldn't make $dir")
+        }
         val previous = current()
         return Generation(dir, previous, records(previous))
     }
 
     /**
-     * Deletes every generation but the current one and [inUse] (the folder an open router reads, which may be
-     * older: a trip keeps its router), and any unfinished one.
+     * Deletes every generation but the current one, [inUse] (the folder an open router reads, which may be
+     * older: a trip keeps its router) and those a round in this process is still filling ([begin]); an unfinished
+     * one a stopped process left behind goes too. The router opens on the map screen while the updater runs in
+     * the same process with a TileFolder of its own, so the round's generation must survive the router's prune.
      */
     fun prune(inUse: File? = null) {
         val keep = setOfNotNull(current()?.name, inUse?.name)
         root.listFiles()?.forEach { f ->
-            if (f.isDirectory && GENERATION.matches(f.name) && f.name !in keep) f.deleteRecursively()
+            if (f.isDirectory && GENERATION.matches(f.name) && f.name !in keep && !isBuilding(f)) f.deleteRecursively()
         }
     }
 
@@ -111,19 +121,28 @@ class TileFolder(filesDir: File) {
             records[name] = Record(sha256, tiles.sumOf { File(dir, it).length() }, tiles)
         }
 
-        /** Writes the pack list and makes this generation current, in one rename. */
+        /**
+         * Writes the pack list and makes this generation current, in one rename. Refused when a tile the list
+         * names isn't here: a generation that lost tiles would route without them and, its list matching the
+         * manifest, never be replaced.
+         */
         fun commit() {
+            for ((name, record) in records) {
+                if (record.tiles.any { !File(dir, it).isFile }) throw IOException("Tiles of $name went missing before the routing switched over")
+            }
             File(dir, RECORDS).writeText(
                 records.entries.joinToString("") { (name, r) -> "$name\t${r.sha256}\t${r.bytes}\t${r.tiles.joinToString(",")}\n" },
             )
             val temp = File(root, "$POINTER.tmp")
             temp.writeText(dir.name)
             if (!temp.renameTo(pointer)) throw IOException("Couldn't switch the routing tiles")
+            synchronized(building) { building -= dir.absolutePath }
         }
 
         /** Drops this generation unfinished. */
         fun abandon() {
             dir.deleteRecursively()
+            synchronized(building) { building -= dir.absolutePath }
         }
     }
 
@@ -138,8 +157,14 @@ class TileFolder(filesDir: File) {
         }.toMap()
     }
 
+    private fun isBuilding(dir: File): Boolean = synchronized(building) { dir.absolutePath in building }
+
     companion object {
         const val DIR = "routing"
+
+        /** Generations a round in this process is filling ([begin]), by path, for every TileFolder. */
+        private val building = HashSet<String>()
+
         private const val POINTER = "current"
         private const val RECORDS = "packs.tsv"
         private val GENERATION = Regex("g[0-9]+")
