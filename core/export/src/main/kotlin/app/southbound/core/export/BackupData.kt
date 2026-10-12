@@ -27,6 +27,8 @@ data class AppSettings(
     /** Basemap region ids the updater keeps on the phone. */
     val regions: Set<String>,
     val allowMobileData: Boolean,
+    /** Settings > Driving: the map's search bar at the bottom (schema 7; an older bundle imports with it on). */
+    val searchAtBottom: Boolean,
 )
 
 /**
