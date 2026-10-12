@@ -82,6 +82,11 @@ class ExploreServices private constructor(context: Context) {
     /** Saved places, lists and recents: encrypted, outside backups, never sent anywhere. */
     val userData by lazy { UserDataStore(File(appContext.noBackupFilesDir, UserDataStore.FILE_NAME), KeystoreSealer()) }
 
+    init {
+        // The first read (the file and a Keystore decrypt) here, off the main thread, before the map asks for it.
+        scope.launch(Dispatchers.IO) { userData }
+    }
+
     /** 511NY incidents and NYC DOT speeds, each behind its toggle. */
     val traffic = TrafficFeed(networkGate, apiKey = { secrets.get(it) })
 
@@ -121,7 +126,8 @@ class ExploreServices private constructor(context: Context) {
     fun finishPendingImport(onApplied: () -> Unit = {}) {
         if (!ImportJournal.pendingIn(appContext.noBackupFilesDir)) return
         scope.launch(Dispatchers.IO) {
-            if (backup.resume() is ResumeOutcome.Applied) onApplied()
+            // Unasked: not over places saved since it stopped (then Settings > Backup offers it).
+            if (backup.resume(automatic = true) is ResumeOutcome.Applied) onApplied()
         }
     }
 
@@ -195,7 +201,8 @@ class ExploreServices private constructor(context: Context) {
         current?.value?.first?.close()
         routing = null
         val router = runCatching { OfflineRouter(appContext, file) }.getOrNull() ?: return null
-        // No router reads an older generation of tiles now.
+        // No router reads an older generation of tiles now; the updater's rounds keep this one while it is open.
+        tiles.reading(file.takeIf { it.isDirectory })
         if (file.isDirectory) runCatching { tiles.prune(inUse = file) }
         val navigator = Navigator(appContext, router).also {
             it.spokenInstructionObserver = voice

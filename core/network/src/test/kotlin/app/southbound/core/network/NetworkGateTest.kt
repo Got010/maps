@@ -16,6 +16,21 @@ class NetworkGateTest {
     }
 
     @Test
+    fun anAnswerLargerThanTheCapIsRefused() {
+        val small = NetworkGate.readCapped(ByteArray(1000).inputStream(), 1000, "example.org")
+        assertEquals(1000, small.size)
+        val big = runCatching { NetworkGate.readCapped(ByteArray(1001).inputStream(), 1000, "example.org") }.exceptionOrNull()
+        assertTrue("$big", big is java.io.IOException && big.message!!.contains("example.org"))
+    }
+
+    @Test
+    fun aPlainHttpRequestIsRefusedBeforeConnecting() {
+        val gate = NetworkGate(InMemoryNetworkToggles(mapOf(NetworkFeature.WEATHER to true)))
+        val error = runCatching { gate.get(NetworkFeature.WEATHER, "http://example.invalid/feed") }.exceptionOrNull()
+        assertTrue("$error", error is java.io.IOException && error.message!!.contains("not HTTPS"))
+    }
+
+    @Test
     fun disabledFeatureNeverRunsTheRequest() {
         val gate = NetworkGate(InMemoryNetworkToggles())
         var ran = false

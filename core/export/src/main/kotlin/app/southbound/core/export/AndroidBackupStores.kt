@@ -6,6 +6,7 @@ import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.network.SecretUnreadableException
 import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.Regions
 import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
@@ -54,8 +55,10 @@ class AndroidBackupStores(
             nightBySunset = driving.nightBySunset.value,
             fuel = FuelChoices(fuelNow.mpg, fuelNow.pricePerGallon, fuelNow.priceSource, fuelNow.region),
             voice = voice.settings.first(),
-            // The user's own regions: one got for a trip goes after it, so it isn't one to restore.
-            regions = regions.own,
+            // The user's own regions: one got for a trip goes after it, so it isn't one to restore. A region a later
+            // version withdrew stays picked here but can't be exported (no import could use it), and nothing in
+            // Settings unticks it: it is left out rather than refusing every export.
+            regions = regions.own intersect Regions.basemaps.map { it.id }.toSet(),
             allowMobileData = UpdateScheduler.allowMobileData(context),
             searchAtBottom = driving.searchAtBottom.value,
         )

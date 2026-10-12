@@ -231,7 +231,7 @@
     <string name="backup_importing">Checking and importing. This takes a few seconds.</string>
     <string name="backup_imported">Imported: %1$s. %2$s</string>
     <string name="backup_import_pending">The file was checked and kept, but putting it in place stopped (%1$s). Nothing is lost: Southbound finishes it the next time it starts, or tap Finish import here. %2$s</string>
-    <string name="backup_pending">An import was checked and kept, but has not finished being applied.</string>
+    <string name="backup_pending">An import was checked and kept, but has not finished being applied. Part of it may already be in place (often the saved places): Finish import puts the rest in; Discard it leaves things as they are now, part imported.</string>
     <string name="backup_finish">Finish import</string>
     <string name="backup_discard">Discard it</string>
     <string name="backup_finishing">Finishing the import…</string>

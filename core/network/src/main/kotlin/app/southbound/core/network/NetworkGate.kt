@@ -109,22 +109,34 @@ class NetworkGate(private val toggles: NetworkToggles) {
     /**
      * A plain HTTPS GET for [feature]. Sends no cookies, no referrer and a
      * generic user agent; callers must not put location, search text or
-     * routes in [url]. Blocking: call off the main thread.
+     * routes in [url]. Redirects are followed by hand, HTTPS only and at most
+     * [MAX_REDIRECTS] of them, and the answer may be at most [maxBytes].
+     * Blocking: call off the main thread.
      */
-    fun get(feature: NetworkFeature, url: String, timeoutMillis: Int = 15_000): ByteArray = request(feature) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = timeoutMillis
-            connection.readTimeout = timeoutMillis
-            connection.useCaches = false
-            connection.instanceFollowRedirects = true
-            connection.setRequestProperty("User-Agent", USER_AGENT)
-            val code = connection.responseCode
-            if (code !in 200..299) throw IOException("HTTP $code from ${URL(url).host}")
-            connection.inputStream.use { it.readBytes() }
-        } finally {
-            connection.disconnect()
+    fun get(feature: NetworkFeature, url: String, timeoutMillis: Int = 15_000, maxBytes: Int = MAX_BYTES): ByteArray = request(feature) {
+        var target = URL(url)
+        repeat(MAX_REDIRECTS + 1) {
+            if (!target.protocol.equals("https", ignoreCase = true)) throw IOException("Refused to connect to ${target.host}: not HTTPS")
+            val connection = target.openConnection() as HttpURLConnection
+            try {
+                connection.connectTimeout = timeoutMillis
+                connection.readTimeout = timeoutMillis
+                connection.useCaches = false
+                connection.instanceFollowRedirects = false
+                connection.setRequestProperty("User-Agent", USER_AGENT)
+                val code = connection.responseCode
+                if (code in 300..399) {
+                    val location = connection.getHeaderField("Location") ?: throw IOException("HTTP $code from ${target.host} without a target")
+                    target = URL(target, location)
+                    return@repeat
+                }
+                if (code !in 200..299) throw IOException("HTTP $code from ${target.host}")
+                return@request connection.inputStream.use { readCapped(it, maxBytes, target.host) }
+            } finally {
+                connection.disconnect()
+            }
         }
+        throw IOException("Too many redirects from ${URL(url).host}")
     }
 
     /**
@@ -147,7 +159,7 @@ class NetworkGate(private val toggles: NetworkToggles) {
                 connection.outputStream.use { it.write(body) }
                 val code = connection.responseCode
                 if (code !in 200..299) throw IOException("HTTP $code from ${URL(url).host}")
-                connection.inputStream.use { it.readBytes() }
+                connection.inputStream.use { readCapped(it, MAX_BYTES, URL(url).host) }
             } finally {
                 connection.disconnect()
             }
@@ -155,5 +167,22 @@ class NetworkGate(private val toggles: NetworkToggles) {
 
     companion object {
         const val USER_AGENT = "Southbound"
+
+        /** The largest answer a feed may send: well above the biggest statewide feed, far below what would hurt the phone. */
+        const val MAX_BYTES = 32 shl 20
+        const val MAX_REDIRECTS = 5
+
+        /** [input] whole, or an IOException once it passes [max] bytes. */
+        fun readCapped(input: java.io.InputStream, max: Int, host: String): ByteArray {
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                if (out.size() + n > max) throw IOException("The answer from $host is larger than ${max shr 20} MB")
+                out.write(buffer, 0, n)
+            }
+            return out.toByteArray()
+        }
     }
 }

@@ -101,7 +101,7 @@ object SouthboundBundle {
             invalid("the manifest doesn't describe a Southbound export")
         }
         val userData = PlacesEntry.decode(entries.getValue(PLACES))
-        val keys = KeysEntry.decode(entries.getValue(API_KEYS))
+        val keys = KeysEntry.decode(entries.getValue(API_KEYS), schema)
         val settings = SettingsEntry.decode(entries.getValue(SETTINGS), schema)
         val data = BackupData(userData, keys, settings)
 
@@ -186,8 +186,14 @@ object SouthboundBundle {
                         at += n
                     }
                 }
+                if (entries.size != ENTRY_NAMES.size) invalid("entries are missing")
+                // The entries are read with the manifest's schema, and the import dialog showed the header's: one file,
+                // one schema (EXPORT.md).
+                val manifest = Obj.of(parseJson(entries.getValue(MANIFEST), MANIFEST), "manifest", MANIFEST_KEYS.toSet())
+                if (manifest.long("schema", 0, Long.MAX_VALUE) != reader.header.schemaVersion) {
+                    invalid("the manifest's schema isn't the header's")
+                }
             }
-            if (entries.size != ENTRY_NAMES.size) invalid("entries are missing")
             return entries
         } catch (e: Throwable) {
             wipe(entries)

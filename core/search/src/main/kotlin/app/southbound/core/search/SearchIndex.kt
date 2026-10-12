@@ -66,43 +66,43 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         }
     }
 
+    // What the pack has is read once, as it opens, on the opening thread. Read lazily, a first search (which holds the
+    // connection's lock) and a first saved Overture place (which took the lock inside the lazy's) could each wait on
+    // the other for good, at startup.
+
     /**
      * Packs built with Overture Places have them in their own tables
      * (overture_place, overture_fts); older packs and those built without
      * them search OSM alone.
      */
-    private val hasOverture: Boolean by lazy {
-        synchronized(connection) {
-            connection.prepare(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'" +
-                    " AND name IN ('overture_place', 'overture_fts')",
-            ).use { it.step() && it.getLong(0) == 2L }
-        }
-    }
+    private val hasOverture: Boolean = connection.prepare(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'" +
+            " AND name IN ('overture_place', 'overture_fts')",
+    ).use { it.step() && it.getLong(0) == 2L }
 
     /** Packs built before landmarks existed lack the table; guidance then simply has none. */
-    private val hasLandmarks: Boolean by lazy {
-        synchronized(connection) {
-            connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landmark'").use { it.step() }
-        }
-    }
+    private val hasLandmarks: Boolean =
+        connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landmark'").use { it.step() }
 
     /**
      * What to select for a landmark's direction: the `direction` column when the pack has it (packs
      * built from late 2026), else NULL, so an older pack reads as every direction unknown.
      */
-    private val directionColumn: String by lazy {
-        val columns = try {
-            synchronized(connection) {
-                connection.prepare("PRAGMA table_info(landmark)").use { stmt ->
-                    buildSet { while (stmt.step()) add(stmt.getText(1)) }
-                }
+    private val directionColumn: String = LandmarkColumns.directionSelect(
+        try {
+            connection.prepare("PRAGMA table_info(landmark)").use { stmt ->
+                buildSet { while (stmt.step()) add(stmt.getText(1)) }
             }
         } catch (e: Exception) {
             emptySet()
-        }
-        LandmarkColumns.directionSelect(columns)
-    }
+        },
+    )
+
+    /** Packs before schema 2 have no address tables; their addresses are `feature` rows. */
+    private val hasAddresses: Boolean = connection.prepare(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'" +
+            " AND name IN ('address', 'address_street', 'address_street_fts')",
+    ).use { it.step() && it.getLong(0) == 3L }
 
     /**
      * Signals, signs, roadside places and alert points inside [box], for
@@ -307,16 +307,6 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         return connection.prepare(sql).use { stmt ->
             stmt.bindAll(args)
             buildList { while (stmt.step()) add(stmt.readCandidate()) }
-        }
-    }
-
-    /** Packs before schema 2 have no address tables; their addresses are `feature` rows. */
-    private val hasAddresses: Boolean by lazy {
-        synchronized(connection) {
-            connection.prepare(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'" +
-                    " AND name IN ('address', 'address_street', 'address_street_fts')",
-            ).use { it.step() && it.getLong(0) == 3L }
         }
     }
 
