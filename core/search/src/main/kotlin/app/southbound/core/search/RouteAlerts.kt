@@ -16,7 +16,8 @@ enum class AlertKind(val category: String) {
 
 /**
  * One alert point on the active route, [alongMeters] from the route's start.
- * The map draws these; guidance speaks them on approach.
+ * The map draws these; guidance speaks them on approach. A landmark the route
+ * passes twice (out and back along one road) is two alerts with the same [id].
  */
 data class RouteAlert(
     val id: Long,
@@ -24,7 +25,17 @@ data class RouteAlert(
     val lat: Double,
     val lon: Double,
     val alongMeters: Double,
-)
+    /**
+     * How many more times the route passes this landmark after this pass: 0 for its last (or only) pass.
+     * Counted from the end because a reroute keeps the destination, so a pass keeps its [key] across one.
+     */
+    val laterPasses: Int = 0,
+) {
+    /** What [RouteAlerts.due] remembers as announced: the landmark and which pass of it. */
+    val key: Key get() = Key(id, laterPasses)
+
+    data class Key(val id: Long, val laterPasses: Int)
+}
 
 /**
  * Matches alert points to a route and decides when each is spoken. Pure, so
@@ -134,13 +145,16 @@ object RouteAlerts {
         dotCameras = count(route, landmarks, Landmark.DOT_CAMERA),
     )
 
-    /** The alerts on [route], in driving order. */
+    /**
+     * The alerts on [route], in driving order: one for each time the route passes within [MAX_OFFSET_M] of an
+     * alert landmark, so a camera on a road driven out and back is announced both ways. Passes less than
+     * [SAME_ALERT_M] apart along the route are one, as [due] would cover the second anyway.
+     */
     fun onRoute(route: RouteLine, landmarks: List<Landmark>): List<RouteAlert> =
-        landmarks.mapNotNull { mark ->
-            val kind = AlertKind.of(mark.category) ?: return@mapNotNull null
-            val loc = route.locate(mark.point) ?: return@mapNotNull null
-            if (loc.offset > MAX_OFFSET_M) return@mapNotNull null
-            RouteAlert(mark.id, kind, mark.lat, mark.lon, loc.along)
+        landmarks.flatMap { mark ->
+            val kind = AlertKind.of(mark.category) ?: return@flatMap emptyList()
+            val passes = route.passes(mark.point, MAX_OFFSET_M, SAME_ALERT_M)
+            passes.mapIndexed { i, loc -> RouteAlert(mark.id, kind, mark.lat, mark.lon, loc.along, laterPasses = passes.size - 1 - i) }
         }.sortedBy { it.alongMeters }
 
     /**
@@ -149,23 +163,23 @@ object RouteAlerts {
      * enabled in [kinds]. Alerts of the same kind right behind a due one are
      * included in [Due.covered] so they aren't spoken again a moment later.
      */
-    fun due(alerts: List<RouteAlert>, userAlong: Double, announced: Set<Long>, kinds: Set<AlertKind>): Due {
+    fun due(alerts: List<RouteAlert>, userAlong: Double, announced: Set<RouteAlert.Key>, kinds: Set<AlertKind>): Due {
         val speak = mutableListOf<RouteAlert>()
-        val covered = mutableSetOf<Long>()
+        val covered = mutableSetOf<RouteAlert.Key>()
         for (alert in alerts) {
-            if (alert.id in announced || alert.id in covered || alert.kind !in kinds) continue
+            if (alert.key in announced || alert.key in covered || alert.kind !in kinds) continue
             val ahead = alert.alongMeters - userAlong
             if (ahead < 0 || ahead > ANNOUNCE_AHEAD_M) continue
             speak += alert
-            covered += alert.id
+            covered += alert.key
             alerts.filter { it.kind == alert.kind && it.alongMeters - alert.alongMeters in 0.0..SAME_ALERT_M }
-                .forEach { covered += it.id }
+                .forEach { covered += it.key }
         }
         return Due(speak, covered)
     }
 
-    /** [speak]: one per alert to say now. [covered]: every id to mark as announced. */
-    data class Due(val speak: List<RouteAlert>, val covered: Set<Long>)
+    /** [speak]: one per alert to say now. [covered]: every alert (by [RouteAlert.key]) to mark as announced. */
+    data class Due(val speak: List<RouteAlert>, val covered: Set<RouteAlert.Key>)
 }
 
 /** The per-route exposure line: how many plate readers and speed cameras a route passes. */

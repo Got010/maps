@@ -51,7 +51,64 @@ class RouteAlertsTest {
         val alerts = RouteAlerts.onRoute(route, listOf(second, school, first))
         val due = RouteAlerts.due(alerts, 300.0, emptySet(), all)
         assertEquals(listOf(first.id, school.id), due.speak.map { it.id })
-        assertEquals(setOf(first.id, second.id, school.id), due.covered)
+        assertEquals(setOf(first.id, second.id, school.id), due.covered.map { it.id }.toSet())
+    }
+
+    // North 1 km on x = 0, across 10 m, and back south on x = 10: one road driven out and back.
+    private val outAndBack = RouteLine(listOf(Hand.at(0.0, 0.0), Hand.at(0.0, 1000.0), Hand.at(10.0, 1000.0), Hand.at(10.0, 0.0)))
+
+    @Test
+    fun aCameraPassedTwiceIsAnAlertEachWay() {
+        val cam = Hand.mark(Landmark.SPEED_CAMERA, 5.0, 500.0)
+        val alerts = RouteAlerts.onRoute(outAndBack, listOf(cam))
+        assertEquals(listOf(cam.id, cam.id), alerts.map { it.id })
+        assertEquals(500.0, alerts[0].alongMeters, 1.0)
+        assertEquals(1510.0, alerts[1].alongMeters, 1.0)
+        assertEquals(listOf(1, 0), alerts.map { it.laterPasses })
+
+        // Spoken on the way out, then again on the way back.
+        val out = RouteAlerts.due(alerts, 250.0, emptySet(), all)
+        assertEquals(listOf(500.0), out.speak.map { Math.round(it.alongMeters).toDouble() })
+        assertEquals(setOf(alerts[0].key), out.covered)
+        assertTrue(RouteAlerts.due(alerts, 600.0, out.covered, all).speak.isEmpty())
+        val back = RouteAlerts.due(alerts, 1300.0, out.covered, all)
+        assertEquals(listOf(alerts[1]), back.speak)
+        assertTrue(RouteAlerts.due(alerts, 1400.0, out.covered + back.covered, all).speak.isEmpty())
+    }
+
+    @Test
+    fun aRerouteKeepsEachPassItsKey() {
+        val cam = Hand.mark(Landmark.ALPR_CAMERA, 5.0, 500.0)
+        val whole = RouteAlerts.onRoute(outAndBack, listOf(cam))
+        // A new route from the top of the road back down: only the way back is left, and it is the same pass.
+        val rest = RouteLine(listOf(Hand.at(0.0, 1000.0), Hand.at(10.0, 1000.0), Hand.at(10.0, 0.0)))
+        val left = RouteAlerts.onRoute(rest, listOf(cam)).single()
+        assertEquals(whole.last().key, left.key)
+        // So the way out, already announced, doesn't silence it.
+        assertEquals(listOf(left), RouteAlerts.due(listOf(left), 300.0, setOf(whole.first().key), all).speak)
+    }
+
+    @Test
+    fun aCameraAtTheTurnIsOneAlert() {
+        // Within 40 m of the road all the way round the turn, so one pass.
+        val cam = Hand.mark(Landmark.SPEED_CAMERA, 5.0, 990.0)
+        val alerts = RouteAlerts.onRoute(outAndBack, listOf(cam))
+        assertEquals(1, alerts.size)
+        assertEquals(0, alerts.single().laterPasses)
+    }
+
+    @Test
+    fun passesFindsEachTimeTheLineComesClose() {
+        val beside = Hand.at(5.0, 500.0)
+        assertEquals(listOf(500.0, 1510.0), outAndBack.passes(beside, 40.0, 200.0).map { Math.round(it.along).toDouble() })
+        // Joined when the gap between the two stretches is shorter than the join distance.
+        assertEquals(1, outAndBack.passes(beside, 40.0, 2_000.0).size)
+        // Once, at the nearest point, for a line passing by once.
+        val once = route.passes(Hand.at(500.0, 1010.0), 40.0, 200.0).single()
+        assertEquals(route.locate(Hand.at(500.0, 1010.0))!!.along, once.along, 0.01)
+        assertEquals(10.0, once.offset, 0.5)
+        assertTrue(route.passes(Hand.at(300.0, 300.0), 40.0, 200.0).isEmpty())
+        assertTrue(RouteLine(listOf(Hand.at(0.0, 0.0))).passes(Hand.at(0.0, 0.0), 40.0, 200.0).isEmpty())
     }
 
     @Test

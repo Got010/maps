@@ -145,7 +145,7 @@ class GuidanceSupport(
     private var progress: RouteProgress? = null
     private var stepCount = -1
     private var prepared: String? = null
-    private val announced = mutableSetOf<Long>()
+    private val announced = mutableSetOf<RouteAlert.Key>()
     private val spokenEarly = mutableSetOf<String>()
 
     /** Follows [navigator]'s trips. Called once per navigator. */

@@ -59,6 +59,52 @@ class RouteLine(val points: List<LatLon>) {
         return best
     }
 
+    /**
+     * Each time the line passes within [withinMeters] of [p], as the nearest place on that stretch, in order
+     * along the line: twice for a point beside a road the line drives out and back along. Stretches less than
+     * [joinMeters] apart along the line are one pass (a road that bends away from the point and back). Empty
+     * when the line never comes that close.
+     */
+    fun passes(p: LatLon, withinMeters: Double, joinMeters: Double): List<Located> {
+        if (points.size < 2) return emptyList()
+        val k = cos(Math.toRadians(p.lat)) * METERS_PER_DEGREE
+        val r2 = withinMeters * withinMeters
+        // Each stretch as [from, to] metres along the line; segments come in order, so stretches do too.
+        val stretches = ArrayList<DoubleArray>()
+        for (i in 0 until points.size - 1) {
+            val a = points[i]
+            val b = points[i + 1]
+            // Metres east and north of p.
+            val ax = (a.lon - p.lon) * k
+            val ay = (a.lat - p.lat) * METERS_PER_DEGREE
+            val dx = (b.lon - a.lon) * k
+            val dy = (b.lat - a.lat) * METERS_PER_DEGREE
+            val len2 = dx * dx + dy * dy
+            val t0: Double
+            val t1: Double
+            if (len2 == 0.0) {
+                if (ax * ax + ay * ay > r2) continue
+                t0 = 0.0
+                t1 = 0.0
+            } else {
+                // The part of the segment inside the circle: |a + t d|^2 <= r^2, a quadratic in t.
+                val half = ax * dx + ay * dy
+                val disc = half * half - len2 * (ax * ax + ay * ay - r2)
+                if (disc < 0) continue
+                val root = sqrt(disc)
+                t0 = ((-half - root) / len2).coerceAtLeast(0.0)
+                t1 = ((-half + root) / len2).coerceAtMost(1.0)
+                if (t0 > t1) continue
+            }
+            val segment = cumulative[i + 1] - cumulative[i]
+            val from = cumulative[i] + t0 * segment
+            val to = cumulative[i] + t1 * segment
+            val last = stretches.lastOrNull()
+            if (last != null && from - last[1] < joinMeters) last[1] = maxOf(last[1], to) else stretches += doubleArrayOf(from, to)
+        }
+        return stretches.mapNotNull { locate(p, it[0], it[1]) }
+    }
+
     /** The point [along] metres from the start, clamped to the line's ends. Null for an empty line. */
     fun pointAt(along: Double): LatLon? {
         if (points.isEmpty()) return null

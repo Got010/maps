@@ -287,8 +287,13 @@ private fun statusLine(first: JourneyLeg.Ride, prediction: Prediction?, journey:
             val base = stringResource(R.string.transit_leaves_from, TransitFormat.time(leaves), first.from.name)
             val late = if (delay > 0) " · " + stringResource(R.string.transit_late, delay) else ""
             val walking = if (walk > 0) " · " + stringResource(R.string.transit_walk_total, walk) else ""
-            val soon = TransitFormat.minutesUntil(leaves, nowSeconds).takeIf { it <= 60 }
-                ?.let { " · " + stringResource(R.string.transit_in_minutes, it) } ?: ""
+            // No countdown for a departure gone a minute or more, or over an hour off.
+            val minutes = TransitFormat.countdown(leaves, nowSeconds)
+            val soon = when {
+                minutes == null || minutes > 60 -> ""
+                minutes == 0 -> " · " + stringResource(R.string.transit_leaving_now)
+                else -> " · " + stringResource(R.string.transit_in_minutes, minutes)
+            }
             base + soon + late + walking
         }
     }
