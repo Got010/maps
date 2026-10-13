@@ -334,6 +334,8 @@ internal fun ExploreMap(
     var preview by remember { mutableStateOf<RoutePreviewState>(RoutePreviewState.Loading) }
     var cameraRequest by remember { mutableStateOf<CameraRequest?>(null) }
     val near = location?.let { LatLon(it.latitude, it.longitude) }
+    // The middle of the map, each time it comes to rest. Search looks there once the map is moved off the user.
+    var mapCenter by remember { mutableStateOf<LatLon?>(null) }
     var transitTime by remember { mutableStateOf(TransitTime()) }
     var transitPlan by remember { mutableStateOf<TransitPlanState>(TransitPlanState.Loading) }
     var transitSelected by remember { mutableIntStateOf(0) }
@@ -1283,6 +1285,7 @@ internal fun ExploreMap(
             onMessageSignTap = { id -> shownThing = ShownThing.Sign(id) },
             onWeatherAreaTap = { id -> shownThing = ShownThing.WeatherAlertShown(id) },
             onWeatherStationTap = { id -> shownThing = ShownThing.WeatherStation(id) },
+            onCameraIdle = { mapCenter = LatLon(it.lat, it.lon) },
         )
 
         if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
@@ -1539,6 +1542,9 @@ internal fun ExploreMap(
                     },
                     index = searchIndex,
                     near = near,
+                    // Around the user while the map follows them; once it is moved (a pan, a place or a route shown),
+                    // around where it is. Before the first fix, around the map too.
+                    area = if (following && near != null) null else mapCenter,
                     onPick = { showPlace(it.place) },
                     onClose = {
                         // Phase 6: closing the stop search returns to the route being planned.

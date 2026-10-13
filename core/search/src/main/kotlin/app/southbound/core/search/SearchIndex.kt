@@ -6,6 +6,7 @@ import androidx.sqlite.driver.bundled.SQLITE_OPEN_READONLY
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.Closeable
 import java.io.File
+import kotlin.math.cos
 
 /**
  * Searches a search pack (search-<region>.sqlite) on the device.
@@ -194,6 +195,63 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
             }
         }
         return NearbyBox.within(found, center, radiusMeters, limit)
+    }
+
+    /**
+     * Places of a kind near [near], for a search chip ("Gas", "Hotels"). The trigram index finds the rows whose text
+     * has the kind's words; SQL keeps those of its categories in the box around [near] and the nearest of them by a
+     * flat-earth distance (no math functions, which not every SQLite build has). A pack with Overture Places adds
+     * theirs the same way, merged with OSM's as in [search] ([PlaceCategory.nearest]).
+     */
+    override fun browse(category: PlaceCategory, near: LatLon, limit: Int): List<SearchResult> {
+        val box = NearbyBox.around(near, PlaceCategory.RADIUS_KM)
+        // A degree of longitude is this much of one of latitude here, squared.
+        val lonScale = cos(Math.toRadians(near.lat)).let { it * it }
+        // Rows to read from each table: twice the limit leaves room for Overture's twins of OSM places.
+        val rows = limit * 2
+        val (osm, overture) = synchronized(connection) {
+            val osm = browseRows(
+                "feature_fts", "feature f ON f.id = feature_fts.rowid", "f", COLUMNS, category, box, near, lonScale, rows,
+            ) { readCandidate() }
+            val overture = if (!hasOverture) {
+                emptyList()
+            } else {
+                browseRows(
+                    "overture_fts", "overture_place o ON o.rowid = overture_fts.rowid", "o", OVERTURE_COLUMNS,
+                    category, box, near, lonScale, rows,
+                ) { readOverture() }
+            }
+            osm to overture
+        }
+        return PlaceCategory.nearest(osm, overture, near, limit)
+    }
+
+    /**
+     * Up to [limit] rows of [category] in [box], nearest [near] first: [fts] joined to [join], whose table is
+     * [alias], selecting [columns] and read with [read].
+     */
+    private fun browseRows(
+        fts: String,
+        join: String,
+        alias: String,
+        columns: String,
+        category: PlaceCategory,
+        box: NearbyBox,
+        near: LatLon,
+        lonScale: Double,
+        limit: Int,
+        read: SQLiteStatement.() -> Candidate,
+    ): List<Candidate> {
+        val (isCategory, categoryArgs) = category.sqlCondition("$alias.category")
+        val sql = "SELECT $columns FROM $fts JOIN $join WHERE $fts MATCH ? AND $isCategory" +
+            " AND $alias.lat BETWEEN ? AND ? AND $alias.lon BETWEEN ? AND ?" +
+            " ORDER BY ($alias.lat - ?) * ($alias.lat - ?) + ($alias.lon - ?) * ($alias.lon - ?) * ? LIMIT $limit"
+        val args = listOf<Any>(category.ftsMatch) + categoryArgs +
+            listOf(box.south, box.north, box.west, box.east, near.lat, near.lat, near.lon, near.lon, lonScale)
+        return connection.prepare(sql).use { stmt ->
+            stmt.bindAll(args)
+            buildList { while (stmt.step()) add(stmt.read()) }
+        }
     }
 
     /**

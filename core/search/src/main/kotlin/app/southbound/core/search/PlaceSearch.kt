@@ -28,6 +28,12 @@ interface PlaceSearch : Closeable {
     /** Places of one [category] within [radiusMeters] of ([lat], [lon]), nearest first. */
     fun nearby(category: String, lat: Double, lon: Double, radiusMeters: Double, limit: Int = 5): List<SearchResult>
 
+    /**
+     * Up to [limit] places of a kind (a search chip: gas, hotels, ...) within [PlaceCategory.RADIUS_KM] of [near],
+     * nearest first, each with its distance from [near]. Overture's places with OSM's, as in [search].
+     */
+    fun browse(category: PlaceCategory, near: LatLon, limit: Int = PlaceCategory.LIMIT): List<SearchResult>
+
     companion object {
         /** Per box; a 2 km piece of route in Midtown has a few hundred. */
         const val LANDMARK_LIMIT = 5_000
