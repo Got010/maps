@@ -15,11 +15,12 @@ enum class PlaceCategory(
     /** Overture taxonomy slugs the pipeline keeps as they are, ending in one of these, count too. */
     val suffixes: List<String> = emptyList(),
 ) {
+    // In the order the chips show: Gas and Hotels first, on screen without scrolling the row on any phone.
     GAS(setOf("fuel")),
+    HOTELS(setOf("hotel", "motel", "hostel", "guest_house", "bed_and_breakfast")),
     // "pizza_restaurant", "sushi_restaurant": Overture's own slugs, kept as they are.
     FOOD(setOf("restaurant", "fast_food", "food_court"), suffixes = listOf("_restaurant")),
     COFFEE(setOf("cafe")),
-    HOTELS(setOf("hotel", "motel", "hostel", "guest_house", "bed_and_breakfast")),
     GROCERIES(setOf("supermarket", "grocery_store", "greengrocer")),
     PHARMACY(setOf("pharmacy", "chemist")),
     PARKING(setOf("parking")),
