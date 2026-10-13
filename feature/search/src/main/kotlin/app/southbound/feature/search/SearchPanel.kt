@@ -1,6 +1,7 @@
 package app.southbound.feature.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -23,10 +25,18 @@ import androidx.compose.material.icons.filled.AddRoad
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EvStation
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.LocalGroceryStore
+import androidx.compose.material.icons.filled.LocalParking
+import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
@@ -60,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Units
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
+import app.southbound.core.search.PlaceCategory
 import app.southbound.core.search.PlaceKind
 import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.SearchQuery
@@ -79,7 +90,9 @@ enum class ShortcutSlot { HOME, WORK }
 
 /**
  * Full-screen search: type, see results as you go, pick one. While the box is
- * empty, the user's saved lists and recent places are offered instead.
+ * empty, the user's saved lists and recent places are offered instead, and a
+ * row of chips (Gas, Food, Hotels, ...) lists those places nearby, nearest first.
+ * Both look around [near], or around [area] once the map has been moved.
  *
  * With [fieldAtBottom] the field sits on the keyboard and everything grows up from it, nearest first: the best match
  * (or Home, Work and the latest recent) right above the field, within the thumb's reach (docs/bottom-search.md).
@@ -91,6 +104,7 @@ enum class ShortcutSlot { HOME, WORK }
 @Composable
 fun SearchPanel(
     index: PlaceSearch?,
+    /** The user's position: results show their distance from it. */
     near: LatLon?,
     onPick: (SearchResult) -> Unit,
     onClose: () -> Unit,
@@ -111,10 +125,17 @@ fun SearchPanel(
     weatherFor: (@Composable (Place) -> Unit)? = null,
     /** The field at the bottom, on the keyboard (Settings > Driving > Search bar at the bottom). */
     fieldAtBottom: Boolean = false,
+    /**
+     * Where to look when it isn't around [near]: the middle of the map once it has been moved off the user. Results
+     * still show their distance from [near].
+     */
+    area: LatLon? = null,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+    // A category chip's places ("Gas", "Hotels"), its name in the box until the box is edited.
+    var browsing by rememberSaveable { mutableStateOf<PlaceCategory?>(null) }
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
     // The query [results] answer: the Search key only ever opens a result for what is typed now.
     var resultsFor by remember { mutableStateOf<String?>(null) }
@@ -131,16 +152,29 @@ fun SearchPanel(
 
     LaunchedEffect(Unit) { focus.requestFocus() }
     // Again once there is a position: results looked up before the first fix carry no distances and rank as if far.
-    LaunchedEffect(query, index, near != null) {
+    // Again when the map moves to somewhere else to look (beside the search on a wide screen).
+    LaunchedEffect(query, browsing, index, near != null, area) {
         val asked = query
-        if (index == null || asked.isBlank()) {
+        val category = browsing
+        val center = area ?: near
+        if (index == null || asked.isBlank() || (category != null && center == null)) {
             results = emptyList()
             error = null
             resultsFor = asked
             return@LaunchedEffect
         }
-        delay(TYPING_DEBOUNCE_MS)
-        val outcome = withContext(Dispatchers.IO) { runCatching { index.search(asked, near) } }
+        if (category == null) delay(TYPING_DEBOUNCE_MS)
+        val outcome = withContext(Dispatchers.IO) {
+            runCatching {
+                val found = if (category != null) index.browse(category, center!!) else index.search(asked, center)
+                // Looked for around the map: the distances are still the user's.
+                if (area == null) {
+                    found
+                } else {
+                    found.map { r -> r.copy(distanceMeters = near?.let { SearchRanking.distanceMeters(it, r.place.lat, r.place.lon) }) }
+                }
+            }
+        }
         results = outcome.getOrDefault(emptyList())
         error = outcome.exceptionOrNull()?.let { "${it::class.simpleName}: ${it.message}" }
         resultsFor = asked
@@ -187,6 +221,8 @@ fun SearchPanel(
                 value = query,
                 onValueChange = {
                     query = it
+                    // Typing over a chip's name searches for what is typed.
+                    browsing = null
                     pickWhenReady = false
                 },
                 placeholder = { Text(stringResource(R.string.search_hint)) },
@@ -195,7 +231,10 @@ fun SearchPanel(
                 keyboardActions = KeyboardActions(onSearch = { searchKey() }),
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
+                        IconButton(onClick = {
+                            query = ""
+                            browsing = null
+                        }) {
                             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.search_clear))
                         }
                     }
@@ -227,6 +266,17 @@ fun SearchPanel(
             )
         }
     }
+    // Places by kind without typing: around the user, or around the map once it has been moved off them.
+    val categories: @Composable () -> Unit = {
+        if (query.isBlank() && index != null) {
+            CategoryChips(onTap = { category, label ->
+                keyboard?.hide()
+                query = label
+                browsing = category
+                pickWhenReady = false
+            })
+        }
+    }
     val note: @Composable () -> Unit = {
         if (query.isBlank() && unreadableNote != null) {
             Text(
@@ -244,6 +294,7 @@ fun SearchPanel(
                 field()
                 HorizontalDivider()
                 chips()
+                categories()
                 note()
             }
             // The lists and messages: running down from the field at the top, or growing up from it at the bottom.
@@ -280,7 +331,11 @@ fun SearchPanel(
                     }
                     index == null -> Message(stringResource(R.string.search_no_pack))
                     error != null -> Message(stringResource(R.string.search_failed, error!!))
-                    query.isNotBlank() && results.isEmpty() -> Message(stringResource(R.string.search_no_results))
+                    query.isNotBlank() && results.isEmpty() && browsing == null -> Message(stringResource(R.string.search_no_results))
+                    query.isNotBlank() && results.isEmpty() && (area ?: near) == null ->
+                        Message(stringResource(R.string.search_category_no_place))
+                    // Not while a chip's places are still being looked up: "Food" in a city takes a moment.
+                    query.isNotBlank() && results.isEmpty() && resultsFor == query -> Message(stringResource(R.string.search_category_none))
                     else -> {
                         // At the bottom the list starts at the field: the best match stays there as the results change.
                         if (fieldAtBottom) LaunchedEffect(results) { resultsState.scrollToItem(0) }
@@ -300,6 +355,7 @@ fun SearchPanel(
             }
             if (fieldAtBottom) {
                 note()
+                categories()
                 chips()
                 HorizontalDivider()
                 field()
@@ -347,6 +403,46 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
             )
         }
     }
+}
+
+/** Gas, Food, Coffee, Hotels and the rest, one tap each, in a row that scrolls sideways. */
+@Composable
+private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (category in PlaceCategory.entries) {
+            val label = stringResource(category.label())
+            AssistChip(
+                onClick = { onTap(category, label) },
+                label = { Text(label) },
+                leadingIcon = { Icon(category.icon(), contentDescription = null, Modifier.size(18.dp)) },
+            )
+        }
+    }
+}
+
+private fun PlaceCategory.label(): Int = when (this) {
+    PlaceCategory.GAS -> R.string.search_category_gas
+    PlaceCategory.FOOD -> R.string.search_category_food
+    PlaceCategory.COFFEE -> R.string.search_category_coffee
+    PlaceCategory.HOTELS -> R.string.search_category_hotels
+    PlaceCategory.GROCERIES -> R.string.search_category_groceries
+    PlaceCategory.PHARMACY -> R.string.search_category_pharmacy
+    PlaceCategory.PARKING -> R.string.search_category_parking
+    PlaceCategory.EV_CHARGING -> R.string.search_category_ev_charging
+}
+
+private fun PlaceCategory.icon(): ImageVector = when (this) {
+    PlaceCategory.GAS -> Icons.Filled.LocalGasStation
+    PlaceCategory.FOOD -> Icons.Filled.Restaurant
+    PlaceCategory.COFFEE -> Icons.Filled.LocalCafe
+    PlaceCategory.HOTELS -> Icons.Filled.Hotel
+    PlaceCategory.GROCERIES -> Icons.Filled.LocalGroceryStore
+    PlaceCategory.PHARMACY -> Icons.Filled.LocalPharmacy
+    PlaceCategory.PARKING -> Icons.Filled.LocalParking
+    PlaceCategory.EV_CHARGING -> Icons.Filled.EvStation
 }
 
 @Composable
