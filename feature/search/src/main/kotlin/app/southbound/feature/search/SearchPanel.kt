@@ -405,7 +405,7 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
     }
 }
 
-/** Gas, Food, Coffee, Hotels and the rest, one tap each, in a row that scrolls sideways. */
+/** Gas, Hotels, Food, Coffee and the rest, one tap each, in a row that scrolls sideways. */
 @Composable
 private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit) {
     Row(

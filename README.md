@@ -128,7 +128,7 @@ keyboard with the best match right above it. Settings > Driving > Search bar at
 the bottom turns it off, putting the bar back at the top. Search looks around
 you, or, once you move the map, around the middle of the map, so you can pan to
 another town and search there; distances are still from you. Chips by the box
-(Gas, Food, Coffee, Hotels, Groceries, Pharmacy, Parking, EV charging) list
+(Gas, Hotels, Food, Coffee, Groceries, Pharmacy, Parking, EV charging) list
 those places within 30 miles, nearest first, without typing. Driving routes may include a **Shorter way**: a side street that
 is shorter and faster than the first route, which the router's preference for
 main roads would otherwise leave out (it names the street, e.g. "via Old Temple
