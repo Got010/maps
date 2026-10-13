@@ -109,6 +109,9 @@ search OSM alone.
   place base less 5, so OSM wins ties, and low-confidence rows sink. A nearby
   Overture shop still beats a far-away OSM one.
 - `SearchIndex.place(id)` also reopens Overture ids.
+- The search box's category chips (`browse()`: Gas, Food, Hotels, ...) are
+  search too: they read `overture_fts` by the kind's category words, as
+  `feature_fts`, and merge the rows with OSM's the same way.
 - Overture rows are **search only**. `landmarks()` (guidance landmarks and
   camera alerts) and `nearby()` ("Parking nearby") read OSM's tables alone.
   This keeps the licences apart and keeps spoken landmarks on OSM.

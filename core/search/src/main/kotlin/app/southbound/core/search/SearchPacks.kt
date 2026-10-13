@@ -35,6 +35,12 @@ class SearchPacks(private val packs: List<SearchIndex>) : PlaceSearch {
             .let(PackMerge::distinctPlaces)
             .take(limit)
 
+    override fun browse(category: PlaceCategory, near: LatLon, limit: Int): List<SearchResult> =
+        packs.flatMapIndexed { i, pack -> pack.browse(category, near, limit).map { PackMerge.moved(it, i) } }
+            .sortedBy { it.distanceMeters ?: Double.MAX_VALUE }
+            .let(PackMerge::distinctPlaces)
+            .take(limit)
+
     override fun close() = packs.forEach { it.close() }
 
     companion object {

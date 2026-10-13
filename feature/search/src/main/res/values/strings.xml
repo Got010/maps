@@ -31,4 +31,15 @@
     <string name="hours_closed_opens_later">Closed · opens %1$s %2$s</string>
     <string name="search_row_open">Open</string>
     <string name="search_row_closed">Closed</string>
+    <!-- The category chips under the search box: one tap lists those places nearby, nearest first. -->
+    <string name="search_category_gas">Gas</string>
+    <string name="search_category_food">Food</string>
+    <string name="search_category_coffee">Coffee</string>
+    <string name="search_category_hotels">Hotels</string>
+    <string name="search_category_groceries">Groceries</string>
+    <string name="search_category_pharmacy">Pharmacy</string>
+    <string name="search_category_parking">Parking</string>
+    <string name="search_category_ev_charging">EV charging</string>
+    <string name="search_category_none">None within 30 miles in the search data.</string>
+    <string name="search_category_no_place">Turn on location, or move the map to where you want to look.</string>
 </resources>
