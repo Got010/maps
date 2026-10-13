@@ -120,6 +120,8 @@ fun SouthboundMap(
     onWeatherAreaTap: ((String) -> Unit)? = null,
     /** A tap on a weather station's badge ([WeatherOverlay.stations]) reports its id. */
     onWeatherStationTap: ((String) -> Unit)? = null,
+    /** The middle of the map each time the camera comes to rest, and once as the map is ready. */
+    onCameraIdle: ((MapPoint) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -217,6 +219,20 @@ fun SouthboundMap(
             loadedMap.removeOnShoveListener(shove)
             loadedMap.removeOnMoveListener(move)
         }
+    }
+
+    // Where the map is looking, e.g. for search to look there once the map has been moved off the user.
+    val currentOnCameraIdle by rememberUpdatedState(onCameraIdle)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        fun report() {
+            val target = loadedMap.cameraPosition.target ?: return
+            currentOnCameraIdle?.invoke(MapPoint(target.latitude, target.longitude))
+        }
+        val idle = MapLibreMap.OnCameraIdleListener { report() }
+        loadedMap.addOnCameraIdleListener(idle)
+        report()
+        onDispose { loadedMap.removeOnCameraIdleListener(idle) }
     }
 
     LaunchedEffect(style, overlays, darkTheme) {
