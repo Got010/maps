@@ -27,7 +27,12 @@ data class MapLine(val points: List<MapPoint>, val role: Role, val rank: Int = 0
 data class SpeedLine(val points: List<MapPoint>, val speedMph: Double)
 
 /** An incident pin; [kind] is the IncidentKind name, [id] comes back from a tap. */
-data class IncidentPin(val id: String, val point: MapPoint, val kind: String, val closure: Boolean)
+data class IncidentPin(val id: String, val point: MapPoint, val kind: String, val closure: Boolean) {
+    companion object {
+        /** The [kind] of a DOT traffic camera counted on a route option, teal as the 511 camera badges. */
+        const val DOT_CAMERA = "DOT_CAMERA"
+    }
+}
 
 /**
  * A licence-plate reader (Flock and others) from the search pack, drawn at

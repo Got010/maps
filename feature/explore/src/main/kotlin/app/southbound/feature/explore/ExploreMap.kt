@@ -1114,14 +1114,18 @@ internal fun ExploreMap(
                     traffic = trafficOverlay,
                 )
             } else {
-                val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
+                val ready = preview as? RoutePreviewState.Ready
+                val selected = ready?.selected ?: 0
+                // The cameras the selected option's card counts, pinned at every zoom: the plate-reader layer
+                // only starts at zoom 11, where one camera on a long route is a small dot hard to come across.
+                val exposurePins = ready?.exposure?.getOrNull(selected)?.marks.orEmpty().map { it.toExposurePin() }
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
                         val role = if (i == selected) MapLine.Role.LEADER else MapLine.Role.THREAD
                         MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, role, rank = i)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
-                    traffic = trafficOverlay,
+                    traffic = trafficOverlay.copy(incidents = (trafficOverlay.incidents + exposurePins).distinctBy { it.id }),
                     slowdowns = previewTraffic.getOrNull(selected)?.toSpeedLines().orEmpty(),
                 )
             }
@@ -1265,7 +1269,11 @@ internal fun ExploreMap(
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
-            onIncidentTap = { id -> shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown) },
+            onIncidentTap = { id ->
+                // A plate reader pinned on a route option opens its card, as its dot does.
+                shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown)
+                    ?: cameraPins.firstOrNull { it.id == id }?.let(ShownThing::PlateReader)
+            },
             // A tap on another route's line picks it, as tapping its card does.
             onRouteTap = { rank ->
                 val ready = preview as? RoutePreviewState.Ready
@@ -1876,6 +1884,17 @@ private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
 
 private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.lon), kind.name, isClosure)
+
+/** A camera counted on a route option, as a pin; a plate reader's id is its camera dot's, so a tap opens its card. */
+private fun Landmark.toExposurePin(): IncidentPin {
+    val kind = when (category) {
+        Landmark.ALPR_CAMERA -> AlertKind.ALPR_CAMERA.name
+        Landmark.SPEED_CAMERA -> AlertKind.SPEED_CAMERA.name
+        else -> IncidentPin.DOT_CAMERA
+    }
+    val id = if (category == Landmark.ALPR_CAMERA) PlateReaders.pinId(this.id) else "exposure:$category:${this.id}"
+    return IncidentPin(id, MapPoint(lat, lon), kind, closure = false)
+}
 
 @Composable
 private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {

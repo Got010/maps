@@ -224,6 +224,7 @@ internal object OverlayLayers {
                         stop("SPEED_CAMERA", literal(ALERT_SPEED_CAMERA)),
                         stop("ALPR_CAMERA", literal(ALERT_ALPR_CAMERA)),
                         stop("SCHOOL_ZONE", literal(ALERT_SCHOOL_ZONE)),
+                        stop(IncidentPin.DOT_CAMERA, literal(TrafficIcons.CAMERA_TEAL)),
                     ),
                 ),
                 circleStrokeColor("#FFFFFF"),
