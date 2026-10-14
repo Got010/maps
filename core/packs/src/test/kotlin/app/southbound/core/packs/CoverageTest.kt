@@ -11,7 +11,7 @@ class CoverageTest {
     @Test
     fun `every covered state is listed once, in the picker's order`() {
         assertEquals(
-            listOf("NY", "NJ", "CT", "PA", "MD", "DE", "DC", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS"),
+            listOf("NY", "NJ", "CT", "PA", "MD", "DE", "DC", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS", "VA", "WV", "KY"),
             Coverage.STATES.map { it.code },
         )
         // Each picker heading names its states ("Maryland, Delaware and DC"), and each state is under one.
@@ -33,7 +33,7 @@ class CoverageTest {
             for (item in listOf(Item.INCIDENTS, Item.CAMERAS, Item.SIGNS)) assertEquals(code, Level.NONE, state.entry(item).level)
         }
         assertEquals(Level.PARTIAL, Coverage.of("OH")!!.entry(Item.INCIDENTS).level)
-        assertEquals(listOf("MI", "ND", "SD"), Coverage.STATES.filter { it.trafficFeed != null && it.entry(Item.SIGNS).level == Level.NONE }.map { it.code })
+        assertEquals(listOf("MI", "ND", "SD", "KY"), Coverage.STATES.filter { it.trafficFeed != null && it.entry(Item.SIGNS).level == Level.NONE }.map { it.code })
     }
 
     /** "Avoiding DOT cameras" is what the packs carry: pipeline/search/dot_cameras.py's FETCHERS and NO_LIST. */
@@ -47,7 +47,7 @@ class CoverageTest {
         val fetched = keys("FETCHERS")
         val none = keys("NO_LIST")
         assertEquals(setOf("NJ", "OH", "MO", "DC"), none)
-        assertEquals(15, fetched.size)
+        assertEquals(18, fetched.size)
         assertEquals(none, Coverage.STATES.filter { it.entry(Item.AVOID_DOT_CAMERAS).level == Level.NONE }.map { it.code }.toSet())
         assertEquals(fetched, Coverage.STATES.filter { it.entry(Item.AVOID_DOT_CAMERAS).level == Level.FULL }.map { it.code }.toSet())
     }
@@ -100,7 +100,7 @@ class CoverageTest {
                 "No traffic feed: New Jersey, DC and Missouri.",
                 "Traffic only with your own key: Ohio.",
                 "No avoiding DOT cameras: New Jersey, DC, Ohio and Missouri.",
-                "No message signs: Michigan, North Dakota and South Dakota.",
+                "No message signs: Michigan, North Dakota, South Dakota and Kentucky.",
                 "Traffic speeds and transit: New York City only.",
             ),
             Coverage.summary(),
@@ -113,6 +113,14 @@ class CoverageTest {
         assertEquals(null, Coverage.pickerNote("Michigan"))
         assertEquals(null, Coverage.pickerNote("Iowa"))
         assertEquals(listOf("Traffic from 511IA.", "Nothing missing beyond what most states lack."), Coverage.lines(Coverage.of("IA")!!))
+        assertEquals(null, Coverage.pickerNote("Virginia"))
+        assertEquals(null, Coverage.pickerNote("West Virginia"))
+        assertEquals(listOf("Traffic from 511 Virginia.", "Nothing missing beyond what most states lack."), Coverage.lines(Coverage.of("VA")!!))
+        assertEquals(listOf("Traffic from WV511.", "Nothing missing beyond what most states lack."), Coverage.lines(Coverage.of("WV")!!))
+        assertEquals(
+            listOf("Traffic from KYTC.", "No message signs: KYTC's message sign layer hasn't changed since August 2025."),
+            Coverage.lines(Coverage.of("KY")!!),
+        )
     }
 
     private fun pipelineDir(): File {

@@ -25,7 +25,8 @@ Settings > What each state has (`core/packs/Coverage.kt`). In short:
   publishes no feed the app can read).
 - **Traffic only with your own free key:** Ohio (OHGO).
 - **No avoiding DOT cameras:** New Jersey, DC, Ohio and Missouri.
-- **No message signs:** Michigan, North Dakota and South Dakota.
+- **No message signs:** Michigan, North Dakota, South Dakota and Kentucky
+  (KYTC's sign layer hasn't changed since August 2025).
 - **Traffic speeds and transit:** New York City only.
 - **Search** outside New York has OpenStreetMap's businesses and house numbers
   alone; the gas price is the US average outside New York and the Central

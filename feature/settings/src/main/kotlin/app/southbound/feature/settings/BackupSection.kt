@@ -374,6 +374,9 @@ private fun networkLabel(feature: NetworkFeature): Int = when (feature) {
     NetworkFeature.TRAFFIC_KANDRIVE -> R.string.backup_net_kandrive
     NetworkFeature.TRAFFIC_MIDRIVE -> R.string.backup_net_midrive
     NetworkFeature.TRAFFIC_OHGO -> R.string.backup_net_ohgo
+    NetworkFeature.TRAFFIC_511VA -> R.string.backup_net_511va
+    NetworkFeature.TRAFFIC_WV511 -> R.string.backup_net_wv511
+    NetworkFeature.TRAFFIC_KYTC -> R.string.backup_net_kytc
 }
 
 /** Counts only: no place, list or key name, and never a key. */

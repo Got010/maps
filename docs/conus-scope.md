@@ -46,7 +46,9 @@ spike before committing to them; the New York numbers are measured (release v0.1
   Columbus' and Louisville's 4-degree tiles), so an eastern phone downloads only the seams it already needed plus
   the Virginia and West Virginia roads inside them. Unlike the Midwest, they skip the `planned` stage: the states
   test build on the pull request builds and routes them first, and one release ships their packs and the app that
-  offers them, so the pipeline change costs one data rebuild.
+  offers them, so the pipeline change costs one data rebuild. Their DOT feeds came in the same pull request: 511
+  Virginia's map layers, WV511's KML services and camera script (each camera's video named only by its player
+  page), and KYTC's ArcGIS layers; Kentucky's message signs alone are missing (its sign layer is stale).
 
 ## Where New York stands (the baseline to scale)
 

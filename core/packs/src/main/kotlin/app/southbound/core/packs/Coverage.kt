@@ -100,6 +100,9 @@ object Coverage {
         State("SD", "South Dakota", "SD511", none("SD511 publishes no message signs", Item.SIGNS)),
         State("NE", "Nebraska", "Nebraska 511", emptyList()),
         State("KS", "Kansas", "KanDrive", emptyList()),
+        State("VA", "Virginia", "511 Virginia", emptyList()),
+        State("WV", "West Virginia", "WV511", emptyList()),
+        State("KY", "Kentucky", "KYTC", none("KYTC's message sign layer hasn't changed since August 2025", Item.SIGNS)),
     )
 
     fun of(code: String): State? = STATES.firstOrNull { it.code == code }
@@ -156,10 +159,6 @@ object Coverage {
     }
 
     /**
-     * A line for the region picker under a heading or a one-region state ("Maryland, Delaware and DC" -> "No traffic
-     * feed for DC"), or null when every state under it has its traffic.
-     */
-    /**
      * The states (and DC) a heading of the region picker ([Regions.byState]) covers: "Maryland, Delaware and DC"
      * is three.
      */
@@ -177,6 +176,10 @@ object Coverage {
         return STATES.filter { state -> headings.any { state.name in namesIn(it) } }
     }
 
+    /**
+     * A line for the region picker under a heading or a one-region state ("Maryland, Delaware and DC" -> "No traffic
+     * feed for DC"), or null when every state under it has its traffic.
+     */
     fun pickerNote(heading: String): String? {
         val states = statesIn(heading)
         val noFeed = states.filter { it.trafficFeed == null }
