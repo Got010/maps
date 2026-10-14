@@ -39,6 +39,9 @@ Since schema 3 the table has a nullable `direction` column: for speed and
 licence-plate cameras the OSM `direction` tag (else `camera:direction`) as degrees clockwise from north
 (0-359), NULL for every other row and for a tag that isn't one bearing (see
 parse_direction). Packs built before it simply lack the column.
+Tolls are category "toll" (the app counts them as plate readers): toll gantries and booths, whether
+mapped as points or drawn as lines, the devices of toll enforcement relations, and where a road
+joins a toll road with none of those mapped near it (TollRoads).
 
 The app reads it with SQLite's FTS5 (see core/search). PRAGMA
 application_id marks the file as a search pack so an import can recognise
@@ -344,6 +347,109 @@ def toll_name(tags):
     return next((name for (key, value), name in TOLL_NAMES.items() if tags.get(key) == value), None)
 
 
+# Roads a car drives on: a toll road and the roads that lead onto it.
+MOTOR_HIGHWAYS = {
+    "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
+    "service", "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",
+}
+# A road joining a toll road this close to a mapped gantry, booth or enforcement device is left to that point.
+TOLL_ENTRY_CLEAR_M = 2000.0
+TOLL_ROAD_NAME = "Toll road"
+TOLL_ENFORCEMENT_NAME = "Toll"
+
+
+def is_toll_road(tags):
+    """A road cars pay to use: toll=yes, or toll:motorcar=yes. A road that charges only lorries or snowmobiles isn't."""
+    if tags.get("highway") not in MOTOR_HIGHWAYS:
+        return False
+    return tags.get("toll") == "yes" or tags.get("toll:motorcar") == "yes"
+
+
+def is_toll_enforcement(tags):
+    """An enforcement relation for a toll (the device that reads the plate is its "device" member)."""
+    return tags.get("type") == "enforcement" and tags.get("enforcement") == "toll"
+
+
+def enforcement_devices(members):
+    """The node ids that read plates for an enforcement relation: its devices, else where it starts ("from")."""
+    nodes = [(m.ref, m.role) for m in members if m.type == "n"]
+    return [ref for ref, role in nodes if role == "device"] or [ref for ref, role in nodes if role == "from"][:1]
+
+
+class TollRoads:
+    """Toll roads with no toll point mapped on them, as points where other roads join them.
+
+    Many toll roads are tagged only toll=yes, with no gantry or booth mapped. Their plate readers are where
+    cars get on and off, so each node where a non-toll road meets a toll road is a toll point ("Toll road"):
+    an end of the non-toll road anywhere on the toll road, or an end of the toll road anywhere on the
+    non-toll road. A road crossing one at grade is neither. Such a point within TOLL_ENTRY_CLEAR_M of a
+    mapped gantry, booth or enforcement device is left out: that toll is already there.
+
+    A first pass (read) collects the toll roads' nodes and the toll enforcement relations' devices; the main
+    pass hands every other motor road to way(), and nodes() gives the devices' places.
+    """
+
+    def __init__(self):
+        self.toll_nodes = set()
+        self.toll_ends = set()
+        self.devices = set()
+        self.entries = {}
+
+    def read(self, pbf):
+        for obj in osmium.FileProcessor(pbf, osmium.osm.WAY | osmium.osm.RELATION).with_filter(
+            osmium.filter.KeyFilter("toll", "toll:motorcar", "type")
+        ):
+            if obj.is_way():
+                if is_toll_road(obj.tags):
+                    refs = [n.ref for n in obj.nodes]
+                    if refs:
+                        self.toll_nodes.update(refs)
+                        self.toll_ends.update((refs[0], refs[-1]))
+            elif is_toll_enforcement(obj.tags):
+                self.devices.update(enforcement_devices(obj.members))
+        return self
+
+    def way(self, way):
+        """A road from the main pass: notes where it joins a toll road, unless it is one."""
+        if not self.toll_nodes or way.tags.get("highway") not in MOTOR_HIGHWAYS or is_toll_road(way.tags):
+            return
+        nodes = way.nodes
+        last = len(nodes) - 1
+        for i, n in enumerate(nodes):
+            joins = n.ref in self.toll_nodes if i in (0, last) else n.ref in self.toll_ends
+            if joins and n.location.valid():
+                self.entries[n.ref] = (n.lat, n.lon)
+
+    def nodes(self, pbf):
+        """The enforcement devices that aren't a toll point by their own tags, as (lat, lon)."""
+        if not self.devices:
+            return []
+        found = []
+        for obj in osmium.FileProcessor(pbf, osmium.osm.NODE).with_filter(osmium.filter.IdFilter(self.devices)):
+            if not toll_name(obj.tags) and obj.location.valid():
+                found.append((obj.location.lat, obj.location.lon))
+        return found
+
+    def clear_entries(self, toll_points):
+        """The join points at least TOLL_ENTRY_CLEAR_M from every one of toll_points, as (lat, lon)."""
+        cell = TOLL_ENTRY_CLEAR_M / KM_PER_DEGREE / 1000.0
+        grid = {}
+        for lat, lon in toll_points:
+            grid.setdefault((math.floor(lat / cell), math.floor(lon / cell)), []).append((lat, lon))
+        kept = []
+        for lat, lon in self.entries.values():
+            cy, cx = math.floor(lat / cell), math.floor(lon / cell)
+            cos_lat = math.cos(math.radians(lat))
+            near = any(
+                math.hypot((plat - lat) * KM_PER_DEGREE, (plon - lon) * KM_PER_DEGREE * cos_lat) * 1000.0 < TOLL_ENTRY_CLEAR_M
+                for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+                for plat, plon in grid.get((cy + dy, cx + dx), ())
+            )
+            if not near:
+                kept.append((lat, lon))
+        return kept
+
+
 def is_alpr(tags):
     """Licence-plate readers as DeFlock maps them (Flock Safety and others), under any of their type names."""
     if tags.get("man_made") != "surveillance" and tags.get("surveillance") is None:
@@ -515,6 +621,7 @@ class Collector:
         self.counts = {LOCALITY: 0, PLACE: 0, STREET: 0, ADDRESS: 0}
         self.landmarks = []
         self.landmark_count = 0
+        self.toll_points = []  # (lat, lon) of every toll landmark, for TollRoads.clear_entries
         self.localities = []  # (category, name, lat, lon), for LocalityFinder
         self.address_rows = []
         # Address points staged per source, and those with no usable number or street.
@@ -600,6 +707,14 @@ class Collector:
             )
             self.landmarks.clear()
 
+    def toll(self, name, lat, lon):
+        """A toll point found from roads or relations rather than its own tags (TollRoads)."""
+        self.landmarks.append(("toll", name, round(lat, 6), round(lon, 6), None))
+        self.landmark_count += 1
+        self.toll_points.append((lat, lon))
+        if len(self.landmarks) >= 50_000:
+            self.flush()
+
     def landmark(self, tags, lat, lon, nodes_only=False):
         """Adds a landmark row if the object is one. Signals and signs count only as nodes.
 
@@ -621,6 +736,8 @@ class Collector:
                 landmark_direction(tags, category),
             ))
             self.landmark_count += 1
+            if category == "toll":
+                self.toll_points.append((lat, lon))
         if len(self.landmarks) >= 50_000:
             self.flush()
 
@@ -810,6 +927,7 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
     collector = Collector(db)
     started = time.time()
 
+    tolls = TollRoads().read(pbf)
     processor = (
         osmium.FileProcessor(pbf)
         .with_locations()
@@ -822,7 +940,13 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
             collector.point(tags, obj.location.lat, obj.location.lon, f"n{obj.id}")
             collector.landmark(tags, obj.location.lat, obj.location.lon)
         elif obj.is_way():
+            # A gantry or booth drawn as a line across the road (or a closed one): at its middle, here only.
+            if toll_name(tags):
+                middle = way_middle(obj)
+                if middle:
+                    collector.landmark(tags, *middle)
             if "highway" in tags:
+                tolls.way(obj)
                 middle = way_middle(obj)
                 if middle:
                     collector.street(tags, *middle, f"w{obj.id}")
@@ -840,8 +964,14 @@ def build(pbf, output, region, state=None, address_points=None, bounds=None, max
                 prefix = "w" if obj.from_way() else "r"
                 collector.point(tags, *centre, f"{prefix}{obj.orig_id()}")
                 # A closed road's school zone was placed where it starts, with the ways: not again at its centre.
-                if not (obj.from_way() and "highway" in tags):
+                # A closed way that is a toll gantry or booth was placed with the ways too.
+                if not (obj.from_way() and ("highway" in tags or toll_name(tags))):
                     collector.landmark(tags, *centre, nodes_only=True)
+    # Toll enforcement devices tagged only by their relation, then the toll roads' joins clear of every toll point.
+    for lat, lon in tolls.nodes(pbf):
+        collector.toll(TOLL_ENFORCEMENT_NAME, lat, lon)
+    for lat, lon in tolls.clear_entries(collector.toll_points):
+        collector.toll(TOLL_ROAD_NAME, lat, lon)
     attribution = "© OpenStreetMap contributors, ODbL"
     if address_points:
         import addresses  # only needed with a state file
