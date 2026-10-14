@@ -23,7 +23,8 @@ import java.util.Collections
  * and navigation can ask as often as they like. Requests carry no location,
  * search or route and always fetch the whole state or city. The other states'
  * 511s ([StateTraffic]: 511PA, CTroads and 511WI, [Ibi511]; Maryland's CHART, [MarylandChart]; DelDOT, [DelDot];
- * Illinois' Travel Midwest, [TravelMidwest]) come in beside 511NY, each under its own toggle.
+ * Illinois' Travel Midwest, [TravelMidwest]; 511 Virginia, [Virginia511]; WV511, [WestVirginia]; KYTC, [Kentucky])
+ * come in beside 511NY, each under its own toggle.
  */
 class TrafficFeed(
     private val gate: NetworkGate,
@@ -55,6 +56,9 @@ class TrafficFeed(
             SouthDakota.Client { url -> fetch(TrafficSource.SD_511.feature, url) },
             MiDrive.Client { url -> fetch(TrafficSource.MI_DRIVE.feature, url) },
             Ohgo.Client({ url -> fetch(TrafficSource.OH_OHGO.feature, url) }) { apiKey(ApiKey.OHGO) },
+            Virginia511.Client { url -> fetch(TrafficSource.VA_511.feature, url) },
+            WestVirginia.Client { url -> fetch(TrafficSource.WV_511.feature, url) },
+            Kentucky.Client { url -> fetch(TrafficSource.KY_KYTC.feature, url) },
         ) + CarsStates.SITES.map { site ->
             CarsStates.Client(site, { url -> fetch(site.source.feature, url) }) { url, body -> post(site.source.feature, url, body) }
         }

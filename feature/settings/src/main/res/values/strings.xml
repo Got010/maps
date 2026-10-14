@@ -108,6 +108,12 @@
     <string name="live_midrive_note">MDOT\'s crashes, closures and work zones across Michigan, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras on the map (a camera\'s picture is fetched when you open it; message signs are not read, their text is one page per sign). No key needed: these are the lists Mi Drive\'s own map reads.</string>
     <string name="live_ohgo">Ohio (OHGO)</string>
     <string name="live_ohgo_note">ODOT\'s crashes, closures and construction across Ohio, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. Needs a free OHGO key: register at publicapi.ohgo.com, paste the key below. The key is stored encrypted and sent only to publicapi.ohgo.com.</string>
+    <string name="live_511va">Virginia (511 Virginia)</string>
+    <string name="live_511va_note">VDOT\'s crashes, closures, work zones and weather closures across Virginia, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras and message signs on the map. No key needed: these are the map layers 511 Virginia\'s own map reads.</string>
+    <string name="live_wv511">West Virginia (WV511)</string>
+    <string name="live_wv511_note">WVDOH\'s incidents, closures and roadwork across West Virginia, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras (a frame of the camera\'s live video, fetched when you open it) and message signs on the map. No key needed: these are the files WV511\'s own map reads.</string>
+    <string name="live_kytc">Kentucky (KYTC)</string>
+    <string name="live_kytc_note">KYTC\'s crashes, closures and work zones across Kentucky, fetched whole every few minutes. Routes steer around closures. Also shows its traffic cameras on the map (no message signs: KYTC\'s sign layer hasn\'t changed since 2025). No key needed: these are the map layers KYTC\'s own GoKY map reads.</string>
     <string name="settings_number_saved_as">Out of range: saved as %1$s</string>
     <string name="live_tomtom_old">TomTom traffic</string>
     <string name="live_tomtom_old_note">Turned on by an older backup. Southbound has no TomTom layer: turn it off.</string>
@@ -167,7 +173,7 @@
     <string name="live_fuel">Fuel</string>
     <string name="live_weather_heading">Weather</string>
     <string name="live_weather">Weather: alerts, radar, current weather and forecast (NWS)</string>
-    <string name="live_weather_note">National Weather Service warnings, watches and advisories for every state Southbound covers (New York to Kansas: New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware, DC, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, North Dakota, South Dakota, Nebraska and Kansas), NOAA\'s radar as one picture of them, every airport weather station\'s current report, and the 7-day forecast for all of them (built from NWS forecasts every 6 hours and fetched from Southbound\'s own GitHub, kept on the phone). Each is one download, the same for every phone; places are looked up on the phone. Warnings on your route are shown and spoken. Nothing about you, your location or your route is sent.</string>
+    <string name="live_weather_note">National Weather Service warnings, watches and advisories for every state Southbound covers (New York to Kansas: New York, New Jersey, Connecticut, Pennsylvania, Maryland, Delaware, DC, Ohio, Indiana, Illinois, Michigan, Wisconsin, Minnesota, Iowa, Missouri, North Dakota, South Dakota, Nebraska, Kansas, Virginia, West Virginia and Kentucky), NOAA\'s radar as one picture of them, every airport weather station\'s current report, and the 7-day forecast for all of them (built from NWS forecasts every 6 hours and fetched from Southbound\'s own GitHub, kept on the phone). Each is one download, the same for every phone; places are looked up on the phone. Warnings on your route are shown and spoken. Nothing about you, your location or your route is sent.</string>
     <string name="live_gas">Gas prices (EIA)</string>
     <string name="live_gas_note">Weekly average retail price for the state you pick, from the U.S. Energy Information Administration. Needs a free EIA API key (eia.gov/opendata/register.php). Nothing about you or your location is sent.</string>
     <string name="live_gas_key">EIA key</string>
@@ -221,6 +227,9 @@
     <string name="backup_net_kandrive">KanDrive (Kansas) traffic</string>
     <string name="backup_net_midrive">Mi Drive (Michigan) traffic</string>
     <string name="backup_net_ohgo">OHGO (Ohio) traffic</string>
+    <string name="backup_net_511va">511 Virginia traffic</string>
+    <string name="backup_net_wv511">WV511 (West Virginia) traffic</string>
+    <string name="backup_net_kytc">KYTC (Kentucky) traffic</string>
     <string name="backup_export_failed_kept">Export failed: %1$s. The partial file could not be deleted; delete it yourself.</string>
     <string name="backup_summary">%1$d saved places in %2$d lists, %3$d recents, Home and Work set: %4$d, %5$d API keys, %6$d preference values</string>
     <string name="backup_import_title">Import</string>

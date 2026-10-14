@@ -9,7 +9,7 @@ downloads the same file and looks a town up in it on the phone.
 How: a lattice over the box of the regions pipeline/regions.json offers (every
 basemap region not marked planned: New York, New Jersey, Connecticut,
 Pennsylvania, Maryland, Delaware and DC, and since October 2026 the twelve
-Midwest states; 3,097 points), STEP degrees apart, keeping the points inside one of those regions (its
+Midwest states, Virginia, West Virginia and Kentucky; 3,412 points), STEP degrees apart, keeping the points inside one of those regions (its
 box, and its area where it has one). The lattice starts at that box's south-west
 corner, so the points stay put while the box does. The file keeps its old name,
 forecast-ny.json.gz, so apps from before the other states read it too. Each

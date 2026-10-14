@@ -55,6 +55,14 @@ PLACES = {
     "Kansas City": (39.0997, -94.5786),
     "Fargo": (46.8772, -96.7898),
     "Omaha": (41.2565, -95.9345),
+    "Richmond, VA": (37.5407, -77.4360),
+    "Norfolk": (36.8508, -76.2859),
+    "Roanoke": (37.2710, -79.9414),
+    "Bristol, VA": (36.6200, -82.1700),
+    "Charleston, WV": (38.3498, -81.6326),
+    "Morgantown": (39.6295, -79.9559),
+    "Louisville": (38.2527, -85.7585),
+    "Lexington, KY": (38.0406, -84.5037),
 }
 
 # (from, to, the phone's regions, must it match the whole graph)
@@ -74,6 +82,16 @@ TRIPS = [
     ("Indianapolis", "St. Louis", ["in", "mo"], True),  # through Illinois
     ("Minneapolis", "Kansas City", ["mn", "mo"], True),  # through Iowa
     ("Fargo", "Omaha", ["nd", "ne"], True),  # through South Dakota
+    # Virginia, West Virginia and Kentucky ("south"): across its seams with the east's and the Midwest's packs, and within it.
+    ("Washington, DC", "Richmond, VA", ["md", "vae"], True),
+    ("Times Square", "Norfolk", ["nyc", "vae"], True),  # through New Jersey, Delaware and Maryland, or the Eastern Shore
+    ("Richmond, VA", "Roanoke", ["vae", "vaw"], True),  # across Virginia's halves
+    ("Roanoke", "Bristol, VA", ["vaw"], True),
+    ("Pittsburgh", "Morgantown", ["paw", "wv"], True),
+    ("Charleston, WV", "Lexington, KY", ["wv", "ky"], True),
+    ("Cincinnati", "Louisville", ["ohs", "ky"], True),
+    ("Louisville", "Indianapolis", ["ky", "in"], True),
+    ("Richmond, VA", "Louisville", ["vae", "ky"], True),  # through West Virginia (or Virginia's west) on main roads
     # Without Pennsylvania's local roads: where does the trip end?
     ("Times Square", "Philadelphia City Hall", ["nyc"], False),
 ]

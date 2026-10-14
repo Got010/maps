@@ -39,6 +39,9 @@ enum class TrafficSource(val label: String, val feature: NetworkFeature, val idP
     KS_KANDRIVE("KanDrive", NetworkFeature.TRAFFIC_KANDRIVE, "ks:"),
     MI_DRIVE("Mi Drive", NetworkFeature.TRAFFIC_MIDRIVE, "mi:"),
     OH_OHGO("OHGO", NetworkFeature.TRAFFIC_OHGO, "oh:"),
+    VA_511("511 Virginia", NetworkFeature.TRAFFIC_511VA, "va:"),
+    WV_511("WV511", NetworkFeature.TRAFFIC_WV511, "wv:"),
+    KY_KYTC("KYTC", NetworkFeature.TRAFFIC_KYTC, "ky:"),
 }
 
 /** One state 511 event: a crash, closure, work zone or special event, at a point. */
@@ -113,9 +116,15 @@ data class TrafficCamera(
      * fetches it first and takes the link [MiDrive.stillOf] allows.
      */
     val stillVia: String? = null,
+    /**
+     * A page naming the video's playlist, for a camera whose list gives none (WV511's, [WestVirginia.playerUrl]: its
+     * cameras stream from three servers): the card fetches it first and takes the link [WestVirginia.streamOf] allows.
+     */
+    val videoVia: String? = null,
 ) {
     val location: GeoPoint get() = GeoPoint(lat, lon)
-    val hasImage: Boolean get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank() || !stillVia.isNullOrBlank())
+    val hasImage: Boolean
+        get() = !disabled && (!imageUrl.isNullOrBlank() || !videoUrl.isNullOrBlank() || !stillVia.isNullOrBlank() || !videoVia.isNullOrBlank())
 }
 
 /**

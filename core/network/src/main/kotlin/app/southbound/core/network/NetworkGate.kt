@@ -71,6 +71,15 @@ enum class NetworkFeature(val enabledByDefault: Boolean) {
 
     /** Ohio's OHGO (ODOT), with the user's own key: incidents, construction, cameras and message signs, the whole state. */
     TRAFFIC_OHGO(enabledByDefault = false),
+
+    /** 511 Virginia (VDOT): incidents, work zones, closures, cameras and message signs, the whole state. */
+    TRAFFIC_511VA(enabledByDefault = false),
+
+    /** West Virginia's WV511 (WVDOH): incidents, roadwork, cameras and message signs, the whole state. */
+    TRAFFIC_WV511(enabledByDefault = false),
+
+    /** Kentucky's KYTC (GoKY's ArcGIS layers): incidents, work zones, closures and cameras, the whole state. */
+    TRAFFIC_KYTC(enabledByDefault = false),
 }
 
 fun interface NetworkToggles {

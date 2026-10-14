@@ -67,7 +67,7 @@ internal object SettingsIndex {
         R.string.live_511, R.string.live_511pa, R.string.live_ctroads, R.string.live_chart_md, R.string.live_deldot,
         R.string.live_ohgo, R.string.live_ohgo_key, R.string.live_511in, R.string.live_travel_midwest, R.string.live_midrive,
         R.string.live_511wi, R.string.live_511mn, R.string.live_511ia, R.string.live_nddot, R.string.live_sd511,
-        R.string.live_511ne, R.string.live_kandrive, R.string.live_dot,
+        R.string.live_511ne, R.string.live_kandrive, R.string.live_511va, R.string.live_wv511, R.string.live_kytc, R.string.live_dot,
     ) + on(
         SettingsTab.LIVE, R.string.live_weather_heading,
         R.string.live_weather,

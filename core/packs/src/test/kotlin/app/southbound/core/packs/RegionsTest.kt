@@ -31,7 +31,7 @@ class RegionsTest {
     fun `statewide is not a basemap region`() {
         assertTrue(Regions.basemaps.none { it.id == Regions.STATEWIDE })
         assertTrue(Regions.basemaps.none { it.id == "all" })
-        assertEquals(26, Regions.basemaps.size)
+        assertEquals(30, Regions.basemaps.size)
         assertEquals("New York and Northern New Jersey", Regions.nameOf("nys"))
         assertEquals("custom", Regions.nameOf("custom"))
     }
@@ -43,7 +43,8 @@ class RegionsTest {
         assertEquals(
             listOf(
                 "New York", "New Jersey", "Connecticut", "Pennsylvania", "Maryland, Delaware and DC", "Ohio", "Indiana", "Illinois", "Michigan",
-                "Wisconsin", "Minnesota", "Iowa", "Missouri", "North Dakota", "South Dakota", "Nebraska", "Kansas",
+                "Wisconsin", "Minnesota", "Iowa", "Missouri", "North Dakota", "South Dakota", "Nebraska", "Kansas", "Virginia",
+                "West Virginia", "Kentucky",
             ),
             Regions.byState.map { it.first },
         )
@@ -104,7 +105,38 @@ class RegionsTest {
         assertEquals("western", Regions.basemapAt(42.8864, -78.8784)?.id)
         assertEquals("capital", Regions.basemapAt(42.6526, -73.7562)?.id)
         assertEquals("md", Regions.basemapAt(39.0, -77.0)?.id) // Silver Spring
-        assertNull(Regions.basemapAt(37.5, -78.0)) // Virginia
+        assertEquals("vae", Regions.basemapAt(37.5, -78.0)?.id) // Virginia, since October 2026
+        assertNull(Regions.basemapAt(36.1627, -86.7816)) // Nashville
+    }
+
+    /** Virginia in two halves at 78.7 W, West Virginia and Kentucky: their outlines run along state lines too. */
+    @Test
+    fun `virginia, west virginia and kentucky, each city in one region`() {
+        assertEquals(listOf("vae", "vaw"), Regions.byState.first { it.first == "Virginia" }.second.map { it.id })
+        fun only(id: String, lat: Double, lon: Double) {
+            assertEquals("$lat,$lon is $id's", listOf(id), Regions.basemapsAt(lat, lon).map { it.id })
+        }
+        only("vae", 38.8816, -77.1067) // Arlington, across the Potomac from DC
+        only("md", 38.9072, -77.0369) // Washington, DC stays Maryland's region's
+        only("vae", 37.5407, -77.4360) // Richmond
+        only("vae", 36.8508, -76.2859) // Norfolk
+        only("vae", 37.2665, -76.0158) // Cape Charles, on the Eastern Shore across the bay
+        only("vae", 39.1857, -78.1633) // Winchester
+        only("vae", 38.0293, -78.4767) // Charlottesville
+        only("vaw", 38.4496, -78.8689) // Harrisonburg
+        only("vaw", 37.2710, -79.9414) // Roanoke
+        only("vaw", 36.7098, -81.9774) // Abingdon
+        only("md", 38.3607, -75.5994) // Salisbury, MD: inside Virginia's east box, not its outline
+        only("wv", 38.3498, -81.6326) // Charleston
+        only("wv", 39.6295, -79.9559) // Morgantown
+        only("wv", 39.2890, -77.8600) // Charles Town, by the Virginia and Maryland lines
+        only("ohs", 39.4154, -81.4548) // Marietta, Ohio, across the river from West Virginia
+        only("ky", 38.2527, -85.7585) // Louisville
+        only("ky", 38.0406, -84.5037) // Lexington
+        only("ky", 39.0837, -84.5085) // Covington
+        only("ohs", 39.1031, -84.5120) // Cincinnati, across the Ohio
+        only("in", 38.2967, -85.7597) // Clarksville, Indiana (the river is Kentucky's)
+        assertNull(Regions.basemapAt(36.5680, -82.1890)) // Bristol, Tennessee
     }
 
     /** New York City's box covers the New Jersey side of the Hudson; the njn area takes those points back. */

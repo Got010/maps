@@ -1,4 +1,4 @@
-# Export format (bundle schema 7)
+# Export format (bundle schema 8)
 
 Settings > Backup > Export writes one file with everything Southbound keeps for you; Import reads it back. The file
 is an FWX v1 container (the fieldwork program's `specs/export-container.md`): a plaintext header, then AES-256-GCM
@@ -8,7 +8,7 @@ its package line and one provenance line differ; `CodecCopyTest` fails on any ot
 against `core/export/SOURCES.sha256`), with its tests 1.2.0-r1 and the shared vectors in
 `core/export/src/test/resources/fwx-v1/`. Never edit those files here: a fix goes to the program's codec first.
 
-- **App ID** `southbound`, **schema** 7. The importer accepts schemas 1 to 7 (see "Schema history").
+- **App ID** `southbound`, **schema** 8. The importer accepts schemas 1 to 8 (see "Schema history").
 - **File name** `southbound-<yyyyMMdd-HHmmss>Z.fwx` (UTC). The header (app, schema, time) is readable without the
   passphrase; nothing else is, and the file length shows roughly how much it holds.
 - **Never in it**: the Keystore keys, the map and search packs, the fetched gas price (a cache), the downloaded voice.
@@ -20,10 +20,10 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 | Entry | Holds |
 |---|---|
-| `manifest.json` | `{"app":"southbound","schema":7,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n}`. Always first. The importer checks every count against what the other entries hold. |
+| `manifest.json` | `{"app":"southbound","schema":8,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n}`. Always first. The importer checks every count against what the other entries hold. |
 | `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`. A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
 | `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`, `OHGO` (schema 6). The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
-| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 24 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, and schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`, `search_at_bottom`; schemas 1 to 6 had `night_by_sunset` alone), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
+| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 27 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`, and schemas 6 and 7 had 24, without `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`, `search_at_bottom`; schemas 1 to 6 had `night_by_sunset` alone), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own), `updates` (`allow_mobile_data`). |
 
 ## Import rules
 
@@ -76,7 +76,7 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 A new entry, a new `ApiKey` or `NetworkFeature`, a new setting, or any change to an entry's fields bumps the schema;
 the importer then declares the range it supports and needs a tested migration for every older schema.
-`SouthboundBundleTest`'s "schema 7 pins what the stores hold" fails when one of those changes without the schema.
+`SouthboundBundleTest`'s "schema 8 pins what the stores hold" fails when one of those changes without the schema.
 
 ### Schema history
 
@@ -100,7 +100,10 @@ the importer then declares the range it supports and needs a tested migration fo
   eleven off.
 - **7** (October 2026): the `driving` group gained `search_at_bottom` (Settings > Driving > Search bar at the bottom,
   `docs/bottom-search.md`). A schema 1 to 6 bundle is read with its own fields exactly and imports with it on, the
-  app's default. Exports are written as schema 7.
+  app's default.
+- **8** (October 2026): the `network` group gained `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC` (Settings >
+  Live data > Incidents and closures in Virginia, West Virginia, Kentucky). A schema 1 to 7 bundle is read with its
+  own fields exactly and imports with all three off. Exports are written as schema 8.
 
 ## Checking an export from Termux
 

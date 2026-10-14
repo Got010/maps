@@ -30,10 +30,11 @@ import java.util.TimeZone
  * Schema 3 added the `WEATHER` toggle, schema 4 `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 5 `TRAFFIC_CHART_MD` and
  * `TRAFFIC_DELDOT`, schema 6 `TRAFFIC_511WI` and `TRAFFIC_TRAVEL_MIDWEST`; an older bundle imports with them off.
  * Schema 7 added the driving setting `search_at_bottom`; an older bundle imports with the search bar at the bottom.
+ * Schema 8 added `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`; an older bundle imports with them off.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 7L
+    const val SCHEMA = 8L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */

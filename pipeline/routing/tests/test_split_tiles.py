@@ -54,6 +54,7 @@ class AssignmentTest(unittest.TestCase):
         # The Midwest's main roads in packs of their own, the seam's in one both parts' phones take.
         self.assertEqual("main-midwest", st.pack_for(0, ["ohn"], groups=["midwest"]))
         self.assertEqual("main-east-midwest", st.pack_for(0, ["ohn", "paw"], groups=["midwest", "east"]))
+        self.assertEqual("main-east-midwest-south", st.pack_for(0, ["ohs", "paw", "wv"], groups=["south", "midwest", "east"]))
         # Only level 0 is shared: secondary roads go by region like local streets.
         self.assertEqual("hudson", st.pack_for(1, ["hudson"]))
         self.assertEqual("hudson", st.pack_for(2, ["hudson"]))
@@ -68,16 +69,27 @@ class AssignmentTest(unittest.TestCase):
             tile = st.tile_id_at(0, lat, lon)
             return st.main_groups_for_tile(self.regions, 0, tile, st.regions_for_tile(self.regions, 0, tile))
         self.assertEqual(["east"], groups_at(40.75, -73.98))  # Manhattan
-        self.assertEqual(["midwest"], groups_at(41.88, -87.63))  # Chicago
-        self.assertEqual(["east", "midwest"], groups_at(41.5, -82.0))  # Lake Erie's shore: Ohio and Pennsylvania
-        # A tile covering no region goes with the regions whose boxes it touches: Kentucky's with Indiana's and
-        # Ohio's, Virginia's with Maryland's and Pennsylvania's.
-        self.assertEqual(["midwest"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 37.5, -85.0), []))
-        self.assertEqual(["east"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 37.5, -78.0), []))
+        self.assertEqual(["midwest"], groups_at(44.98, -93.27))  # Minneapolis
+        # Chicago's tile reaches Louisville (38 to 42 N, 88 to 84 W), so it is a seam with Kentucky's.
+        self.assertEqual(["midwest", "south"], groups_at(41.88, -87.63))
+        self.assertEqual(["east", "midwest"], groups_at(42.33, -83.05))  # Detroit and Erie, Pennsylvania
+        # Virginia, West Virginia and Kentucky ("south"): their main roads share tiles with both other groups'.
+        self.assertEqual(["south"], groups_at(36.6, -82.2))  # Bristol, with Tennessee and North Carolina's edges
+        self.assertEqual(["east", "south"], groups_at(37.54, -77.44))  # Richmond, with Maryland's Point Lookout
+        self.assertEqual(["east", "south"], groups_at(38.9, -77.04))  # Washington and Northern Virginia
+        self.assertEqual(["midwest", "south"], groups_at(38.25, -85.76))  # Louisville, with Cincinnati, Indianapolis and Chicago
+        self.assertEqual(["east", "midwest", "south"], groups_at(39.96, -83.0))  # Columbus, West Virginia, Pittsburgh's edge
+        # Not New York City's: the east half of Virginia stops short of 38 N on the Eastern Shore (regions.json).
+        self.assertEqual(["east"], groups_at(40.75, -73.98))
+        # A tile covering no region goes with the regions whose boxes it touches: Nashville's with Indiana's,
+        # Illinois' and Kentucky's, Raleigh's with Maryland's and Virginia's.
+        self.assertEqual(["midwest", "south"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 36.16, -86.78), []))
+        self.assertEqual(["east", "south"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 35.78, -78.64), []))
         # One touching no box at all goes with every group.
-        self.assertEqual(["east", "midwest"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 30.0, -90.0), []))
+        self.assertEqual(["east", "midwest", "south"], st.main_groups_for_tile(self.regions, 0, st.tile_id_at(0, 30.0, -90.0), []))
         self.assertEqual(["nyc", "li", "hudson", "capital", "western", "njn", "njs", "ct", "pae", "paw", "md"], st.regions_in_groups(self.regions, ["east"]))
         self.assertEqual(15, len(st.regions_in_groups(self.regions, ["midwest"])))
+        self.assertEqual(["vae", "vaw", "wv", "ky"], st.regions_in_groups(self.regions, ["south"]))
 
     def test_local_roads_follow_the_maps(self):
         # Manhattan and the Bronx with Fort Lee across the river: New York City's, the Hudson Valley's and
@@ -98,9 +110,12 @@ class AssignmentTest(unittest.TestCase):
         self.assertEqual(["pae"], self.packs_at(41.10, -75.40))
 
     def test_tiles_no_region_covers(self):
-        self.assertEqual([], self.packs_at(37.5, -85.0))  # Kentucky
-        self.assertEqual([], self.packs_at(37.5, -78.0))  # Virginia
-        self.assertEqual(["ohs"], self.packs_at(40.0, -82.0))  # Ohio, since the Midwest (planned regions count)
+        self.assertEqual([], self.packs_at(36.0, -86.8))  # Tennessee
+        self.assertEqual([], self.packs_at(35.8, -78.6))  # North Carolina
+        self.assertEqual(["ohs"], self.packs_at(40.0, -82.0))  # Ohio, since the Midwest
+        self.assertEqual(["ky"], self.packs_at(37.5, -85.0))  # Kentucky and Virginia, since October 2026
+        self.assertEqual(["vae"], self.packs_at(37.5, -78.0))
+        self.assertEqual(["vaw"], self.packs_at(37.27, -79.94))  # Roanoke
 
 
 class SplitTest(unittest.TestCase):
@@ -114,7 +129,7 @@ class SplitTest(unittest.TestCase):
                 st.tile_path(1, st.tile_id_at(1, 40.75, -73.98)): b"arterials",
                 st.tile_path(2, st.tile_id_at(2, 42.8864, -78.8784)): b"buffalo",
                 st.tile_path(2, st.tile_id_at(2, 39.9526, -75.1636)): b"philadelphia",
-                st.tile_path(2, st.tile_id_at(2, 37.5, -85.0)): b"kentucky",
+                st.tile_path(2, st.tile_id_at(2, 36.0, -86.8)): b"tennessee",
             }
             for rel, data in files.items():
                 os.makedirs(os.path.dirname(os.path.join(tiles, rel)), exist_ok=True)
@@ -127,7 +142,7 @@ class SplitTest(unittest.TestCase):
 
             self.assertEqual((1, len(b"highways")), result["main"])
             self.assertEqual((1, len(b"buffalo")), result["western"])
-            self.assertEqual((1, len(b"kentucky")), result[None])
+            self.assertEqual((1, len(b"tennessee")), result[None])
             # Manhattan's 1-degree level 1 tile reaches four regions; Philadelphia and Camden's level 2 tile, once,
             # in the pack for both regions.
             arterials = st.pack_for(1, st.regions_for_tile(regions, 1, st.tile_id_at(1, 40.75, -73.98)))
@@ -146,7 +161,7 @@ class SplitTest(unittest.TestCase):
             self.assertEqual(arterials.split("-"), listing[f"routing-{arterials}.tar"])
             with open(index) as f:
                 rows = [json.loads(line) for line in f]
-            self.assertIn([st.tile_path(2, st.tile_id_at(2, 37.5, -85.0)), 2, 8, []], rows)
+            self.assertIn([st.tile_path(2, st.tile_id_at(2, 36.0, -86.8)), 2, 9, []], rows)
             with tarfile.open(os.path.join(out, "routing-njs-pae.tar")) as tar:
                 (member,) = tar.getmembers()
                 self.assertEqual(st.tile_path(2, st.tile_id_at(2, 39.9526, -75.1636)), member.name)

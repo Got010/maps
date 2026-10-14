@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 SOURCES = {"new-york", "new-jersey", "connecticut", "pennsylvania", "maryland", "delaware", "district-of-columbia",
            "ohio", "indiana", "illinois", "michigan", "wisconsin", "minnesota", "iowa", "missouri", "north-dakota", "south-dakota",
-           "nebraska", "kansas"}  # fetch_source
+           "nebraska", "kansas", "virginia", "west-virginia", "kentucky"}  # fetch_source
 
 
 def in_box(bounds, lon, lat):
@@ -51,7 +51,7 @@ class RegionsTest(unittest.TestCase):
     def test_basemap_regions_have_a_main_road_group(self):
         for name, region in self.regions.items():
             if region["basemap"]:
-                self.assertIn(region.get("main"), ("east", "midwest"), name)
+                self.assertIn(region.get("main"), ("east", "midwest", "south"), name)
                 if region.get("planned"):
                     self.assertEqual("midwest", region["main"], name)
             else:
@@ -73,7 +73,7 @@ class RegionsTest(unittest.TestCase):
         self.assertFalse(self.regions["nys"]["basemap"])
         offered = {n: r for n, r in self.regions.items() if r["basemap"] and not r.get("planned")}
         basemaps = [r["bounds"] for r in offered.values()]
-        self.assertEqual(26, len(basemaps))
+        self.assertEqual(30, len(basemaps))
         # Every region whose search pack is cut from search-nys lies inside the nys region.
         cut = [name for name, region in offered.items() if region.get("search_from") == "nys"]
         self.assertEqual(["nyc", "li", "hudson", "capital", "western", "njn"], cut)
@@ -195,6 +195,49 @@ class RegionsTest(unittest.TestCase):
             "Cumberland, MD": (-78.7625, 39.6528, "md"),
             "Gettysburg, PA": (-77.2311, 39.8309, "paw"),
             "York, PA": (-76.7277, 39.9626, "pae"),
+            # Virginia's halves meet at 78.7 W; the east half takes in the Chesapeake and the Eastern Shore.
+            "Arlington, VA": (-77.1067, 38.8816, "vae"),
+            "Alexandria, VA": (-77.0469, 38.8048, "vae"),
+            "Leesburg, VA": (-77.5636, 39.1157, "vae"),
+            "Winchester, VA": (-78.1633, 39.1857, "vae"),
+            "Charlottesville": (-78.4767, 38.0293, "vae"),
+            "Richmond, VA": (-77.4360, 37.5407, "vae"),
+            "Norfolk": (-76.2859, 36.8508, "vae"),
+            "Virginia Beach": (-75.9780, 36.8529, "vae"),
+            "Cape Charles, VA": (-76.0158, 37.2665, "vae"),
+            "Chincoteague, VA": (-75.3810, 37.9332, "vae"),
+            "Harrisonburg": (-78.8689, 38.4496, "vaw"),
+            "Lynchburg": (-79.1422, 37.4138, "vaw"),
+            "Roanoke": (-79.9414, 37.2710, "vaw"),
+            "Danville, VA": (-79.3950, 36.5860, "vaw"),
+            "Abingdon, VA": (-81.9774, 36.7098, "vaw"),
+            "Salisbury, MD": (-75.5994, 38.3607, "md"),  # in Virginia's east box, not its area
+            "Bristol, TN": (-82.1890, 36.5680, []),
+            "Elizabeth City, NC": (-76.2510, 36.2946, []),
+            # West Virginia, between Virginia, Maryland, Pennsylvania and Ohio.
+            "Charleston, WV": (-81.6326, 38.3498, "wv"),
+            "Morgantown": (-79.9559, 39.6295, "wv"),
+            "Wheeling": (-80.7209, 40.0640, "wv"),
+            "Huntington, WV": (-82.4452, 38.4192, "wv"),
+            "Martinsburg, WV": (-77.9639, 39.4562, "wv"),
+            "Charles Town, WV": (-77.8600, 39.2890, "wv"),
+            "Steubenville, OH": (-80.6340, 40.3698, "ohs"),
+            "Marietta, OH": (-81.4548, 39.4154, "ohs"),
+            "Uniontown, PA": (-79.7164, 39.9001, "paw"),
+            # Kentucky, across the Ohio from Ohio, Indiana and Illinois.
+            "Louisville": (-85.7585, 38.2527, "ky"),
+            "Lexington, KY": (-84.5037, 38.0406, "ky"),
+            "Covington, KY": (-84.5085, 39.0837, "ky"),
+            "Paducah": (-88.6000, 37.0834, "ky"),
+            "Pikeville, KY": (-82.5188, 37.4793, "ky"),
+            "Ashland, KY": (-82.6380, 38.4784, "ky"),
+            "Cincinnati": (-84.5120, 39.1031, "ohs"),
+            "Clarksville, IN": (-85.7597, 38.2967, "in"),  # across the Ohio from Louisville (the river is Kentucky's)
+            "Newport, KY": (-84.4955, 39.0914, "ky"),
+            "Owensboro": (-87.1112, 37.7719, "ky"),
+            "Evansville": (-87.5711, 37.9716, "in"),
+            "Cairo, IL": (-89.1765, 37.0053, "ils"),
+            "Nashville, TN": (-86.7816, 36.1627, []),
         }
         for name, (lon, lat, expected) in cases.items():
             self.assertEqual(expected if isinstance(expected, list) else [expected], self.basemaps_at(lon, lat), name)

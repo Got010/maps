@@ -131,7 +131,7 @@ class MetarTest {
     @Test
     fun `one fixed request per state, the same for every phone`() {
         assertEquals(
-            listOf("NY", "NJ", "CT", "PA", "MD", "DE", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS").map { "https://aviationweather.gov/api/data/metar?ids=@$it&format=json" },
+            listOf("NY", "NJ", "CT", "PA", "MD", "DE", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS", "VA", "WV", "KY").map { "https://aviationweather.gov/api/data/metar?ids=@$it&format=json" },
             Metar.URLS,
         )
         // Every covered state's alerts are asked for; DC alone has no station of its own.

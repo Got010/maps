@@ -56,7 +56,7 @@ data class WeatherSnapshot(
 object Radar {
     /**
      * West, south, east, north: every covered state, Kansas to Long Island and Missouri's boot heel to the Northwest
-     * Angle, with a margin, the same for every phone (the east alone was -80.6, 37.8, -71.7, 45.1 until the Midwest
+     * Angle (Virginia, West Virginia and Kentucky fall inside it), with a margin, the same for every phone (the east alone was -80.6, 37.8, -71.7, 45.1 until the Midwest
      * was offered in October 2026). One picture of all of it: a phone asks for the same bytes wherever its map is.
      */
     val BOUNDS = doubleArrayOf(-104.2, 35.9, -71.6, 49.5)
