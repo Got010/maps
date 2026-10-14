@@ -163,7 +163,10 @@ object Coverage {
      * The states (and DC) a heading of the region picker ([Regions.byState]) covers: "Maryland, Delaware and DC"
      * is three.
      */
-    fun statesIn(heading: String): List<State> = STATES.filter { it.name in heading }
+    fun statesIn(heading: String): List<State> = STATES.filter { it.name in namesIn(heading) }
+
+    /** The state names a picker heading lists, whole: "Maryland, Delaware and DC" is three, "West Virginia" not Virginia's. */
+    fun namesIn(heading: String): List<String> = heading.split(", ", " and ").map { it.trim() }
 
     /**
      * The states (and DC) the phone has map regions for, in [STATES] order: Settings > Live data lists their
@@ -171,7 +174,7 @@ object Coverage {
      */
     fun statesWithRegions(regionIds: Set<String>): List<State> {
         val headings = Regions.byState.filter { (_, regions) -> regions.any { it.id in regionIds } }.map { it.first }
-        return STATES.filter { state -> headings.any { state.name in it } }
+        return STATES.filter { state -> headings.any { state.name in namesIn(it) } }
     }
 
     fun pickerNote(heading: String): String? {

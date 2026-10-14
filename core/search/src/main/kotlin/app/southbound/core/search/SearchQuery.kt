@@ -42,11 +42,13 @@ data class SearchQuery(val tokens: List<String>, val soft: List<String> = emptyL
         /** The states the packs cover (core:packs Regions), and DC. */
         private val STATE_CODES = setOf(
             "ny", "nj", "ct", "pa", "md", "de", "dc", "oh", "in", "il", "mi", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks",
+            "va", "wv", "ky",
         )
         private val STATE_NAMES = listOf(
             "new york", "new jersey", "connecticut", "pennsylvania", "maryland", "delaware", "ohio", "indiana", "illinois",
             "michigan", "wisconsin", "minnesota", "iowa", "missouri", "north dakota", "south dakota", "nebraska", "kansas",
-        ).map { it.split(' ') }
+            "virginia", "west virginia", "kentucky",
+        ).map { SearchText.normalize(it).split(' ') } // as the query's words are: "west virginia" is "w virginia"
         private val SOFT_WORDS = STATE_CODES + setOf("usa", "us")
         private val ZIP = Regex("\\d{5}")
         private val ZIP_PLUS_FOUR = Regex("\\d{4}")

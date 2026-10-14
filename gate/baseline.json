@@ -941,7 +941,7 @@
     },
     {
       "value": "https://api.weather.gov",
-      "note": "National Weather Service alerts: core/weather NwsAlerts.kt fetches /alerts/active?area=NY,NJ,CT,PA,MD,DE,DC,OH,IN,IL,MI,WI,MN,IA,MO,ND,SD,NE,KS (every active alert in every covered state, one request) and WeatherFeed reads the shapes of the /zones/ that alerts name (only zones named by those alerts, the same for every phone). No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+      "note": "National Weather Service alerts: core/weather NwsAlerts.kt fetches /alerts/active?area=NY,NJ,CT,PA,MD,DE,DC,OH,IN,IL,MI,WI,MN,IA,MO,ND,SD,NE,KS,VA,WV,KY (every active alert in every covered state, one request) and WeatherFeed reads the shapes of the /zones/ that alerts name (only zones named by those alerts, the same for every phone). No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
       "value": "https://apps.mapbox.com",
@@ -949,7 +949,7 @@
     },
     {
       "value": "https://aviationweather.gov",
-      "note": "Current weather: core/weather Metar.URLS, the NWS Aviation Weather Center's latest METAR of every reporting station in each covered state (ids=@NY, @NJ, @CT, @PA, @MD, @DE and the twelve Midwest states' @OH to @KS; one request per state, eighteen in all, the API takes one state a request), the same for every phone. Drawn as temperature badges on the weather layer and as the nearest station's conditions on a place card, worked out on the phone. No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
+      "note": "Current weather: core/weather Metar.URLS, the NWS Aviation Weather Center's latest METAR of every reporting station in each covered state (ids=@NY, @NJ, @CT, @PA, @MD, @DE the twelve Midwest states' @OH to @KS, and @VA, @WV and @KY; one request per state, twenty-one in all, the API takes one state a request), the same for every phone. Drawn as temperature badges on the weather layer and as the nearest station's conditions on a place card, worked out on the phone. No key, nothing about the user's location, search or route. Gated by NetworkFeature.WEATHER (Settings > Live data, off by default)."
     },
     {
       "value": "https://chartexp1.sha.maryland.gov",
