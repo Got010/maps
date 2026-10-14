@@ -2145,6 +2145,130 @@ def dot_south_2():
                 print(f"      {item.get('type')} | {item.get('title')} | {item.get('owner')} | {item.get('url')} | {item.get('id')}")
 
 
+def _arcgis_all(url, out_fields="*", geometry=True):
+    """Every row of an ArcGIS layer, a page (its maxRecordCount, up to 1000) at a time: [{attributes, geometry}]."""
+    rows, offset = [], 0
+    for _ in range(40):
+        q = urllib.parse.urlencode({"where": "1=1", "outFields": out_fields, "returnGeometry": str(geometry).lower(), "outSR": "4326",
+                                    "resultOffset": offset, "resultRecordCount": 1000, "f": "json"})
+        st_, _, _, body = get(f"{url}/query?{q}", limit=40_000_000)
+        d = _json(body)
+        page = (d or {}).get("features") if isinstance(d, dict) else None
+        if not page:
+            if st_ != 200 or not isinstance(d, dict):
+                print("   page failed:", st_, body[:300])
+            break
+        rows += page
+        if not d.get("exceededTransferLimit"):
+            break
+        offset += len(page)
+    return rows
+
+
+def _tally(rows, key, n=25):
+    counts = {}
+    for r in rows:
+        v = (r.get("attributes") or {}).get(key)
+        counts[str(v)] = counts.get(str(v), 0) + 1
+    return sorted(counts.items(), key=lambda kv: -kv[1])[:n]
+
+
+def dot_south_3():
+    """Third round: Kentucky's layers measured whole, Virginia's lazy scripts, West Virginia's map iframe and lists."""
+    import time
+    now = time.time() * 1000
+    head("Kentucky: KYTC's incidents (24 hours), whole")
+    base = "https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services"
+    rows = _arcgis_all(f"{base}/kytc_incidents_reports_24hr/FeatureServer/0")
+    print("   rows", len(rows))
+    for key in ("KYTC_Type", "Source", "CFR_Type", "Source_Type", "Type", "Route"):
+        print(f"   {key}:", _tally(rows, key))
+    ended = sum(1 for r in rows if ((r.get("attributes") or {}).get("EndDate") or 0) and r["attributes"]["EndDate"] < now)
+    print(f"   EndDate before now: {ended}; BeginDate after now: {sum(1 for r in rows if (r.get('attributes') or {}).get('BeginDate', 0) > now)}")
+    for kind in ("Crash", "Incident", "Closure", "Road Closed", "Waze"):
+        for r in rows:
+            a = r.get("attributes") or {}
+            if kind.lower() in json.dumps(a).lower():
+                print(f"   a {kind!r} row:", json.dumps(a)[:900])
+                break
+    for svc in ("KYTC_Road_Closures", "dmsSigns_2020"):
+        head(f"Kentucky: {svc}")
+        st_, d = try_json(f"{base}/{svc}/FeatureServer?f=json", sample=300)
+        layers = [l.get("id") for l in (d or {}).get("layers", [])] if isinstance(d, dict) else []
+        print("   layers", [(l.get("id"), l.get("name"), l.get("geometryType")) for l in (d or {}).get("layers", [])] if isinstance(d, dict) else None)
+        for lid in layers[:4]:
+            _arcgis_layer(f"{base}/{svc}/FeatureServer/{lid}", label=f"{svc}/{lid}", n=4)
+            every = _arcgis_all(f"{base}/{svc}/FeatureServer/{lid}", geometry=False)
+            print(f"   {svc}/{lid} whole: {len(every)} rows, {len(json.dumps(every))} bytes as JSON")
+    head("Kentucky: KYTC's cameras, whole")
+    cams = _arcgis_all("https://services2.arcgis.com/CcI36Pduqd0OR4W9/ArcGIS/rest/services/trafficCamerasCur_Prd/FeatureServer/0", geometry=False)
+    print("   cameras", len(cams))
+    hosts = {}
+    for c in cams:
+        u = (c.get("attributes") or {}).get("snapshot") or ""
+        m = re.match(r"(https?)://([^/]+)", u)
+        k = f"{m.group(1)}://{m.group(2)}" if m else "(none)"
+        hosts[k] = hosts.get(k, 0) + 1
+    print("   snapshot hosts:", sorted(hosts.items(), key=lambda kv: -kv[1]))
+    for key in ("state", "status", "district", "highway"):
+        print(f"   {key}:", _tally(cams, key, 12))
+    ky_cams = [c for c in cams if "Indiana" not in ((c.get("attributes") or {}).get("description") or "")]
+    print("   not marked Indiana:", len(ky_cams), "sample:", [json.dumps(c["attributes"])[:400] for c in ky_cams[:3]])
+    for u in [c["attributes"]["snapshot"] for c in cams if (c.get("attributes") or {}).get("snapshot")][:400:80]:
+        st_, _, h, b = get(u.replace("http://", "https://", 1), limit=2_000_000)
+        print(f"   https still {u[:90]}: status {st_} type {h.get('Content-Type')} bytes {len(b)}")
+    head("Kentucky: KYTC's WZDx feed")
+    st_, d = try_json("https://storage.googleapis.com/kytc-its-2020-openrecords/public/feeds/WZDx/kytc_wzdx_v4.1.geojson", sample=1800)
+    if isinstance(d, dict):
+        print("   feed_info:", json.dumps(d.get("feed_info"))[:600], "features", len(d.get("features") or []))
+
+    head("Virginia: 511.vdot.virginia.gov's lazy chunks")
+    try:
+        status, final, page = _site_marks("https://511.vdot.virginia.gov")
+        mains = [urllib.parse.urljoin(final, s) for s in re.findall(r'<script[^>]+src="([^"]+)"', page) if "main-" in s]
+        seen = set()
+        queue = list(mains)
+        while queue and len(seen) < 60:
+            src = queue.pop(0)
+            if src in seen:
+                continue
+            seen.add(src)
+            _, _, _, js = get(src, headers=BROWSER, limit=12_000_000)
+            for chunk in re.findall(r"""["'`]\.?/?(chunk-[A-Z0-9]+\.js)["'`]""", js):
+                queue.append(urllib.parse.urljoin(final, chunk))
+            found = _strings(js, r"services/|/511|geojson|ttrip|smarterRoads|iteriscloud|cameras|/events|/layers|dms|signs|NODE_ENDPOINT|\.json", 60)
+            if found:
+                print(f"   {src[-26:]} ({len(js)} bytes):", found)
+            for m in re.finditer(r"NODE_ENDPOINT[^;]{0,400}", js):
+                print("   NODE_ENDPOINT use:", m.group(0)[:400])
+                break
+        print("   scripts read:", len(seen))
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+    for path in ("/services/511/layers", "/services/511/cameras", "/services/511/events", "/services/511/map/layers", "/services/511/api/layers"):
+        st_, _, h, b = get("https://511.vdot.virginia.gov" + path, headers=BROWSER, limit=2_000_000)
+        print(f"   {path}: status {st_} type {h.get('Content-Type')} bytes {len(b)}:", b[:300].replace("\n", " "))
+
+    head("West Virginia: the map iframe and the list pages")
+    try:
+        url = "https://www.wv511.org/webmapi.aspx?VIEWLEVEL=XD&VIEWLEVEL2=&VIEWTYPE=ICDS&VIEWTYPE2=&VIEWPTCONLY=0&LAT=&LNG=&ZOOM=&GV=&WEBMAPKEY="
+        st_, final, h, page = get(url, headers=BROWSER, limit=4_000_000)
+        print(f"   webmapi: status {st_} bytes {len(page)}")
+        print("   service strings:", _strings(page, r"asmx|ashx|svc|json|kml|xml|Handler|Service|\.aspx|/api|camera|incident|event|dms|sign|Get[A-Z]", 120))
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:20]:
+            src = urllib.parse.urljoin(final, html.unescape(src))
+            if any(x in src for x in ("jquery", "jqyery", "google", "gtag", "awstats")):
+                continue
+            _, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+            print(f"   {src[-70:]} ({len(js)} bytes):", _strings(js, r"asmx|ashx|svc|json|kml|xml|Handler|\.aspx|/api|Get[A-Z][a-z]", 120))
+        for path in ("/CameraListing.aspx", "/dms.aspx", "/current_alerts.aspx", "/districtRoadwork.aspx", "/emergencyClosures.aspx"):
+            st_, _, h, b = get("https://www.wv511.org" + path, headers=BROWSER, limit=4_000_000)
+            print(f"   {path}: status {st_} bytes {len(b)}; images {len(re.findall(r'<img', b))}; text: {text_of(b)[:1500]!r}")
+            print("      links/images:", sorted(set(re.findall(r'(?:src|href)="([^"]*(?:cam|Cam|jpg|dms|DMS|aspx\?)[^"]*)"', b)))[:25])
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2156,7 +2280,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
             "dot-midwest-10": dot_midwest_10,
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
-            "dot-south-2": dot_south_2}
+            "dot-south-2": dot_south_2, "dot-south-3": dot_south_3}
 
 
 class Timeout(Exception):
