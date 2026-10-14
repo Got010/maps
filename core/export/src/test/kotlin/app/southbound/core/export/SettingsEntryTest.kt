@@ -22,14 +22,23 @@ class SettingsEntryTest {
     /** The driving setting schema 7 added, as [Samples.settings] writes it. */
     private val NEWER_7 = ""","search_at_bottom":false"""
 
-    /** What schemas 1 to 6 wrote for [s]: today's text without schema 7's field. */
-    private fun upTo6(s: AppSettings): String = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_7, "")
+    /** The network toggles schema 8 added, last in the group after schema 6's. */
+    private val NEWER_8 = ""","TRAFFIC_511VA":true,"TRAFFIC_WV511":true,"TRAFFIC_KYTC":true"""
+
+    /** What schema 7 wrote for [s]: today's text without schema 8's toggles. */
+    private fun upTo7(s: AppSettings): String = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_8, "")
+
+    /** What schemas 1 to 6 wrote for [s]: schema 7's text without its field. */
+    private fun upTo6(s: AppSettings): String = upTo7(s).replace(NEWER_7, "")
+
+    /** The toggles schema 8 added. */
+    private val SINCE_8 = listOf(NetworkFeature.TRAFFIC_511VA, NetworkFeature.TRAFFIC_WV511, NetworkFeature.TRAFFIC_KYTC)
 
     private val SINCE_4 = listOf(
         NetworkFeature.TRAFFIC_511PA, NetworkFeature.TRAFFIC_CTROADS, NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT,
         NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
         NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO,
-    )
+    ) + SINCE_8
 
     /** The toggles newer than schema 3, plus [also], all off. */
     private fun off(vararg also: NetworkFeature): Map<NetworkFeature, Boolean> = (SINCE_4 + also).associateWith { false }
@@ -64,7 +73,7 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(72, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(75, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
@@ -176,11 +185,32 @@ class SettingsEntryTest {
         // What schema 6 wrote: the driving group with night_by_sunset alone.
         val six = upTo6(s)
         assertTrue("search_at_bottom" !in six && "TRAFFIC_OHGO" in six && "night_by_sunset" in six)
-        assertEquals(s.copy(searchAtBottom = true), SettingsEntry.decode(six.toByteArray(), schema = 6))
+        assertEquals(s.copy(searchAtBottom = true, network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(six.toByteArray(), schema = 6))
         assertEquals(71, SettingsEntry.count(s, 6))
         assertEquals(72, SettingsEntry.count(s, 7))
         // Schema 7 requires it, and schema 6 refuses it.
         for ((text, schema) in listOf(six to 7L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 6L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
+    }
+
+    @Test
+    fun `a schema 7 bundle reads with Virginia, West Virginia and Kentucky off`() {
+        val s = Samples.settings()
+        assertTrue(SINCE_8.all { s.network.getValue(it) })
+        // What schema 7 wrote: the network group without the three toggles schema 8 added.
+        val seven = upTo7(s)
+        assertTrue("TRAFFIC_511VA" !in seven && "TRAFFIC_WV511" !in seven && "TRAFFIC_KYTC" !in seven && "TRAFFIC_OHGO" in seven && "search_at_bottom" in seven)
+        assertEquals(s.copy(network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(seven.toByteArray(), schema = 7))
+        assertEquals(72, SettingsEntry.count(s, 7))
+        assertEquals(75, SettingsEntry.count(s, 8))
+        // Schema 8 requires them, and schema 7 refuses them.
+        for ((text, schema) in listOf(seven to 8L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 7L)) {
             try {
                 SettingsEntry.decode(text.toByteArray(), schema)
                 fail("accepted schema $schema")
