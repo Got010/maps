@@ -20,6 +20,7 @@ import os
 import re
 import signal
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2553,6 +2554,131 @@ def dot_south_7():
             print(f"   {ident}: status {st_}", b[:200])
 
 
+def dot_south_8():
+    """Eighth round: every request the three states' readers make, as the phone makes it, WV511's stream page, and
+    the build's camera fetchers for the three."""
+    java_accept = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+    app = {"User-Agent": "Southbound", "Accept": java_accept}
+
+    def show(label, url, n=160):
+        status, _, h, body = get(url, headers=app, limit=40_000_000)
+        print(f"   {label}: status {status} type {h.get('Content-Type')} bytes {len(body)}:", body[:n].replace("\n", " "))
+        return status, h, body
+
+    head("The phone's own requests: Virginia")
+    va = "https://511.vdot.virginia.gov/services/511/map/layers/map"
+    for ident in ("incidents", "hpIncidents", "acon", "weatherClosures", "otherWeather", "sEvents", "sActivity", "dms", "cams"):
+        status, h, body = show(ident, f"{va}/{ident}", 120)
+        d = _json(body)
+        feats = d.get("features") if isinstance(d, dict) else None
+        if isinstance(feats, list):
+            icons = {}
+            for f in feats:
+                k = str(((f or {}).get("properties") or {}).get("icon"))
+                icons[k] = icons.get(k, 0) + 1
+            print(f"      {len(feats)} features, icons {sorted(icons.items(), key=lambda kv: -kv[1])[:8]}")
+            if ident == "cams":
+                active = [f for f in feats if ((f or {}).get("properties") or {}).get("active")]
+                hosts = {}
+                for f in feats:
+                    u = ((f or {}).get("properties") or {}).get("image_url") or ""
+                    hh = urllib.parse.urlsplit(u).netloc
+                    hosts[hh] = hosts.get(hh, 0) + 1
+                print(f"      active {len(active)}; still hosts {hosts}")
+                if active:
+                    p = active[0]["properties"]
+                    show("a still", p.get("image_url"), 8)
+                    show("a stream", p.get("https_url"), 300)
+            if ident in ("acon", "sEvents"):
+                now = time.time()
+                live = [f for f in feats if (((f or {}).get("properties") or {}).get("start") or 0) <= now < (((f or {}).get("properties") or {}).get("end") or 1e12)]
+                print(f"      in their window now {len(live)} of {len(feats)}")
+            if ident == "dms":
+                blank = [f for f in feats if not str(((f or {}).get("properties") or {}).get("text") or "").strip()]
+                print(f"      blank {len(blank)}; texts with a page mark:",
+                      [((f.get("properties") or {}).get("text")) for f in feats if re.search(r"\[|\||/", str((f.get("properties") or {}).get("text")))][:6])
+
+    head("The phone's own requests: West Virginia")
+    wv = "https://www.wv511.org/wsvc/gmap.asmx"
+    for label, url in (("incidents", f"{wv}/buildEventsKMLi_Filtered?CategoryIDs=&SeverityIDs=1%2C2%2C3%2C4%2C&is511Only=0"),
+                       ("roadwork", f"{wv}/buildEventsKMLc"),
+                       ("signs", f"{wv}/buildDMSKML?isActive=1"),
+                       ("cameras", f"{wv}/buildCamerasJSONjs")):
+        status, h, body = show(label, url, 100)
+        marks = re.findall(r"(?s)<Placemark.*?</Placemark>", body)
+        styles = {}
+        for m in marks:
+            k = (re.findall(r"<styleUrl>#?([^<]+)</styleUrl>", m) or ["?"])[0]
+            styles[k] = styles.get(k, 0) + 1
+        if marks:
+            print(f"      {len(marks)} placemarks, styles {sorted(styles.items(), key=lambda kv: -kv[1])[:12]}")
+        if label == "signs":
+            for m in marks[:6]:
+                print("      sign:", re.sub(r"\s+", " ", m)[:700])
+            if marks:
+                start = body.find("<Placemark")
+                _fixture("wv-signs-active", re.sub(r"\s*\n\s*", " ", body[:start] + "".join(marks[:5]) + "</Document></kml>"))
+        if label == "incidents" and marks:
+            start = body.find("<Placemark")
+            _fixture("wv-incidents", re.sub(r"\s*\n\s*", " ", body[:start] + "".join(marks[:8]) + "</Document></kml>"))
+
+    head("West Virginia: a camera's stream page")
+    ref = {**BROWSER, "Referer": "https://www.wv511.org/"}
+    for cam in ("CAM117", "CAM001"):
+        st_, _, h, page = get(f"https://www.wv511.org/flowplayeri.aspx?CAMID={cam}", headers=ref, limit=4_000_000)
+        print(f"   flowplayeri {cam}: status {st_} bytes {len(page)}")
+        found = sorted(set(re.findall(r"""(?:https?:)?//[^\s"'<>]+|[^\s"'<>]*\.m3u8[^\s"'<>]*""", page)))
+        print("   urls:", found[:60])
+        for needle in ("m3u8", "rtplive", "wowza", "stream", "src", "clip", "playlist"):
+            for ctx in _context(page, needle, 200, 300, 3) or []:
+                print(f"   [{needle}]", ctx)
+        streams = [u for u in found if "m3u8" in u]
+        for u in streams[:2]:
+            u = "https:" + u if u.startswith("//") else u
+            for hdr, label in ((app, "app"), (ref, "browser")):
+                status, _, hh, body = get(u, headers=hdr, limit=400_000)
+                print(f"   {label} {u}: status {status} type {hh.get('Content-Type')} bytes {len(body)}:", body[:300].replace("\n", " | "))
+        if streams:
+            break
+
+    head("The phone's own requests: Kentucky")
+    base = "https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services"
+    q = "query?where=1%3D1&outFields=*&returnGeometry=false&resultRecordCount=2000&f=json"
+    for label, url in (("incidents", f"{base}/kytc_incidents_reports_24hr/FeatureServer/0/{q}"),
+                       ("closures", f"{base}/KYTC_Road_Closures/FeatureServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&resultRecordCount=2000&f=json"),
+                       ("cameras", f"{base}/trafficCamerasCur_Prd/FeatureServer/0/{q}")):
+        status, h, body = show(label, url, 100)
+        d = _json(body)
+        if isinstance(d, dict):
+            feats = d.get("features") or []
+            print(f"      {len(feats)} features, exceededTransferLimit {d.get('exceededTransferLimit')}")
+            if label == "cameras":
+                hosts = {}
+                for f in feats:
+                    a = f.get("attributes") or {}
+                    if a.get("state") == "Kentucky":
+                        hh = urllib.parse.urlsplit(a.get("snapshot") or "").netloc + " " + str(a.get("status"))
+                        hosts[hh] = hosts.get(hh, 0) + 1
+                print("      Kentucky's stills by host and status:", hosts)
+                ky = [f for f in feats if (f.get("attributes") or {}).get("state") == "Kentucky"]
+                if ky:
+                    show("a still", ky[0]["attributes"]["snapshot"].replace("http://", "https://"), 8)
+
+    head("The build's camera lists, the three states")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline", "search"))
+    import dot_cameras
+    for state in ("VA", "WV", "KY"):
+        fetch = dot_cameras.FETCHERS.get(state)
+        if fetch is None:
+            print(f"   {state}: no fetcher ({dot_cameras.NO_LIST.get(state)})")
+            continue
+        try:
+            rows = fetch()
+            print(f"   {state}: {len(rows)} cameras; first {rows[:2]}")
+        except Exception as e:  # noqa: BLE001 - a probe reports every failure
+            print(f"   {state}: FAILED {type(e).__name__}: {str(e)[:200]}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2566,7 +2692,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
             "dot-south-4": dot_south_4, "dot-south-5": dot_south_5,
-            "dot-south-6": dot_south_6, "dot-south-7": dot_south_7}
+            "dot-south-6": dot_south_6, "dot-south-7": dot_south_7,
+            "dot-south-8": dot_south_8}
 
 
 class Timeout(Exception):
