@@ -2697,6 +2697,24 @@ def dot_south_9():
     print("   hosts:", hosts)
 
 
+def dot_south_10():
+    """Tenth round: WV511's player page as the phone asks for it (no Referer), and the stream link in it."""
+    app = {"User-Agent": "Southbound", "Accept": "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"}
+    head("West Virginia: the player page, the phone's request")
+    for cam in ("CAM117", "CAM049", "CAM069"):
+        st_, final, h, page = get(f"https://www.wv511.org/flowplayeri.aspx?CAMID={cam}", headers=app, limit=1_000_000)
+        streams = sorted(set(re.findall(r"https://[^\s'\"<>]+?\.m3u8", page)))
+        print(f"   {cam}: status {st_} final {final} type {h.get('Content-Type')} bytes {len(page)} streams {streams}")
+        for u in streams[:1]:
+            st2, _, h2, pl = get(u, headers=app, limit=200_000)
+            print(f"      {u}: status {st2} type {h2.get('Content-Type')}:", pl[:200].replace("\n", " | "))
+            links = [l for l in pl.splitlines() if l and not l.startswith("#")]
+            if links:
+                media = urllib.parse.urljoin(u, links[0])
+                st3, _, _, ml = get(media, headers=app, limit=200_000)
+                print(f"      {media}: status {st3}:", ml[:300].replace("\n", " | "))
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2711,7 +2729,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
             "dot-south-4": dot_south_4, "dot-south-5": dot_south_5,
             "dot-south-6": dot_south_6, "dot-south-7": dot_south_7,
-            "dot-south-8": dot_south_8, "dot-south-9": dot_south_9}
+            "dot-south-8": dot_south_8, "dot-south-9": dot_south_9,
+            "dot-south-10": dot_south_10}
 
 
 class Timeout(Exception):
