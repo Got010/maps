@@ -13,9 +13,10 @@ level and tile id (2/000/756/425.gph):
 
 The main levels (level 0 by default: the roads a long trip runs on) go by the
 "main" group of the regions each tile covers (regions.json: "east" for New York
-and its neighbours, "midwest"): routing-main.tar holds the tiles covering east
-regions alone, routing-main-midwest.tar the Midwest's, routing-main-east-midwest.tar
-the ones on the seam, and each is listed for every region of its groups, so a
+and its neighbours, "midwest", "south" for Virginia, West Virginia and Kentucky):
+routing-main.tar holds the tiles covering east regions alone, routing-main-midwest.tar
+the Midwest's, routing-main-east-midwest.tar the ones on that seam (and so on for
+"south" and its seams), and each is listed for every region of its groups, so a
 phone has the main roads of its own part of the country, and of any region it
 adds for a trip, with nothing in between missing: a trip from New York to
 Chicago runs on the east pack, the seam pack and the Midwest pack, all three on
@@ -33,8 +34,8 @@ pack named by them: routing-hudson.tar holds the tiles only the Hudson Valley
 covers, routing-hudson-njn-nyc.tar those on the edge of three regions. A phone
 takes every pack naming one of its regions, so a tile on a boundary is
 downloaded once, however many of the phone's regions it touches. Tiles no
-region covers (Ohio, Virginia: the extracts reach a little past the state
-lines) are left out and counted.
+region covers (Tennessee, North Carolina: the extracts reach a little past the
+state lines) are left out and counted.
 
 routing-packs.json, next to the packs, lists each pack with the regions it
 serves (the main packs: every region of their groups); the release manifest

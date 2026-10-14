@@ -46,6 +46,7 @@ STATE_OF_SOURCE = {
     "delaware": "DE", "district-of-columbia": "DC", "ohio": "OH", "indiana": "IN", "illinois": "IL",
     "michigan": "MI", "wisconsin": "WI", "minnesota": "MN", "iowa": "IA", "missouri": "MO",
     "north-dakota": "ND", "south-dakota": "SD", "nebraska": "NE", "kansas": "KS",
+    "virginia": "VA", "west-virginia": "WV", "kentucky": "KY",
 }
 
 

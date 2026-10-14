@@ -35,6 +35,12 @@ CHOICES = [
     ("Southern Michigan + Ohio + Indiana", ["mis", "ohn", "ohs", "in"]),
     ("NYC + Chicago (a trip there)", ["nyc", "iln"]),
     ("The Midwest", ["ohn", "ohs", "in", "iln", "ils", "mis", "miu", "wi", "mn", "ia", "mo", "nd", "sd", "ne", "ks"]),
+    ("Northern Virginia, Richmond and Hampton Roads", ["vae"]),
+    ("Virginia", ["vae", "vaw"]),
+    ("West Virginia", ["wv"]),
+    ("Kentucky", ["ky"]),
+    ("Maryland + Northern Virginia (a DC phone)", ["md", "vae"]),
+    ("Virginia, West Virginia and Kentucky", ["vae", "vaw", "wv", "ky"]),
 ]
 SCHEMES = ["per region", "one copy", "one copy, L0"]
 

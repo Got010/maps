@@ -5,12 +5,13 @@
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
 
-REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks nys
+REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks vae vaw wv ky nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
-# The regions beyond New York: OSM-only search, routing from the split packs (southbound-v2.json). The Midwest's
-# (MIDWEST_REGIONS) are planned in regions.json: releases ship their packs, the app offers them from its next version.
+# The regions beyond New York: OSM-only search, routing from the split packs (southbound-v2.json): the Midwest's
+# (MIDWEST_REGIONS), and Virginia's halves, West Virginia and Kentucky (SOUTH_REGIONS, main-road group "south").
 MIDWEST_REGIONS := ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks
-STATE_REGIONS := njs ct pae paw md $(MIDWEST_REGIONS)
+SOUTH_REGIONS := vae vaw wv ky
+STATE_REGIONS := njs ct pae paw md $(MIDWEST_REGIONS) $(SOUTH_REGIONS)
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
@@ -18,7 +19,7 @@ STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys tra
 	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
-.PHONY: nyc state states midwest routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
+.PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
 
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
@@ -31,6 +32,9 @@ states: $(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS
 
 ## midwest: the Midwest's regions' basemaps and search packs alone (their routing is in routing-split)
 midwest: $(addprefix tiles-,$(MIDWEST_REGIONS)) $(addprefix search-,$(MIDWEST_REGIONS))
+
+## south: Virginia's, West Virginia's and Kentucky's regions' basemaps and search packs alone (their routing is in routing-split)
+south: $(addprefix tiles-,$(SOUTH_REGIONS)) $(addprefix search-,$(SOUTH_REGIONS))
 
 ## routing-split: one graph for every state, cut into routing-main.tar and routing-<region>.tar (routing/split.sh)
 routing-split:
