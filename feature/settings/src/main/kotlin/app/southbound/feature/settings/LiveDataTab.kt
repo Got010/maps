@@ -68,6 +68,9 @@ private val TRAFFIC_FEEDS = listOf(
     TrafficFeed("SD", NetworkFeature.TRAFFIC_SD511, R.string.live_sd511, R.string.live_sd511_note),
     TrafficFeed("NE", NetworkFeature.TRAFFIC_511NE, R.string.live_511ne, R.string.live_511ne_note),
     TrafficFeed("KS", NetworkFeature.TRAFFIC_KANDRIVE, R.string.live_kandrive, R.string.live_kandrive_note),
+    TrafficFeed("VA", NetworkFeature.TRAFFIC_511VA, R.string.live_511va, R.string.live_511va_note),
+    TrafficFeed("WV", NetworkFeature.TRAFFIC_WV511, R.string.live_wv511, R.string.live_wv511_note),
+    TrafficFeed("KY", NetworkFeature.TRAFFIC_KYTC, R.string.live_kytc, R.string.live_kytc_note),
 )
 
 /**
