@@ -2269,6 +2269,83 @@ def dot_south_3():
         print("   failed:", repr(e)[:300])
 
 
+def _context(js, needle, before=250, after=450, limit=4):
+    """Up to [limit] snippets of a script around [needle]."""
+    out, start = [], 0
+    while len(out) < limit:
+        i = js.find(needle, start)
+        if i < 0:
+            break
+        out.append(js[max(0, i - before):i + after].replace("\n", " "))
+        start = i + len(needle)
+    return out
+
+
+def dot_south_4():
+    """Fourth round: WV511's web services, Virginia's layer URLs from their code, Kentucky's freshness."""
+    import time
+    now = time.time() * 1000
+    head("West Virginia: WV511's gmap.asmx services")
+    wv = "https://www.wv511.org/wsvc/gmap.asmx"
+    for path in ("buildCamerasJSONjs", "buildEventsKMLc", "buildEventsKMLs", "buildPlannedEventsActiveKML", "buildDMSKML?isActive=1",
+                 "buildDMSKML?isActive=0", "buildRoutePolysClosedKML", "GetEventGeometriesGeoJSON?EventClassType=", "buildEventsKMLi_Filtered?CategoryIDs="):
+        st_, _, h, b = get(f"{wv}/{path}", headers={**BROWSER, "Referer": "https://www.wv511.org/"}, limit=20_000_000)
+        print(f"--- {path}: status {st_} type {h.get('Content-Type')} bytes {len(b)}")
+        print("   head:", b[:1800].replace("\n", " "))
+        if "<Placemark" in b:
+            marks = re.findall(r"(?s)<Placemark.*?</Placemark>", b)
+            print(f"   placemarks {len(marks)}; second: {marks[1][:1500] if len(marks) > 1 else ''}".replace("\n", " "))
+            styles = {}
+            for m in marks:
+                s = (re.findall(r"<styleUrl>([^<]*)</styleUrl>", m) or ["?"])[0]
+                styles[s] = styles.get(s, 0) + 1
+            print("   styles:", sorted(styles.items(), key=lambda kv: -kv[1])[:20])
+    st_, _, _, page = get("https://www.wv511.org/CameraListing.aspx", headers=BROWSER, limit=4_000_000)
+    _, _, _, js = get("https://www.wv511.org/js/CameraListing.min.js", headers=BROWSER, limit=4_000_000)
+    print("   CameraListing.min.js strings:", _strings(js, r"asmx|ashx|json|jpg|camera|Cam|http|\.aspx", 60))
+
+    head("Virginia: how its map builds its layer URLs")
+    try:
+        status, final, page = _site_marks("https://511.vdot.virginia.gov")
+        mains = [urllib.parse.urljoin(final, s) for s in re.findall(r'<script[^>]+src="([^"]+)"', page) if "main-" in s]
+        seen, queue = set(), list(mains)
+        while queue and len(seen) < 70:
+            src = queue.pop(0)
+            if src in seen:
+                continue
+            seen.add(src)
+            _, _, _, js = get(src, headers=BROWSER, limit=12_000_000)
+            for chunk in re.findall(r"""["'`]\.?/?(chunk-[A-Z0-9]+\.js)["'`]""", js):
+                queue.append(urllib.parse.urljoin(final, chunk))
+            for needle in ("layers/map", "getCamerasArray", "CAMERA_MAPPING", "/layers/road", "layerMap=", "511_events", "travelSigns:", "/api/incidents"):
+                for snip in _context(js, needle, limit=2):
+                    print(f"   {src[-22:]} [{needle}]: {snip}")
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+    va = "https://511.vdot.virginia.gov/services/511/map"
+    for path in ("layers/map", "layers/map/", "layers/map/incidents", "layers/map/construction", "layers/map/511_events", "layers/map/dms",
+                 "layers/map/cameras", "layers/map/camera", "layers/map/travelSigns", "cameras", "camerasArray", "cameras/array",
+                 "layers/road/roadCond", "layers/rwis/", "layers/transit/"):
+        st_, _, h, b = get(f"{va}/{path}", headers=BROWSER, limit=30_000_000)
+        print(f"--- {path}: status {st_} type {h.get('Content-Type')} bytes {len(b)}:", b[:700].replace("\n", " "))
+
+    head("Kentucky: freshness of the sign layer, closures and incidents in effect")
+    base = "https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services"
+    signs = _arcgis_all(f"{base}/dmsSigns_2020/FeatureServer/0", geometry=False)
+    ts = sorted(((s.get("attributes") or {}).get("updateTS") or 0) for s in signs)
+    ex = sorted(((s.get("attributes") or {}).get("kytcDateExistsUTC") or 0) for s in signs)
+    print(f"   signs {len(signs)}; updateTS newest {ts[-1] if ts else None} ({(now - ts[-1]) / 3.6e6 if ts else 0:.0f} h ago);"
+          f" kytcDateExistsUTC newest {ex[-1] if ex else None}; status {_tally(signs, 'dmsStatus')}")
+    closures = _arcgis_all(f"{base}/KYTC_Road_Closures/FeatureServer/0", geometry=False)
+    live = [c for c in closures if ((c.get("attributes") or {}).get("endtime") or 0) > now and ((c.get("attributes") or {}).get("starttime") or 0) <= now]
+    print(f"   closures {len(closures)}, in effect now {len(live)}; types {_tally(closures, 'closure_type')}; directions {_tally(closures, 'direction')}")
+    inc = _arcgis_all(f"{base}/kytc_incidents_reports_24hr/FeatureServer/0", geometry=False)
+    ends = sorted(((r.get("attributes") or {}).get("EndDate") or 0) for r in inc)
+    newest = ends[-1] if ends else 0
+    recent = [r for r in inc if newest - ((r.get("attributes") or {}).get("EndDate") or 0) < 20 * 60_000]
+    print(f"   incidents {len(inc)}; newest EndDate {newest} ({(now - newest) / 60000:.0f} min ago); within 20 min of it {len(recent)}: {_tally(recent, 'KYTC_Type')}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2280,7 +2357,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
             "dot-midwest-10": dot_midwest_10,
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
-            "dot-south-2": dot_south_2, "dot-south-3": dot_south_3}
+            "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
+            "dot-south-4": dot_south_4}
 
 
 class Timeout(Exception):
