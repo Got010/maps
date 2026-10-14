@@ -87,7 +87,8 @@ fetch_source() {
   local name="$1" url
   case "$name" in
     new-york | new-jersey | connecticut | pennsylvania | maryland | delaware | district-of-columbia | \
-      ohio | indiana | illinois | michigan | wisconsin | minnesota | iowa | missouri | north-dakota | south-dakota | nebraska | kansas)
+      ohio | indiana | illinois | michigan | wisconsin | minnesota | iowa | missouri | north-dakota | south-dakota | nebraska | kansas | \
+      virginia | west-virginia | kentucky)
       url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
     *) echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2; exit 2 ;;
   esac

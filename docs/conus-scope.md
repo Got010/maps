@@ -36,6 +36,19 @@ spike before committing to them; the New York numbers are measured (release v0.1
   east's (119 MB), `routing-main-midwest.tar` and a seam pack join it on a phone with a Midwest region or a trip
   there, instead of one 301 MB pack for every phone. Then the app offers the regions, weather adds the states
   and widens the radar and forecast grid, and each state's DOT feed is probed and read as the others were.
+- **Virginia, West Virginia and Kentucky** (owner, October 2026: "Add in virginia, west virginia, and a surrounding
+  state of both. Full features as every other state"; Kentucky is the state bordering both that wasn't covered,
+  Maryland being the other). Four regions, outlines from the same Natural Earth file at the same simplification:
+  Virginia in two at 78.7° W (`vae`, Northern Virginia, Richmond and Hampton Roads with the Eastern Shore, its
+  outline bridging the Chesapeake; `vaw`, Roanoke, Lynchburg and Southwest Virginia), since Virginia is about
+  Ohio's size in OSM; `wv` and `ky` whole, about Indiana's size or less. Their main roads are a third group,
+  `south`: its own pack and seam packs with the east's (Washington, Richmond) and the Midwest's (Chicago's,
+  Columbus' and Louisville's 4-degree tiles), so an eastern phone downloads only the seams it already needed plus
+  the Virginia and West Virginia roads inside them. Unlike the Midwest, they skip the `planned` stage: the states
+  test build on the pull request builds and routes them first, and one release ships their packs and the app that
+  offers them, so the pipeline change costs one data rebuild. Their DOT feeds came in the same pull request: 511
+  Virginia's map layers, WV511's KML services and camera script (each camera's video named only by its player
+  page), and KYTC's ArcGIS layers; Kentucky's message signs alone are missing (its sign layer is stale).
 
 ## Where New York stands (the baseline to scale)
 

@@ -49,6 +49,7 @@ import app.southbound.core.network.NetworkGate
 import app.southbound.core.traffic.Hls
 import app.southbound.core.traffic.MiDrive
 import app.southbound.core.traffic.TrafficCamera
+import app.southbound.core.traffic.WestVirginia
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,7 +73,7 @@ private sealed interface StillState {
  * still. The still is fetched through [gate] under its 511's toggle (511NY, 511PA,
  * CTroads, CHART, DelDOT) from the camera's own image link (which names the camera,
  * never the viewer) when the card opens and on Refresh. A camera that only streams
- * video (CHART's, DelDOT's) shows a frame of its newest few seconds instead
+ * video (CHART's, DelDOT's, WV511's) shows a frame of its newest few seconds instead
  * ([videoFrame]). An offline camera says so and fetches nothing.
  */
 @Composable
@@ -81,11 +82,12 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
     var reloads by remember(camera.id) { mutableIntStateOf(0) }
     var state by remember(camera.id) { mutableStateOf<StillState>(StillState.Loading) }
     var busy by remember(camera.id) { mutableStateOf(false) }
-    LaunchedEffect(camera.id, camera.imageUrl, camera.videoUrl, camera.stillVia, reloads) {
+    LaunchedEffect(camera.id, camera.imageUrl, camera.videoUrl, camera.stillVia, camera.videoVia, reloads) {
         val url = camera.imageUrl?.takeIf { it.isNotBlank() }
         val video = camera.videoUrl?.takeIf { it.isNotBlank() }
         val via = camera.stillVia?.takeIf { it.isNotBlank() }
-        if (!camera.hasImage || (url == null && video == null && via == null)) return@LaunchedEffect
+        val videoVia = camera.videoVia?.takeIf { it.isNotBlank() }
+        if (!camera.hasImage || (url == null && video == null && via == null && videoVia == null)) return@LaunchedEffect
         // Keep the old picture on screen while a refresh loads; only the first load shows a spinner.
         if (state !is StillState.Shown) state = StillState.Loading
         busy = true
@@ -94,7 +96,9 @@ internal fun TrafficCameraCard(camera: TrafficCamera, gate: NetworkGate, onClose
                 // Mi Drive's list names no still: its camera's detail page does (the same toggle, the same rules).
                 val still = url ?: via?.let { MiDrive.stillOf(gate.get(camera.source.feature, it).decodeToString()) }
                 if (still == null) {
-                    videoFrame(gate, camera, video ?: return@withContext null)
+                    // WV511's list names no stream: its camera's player page does (the same toggle, the same rules).
+                    val playlist = video ?: videoVia?.let { WestVirginia.streamOf(gate.get(camera.source.feature, it).decodeToString()) }
+                    videoFrame(gate, camera, playlist ?: return@withContext null)
                 } else {
                     val bytes = gate.get(camera.source.feature, still)
                     if (bytes.size > MAX_IMAGE_BYTES) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size)

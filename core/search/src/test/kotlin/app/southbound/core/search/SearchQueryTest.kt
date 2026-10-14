@@ -38,6 +38,14 @@ class SearchQueryTest {
         // A name after a comma, as an address writes it.
         assertEquals(listOf("hartford") to listOf("connecticut"), SearchQuery.parse("Hartford, Connecticut").let { it.tokens to it.soft })
         assertEquals(listOf("newark") to listOf("new", "jersey", "07102"), SearchQuery.parse("Newark, New Jersey 07102").let { it.tokens to it.soft })
+        // Names with a compass word are matched as the query's words are normalised ("north" is "n").
+        assertEquals(listOf("fargo") to listOf("n", "dakota"), SearchQuery.parse("Fargo, North Dakota").let { it.tokens to it.soft })
+        assertEquals(listOf("charleston") to listOf("w", "virginia"), SearchQuery.parse("Charleston, West Virginia").let { it.tokens to it.soft })
+        assertEquals(listOf("richmond") to listOf("virginia"), SearchQuery.parse("Richmond, Virginia").let { it.tokens to it.soft })
+        assertEquals(listOf("louisville") to listOf("ky"), SearchQuery.parse("Louisville KY").let { it.tokens to it.soft })
+        assertEquals(listOf("wheeling") to listOf("wv", "26003"), SearchQuery.parse("Wheeling WV 26003").let { it.tokens to it.soft })
+        // A town named for a state stays a required word after a comma: "Virginia Beach" is not Virginia.
+        assertEquals(listOf("atlantic", "ave", "virginia", "beach"), SearchQuery.parse("Atlantic Ave, Virginia Beach").tokens)
         // Without one, a state's name may be the place's own.
         assertEquals(listOf("lake", "michigan") to emptyList<String>(), SearchQuery.parse("Lake Michigan").let { it.tokens to it.soft })
         assertEquals(listOf("indiana") to emptyList<String>(), SearchQuery.parse("Indiana").let { it.tokens to it.soft })

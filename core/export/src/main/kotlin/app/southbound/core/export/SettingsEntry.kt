@@ -28,7 +28,8 @@ import app.southbound.core.voice.VoiceSettings
  * `avoid_dot_cameras`, schema 3 the network group's `WEATHER`, schema 4 its `TRAFFIC_511PA` and `TRAFFIC_CTROADS`,
  * schema 5 its `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 6 the eleven Midwest toggles, `TRAFFIC_511WI` to
  * `TRAFFIC_OHGO`; an older bundle reads with each off; schema 7 the driving group's `search_at_bottom`, which an older
- * bundle reads as on, the app's default); an enum is its constant's name; a number
+ * bundle reads as on, the app's default; schema 8 the network group's `TRAFFIC_511VA`, `TRAFFIC_WV511` and
+ * `TRAFFIC_KYTC`, which an older bundle reads as off); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
@@ -50,6 +51,9 @@ internal object SettingsEntry {
         NetworkFeature.TRAFFIC_KANDRIVE to 6L,
         NetworkFeature.TRAFFIC_MIDRIVE to 6L,
         NetworkFeature.TRAFFIC_OHGO to 6L,
+        NetworkFeature.TRAFFIC_511VA to 8L,
+        NetworkFeature.TRAFFIC_WV511 to 8L,
+        NetworkFeature.TRAFFIC_KYTC to 8L,
     )
 
     private fun inSchema(feature: NetworkFeature, schema: Long): Boolean = (NETWORK_SINCE[feature] ?: 1L) <= schema
@@ -91,7 +95,7 @@ internal object SettingsEntry {
      * [count] as a bundle of [schema] lists them: schema 1 had no `avoid_dot_cameras`, schemas 1 and 2 no `WEATHER`,
      * schemas 1 to 3 neither `TRAFFIC_511PA` nor `TRAFFIC_CTROADS`, schemas 1 to 4 neither `TRAFFIC_CHART_MD` nor
      * `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven (`TRAFFIC_511WI` to `TRAFFIC_OHGO`), schemas 1 to 6
-     * no `search_at_bottom`.
+     * no `search_at_bottom`, schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`).
      */
     fun count(s: AppSettings, schema: Long): Int =
         count(s) - (if (schema < 2) 1 else 0) - (if (schema < 7) 1 else 0) - NetworkFeature.entries.count { !inSchema(it, schema) }
@@ -154,10 +158,11 @@ internal object SettingsEntry {
     )
 
     /**
-     * Reads settings written with bundle [schema] (1 to 7; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
+     * Reads settings written with bundle [schema] (1 to 8; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
      * `WEATHER` toggle, schemas 1 to 3 no `TRAFFIC_511PA` or `TRAFFIC_CTROADS`, schemas 1 to 4 no
-     * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT` and schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
-     * `TRAFFIC_OHGO`), each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on).
+     * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
+     * `TRAFFIC_OHGO`) and schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
+     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on).
      */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
