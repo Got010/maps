@@ -270,6 +270,8 @@ def landmark_category(tags):
         return "speed_camera"
     if is_alpr(tags):
         return "alpr_camera"
+    if toll_name(tags):
+        return "toll"
     if is_school_zone(tags):
         return "school_zone"
     sign = LANDMARK_SIGNS.get(tags.get("highway"))
@@ -325,14 +327,35 @@ def landmark_direction(tags, category):
     return parse_direction(value)
 
 
+# What OSM calls a plate reader's type: ALPR in the US (DeFlock), ANPR in Britain, LPR now and then.
+ALPR_TYPES = ("ALPR", "ANPR", "LPR")
+# Makers whose road cameras are plate readers: Flock, Motorola's Vigilant, Leonardo's ELSAG, Genetec's AutoVu,
+# Rekor, Perceptics, Neology.
+ALPR_MAKERS = ("flock", "vigilant", "elsag", "autovu", "rekor", "perceptics", "neology")
+# Makers that sell plate readers among other cameras: one counts only when it watches traffic.
+ALPR_TRAFFIC_MAKERS = ("motorola", "genetec", "leonardo")
+# A toll gantry or booth (category "toll"): tolls here are cashless (E-ZPass, or a bill sent to the plate it
+# photographs), so the app counts and avoids every one as a plate reader. Its name on the camera card.
+TOLL_NAMES = {("highway", "toll_gantry"): "Toll gantry", ("barrier", "toll_booth"): "Toll booth"}
+
+
+def toll_name(tags):
+    """"Toll gantry" or "Toll booth" for a toll point, else None."""
+    return next((name for (key, value), name in TOLL_NAMES.items() if tags.get(key) == value), None)
+
+
 def is_alpr(tags):
-    """Licence-plate readers as DeFlock maps them (Flock Safety and others)."""
+    """Licence-plate readers as DeFlock maps them (Flock Safety and others), under any of their type names."""
     if tags.get("man_made") != "surveillance" and tags.get("surveillance") is None:
         return False
     kind = (tags.get("surveillance:type") or "").upper()
     camera = (tags.get("camera:type") or "").upper()
-    operator = " ".join(tags.get(k, "") for k in ("operator", "manufacturer", "brand")).lower()
-    return kind == "ALPR" or camera == "ALPR" or "flock" in operator
+    if kind in ALPR_TYPES or camera in ALPR_TYPES:
+        return True
+    maker = " ".join(tags.get(k, "") for k in ("operator", "manufacturer", "brand", "model")).lower()
+    if any(m in maker for m in ALPR_MAKERS):
+        return True
+    return tags.get("surveillance:zone") == "traffic" and any(m in maker for m in ALPR_TRAFFIC_MAKERS)
 
 
 def is_red_light_camera(tags):
@@ -391,6 +414,8 @@ def landmark_name(tags, category):
     """
     if category == "alpr_camera":
         return alpr_name(tags)
+    if category == "toll":
+        return toll_name(tags)
     if category in ("traffic_signals", "stop", "speed_camera", "red_light_camera", "school_zone"):
         return None
     return tags.get("brand") or tags.get("name")

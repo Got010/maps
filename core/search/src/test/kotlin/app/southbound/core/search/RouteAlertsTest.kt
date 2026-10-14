@@ -273,6 +273,21 @@ class RouteAlertsTest {
     }
 
     @Test
+    fun tollsAreCountedAsPlateReaders() {
+        val marks = listOf(
+            Hand.mark(Landmark.ALPR_CAMERA, 5.0, 200.0),
+            Hand.mark(Landmark.TOLL, 0.0, 500.0, name = "Toll gantry"),
+            Hand.mark(Landmark.TOLL, 300.0, 700.0, name = "Toll booth"), // on another road
+        )
+        val e = RouteAlerts.exposure(northbound, marks)
+        assertEquals(2, e.plateReaders)
+        assertEquals(1, e.tolls)
+        assertEquals(listOf(marks[0], marks[1]).map { it.id }, e.marks.map { it.id })
+        // Never spoken: the count and the map are what say it is there.
+        assertTrue(RouteAlerts.onRoute(northbound, marks).none { it.id == marks[1].id })
+    }
+
+    @Test
     fun anOldPackWithoutTheColumnCountsEveryCamera() {
         // A pack without the column reads every direction as NULL, so the count is the one it always was.
         assertEquals("NULL", LandmarkColumns.directionSelect(setOf("id", "category", "name", "lat", "lon")))

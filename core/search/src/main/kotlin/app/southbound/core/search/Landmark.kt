@@ -35,6 +35,16 @@ data class Landmark(
         const val ALPR_CAMERA = "alpr_camera"
 
         /**
+         * A toll gantry or booth (named "Toll gantry" or "Toll booth"). Tolls are cashless, so each one photographs
+         * plates: drawn, counted and avoided as a plate reader ([PLATE_READERS]), and avoided with "Avoid tolls" too.
+         * Never spoken. Packs from before October 2026 have none.
+         */
+        const val TOLL = "toll"
+
+        /** The categories that read plates: the map's plate-reader dots, the "plate readers" count and its avoid. */
+        val PLATE_READERS = listOf(ALPR_CAMERA, TOLL)
+
+        /**
          * A state DOT traffic camera (511NY's list, read when the pack is built; see
          * pipeline/search/dot_cameras.py). Never spoken and never a landmark in directions:
          * only counted on route options and squared off by "Avoid DOT cameras".

@@ -7,6 +7,7 @@ import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.eq
 import org.maplibre.android.style.expressions.Expression.get
+import org.maplibre.android.style.expressions.Expression.has
 import org.maplibre.android.style.expressions.Expression.interpolate
 import org.maplibre.android.style.expressions.Expression.linear
 import org.maplibre.android.style.expressions.Expression.literal
@@ -15,6 +16,7 @@ import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.switchCase
 import org.maplibre.android.style.expressions.Expression.toColor
+import org.maplibre.android.style.expressions.Expression.toNumber
 import org.maplibre.android.style.expressions.Expression.zoom
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
@@ -29,6 +31,9 @@ import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment
+import org.maplibre.android.style.layers.PropertyFactory.iconRotate
+import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
@@ -62,6 +67,10 @@ internal object OverlayLayers {
     const val CAMERAS = "southbound-cameras"
     private const val CAMERA_PURPLE = "#7B1FA2"
     private const val CAMERA_MIN_ZOOM = 11f
+
+    /** Which way each plate reader faces, when mapped: a wedge from its dot, under it. */
+    const val CAMERA_WEDGES = "southbound-camera-wedges"
+    private const val CAMERA_WEDGE_ICON = "southbound-camera-wedge"
 
     private const val PIN_RED = "#D93025"
     private const val DESTINATION = "#202124"
@@ -230,6 +239,19 @@ internal object OverlayLayers {
                 circleStrokeColor("#FFFFFF"),
                 circleStrokeWidth(2f),
             ),
+        )
+        // Plate readers facing a mapped way: a see-through wedge aimed that way, turning with the map, under the dot.
+        style.addImage(CAMERA_WEDGE_ICON, TrafficIcons.wedge(CAMERA_PURPLE))
+        style.addLayer(
+            SymbolLayer(CAMERA_WEDGES, CAMERAS).withProperties(
+                iconImage(CAMERA_WEDGE_ICON),
+                iconRotate(toNumber(get("direction"))),
+                iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
+                iconSize(interpolate(linear(), zoom(), stop(CAMERA_MIN_ZOOM, 0.45f), stop(15, 0.8f), stop(18, 1.1f))),
+                iconAllowOverlap(true),
+                iconIgnorePlacement(true),
+            ).withFilter(has("direction")).also { it.minZoom = CAMERA_MIN_ZOOM },
         )
         // Plate readers: always on, purple with a white ring, a little bigger as the map zooms in.
         style.addLayer(

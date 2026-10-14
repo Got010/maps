@@ -37,9 +37,10 @@ data class IncidentPin(val id: String, val point: MapPoint, val kind: String, va
 /**
  * A licence-plate reader (Flock and others) from the search pack, drawn at
  * all times. [id] comes back from a tap; [name] is who makes or runs it,
- * when mapped.
+ * when mapped; [direction] the way it faces in degrees clockwise from north,
+ * when mapped, drawn as a wedge from the dot.
  */
-data class CameraPin(val id: String, val point: MapPoint, val name: String? = null)
+data class CameraPin(val id: String, val point: MapPoint, val name: String? = null, val direction: Int? = null)
 
 /**
  * A state 511 traffic camera, drawn with the traffic layer. [id] comes back from
@@ -188,7 +189,8 @@ internal object OverlayGeoJson {
     fun cameras(pins: List<CameraPin>): String = featureCollection(
         pins.filter { it.point.isFinite }.map { pin ->
             val name = pin.name?.let { ""","name":${quote(it)}""" } ?: ""
-            """{"type":"Feature","properties":{"id":${quote(pin.id)}$name},""" +
+            val direction = pin.direction?.let { ""","direction":${((it % 360) + 360) % 360}""" } ?: ""
+            """{"type":"Feature","properties":{"id":${quote(pin.id)}$name$direction},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )

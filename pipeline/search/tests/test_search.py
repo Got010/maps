@@ -267,6 +267,30 @@ class BuildTest(unittest.TestCase):
         self.assertEqual("traffic_signals", cat({"highway": "traffic_signals", "traffic_sign": "school_bus"}))
         self.assertIsNone(cat({"amenity": "cafe"}))
 
+    def test_other_plate_readers(self):
+        cat = build_search.landmark_category
+        # Tolls are cashless, every gantry and booth photographs plates: their own category, which the app counts
+        # as plate readers.
+        self.assertEqual("toll", cat({"highway": "toll_gantry"}))
+        self.assertEqual("toll", cat({"barrier": "toll_booth", "name": "Tappan Zee Toll Plaza"}))
+        self.assertEqual("Toll gantry", build_search.landmark_name({"highway": "toll_gantry", "operator": "MTA"}, "toll"))
+        self.assertEqual("Toll booth", build_search.landmark_name({"barrier": "toll_booth", "name": "Plaza"}, "toll"))
+        self.assertIsNone(build_search.landmark_direction({"highway": "toll_gantry", "direction": "90"}, "toll"))
+        # Other words for the type, any case.
+        for kind in ["ANPR", "lpr", "alpr"]:
+            self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "surveillance:type": kind}), kind)
+            self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "camera:type": kind}), kind)
+        # Makers that only make plate readers count anywhere.
+        for maker in ["Vigilant Solutions", "Leonardo ELSAG", "Genetec AutoVu", "Rekor", "Perceptics", "Neology"]:
+            self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "manufacturer": maker}), maker)
+        # Makers of all sorts of cameras count only on traffic.
+        self.assertIsNone(cat({"man_made": "surveillance", "manufacturer": "Motorola Solutions"}))
+        self.assertIsNone(cat({"man_made": "surveillance", "manufacturer": "Genetec", "surveillance:zone": "town"}))
+        self.assertEqual("alpr_camera", cat({"man_made": "surveillance", "manufacturer": "Motorola Solutions", "surveillance:zone": "traffic"}))
+        # A plain camera is not a plate reader, nor is a road that charges a toll.
+        self.assertIsNone(cat({"man_made": "surveillance", "surveillance:type": "camera", "surveillance:zone": "traffic"}))
+        self.assertIsNone(cat({"highway": "motorway", "toll": "yes"}))
+
     def test_red_light_cameras(self):
         cat = build_search.landmark_category
         self.assertEqual("red_light_camera", cat({"highway": "speed_camera", "speed_camera": "traffic_signals"}))
