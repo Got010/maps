@@ -30,12 +30,6 @@ jobs:
         with:
           persist-credentials: false
       # Each step may fail or time out without hiding the others.
-      # Virginia, West Virginia and Kentucky (owner, October 2026): which platform each 511 runs, and its feeds. First,
-      # as the job stops at 30 minutes.
-      - name: Virginia, West Virginia and Kentucky DOTs
-        timeout-minutes: 14
-        continue-on-error: true
-        run: python3 -u scripts/feed-probe.py dot-south
       - name: 511NY
         timeout-minutes: 4
         continue-on-error: true
@@ -223,3 +217,9 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py nycdot
+      # Virginia, West Virginia and Kentucky (owner, October 2026): which platform each 511 runs, and its feeds. Last,
+      # so its lines are the end of the job's log (the whole job takes about ten minutes of its thirty).
+      - name: Virginia, West Virginia and Kentucky DOTs
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-south
