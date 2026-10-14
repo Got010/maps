@@ -129,21 +129,42 @@ object RouteAlerts {
         category: String,
         withinMeters: Double = MAX_OFFSET_M,
         sameSpotMeters: Double = SAME_SPOT_M,
-    ): Int {
-        val spots = mutableListOf<LatLon>()
+    ): Int = counted(route, landmarks, category, withinMeters, sameSpotMeters).size
+
+    /** The landmarks [count] counts, one per spot: what the route option's line stands for, to show on the map. */
+    fun counted(
+        route: RouteLine,
+        landmarks: List<Landmark>,
+        category: String,
+        withinMeters: Double = MAX_OFFSET_M,
+        sameSpotMeters: Double = SAME_SPOT_M,
+    ): List<Landmark> {
+        val kept = mutableListOf<Landmark>()
         for (mark in alongRoute(route, landmarks, category, withinMeters)) {
             if (!facesRoute(route, mark, withinMeters)) continue
-            if (spots.none { RouteLine.distanceMeters(it, mark.point) <= sameSpotMeters }) spots += mark.point
+            if (kept.none { RouteLine.distanceMeters(it.point, mark.point) <= sameSpotMeters }) kept += mark
         }
-        return spots.size
+        return kept
     }
 
-    /** What a drive along [route] is exposed to: its plate readers, speed cameras and DOT cameras, by [count]. */
-    fun exposure(route: RouteLine, landmarks: List<Landmark>): RouteExposure = RouteExposure(
-        plateReaders = count(route, landmarks, AlertKind.ALPR_CAMERA),
-        speedCameras = count(route, landmarks, AlertKind.SPEED_CAMERA),
-        dotCameras = count(route, landmarks, Landmark.DOT_CAMERA),
-    )
+    /**
+     * What a drive along [route] is exposed to: its plate readers (tolls among them, [Landmark.PLATE_READERS]),
+     * speed cameras and DOT cameras, by [count], and the cameras counted ([counted]), so the map can show where
+     * each one is.
+     */
+    fun exposure(route: RouteLine, landmarks: List<Landmark>): RouteExposure {
+        val readers = counted(route, landmarks, Landmark.ALPR_CAMERA)
+        val tolls = counted(route, landmarks, Landmark.TOLL)
+        val speedCameras = counted(route, landmarks, Landmark.SPEED_CAMERA)
+        val dotCameras = counted(route, landmarks, Landmark.DOT_CAMERA)
+        return RouteExposure(
+            plateReaders = readers.size + tolls.size,
+            speedCameras = speedCameras.size,
+            dotCameras = dotCameras.size,
+            marks = readers + tolls + speedCameras + dotCameras,
+            tolls = tolls.size,
+        )
+    }
 
     /**
      * The alerts on [route], in driving order: one for each time the route passes within [MAX_OFFSET_M] of an
@@ -182,8 +203,18 @@ object RouteAlerts {
     data class Due(val speak: List<RouteAlert>, val covered: Set<RouteAlert.Key>)
 }
 
-/** The per-route exposure line: how many plate readers and speed cameras a route passes. */
-data class RouteExposure(val plateReaders: Int, val speedCameras: Int, val dotCameras: Int = 0) {
+/**
+ * The per-route exposure line: how many plate readers (toll gantries and booths included: [tolls] of them),
+ * speed cameras and DOT cameras a route passes. [marks] are the cameras counted, one per spot (empty when only
+ * the counts are known).
+ */
+data class RouteExposure(
+    val plateReaders: Int,
+    val speedCameras: Int,
+    val dotCameras: Int = 0,
+    val marks: List<Landmark> = emptyList(),
+    val tolls: Int = 0,
+) {
     val isEmpty: Boolean get() = plateReaders == 0 && speedCameras == 0 && dotCameras == 0
 }
 

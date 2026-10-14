@@ -57,7 +57,7 @@ class WalkBikePrefsTest {
         assertTrue(RouteOptions.withPrefs(walkBody, TravelMode.WALK, prefs).contains(""""costing_options":{"pedestrian":{"type":"wheelchair","""))
         // Driving ignores the walking prefs, and its own body only carries its own options.
         val auto = """{"costing":"auto"}"""
-        assertEquals("""{"costing_options":{"auto":{"use_tolls":0}},"costing":"auto"}""", RouteOptions.withPrefs(auto, TravelMode.DRIVE, prefs))
+        assertEquals("""{"costing_options":{"auto":{"use_tolls":0,"exclude_tolls":true}},"costing":"auto"}""", RouteOptions.withPrefs(auto, TravelMode.DRIVE, prefs))
         assertEquals(auto, RouteOptions.withPrefs(auto, TravelMode.DRIVE, RoutePrefs(walk = WalkPrefs(stepFree = true))))
     }
 

@@ -581,7 +581,7 @@ internal fun ExploreMap(
         // Valhalla on the phone ranks without live speeds, so put the fastest option with traffic first
         // (when it gains 2+ min). The driver's avoid options win over a traffic estimate: with tolls, highways
         // or ferries avoided Valhalla's order stands, and no route with more plate readers than its first may lead.
-        val order = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
+        val byTraffic = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
             found.indices.toList()
         } else {
             TrafficRanking.order(
@@ -590,6 +590,8 @@ internal fun ExploreMap(
                 mayLead = { i -> valhallaExposure.getOrNull(i).avoided(routePrefs) <= valhallaExposure.getOrNull(0).avoided(routePrefs) },
             )
         }
+        // Avoiding plate readers, tolls or DOT cameras beats any time saved: fewest of them first, however much longer.
+        val order = byTraffic.sortedBy { valhallaExposure.getOrNull(it).avoided(routePrefs) }
         val ranked = TrafficRanking.reorder(found, order)
         val slow = TrafficRanking.reorder(valhallaSlow, order)
         val exposure = TrafficRanking.reorder(valhallaExposure, order)
@@ -1114,14 +1116,18 @@ internal fun ExploreMap(
                     traffic = trafficOverlay,
                 )
             } else {
-                val selected = (preview as? RoutePreviewState.Ready)?.selected ?: 0
+                val ready = preview as? RoutePreviewState.Ready
+                val selected = ready?.selected ?: 0
+                // The cameras the selected option's card counts, pinned at every zoom: the plate-reader layer
+                // only starts at zoom 11, where one camera on a long route is a small dot hard to come across.
+                val exposurePins = ready?.exposure?.getOrNull(selected)?.marks.orEmpty().map { it.toExposurePin() }
                 MapOverlays(
                     routes = routes.mapIndexed { i, route ->
                         val role = if (i == selected) MapLine.Role.LEADER else MapLine.Role.THREAD
                         MapLine(route.geometry.map { MapPoint(it.lat, it.lng) }, role, rank = i)
                     },
                     pin = MapPoint(current.place.lat, current.place.lon),
-                    traffic = trafficOverlay,
+                    traffic = trafficOverlay.copy(incidents = (trafficOverlay.incidents + exposurePins).distinctBy { it.id }),
                     slowdowns = previewTraffic.getOrNull(selected)?.toSpeedLines().orEmpty(),
                 )
             }
@@ -1265,7 +1271,11 @@ internal fun ExploreMap(
                 }
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
-            onIncidentTap = { id -> shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown) },
+            onIncidentTap = { id ->
+                // A plate reader pinned on a route option opens its card, as its dot does.
+                shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown)
+                    ?: cameraPins.firstOrNull { it.id == id }?.let(ShownThing::PlateReader)
+            },
             // A tap on another route's line picks it, as tapping its card does.
             onRouteTap = { rank ->
                 val ready = preview as? RoutePreviewState.Ready
@@ -1862,13 +1872,24 @@ private const val SEARCH_WAIT_MS = 5_000L
  */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int, val extra: List<List<Pair<Double, Double>>>)
 
-/** The cameras on a route option that the driver asked to avoid (plate readers, DOT cameras or both); none when unknown. */
-private fun RouteExposure?.avoided(prefs: RoutePrefs): Int =
-    (if (prefs.avoidAlpr) this?.plateReaders ?: 0 else 0) + (if (prefs.avoidDotCameras) this?.dotCameras ?: 0 else 0)
+/**
+ * The cameras on a route option that the driver asked to avoid (plate readers, tolls among them; tolls alone with
+ * "Avoid tolls"; DOT cameras); none when unknown.
+ */
+private fun RouteExposure?.avoided(prefs: RoutePrefs): Int {
+    if (this == null) return 0
+    val readers = when {
+        prefs.avoidAlpr -> plateReaders
+        prefs.avoidTolls -> tolls
+        else -> 0
+    }
+    return readers + if (prefs.avoidDotCameras) dotCameras else 0
+}
 
-/** The landmark categories the avoid options square off. */
+/** The landmark categories the avoid options steer around: plate readers with tolls, tolls, DOT cameras. */
 private fun RoutePrefs.avoidedCameraCategories(): List<String> = buildList {
-    if (avoidAlpr) add(Landmark.ALPR_CAMERA)
+    if (avoidAlpr) addAll(Landmark.PLATE_READERS)
+    if (avoidTolls && Landmark.TOLL !in this) add(Landmark.TOLL)
     if (avoidDotCameras) add(Landmark.DOT_CAMERA)
 }
 
@@ -1876,6 +1897,17 @@ private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
 
 private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.lon), kind.name, isClosure)
+
+/** A camera counted on a route option, as a pin; a plate reader's id is its camera dot's, so a tap opens its card. */
+private fun Landmark.toExposurePin(): IncidentPin {
+    val kind = when (category) {
+        Landmark.ALPR_CAMERA, Landmark.TOLL -> AlertKind.ALPR_CAMERA.name
+        Landmark.SPEED_CAMERA -> AlertKind.SPEED_CAMERA.name
+        else -> IncidentPin.DOT_CAMERA
+    }
+    val id = if (category in Landmark.PLATE_READERS) PlateReaders.pinId(this.id) else "exposure:$category:${this.id}"
+    return IncidentPin(id, MapPoint(lat, lon), kind, closure = false)
+}
 
 @Composable
 private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {

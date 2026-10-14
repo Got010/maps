@@ -71,20 +71,28 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
     ): List<Route> {
         val adapter = adapters.getValue(mode)
         val request = adapter.generateRequest(from, waypoints)
-        val body = when (request) {
+        fun body(strictTolls: Boolean): String = when (request) {
             is RouteRequest.HttpPost -> {
-                val withPrefs = RouteOptions.withPrefs(request.body.decodeToString(), mode, prefs, useDistance)
+                val withPrefs = RouteOptions.withPrefs(request.body.decodeToString(), mode, prefs, useDistance, strictTolls)
                 val withPolygons = RouteOptions.withExcludePolygons(if (alternates) withPrefs else RouteOptions.withoutAlternates(withPrefs), avoid)
                 RouteOptions.withExcludeLocations(withPolygons, excludePoints)
             }
             is RouteRequest.HttpGet -> throw RoutingException("Unexpected GET route request")
         }
         val response = try {
-            synchronized(valhalla) { valhalla.routeRaw(body) }
+            synchronized(valhalla) { valhalla.routeRaw(body(strictTolls = true)) }
         } catch (e: ValhallaException) {
-            // e.g. "No path could be found for input": a place off the road
-            // network or outside the routing pack.
-            throw RoutingException("No route found", e)
+            // "Avoid tolls" leaves out every toll road; when there is no way around one (an island, a toll bridge
+            // across the only river crossing in reach), the route keeps as few tolls as it can instead.
+            val tollsOnly = mode == TravelMode.DRIVE && prefs.avoidTolls
+            try {
+                if (!tollsOnly) throw e
+                synchronized(valhalla) { valhalla.routeRaw(body(strictTolls = false)) }
+            } catch (e: ValhallaException) {
+                // e.g. "No path could be found for input": a place off the road
+                // network or outside the routing pack.
+                throw RoutingException("No route found", e)
+            }
         }
         val routes = adapter.parseResponse(response.encodeToByteArray())
         if (routes.isEmpty()) throw RoutingException("No route found")
