@@ -35,9 +35,10 @@ data class Landmark(
         const val ALPR_CAMERA = "alpr_camera"
 
         /**
-         * A toll gantry or booth (named "Toll gantry" or "Toll booth"). Tolls are cashless, so each one photographs
-         * plates: drawn, counted and avoided as a plate reader ([PLATE_READERS]), and avoided with "Avoid tolls" too.
-         * Never spoken. Packs from before October 2026 have none.
+         * A toll gantry or booth ("Toll gantry", "Toll booth"), a toll enforcement relation's device ("Toll"), or
+         * where a road joins a toll road with none of those mapped near ("Toll road"). Tolls are cashless, so each
+         * one photographs plates: drawn, counted and avoided as a plate reader ([PLATE_READERS]), and avoided with
+         * "Avoid tolls" too. Never spoken. Packs from before October 2026 have none.
          */
         const val TOLL = "toll"
 
