@@ -217,8 +217,18 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py nycdot
-      # Virginia, West Virginia and Kentucky (owner, October 2026): which platform each 511 runs, and its feeds. Last,
-      # so its lines are the end of the job's log (the whole job takes about ten minutes of its thirty).
+
+  # Virginia, West Virginia and Kentucky (owner, October 2026): which platform each 511 runs, and its feeds. A job of
+  # its own, beside the others, so its log is only these rounds and the 30-minute probe job can't crowd them out.
+  south:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Virginia, West Virginia and Kentucky DOTs
         timeout-minutes: 14
         continue-on-error: true
@@ -227,3 +237,7 @@ jobs:
         timeout-minutes: 10
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py dot-south-2
+      - name: Virginia, West Virginia and Kentucky DOTs, third round
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-south-3
