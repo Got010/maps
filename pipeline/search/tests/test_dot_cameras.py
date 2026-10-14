@@ -109,6 +109,21 @@ class StateReadersTest(unittest.TestCase):
         self.assertEqual(["Watertown North", "Elsewhere", "Agar"], [n for n, _, _ in sd])
         self.assertEqual((44.95, -97.06), sd[0][1:])  # SD511's coordinates come as strings or numbers alike
 
+    def test_virginia_west_virginia_and_kentucky(self):
+        va = dot_cameras.read_vdot(traffic("va/cameras.json"))
+        self.assertEqual(4, len(va))
+        self.assertEqual(("University Drive and Sager Avenue", 38.84519, -77.3055), va[0])
+        with open(os.path.join(TRAFFIC, "wv", "cameras.js"), encoding="utf-8") as f:
+            wv = dot_cameras.read_wv511(f.read())
+        self.assertEqual(6, len(wv))
+        # The county mark ("[BER]") and the "West Virginia DOT" tag are not the camera's name.
+        self.assertEqual(("I-81 @ 0.5", 39.302863, -78.078892), wv[0])
+        self.assertEqual([], dot_cameras.read_wv511("var styles = [];"))
+        ky = dot_cameras.read_kytc(traffic("ky/cameras.json"))
+        # Kentucky's six; the two Indiana cameras in the layer are Indiana's list's.
+        self.assertEqual(6, len(ky))
+        self.assertEqual(("I-71 at Old Brownsboro Rd", 38.320179, -85.561249), ky[0])
+
     def test_new_york(self):
         with open(FIXTURE, encoding="utf-8") as f:
             self.assertEqual(3, len(dot_cameras.read_geojson(json.load(f))))
@@ -121,7 +136,7 @@ class RegionsTest(unittest.TestCase):
 
     def test_every_covered_state_has_a_list_or_a_reason(self):
         states = set(dot_cameras.STATE_OF_SOURCE.values())
-        self.assertEqual(19, len(states))
+        self.assertEqual(22, len(states))
         self.assertEqual(states, set(dot_cameras.FETCHERS) | set(dot_cameras.NO_LIST))
         self.assertFalse(set(dot_cameras.FETCHERS) & set(dot_cameras.NO_LIST))
 

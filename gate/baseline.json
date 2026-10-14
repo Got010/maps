@@ -824,12 +824,20 @@
       "note": "Ohio's state servers, for an ODOT camera snapshot hosted there: core/traffic Ohgo.kt follows a camera's snapshot link only on this and the other ODOT suffixes; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_OHGO (Settings > Live data, off by default)."
     },
     {
+      "value": ".roadsummary.com",
+      "note": "WVDOH's camera stream servers (vtc1 to vtc3.roadsummary.com): core/traffic WestVirginia.kt takes a camera's https playlist link (https://vtc<n>.roadsummary.com/rtplive/<camera>/playlist.m3u8) from its player page only on hosts ending in this. The camera card then fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_WV511 (Settings > Live data, off by default)."
+    },
+    {
       "value": ".sha.maryland.gov",
       "note": "CHART's camera stream servers (strmr5.sha.maryland.gov, a camera's cctvIp): core/traffic MarylandChart.kt follows a camera's stream only on a host one label under this suffix, https://<host>/rtplive/<camera id>/playlist.m3u8. When a camera card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_CHART_MD (Settings > Live data, off by default)."
     },
     {
       "value": ".skyvdn.com",
       "note": "KDOT's Skyline camera servers (kdot-sfs2.us-east-1.skyvdn.com and the like): core/traffic CarsStates.kt keeps a Kansas camera's still on a host ending in this; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
+    },
+    {
+      "value": ".vdotcameras.com",
+      "note": "VDOT's camera stream servers (media-sfs1.vdotcameras.com and the like): core/traffic Virginia511.kt keeps a camera's https playlist link (https://media-sfs<n>.vdotcameras.com/rtplive/<camera>/playlist.m3u8) only on hosts ending in this, and only for a camera with no still. When such a camera's card opens, the card fetches that playlist, the media playlist it names and the newest few-second segment through NetworkGate.get, and decodes one frame on the phone (core/traffic Hls.kt, feature/explore TrafficCameraCard.kt). The links name the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511VA (Settings > Live data, off by default)."
     },
     {
       "value": "511.nebraska.gov",
@@ -906,6 +914,10 @@
     {
       "value": "https://511.nebraska.gov",
       "note": "Nebraska's 511 site: core/traffic CarsStates.kt posts the fixed GraphQL document CarsStates.eventsQuery (the site's own mapFeaturesQuery for its incidents, closures, construction and road reports layers over a fixed box around the whole state) to /api/graphql through NetworkGate.post, every time the same bytes, no key and nothing about the user. Gated by NetworkFeature.TRAFFIC_511NE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "https://511.vdot.virginia.gov",
+      "note": "511 Virginia (VDOT): core/traffic Virginia511.kt fetches the GeoJSON layers its own map reads, /services/511/map/layers/map/<layer> (incidents, hpIncidents, acon, weatherClosures, otherWeather, sEvents, sActivity, dms and cams), the whole state every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_511VA (Settings > Live data, off by default)."
     },
     {
       "value": "https://511ia.org",
@@ -1024,6 +1036,10 @@
       "note": "South Dakota's SD511 (Iteris) CDN: core/traffic SouthDakota.kt fetches the GeoJSON files its own map reads, /geojson/icons/metadata/icons.road-work, incidents-accidents, restriction, obstructions and scheduled-events (the events) and icons.cameras and icons.rwis (camera sites), the whole state every time, no key and nothing about the user's location, search or route; a camera's still (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) is kept only on this host and fetched through NetworkGate.get when its card opens. Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
+      "value": "https://services2.arcgis.com",
+      "note": "Kentucky's KYTC map layers (ArcGIS Online, the cabinet's organisation CcI36Pduqd0OR4W9): core/traffic Kentucky.kt queries whole layers (where=1=1) that the cabinet's own GoKY map reads, kytc_incidents_reports_24hr, KYTC_Road_Closures and trafficCamerasCur_Prd, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_KYTC (Settings > Live data, off by default)."
+    },
+    {
       "value": "https://tmc.deldot.gov",
       "note": "Delaware's DelDOT (its Transportation Management Center): core/traffic DelDot.kt fetches the files DelDOT's own traffic map reads, /json/advisory.json, vmsg-vms.json and videocamera.json: the advisories, message signs and cameras of the whole state, every time, no key and nothing about the user's location, search or route. Gated by NetworkFeature.TRAFFIC_DELDOT (Settings > Live data, off by default)."
     },
@@ -1042,6 +1058,10 @@
     {
       "value": "https://www.mapbox.com",
       "note": "Strings inside the MapLibre Android SDK (attribution and feedback links, Mapbox host checks inherited from its Mapbox lineage). App code never uses them: the map style is bundled (assets/light.json, dark.json) and tiles come from pmtiles://file:// on the phone."
+    },
+    {
+      "value": "https://www.wv511.org",
+      "note": "West Virginia's WV511 (WVDOH): core/traffic WestVirginia.kt fetches what its own map reads from /wsvc/gmap.asmx, buildEventsKMLi_Filtered (incidents, every severity), buildEventsKMLc (roadwork), buildDMSKML?isActive=1 (message signs) and buildCamerasJSONjs (cameras), the whole state every time, no key and nothing about the user's location, search or route; when a camera card opens it fetches that camera's player page, /flowplayeri.aspx?CAMID=<camera>, for its stream's link (the id names the camera, never the viewer). Gated by NetworkFeature.TRAFFIC_WV511 (Settings > Live data, off by default)."
     },
     {
       "value": "https://youtrack.jetbrains.com",
@@ -1084,6 +1104,10 @@
       "note": "SD511's CDN as a bare host: core/traffic SouthDakota.kt compares a camera's still link against it (https://sd.cdn.iteris-atis.com/camera_images/<site>/<view>/latest.jpg) and follows only matches, through NetworkGate.get when the card opens. Requests go to https://sd.cdn.iteris-atis.com (see that entry). Gated by NetworkFeature.TRAFFIC_SD511 (Settings > Live data, off by default)."
     },
     {
+      "value": "snapshot.vdotcameras.com",
+      "note": "VDOT's camera stills (https://snapshot.vdotcameras.com/thumbs/<camera>.flv.png): core/traffic Virginia511.kt keeps a camera's still only on this host; the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_511VA (Settings > Live data, off by default)."
+    },
+    {
       "value": "tcp://*:8002",
       "note": "Valhalla's httpd.service.listen setting (tcp://*:8002) in its bundled default configuration (com/valhalla/valhalla/default.json) and the matching default in valhalla-models-config. That is the standalone valhalla_service server's address; valhalla-mobile runs the engine in-process and the app only calls its actor API, but that nothing listens on it has not been verified on a device."
     },
@@ -1102,6 +1126,10 @@
     {
       "value": "www.kcscout.net",
       "note": "KC Scout's (Kansas City's) camera stills: core/traffic CarsStates.kt keeps a Kansas camera's still only on KDOT's hosts, this one among them; fetched through NetworkGate.get when its card opens; names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KANDRIVE (Settings > Live data, off by default)."
+    },
+    {
+      "value": "www.trimarc.org",
+      "note": "TRIMARC's camera stills for KYTC (https://www.trimarc.org/images/milestone/CCTV_<camera>.jpg): core/traffic Kentucky.kt keeps a Kentucky camera's still only on this host, over https; the camera card fetches it through NetworkGate.get when opened. The link names the camera, never the viewer. Gated by NetworkFeature.TRAFFIC_KYTC (Settings > Live data, off by default)."
     }
   ],
   "assets": [
