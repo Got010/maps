@@ -245,3 +245,7 @@ jobs:
         timeout-minutes: 14
         continue-on-error: true
         run: python3 -u scripts/feed-probe.py dot-south-4
+      - name: Virginia, West Virginia and Kentucky DOTs, fifth round
+        timeout-minutes: 14
+        continue-on-error: true
+        run: python3 -u scripts/feed-probe.py dot-south-5

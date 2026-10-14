@@ -2346,6 +2346,113 @@ def dot_south_4():
     print(f"   incidents {len(inc)}; newest EndDate {newest} ({(now - newest) / 60000:.0f} min ago); within 20 min of it {len(recent)}: {_tally(recent, 'KYTC_Type')}")
 
 
+def _fixture(label, text):
+    """A raw answer on one line between markers, to copy into a test fixture."""
+    print(f"FIXTURE-BEGIN {label}\n{text}\nFIXTURE-END {label}")
+
+
+def dot_south_5():
+    """Fifth round: Virginia's layers listed and measured, WV511's services summed up, and fixtures for all three."""
+    head("Virginia: the map's layers")
+    va = "https://511.vdot.virginia.gov/services/511/map/layers/map"
+    st_, d = try_json(va, sample=100)
+    layers = (d or {}).get("data") if isinstance(d, dict) else None
+    for l in layers or []:
+        print(f"   {l.get('id')} | {l.get('layer_type')} | {l.get('description')} | identifier {l.get('identifier')} | source {l.get('source')}"
+              f" | active {l.get('active')} | data_path {l.get('data_path')}")
+    idents = []
+    for l in layers or []:
+        for k in (l.get("identifier"), l.get("source")):
+            if k and k not in idents:
+                idents.append(k)
+    for ident in idents[:40]:
+        st_, _, h, b = get(f"{va}/{urllib.parse.quote(ident)}", headers=BROWSER, limit=40_000_000)
+        dd = _json(b)
+        feats = dd.get("features") if isinstance(dd, dict) else None
+        kinds = {}
+        for f in feats or []:
+            p = f.get("properties") or {}
+            k = (p.get("type"), p.get("icon"))
+            kinds[str(k)] = kinds.get(str(k), 0) + 1
+        print(f"--- {ident}: status {st_} bytes {len(b)} features {len(feats) if isinstance(feats, list) else None}"
+              f" kinds {sorted(kinds.items(), key=lambda kv: -kv[1])[:12]}")
+        if feats:
+            print("   first:", json.dumps(feats[0])[:1200])
+    for ident in ("incidents", "dms"):
+        st_, _, _, b = get(f"{va}/{ident}", headers=BROWSER, limit=40_000_000)
+        dd = _json(b)
+        if isinstance(dd, dict) and isinstance(dd.get("features"), list):
+            _fixture(f"va-{ident}", json.dumps({"type": "FeatureCollection", "features": dd["features"][:6]}))
+    cams = next((l.get("data_path") for l in layers or [] if l.get("identifier") == "cams"), None)
+    if cams:
+        st_, _, h, b = get(cams, headers=BROWSER, limit=40_000_000)
+        dd = _json(b)
+        feats = dd.get("features") if isinstance(dd, dict) else None
+        print(f"--- cameras {cams}: status {st_} type {h.get('Content-Type')} bytes {len(b)} features {len(feats) if isinstance(feats, list) else None}")
+        if feats:
+            print("   first:", json.dumps(feats[0])[:1500])
+            hosts = {}
+            for f in feats:
+                for v in json.dumps(f.get("properties") or {}).split('"'):
+                    m = re.match(r"(https?)://([^/]+)", v)
+                    if m:
+                        hosts[m.group(0)] = hosts.get(m.group(0), 0) + 1
+            print("   hosts in properties:", sorted(hosts.items(), key=lambda kv: -kv[1])[:10])
+            _fixture("va-cameras", json.dumps({"type": "FeatureCollection", "features": feats[:4]}))
+            img = re.search(r'"(https://[^"]+\.(?:jpg|jpeg|png)[^"]*)"', json.dumps(feats[:20]))
+            if img:
+                st_, _, h, b = get(img.group(1), limit=2_000_000)
+                print(f"   a still {img.group(1)}: status {st_} type {h.get('Content-Type')} bytes {len(b)}")
+
+    head("West Virginia: WV511's services, summed up")
+    wv = "https://www.wv511.org/wsvc/gmap.asmx"
+    for path in ("buildEventsKMLc", "buildEventsKMLs", "buildPlannedEventsActiveKML", "buildPlannedEventsFutureKML",
+                 "buildDMSKML?isActive=1", "buildDMSKML?isActive=0", "buildRoutePolysClosedKML", "buildRoutePolysRestrictionsKML"):
+        st_, _, h, b = get(f"{wv}/{path}", headers={**BROWSER, "Referer": "https://www.wv511.org/"}, limit=20_000_000)
+        marks = re.findall(r"(?s)<Placemark.*?</Placemark>", b)
+        styles = {}
+        for m in marks:
+            s = (re.findall(r"<styleUrl>([^<]*)</styleUrl>", m) or ["?"])[0]
+            styles[s] = styles.get(s, 0) + 1
+        names = {}
+        for m in marks:
+            n = (re.findall(r"<name><!\[CDATA\[(.*?)\]\]></name>", m, re.S) or re.findall(r"<name>(.*?)</name>", m, re.S) or ["?"])[0]
+            names[n[:40]] = names.get(n[:40], 0) + 1
+        print(f"--- {path}: status {st_} bytes {len(b)} placemarks {len(marks)} styles {sorted(styles.items(), key=lambda kv: -kv[1])[:10]}")
+        print("   names:", sorted(names.items(), key=lambda kv: -kv[1])[:15])
+        for m in marks[:2]:
+            print("   placemark:", re.sub(r"\s+", " ", m)[:1200])
+        if marks and path in ("buildEventsKMLc", "buildEventsKMLs", "buildDMSKML?isActive=0", "buildPlannedEventsActiveKML", "buildRoutePolysClosedKML"):
+            start = b.find("<Placemark")
+            _fixture(f"wv-{path}", re.sub(r"\s*\n\s*", " ", b[:start] + "".join(marks[:5]) + "</Document></kml>"))
+    st_, _, h, b = get(f"{wv}/buildCamerasJSONjs", headers={**BROWSER, "Referer": "https://www.wv511.org/"}, limit=20_000_000)
+    print(f"--- buildCamerasJSONjs: status {st_} type {h.get('Content-Type')} bytes {len(b)}\n   head: {b[:2500]}")
+    _fixture("wv-cameras", b[:6000])
+    stills = re.findall(r"https?://[^\"' ]+\.(?:jpg|jpeg|png)", b)
+    hosts = {}
+    for u in stills:
+        k = re.match(r"https?://[^/]+", u).group(0)
+        hosts[k] = hosts.get(k, 0) + 1
+    print("   still hosts:", sorted(hosts.items(), key=lambda kv: -kv[1])[:10], "streams:", len(re.findall(r"\.m3u8", b)))
+    for u in stills[:2]:
+        st_, _, h, bb = get(u.replace("http://", "https://", 1), limit=2_000_000)
+        print(f"   still {u}: status {st_} type {h.get('Content-Type')} bytes {len(bb)}")
+
+    head("Kentucky: fixtures")
+    base = "https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services"
+    for label, url, where in (
+        ("ky-incidents", f"{base}/kytc_incidents_reports_24hr/FeatureServer/0", "KYTC_Type IN ('Crash','Hazard','Roadway or Lane Blocking Incident')"),
+        ("ky-workzones", f"{base}/kytc_incidents_reports_24hr/FeatureServer/0", "KYTC_Type = 'Work Zone'"),
+        ("ky-closures", f"{base}/KYTC_Road_Closures/FeatureServer/0", "1=1"),
+        ("ky-cameras", "https://services2.arcgis.com/CcI36Pduqd0OR4W9/ArcGIS/rest/services/trafficCamerasCur_Prd/FeatureServer/0", "1=1"),
+    ):
+        geometry = "true" if label == "ky-closures" else "false"
+        q = urllib.parse.urlencode({"where": where, "outFields": "*", "returnGeometry": geometry, "outSR": "4326", "resultRecordCount": 6, "f": "json"})
+        st_, _, _, b = get(f"{url}/query?{q}", limit=10_000_000)
+        print(f"   {label}: status {st_} bytes {len(b)}")
+        _fixture(label, b)
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2358,7 +2465,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-10": dot_midwest_10,
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
-            "dot-south-4": dot_south_4}
+            "dot-south-4": dot_south_4, "dot-south-5": dot_south_5}
 
 
 class Timeout(Exception):
