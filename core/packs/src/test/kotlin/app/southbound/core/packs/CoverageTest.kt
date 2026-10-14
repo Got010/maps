@@ -17,9 +17,12 @@ class CoverageTest {
         // Each picker heading names its states ("Maryland, Delaware and DC"), and each state is under one.
         val headings = Regions.byState.map { it.first }
         for (state in Coverage.STATES) {
-            assertEquals(state.code, 1, headings.count { state.name in it })
+            assertEquals(state.code, 1, headings.count { state.name in Coverage.namesIn(it) })
         }
-        for (heading in headings) assertTrue(heading, Coverage.STATES.any { it.name in heading })
+        for (heading in headings) assertTrue(heading, Coverage.STATES.any { it.name in Coverage.namesIn(heading) })
+        // Whole names: West Virginia's heading is not Virginia's too.
+        assertEquals(listOf("WV"), Coverage.statesIn("West Virginia").map { it.code })
+        assertEquals(listOf("MD", "DE", "DC"), Coverage.statesIn("Maryland, Delaware and DC").map { it.code })
     }
 
     @Test

@@ -1,12 +1,13 @@
 # Southbound
 
 A privacy-first, offline Android maps app for New York, New Jersey,
-Connecticut, Pennsylvania, Maryland, Delaware, DC and the twelve Midwest
-states (Ohio to Kansas and the Dakotas). It installs only
+Connecticut, Pennsylvania, Maryland, Delaware, DC, the twelve Midwest
+states (Ohio to Kansas and the Dakotas), Virginia, West Virginia and
+Kentucky. It installs only
 from this repo's GitHub Releases. Plan and rules: [HANDOFF.md](HANDOFF.md) and
 [CLAUDE.md](CLAUDE.md).
 
-**Status: Phase 3.** Offline maps, search and directions in twenty-six regional
+**Status: Phase 3.** Offline maps, search and directions in thirty regional
 packs across those states (pick the ones you want), drive, walk and bike directions
 with spoken turn-by-turn guidance, and NYC subway, bus, LIRR and Metro-North
 trip planning, all on the phone, plus saved places and recents kept encrypted
@@ -47,7 +48,8 @@ Southbound keeps itself current from its own releases (Settings > Updates):
   Settings > Updates). On first start, and then daily, Southbound reads the
   latest release's manifest and downloads, for each ticked region, its map,
   search and local streets for directions, plus main roads for every state
-  (the east's, the Midwest's, and the seam between them, as your regions need)
+  (the east's, the Midwest's, Virginia, West Virginia and Kentucky's, and the
+  seams between them, as your regions need)
   and NYC transit, fetching only the
   packs that changed, on Wi-Fi unless you allow mobile data. Each download is checked
   against its published SHA-256 before it replaces the old pack, and the map
