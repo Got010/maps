@@ -1958,6 +1958,85 @@ def iowa_slugs():
             print(f"     tooltips: {json.dumps(tips)[:500]}")
 
 
+# Virginia, West Virginia and Kentucky (owner, October 2026: "Add in virginia, west virginia, and a surrounding state
+# of both. Full features as every other state"). First round: which platform each 511 runs (IBI's like 511PA, CARS
+# like Kansas, or its own), the data URLs its pages and scripts name, USDOT's registry of state work-zone feeds,
+# and public ArcGIS items (Kentucky's GoKY map is ArcGIS).
+SOUTH_SITES = {
+    "Virginia": ["https://www.511virginia.org", "https://511.vdot.virginia.gov"],
+    "West Virginia": ["https://www.wv511.org", "https://wv511.org"],
+    "Kentucky": ["https://goky.ky.gov", "https://511.ky.gov", "https://www.trimarc.org"],
+}
+SOUTH_STATES = ["VA", "WV", "KY"]
+
+
+def _site_marks(site):
+    """A site's home page: status, final URL, which platform marks it carries, and the data-like URLs it names."""
+    status, final, headers, page = get(site + "/", headers=BROWSER, limit=4_000_000)
+    print(f"   home: status {status} final {final} type {headers.get('Content-Type')} bytes {len(page)}; marks:",
+          [m for m in ("mapIcons", "List/GetData", "Generated/Content", "ibigroup", "iteris", "carsprogram", "castlerock",
+                       "arcgis", "esri", "one.network", "waze", "trafficland", "skyvdn", "511") if m.lower() in page.lower()])
+    print("   title:", (re.findall(r"(?is)<title>(.*?)</title>", page) or ["?"])[0].strip()[:120])
+    print("   data-ish URLs:", sorted(set(re.findall(r"""["'](https?://[^"' ]+(?:api|json|xml|rest|feed|geojson|FeatureServer|MapServer)[^"' ]*)["']""", page)))[:30])
+    print("   data-ish paths:", sorted(set(re.findall(r"""["'](/[A-Za-z0-9_./-]*(?:api|json|xml|rest|data|map/|Service|geojson)[A-Za-z0-9_./?=&-]*)["']""", page)))[:40])
+    return status, final, page
+
+
+def _script_urls(final, page, n=14):
+    """The data-like URLs and paths the page's own scripts (not the usual libraries) name."""
+    for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:n]:
+        src = urllib.parse.urljoin(final, src)
+        if any(x in src for x in ("jquery", "bootstrap", "google", "gtag", "polyfill", "recaptcha", "analytics")):
+            continue
+        _, _, _, js = get(src, headers=BROWSER, limit=12_000_000)
+        hits = sorted(set(re.findall(r"""["'`](https?://[^"'` ]+(?:api|json|rest|feed|geojson|FeatureServer|MapServer|camera|incident|event)[^"'` ]*)["'`]""", js, re.I)))
+        paths = sorted(set(re.findall(r"""["'`](/?[A-Za-z0-9_./-]*(?:api/|json|data/|map/get|getIncidents|getCameras|GetData|mapIcons|geojson|configs?/)[A-Za-z0-9_./?=&{}-]*)["'`]""", js)))
+        cars = sorted(set(re.findall(r"https://[a-z0-9.-]*carsprogram\.org", js)))
+        if hits or paths or cars:
+            print(f"   script {src[-80:]} ({len(js)} bytes):\n      urls {hits[:30]}\n      paths {paths[:30]}\n      cars {cars[:5]}")
+
+
+def dot_south():
+    head("USDOT WZDx feed registry: Virginia, West Virginia, Kentucky")
+    status, d = try_json("https://data.transportation.gov/resource/69qe-yiui.json?$limit=500", sample=600)
+    if isinstance(d, list):
+        for row in d:
+            text = json.dumps(row)
+            if any(s in text for s in ("Virginia", "Kentucky", '"VA"', '"WV"', '"KY"', "KYTC", "VDOT", "WVDOH")):
+                print("   ", text[:700])
+    for state, sites in SOUTH_SITES.items():
+        for site in sites:
+            head(f"{state}: {site}")
+            try:
+                status, final, page = _site_marks(site)
+                if status != 200:
+                    continue
+                base = final.rstrip("/")
+                if "mapicons" in page.lower() or "list/getdata" in page.lower():
+                    ibi_layers(base)
+                for path in ("/configs/main.json", "/config/main.json"):
+                    st_, _, h, body = get(base + path, headers=BROWSER, limit=2_000_000)
+                    print(f"   {path}: status {st_} type {h.get('Content-Type')} bytes {len(body)}", body[:600].replace("\n", " ") if st_ == 200 else "")
+                _script_urls(final, page)
+            except Exception as e:
+                print("   failed:", repr(e)[:200])
+    head("Public ArcGIS items about the three states' traffic")
+    for q in ("goky", "KYTC traffic cameras", "KYTC incidents", "VDOT traffic cameras", "VDOT incidents", "WV511", "WVDOT cameras"):
+        st_, d = try_json("https://www.arcgis.com/sharing/rest/search?f=json&num=12&q=" + urllib.parse.quote(q), label=f"ArcGIS search {q!r}", sample=200)
+        for item in (d or {}).get("results", []) if isinstance(d, dict) else []:
+            print(f"      {item.get('type')} | {item.get('title')} | owner {item.get('owner')} | {item.get('url')} | id {item.get('id')} | access {item.get('access')}")
+    head("Weather: the three states")
+    for state in SOUTH_STATES:
+        st_, _, _, b = get("https://api.weather.gov/alerts/active?area=" + state, limit=20_000_000)
+        print(f"  alerts {state}: status {st_} alerts {len(((_json(b) or {}).get('features')) or [])} bytes {len(b)}")
+        st_, _, _, b = get(f"https://aviationweather.gov/api/data/metar?ids=@{state}&format=json", limit=10_000_000)
+        d = _json(b)
+        print(f"  METAR @{state}: status {st_} stations {len(d) if isinstance(d, list) else None} bytes {len(b)}", "" if isinstance(d, list) else b[:300])
+    every = ["NY", "NJ", "CT", "PA", "MD", "DE", "DC", "OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS"] + SOUTH_STATES
+    st_, _, _, b = get("https://api.weather.gov/alerts/active?area=" + ",".join(every), limit=40_000_000)
+    print(f"  alerts for all {len(every)} states in one request: status {st_} alerts {len(((_json(b) or {}).get('features')) or [])} bytes {len(b)}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -1968,7 +2047,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
             "dot-midwest-10": dot_midwest_10,
-            "app-requests": app_requests, "iowa-slugs": iowa_slugs}
+            "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south}
 
 
 class Timeout(Exception):
