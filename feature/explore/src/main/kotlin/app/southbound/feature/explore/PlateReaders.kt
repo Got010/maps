@@ -28,7 +28,10 @@ internal object PlateReaders {
 
     /** Every plate reader in the pack, as map dots. Empty for a pack without landmarks. */
     fun pins(index: PlaceSearch): List<CameraPin> =
-        index.alprCameras().map { CameraPin("$ID_PREFIX${it.id}", MapPoint(it.lat, it.lon), it.name) }
+        index.alprCameras().map { CameraPin(pinId(it.id), MapPoint(it.lat, it.lon), it.name) }
+
+    /** The map id of the plate reader with landmark id [id]. */
+    fun pinId(id: Long): String = "$ID_PREFIX$id"
 
     /**
      * The plate readers and speed cameras each route passes, in the routes' order (a camera facing across

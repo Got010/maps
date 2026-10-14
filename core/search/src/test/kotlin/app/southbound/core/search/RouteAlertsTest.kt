@@ -245,7 +245,9 @@ class RouteAlertsTest {
             Hand.mark(Landmark.SCHOOL_ZONE, 0.0, 700.0),
         )
         val e = RouteAlerts.exposure(northbound, marks)
-        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 2), e)
+        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 2), e.copy(marks = emptyList()))
+        // The cameras counted come along, so the map can pin them: not the one facing across.
+        assertEquals(listOf(marks[0], marks[2], marks[3]).map { it.id }, e.marks.map { it.id })
         assertTrue(!e.isEmpty)
         assertTrue(RouteAlerts.exposure(northbound, emptyList()).isEmpty)
         assertTrue(RouteExposure(0, 0).isEmpty)
@@ -261,7 +263,10 @@ class RouteAlertsTest {
             Hand.mark(Landmark.DOT_CAMERA, 300.0, 600.0), // another road
             Hand.mark(Landmark.ALPR_CAMERA, 5.0, 400.0),
         )
-        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 0, dotCameras = 2), RouteAlerts.exposure(northbound, marks))
+        val e = RouteAlerts.exposure(northbound, marks)
+        assertEquals(RouteExposure(plateReaders = 1, speedCameras = 0, dotCameras = 2), e.copy(marks = emptyList()))
+        // One pin per spot: the second mark on the same pole isn't pinned again.
+        assertEquals(listOf(marks[4], marks[0], marks[2]).map { it.id }, e.marks.map { it.id })
         assertEquals(3, RouteAlerts.alongRoute(northbound, marks, Landmark.DOT_CAMERA).size)
         assertTrue(RouteAlerts.onRoute(northbound, marks).none { it.kind != AlertKind.ALPR_CAMERA })
         assertTrue(!RouteExposure(0, 0, 1).isEmpty)
