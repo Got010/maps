@@ -48,6 +48,43 @@ internal object TrafficIcons {
         return bitmap
     }
 
+    /**
+     * A plate reader's field of view: a [WEDGE_DEGREES] wedge pointing up (north) from the bitmap's centre, where the
+     * camera's dot sits, so rotating the icon by the camera's direction aims it. Purple, see-through with a solid edge.
+     */
+    fun wedge(fill: String): Bitmap {
+        val d = density
+        val size = (WEDGE_DP * d).toInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val unit = size / WEDGE_DP
+        canvas.scale(unit, unit)
+        val c = WEDGE_DP / 2
+        val r = c - 1f
+        val half = WEDGE_DEGREES / 2
+        val path = Path().apply {
+            moveTo(c, c)
+            arcTo(RectF(c - r, c - r, c + r, c + r), -90f - half, WEDGE_DEGREES.toFloat())
+            close()
+        }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor(fill)
+        paint.alpha = 0x66
+        canvas.drawPath(path, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.2f
+        paint.alpha = 0xE6
+        canvas.drawPath(path, paint)
+        return bitmap
+    }
+
+    /** The wedge's bitmap is this many dp square; its point is in the middle. */
+    private const val WEDGE_DP = 40f
+
+    /** How wide [wedge] opens: a typical plate reader's view. */
+    private const val WEDGE_DEGREES = 50
+
     /** A small black board with an amber frame and three amber lines of "text", like a roadside sign. */
     fun sign(): Bitmap {
         val d = density

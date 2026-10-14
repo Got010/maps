@@ -128,6 +128,21 @@ class OverlayGeoJsonTest {
     }
 
     @Test
+    fun camerasCarryTheWayTheyFaceWhenMapped() {
+        val json = OverlayGeoJson.cameras(
+            listOf(
+                CameraPin("alpr:7", MapPoint(40.744, -73.99), direction = 90),
+                CameraPin("alpr:8", MapPoint(40.7445, -73.99), direction = -45),
+                CameraPin("alpr:9", MapPoint(40.745, -73.99), direction = 360),
+            ),
+        )
+        assertTrue(json.contains(""""id":"alpr:7","direction":90}"""))
+        // The wedge layer rotates by it, so it is always 0-359.
+        assertTrue(json.contains(""""id":"alpr:8","direction":315}"""))
+        assertTrue(json.contains(""""id":"alpr:9","direction":0}"""))
+    }
+
+    @Test
     fun trafficCamerasCarryIdKindAndOfflineWithLiveOnesOnTop() {
         val json = OverlayGeoJson.trafficCameras(
             listOf(

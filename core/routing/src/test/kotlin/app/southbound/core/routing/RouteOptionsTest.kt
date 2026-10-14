@@ -62,12 +62,17 @@ class RouteOptionsTest {
     @Test
     fun `avoid toggles become use_ options at zero`() {
         assertEquals(
-            """{"costing_options":{"auto":{"use_tolls":0,"use_highways":0,"use_ferry":0}},"format":"osrm","costing":"auto","locations":[]}""",
+            """{"costing_options":{"auto":{"use_tolls":0,"exclude_tolls":true,"use_highways":0,"use_ferry":0}},"format":"osrm","costing":"auto","locations":[]}""",
             RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidTolls = true, avoidHighways = true, avoidFerries = true)),
         )
         assertEquals(
-            """{"costing_options":{"auto":{"use_tolls":0}},"format":"osrm","costing":"auto","locations":[]}""",
+            """{"costing_options":{"auto":{"use_tolls":0,"exclude_tolls":true}},"format":"osrm","costing":"auto","locations":[]}""",
             RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidTolls = true)),
+        )
+        // With no way around a toll, the router asks again with tolls kept as few as it can.
+        assertEquals(
+            """{"costing_options":{"auto":{"use_tolls":0}},"format":"osrm","costing":"auto","locations":[]}""",
+            RouteOptions.withPrefs(autoBody, TravelMode.DRIVE, RoutePrefs(avoidTolls = true), strictTolls = false),
         )
     }
 

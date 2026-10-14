@@ -74,7 +74,7 @@ class ShorterRouteTest {
             RouteOptions.withPrefs(body, TravelMode.DRIVE, RoutePrefs.DEFAULT, ShorterRoute.USE_DISTANCE),
         )
         assertEquals(
-            """{"costing_options":{"auto":{"use_distance":0.50,"use_tolls":0}},"alternates":2,"format":"osrm","costing":"auto","locations":[]}""",
+            """{"costing_options":{"auto":{"use_distance":0.50,"use_tolls":0,"exclude_tolls":true}},"alternates":2,"format":"osrm","costing":"auto","locations":[]}""",
             RouteOptions.withPrefs(body, TravelMode.DRIVE, RoutePrefs(avoidTolls = true), ShorterRoute.USE_DISTANCE),
         )
         assertEquals("""{"alternates":0,"costing":"auto"}""", RouteOptions.withoutAlternates("""{"alternates" : 2,"costing":"auto"}"""))

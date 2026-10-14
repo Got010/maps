@@ -26,9 +26,12 @@ internal object PlateReaders {
 
     private const val ID_PREFIX = "alpr:"
 
-    /** Every plate reader in the pack, as map dots. Empty for a pack without landmarks. */
+    /** Every plate reader in the pack (tolls too), as map dots, aimed the way each faces when mapped. Empty for a pack without landmarks. */
     fun pins(index: PlaceSearch): List<CameraPin> =
-        index.alprCameras().map { CameraPin("$ID_PREFIX${it.id}", MapPoint(it.lat, it.lon), it.name) }
+        index.alprCameras().map { CameraPin(pinId(it.id), MapPoint(it.lat, it.lon), it.name, it.direction) }
+
+    /** The map id of the plate reader with landmark id [id]. */
+    fun pinId(id: Long): String = "$ID_PREFIX$id"
 
     /**
      * The plate readers and speed cameras each route passes, in the routes' order (a camera facing across
@@ -40,7 +43,8 @@ internal object PlateReaders {
         val line = route.line()
         RouteAlerts.exposure(
             line,
-            near(index, line, RouteAlerts.MAX_OFFSET_M) + near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.SPEED_CAMERA) +
+            near(index, line, RouteAlerts.MAX_OFFSET_M) + near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.TOLL) +
+                near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.SPEED_CAMERA) +
                 near(index, line, RouteAlerts.MAX_OFFSET_M, Landmark.DOT_CAMERA),
         )
     }
@@ -65,7 +69,7 @@ internal object PlateReaders {
         mode: TravelMode,
         closures: List<List<Pair<Double, Double>>>,
         first: List<Route>,
-        categories: List<String> = listOf(Landmark.ALPR_CAMERA),
+        categories: List<String> = Landmark.PLATE_READERS,
     ): Avoided {
         val ends = listOf(CameraAvoidance.Spot(from.coordinates.lat, from.coordinates.lng)) +
             waypoints.map { CameraAvoidance.Spot(it.coordinate.lat, it.coordinate.lng) }
