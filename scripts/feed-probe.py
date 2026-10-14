@@ -2020,6 +2020,12 @@ def dot_south():
                 _script_urls(final, page)
             except Exception as e:
                 print("   failed:", repr(e)[:200])
+    head("Iteris' CDN and aggregator, as South Dakota's (sd.cdn.iteris-atis.com): the three states' guesses")
+    for prefix in ("va", "vdot", "wv", "wvdot", "ky", "kytc"):
+        for path in ("geojson/icons/metadata/icons.json", "geojson/icons/metadata/icons.cameras.geojson", "geojson/events.geojson"):
+            try_json(f"https://{prefix}.cdn.iteris-atis.com/{path}", sample=500)
+    for group in ("vdot", "virginia", "wvdot", "kytc"):
+        try_json(f"https://aggregator.iteris-atis.com/aggregator/services/layers/group/{group}/current/", sample=500)
     head("Public ArcGIS items about the three states' traffic")
     for q in ("goky", "KYTC traffic cameras", "KYTC incidents", "VDOT traffic cameras", "VDOT incidents", "WV511", "WVDOT cameras"):
         st_, d = try_json("https://www.arcgis.com/sharing/rest/search?f=json&num=12&q=" + urllib.parse.quote(q), label=f"ArcGIS search {q!r}", sample=200)
