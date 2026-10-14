@@ -169,6 +169,53 @@ def read_arcgis(doc):
     return out
 
 
+def read_kytc(doc):
+    """KYTC's camera layer (ArcGIS, f=json): features[{attributes{state, description, latitude, longitude}}]; the
+    layer also carries Indiana's cameras around Louisville, which Indiana's own list has."""
+    out = []
+    for f in (doc or {}).get("features") or []:
+        a = (f or {}).get("attributes") or {}
+        if str(a.get("state") or "").strip().lower() != "kentucky":
+            continue
+        at = _ok(a.get("latitude"), a.get("longitude"))
+        if at:
+            out.append((_named(a.get("description") or a.get("name")), *at))
+    return out
+
+
+def read_vdot(doc):
+    """511 Virginia's camera layer: a FeatureCollection of Points with properties.description."""
+    out = []
+    for f in (doc or {}).get("features") or []:
+        if not isinstance(f, dict):
+            continue
+        g = f.get("geometry") or {}
+        c = g.get("coordinates") or []
+        at = _ok(c[1], c[0]) if g.get("type") == "Point" and len(c) >= 2 else None
+        if at:
+            out.append((_named((f.get("properties") or {}).get("description")), *at))
+    return out
+
+
+def read_wv511(js):
+    """WV511's camera script: `var camera_data = {"count":133,"cams":[{title, description (HTML), start_lat,
+    start_lng}]}` among the map's other variables."""
+    text = js.decode("utf-8", "replace") if isinstance(js, bytes) else js
+    i = text.find("camera_data")
+    if i < 0:
+        return []
+    start = text.find("{", i)
+    doc, _ = json.JSONDecoder().raw_decode(text[start:])
+    out = []
+    for cam in (doc or {}).get("cams") or []:
+        at = _ok(cam.get("start_lat"), cam.get("start_lng"))
+        if at:
+            desc = re.sub(r"(?s)<!--.*?-->|<span.*?</span>|<[^>]+>", " ", cam.get("description") or "")
+            desc = re.sub(r"^\s*\[[A-Z]+\]\s*", "", re.sub(r"\s+", " ", desc).strip())
+            out.append((_named(desc or cam.get("title")), *at))
+    return out
+
+
 # Fetchers: state code -> function returning [(name, lat, lon)] for the whole state.
 
 def _ibi(base):
@@ -195,6 +242,10 @@ ND_CAMERAS = ("https://gis.dot.nd.gov/arcgis/rest/services/external/rcrs_dynamic
               "?where=1%3D1&outFields=Description&returnGeometry=true&outSR=4326&f=json")
 SD_CAMERAS = "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.cameras.geojson"
 SD_WEATHER_CAMERAS = "https://sd.cdn.iteris-atis.com/geojson/icons/metadata/icons.rwis.geojson"
+VA_CAMERAS = "https://511.vdot.virginia.gov/services/511/map/layers/map/cams"
+WV_CAMERAS = "https://www.wv511.org/wsvc/gmap.asmx/buildCamerasJSONjs"
+KY_CAMERAS = ("https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/trafficCamerasCur_Prd/FeatureServer/0/query"
+              "?where=1%3D1&outFields=*&returnGeometry=false&resultRecordCount=2000&f=json")
 
 FETCHERS = {
     "NY": lambda: read_geojson(_json(_get("https://api-511x-nysdot.carsprogram.org/cameras/map-features"))),
@@ -215,6 +266,9 @@ FETCHERS = {
     "MI": lambda: read_midrive(_json(_get("https://mdotjboss.state.mi.us/MiDrive/camera/AllForMap"))),
     "ND": lambda: read_arcgis(_json(_get(ND_CAMERAS))),
     "SD": lambda: read_geojson(_json(_get(SD_CAMERAS))) + read_geojson(_json(_get(SD_WEATHER_CAMERAS))),
+    "VA": lambda: read_vdot(_json(_get(VA_CAMERAS))),
+    "WV": lambda: read_wv511(_get(WV_CAMERAS, headers={"Accept": "*/*"})),
+    "KY": lambda: read_kytc(_json(_get(KY_CAMERAS))),
 }
 
 # The covered states with no list, and why (the phone's Coverage.kt says the same).
