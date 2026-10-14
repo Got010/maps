@@ -49,16 +49,21 @@ class ForecastPackTest(unittest.TestCase):
             (41.77, -72.67),  # Hartford
             (42.65, -73.76),  # Albany
             (42.36, -71.06),  # Boston: no region
-            (39.40, -78.90),  # West Virginia, inside Maryland's box but not its area
+            (39.40, -78.90),  # West Virginia, inside Maryland's box but its own region's since October 2026
             (40.00, -81.00),  # Ohio: offered since v0.1.38
+            (38.25, -85.76),  # Louisville
+            (37.54, -77.44),  # Richmond, Virginia
+            (36.16, -86.78),  # Nashville: no region
             (46.00, -110.00),  # Montana: no region
         ], regions)
-        self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76), (40.00, -81.00)], kept)
+        self.assertEqual([(39.95, -75.17), (39.29, -76.61), (38.90, -77.04), (41.77, -72.67), (42.65, -73.76), (39.40, -78.90),
+                          (40.00, -81.00), (38.25, -85.76), (37.54, -77.44)], kept)
         # The offered regions' box: every covered state since the Midwest's regions were offered (October 2026; the east's
-        # alone was (-80.52, 37.88, -71.75, 45.02) with 477 points).
+        # alone was (-80.52, 37.88, -71.75, 45.02) with 477 points). Virginia, West Virginia and Kentucky lie inside it
+        # and add 315 points to the Midwest's 3,097.
         self.assertEqual((-104.07, 35.98, -71.75, 49.38), fp.offered_box(regions))
         pts = fp.covered(fp.lattice(fp.offered_box(regions)), regions)
-        self.assertEqual(3097, len(pts))
+        self.assertEqual(3412, len(pts))
 
     def test_icon_codes(self):
         self.assertEqual("skc", fp.icon_code("https://api.weather.gov/icons/land/day/skc?size=medium"))
