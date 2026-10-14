@@ -581,7 +581,7 @@ internal fun ExploreMap(
         // Valhalla on the phone ranks without live speeds, so put the fastest option with traffic first
         // (when it gains 2+ min). The driver's avoid options win over a traffic estimate: with tolls, highways
         // or ferries avoided Valhalla's order stands, and no route with more plate readers than its first may lead.
-        val order = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
+        val byTraffic = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
             found.indices.toList()
         } else {
             TrafficRanking.order(
@@ -590,6 +590,8 @@ internal fun ExploreMap(
                 mayLead = { i -> valhallaExposure.getOrNull(i).avoided(routePrefs) <= valhallaExposure.getOrNull(0).avoided(routePrefs) },
             )
         }
+        // Avoiding plate readers, tolls or DOT cameras beats any time saved: fewest of them first, however much longer.
+        val order = byTraffic.sortedBy { valhallaExposure.getOrNull(it).avoided(routePrefs) }
         val ranked = TrafficRanking.reorder(found, order)
         val slow = TrafficRanking.reorder(valhallaSlow, order)
         val exposure = TrafficRanking.reorder(valhallaExposure, order)
@@ -1870,13 +1872,24 @@ private const val SEARCH_WAIT_MS = 5_000L
  */
 private data class FasterOffer(val route: Route, val points: List<GeoPoint>, val savesMinutes: Int, val extra: List<List<Pair<Double, Double>>>)
 
-/** The cameras on a route option that the driver asked to avoid (plate readers, DOT cameras or both); none when unknown. */
-private fun RouteExposure?.avoided(prefs: RoutePrefs): Int =
-    (if (prefs.avoidAlpr) this?.plateReaders ?: 0 else 0) + (if (prefs.avoidDotCameras) this?.dotCameras ?: 0 else 0)
+/**
+ * The cameras on a route option that the driver asked to avoid (plate readers, tolls among them; tolls alone with
+ * "Avoid tolls"; DOT cameras); none when unknown.
+ */
+private fun RouteExposure?.avoided(prefs: RoutePrefs): Int {
+    if (this == null) return 0
+    val readers = when {
+        prefs.avoidAlpr -> plateReaders
+        prefs.avoidTolls -> tolls
+        else -> 0
+    }
+    return readers + if (prefs.avoidDotCameras) dotCameras else 0
+}
 
-/** The landmark categories the avoid options square off. */
+/** The landmark categories the avoid options steer around: plate readers with tolls, tolls, DOT cameras. */
 private fun RoutePrefs.avoidedCameraCategories(): List<String> = buildList {
-    if (avoidAlpr) add(Landmark.ALPR_CAMERA)
+    if (avoidAlpr) addAll(Landmark.PLATE_READERS)
+    if (avoidTolls && Landmark.TOLL !in this) add(Landmark.TOLL)
     if (avoidDotCameras) add(Landmark.DOT_CAMERA)
 }
 
@@ -1888,11 +1901,11 @@ private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.l
 /** A camera counted on a route option, as a pin; a plate reader's id is its camera dot's, so a tap opens its card. */
 private fun Landmark.toExposurePin(): IncidentPin {
     val kind = when (category) {
-        Landmark.ALPR_CAMERA -> AlertKind.ALPR_CAMERA.name
+        Landmark.ALPR_CAMERA, Landmark.TOLL -> AlertKind.ALPR_CAMERA.name
         Landmark.SPEED_CAMERA -> AlertKind.SPEED_CAMERA.name
         else -> IncidentPin.DOT_CAMERA
     }
-    val id = if (category == Landmark.ALPR_CAMERA) PlateReaders.pinId(this.id) else "exposure:$category:${this.id}"
+    val id = if (category in Landmark.PLATE_READERS) PlateReaders.pinId(this.id) else "exposure:$category:${this.id}"
     return IncidentPin(id, MapPoint(lat, lon), kind, closure = false)
 }
 

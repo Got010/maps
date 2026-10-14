@@ -148,14 +148,22 @@ object RouteAlerts {
     }
 
     /**
-     * What a drive along [route] is exposed to: its plate readers, speed cameras and DOT cameras, by [count],
-     * and the cameras counted ([counted]), so the map can show where each one is.
+     * What a drive along [route] is exposed to: its plate readers (tolls among them, [Landmark.PLATE_READERS]),
+     * speed cameras and DOT cameras, by [count], and the cameras counted ([counted]), so the map can show where
+     * each one is.
      */
     fun exposure(route: RouteLine, landmarks: List<Landmark>): RouteExposure {
-        val plateReaders = counted(route, landmarks, Landmark.ALPR_CAMERA)
+        val readers = counted(route, landmarks, Landmark.ALPR_CAMERA)
+        val tolls = counted(route, landmarks, Landmark.TOLL)
         val speedCameras = counted(route, landmarks, Landmark.SPEED_CAMERA)
         val dotCameras = counted(route, landmarks, Landmark.DOT_CAMERA)
-        return RouteExposure(plateReaders.size, speedCameras.size, dotCameras.size, plateReaders + speedCameras + dotCameras)
+        return RouteExposure(
+            plateReaders = readers.size + tolls.size,
+            speedCameras = speedCameras.size,
+            dotCameras = dotCameras.size,
+            marks = readers + tolls + speedCameras + dotCameras,
+            tolls = tolls.size,
+        )
     }
 
     /**
@@ -196,14 +204,16 @@ object RouteAlerts {
 }
 
 /**
- * The per-route exposure line: how many plate readers, speed cameras and DOT cameras a route passes.
- * [marks] are the cameras counted, one per spot (empty when only the counts are known).
+ * The per-route exposure line: how many plate readers (toll gantries and booths included: [tolls] of them),
+ * speed cameras and DOT cameras a route passes. [marks] are the cameras counted, one per spot (empty when only
+ * the counts are known).
  */
 data class RouteExposure(
     val plateReaders: Int,
     val speedCameras: Int,
     val dotCameras: Int = 0,
     val marks: List<Landmark> = emptyList(),
+    val tolls: Int = 0,
 ) {
     val isEmpty: Boolean get() = plateReaders == 0 && speedCameras == 0 && dotCameras == 0
 }

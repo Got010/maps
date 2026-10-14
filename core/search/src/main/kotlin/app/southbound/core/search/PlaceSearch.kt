@@ -22,7 +22,7 @@ interface PlaceSearch : Closeable {
     /** Landmarks of one [category] in [box]. */
     fun landmarks(box: NearbyBox, category: String, limit: Int = LANDMARK_LIMIT): List<Landmark>
 
-    /** Every licence-plate reader in the pack, for the always-on camera layer. */
+    /** Every licence-plate reader in the pack, tolls too ([Landmark.PLATE_READERS]), for the always-on camera layer. */
     fun alprCameras(limit: Int = ALPR_LIMIT): List<Landmark>
 
     /** Places of one [category] within [radiusMeters] of ([lat], [lon]), nearest first. */

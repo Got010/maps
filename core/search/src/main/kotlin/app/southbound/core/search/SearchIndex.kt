@@ -153,8 +153,8 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
     }
 
     /**
-     * Every licence-plate reader in the pack, for the always-on camera layer.
-     * DeFlock maps a few thousand across the state, so one read is cheap.
+     * Every licence-plate reader in the pack ([Landmark.PLATE_READERS]: tolls too), with the way each faces when
+     * mapped, for the always-on camera layer. DeFlock maps a few thousand across the state, so one read is cheap.
      * Empty for an older pack without the landmark table; on any read error
      * too, since the map is fine without them.
      */
@@ -163,10 +163,11 @@ class SearchIndex private constructor(private val connection: SQLiteConnection) 
         return try {
             synchronized(connection) {
                 connection.prepare(
-                    "SELECT id, category, name, lat, lon FROM landmark WHERE category = ? LIMIT $limit",
+                    "SELECT id, category, name, lat, lon, $directionColumn FROM landmark WHERE category IN (?, ?) LIMIT $limit",
                 ).use { stmt ->
                     stmt.bindText(1, Landmark.ALPR_CAMERA)
-                    buildList { while (stmt.step()) add(stmt.readLandmark()) }
+                    stmt.bindText(2, Landmark.TOLL)
+                    buildList { while (stmt.step()) add(stmt.readLandmark(withDirection = true)) }
                 }
             }
         } catch (e: Exception) {

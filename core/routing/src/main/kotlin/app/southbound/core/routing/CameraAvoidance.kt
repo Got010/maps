@@ -36,17 +36,20 @@ object CameraAvoidance {
     const val NEAR_ROUTE_METERS = 40.0
 
     /** At most this many roads are excluded for one trip; the phone's Valhalla is configured to take them (OfflineRouter). */
-    const val MAX_CAMERAS = 300
+    const val MAX_CAMERAS = 500
 
-    /** Route, exclude the cameras found, route again: at most this many times after the first route (16 added one trip in 53). */
-    const val MAX_PASSES = 12
+    /**
+     * Route, exclude the cameras found, route again: at most this many times after the first route. 12 was enough for
+     * 52 trips in 53 measured; avoiding is to win however long the way around, so the long trips get room to go on.
+     */
+    const val MAX_PASSES = 30
 
     /**
      * Routings one preview may spend on avoiding, the bisections of [passable] included; each is a second or so on
-     * the phone. The median trip takes 6 or 7, nine in ten under 18; the few that ran past 24 in the measurements
-     * found nothing more after it.
+     * the phone. The median trip takes 6 or 7, nine in ten under 18, so this only lets the rare long trip (many
+     * cameras, many dead ends) keep looking for a way around rather than stopping at 24.
      */
-    const val MAX_ROUTINGS = 24
+    const val MAX_ROUTINGS = 60
 
     /**
      * A camera already excluded gets another spot when a later route passes it on a road farther than this from its

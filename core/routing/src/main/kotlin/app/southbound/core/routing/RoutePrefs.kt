@@ -96,8 +96,9 @@ data class RoutePrefs(
     val avoidFerries: Boolean = false,
     /**
      * Steer clear of licence-plate readers (Flock and others, as DeFlock maps
-     * them). Not a Valhalla costing option: the app squares off the cameras
-     * on each route and routes again (see [CameraAvoidance]).
+     * them, and toll gantries and booths). Not a Valhalla costing option: the app
+     * excludes the road beside the cameras on each route and routes again (see
+     * [CameraAvoidance]); the option with the fewest leads, however long.
      */
     val avoidAlpr: Boolean = false,
     /**
@@ -136,12 +137,16 @@ data class RoutePrefs(
      * from a plain car trip (driving only; see [WalkPrefs] and [BikePrefs]).
      * Valhalla's 0 for use_tolls, use_highways and
      * use_ferry means avoid as far as possible; unset keeps its own default.
+     * Tolls are plate readers too, so [avoidTolls] also sets `exclude_tolls`:
+     * no toll road at all, however long the way around. [strictTolls] false
+     * leaves that out, for the trip with no way around a toll ([OfflineRouter]).
      * [useDistance] weighs distance into the route choice ([ShorterRoute]).
      */
-    fun costingOptionsJson(useDistance: Double? = null): String? {
+    fun costingOptionsJson(useDistance: Double? = null, strictTolls: Boolean = true): String? {
         val parts = buildList {
             if (useDistance != null) add(""""use_distance":${num(useDistance)}""")
             if (avoidTolls) add(""""use_tolls":0""")
+            if (avoidTolls && strictTolls) add(""""exclude_tolls":true""")
             if (avoidHighways) add(""""use_highways":0""")
             if (avoidFerries) add(""""use_ferry":0""")
             if (vehicle == VehicleKind.TRUCK) {
