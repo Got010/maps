@@ -2453,6 +2453,50 @@ def dot_south_5():
         _fixture(label, b)
 
 
+def dot_south_6():
+    """Sixth round: WV511's incident layer (its category ids) and how its cameras' video is played."""
+    head("West Virginia: how the map asks for incidents")
+    site = "https://www.wv511.org"
+    ref = {**BROWSER, "Referer": "https://www.wv511.org/"}
+    js_all = {}
+    for path in ("/js/gmapi.min.js", "/js/webmap.min.js", "/js/CameraListing.min.js", "/js/cam_stream_timeout.js", "/js/gmapi.polys.min.js"):
+        _, _, _, js = get(site + path, headers=ref, limit=4_000_000)
+        js_all[path] = js
+        for needle in ("buildEventsKMLi_Filtered", "CategoryIDs", "filterEvents", "buildEventsKMLc", "m3u8", "rtplive", "streaming", "STREAMING", "LoadAnotherCam", "playlist"):
+            for snip in _context(js, needle, before=200, after=500, limit=2):
+                print(f"   {path} [{needle}]: {snip}")
+    st_, _, _, page = get(f"{site}/webmapi.aspx?VIEWLEVEL=XD&VIEWLEVEL2=&VIEWTYPE=ICDS&VIEWTYPE2=&VIEWPTCONLY=0&LAT=&LNG=&ZOOM=&GV=&WEBMAPKEY=", headers=ref, limit=4_000_000)
+    for needle in ("CategoryIDs", "filterEvents", "Categor", "m3u8", "stream"):
+        for snip in _context(page, needle, before=200, after=400, limit=2):
+            print(f"   webmapi [{needle}]: {snip}")
+    st_, _, _, home = get(f"{site}/", headers=ref, limit=4_000_000)
+    print("   home's event filter inputs:", re.findall(r'<input[^>]+(?:Event|event|cat|Cat)[^>]*>', home)[:30])
+    for ids in ("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30", "0", "1"):
+        st_, _, h, b = get(f"{site}/wsvc/gmap.asmx/buildEventsKMLi_Filtered?CategoryIDs={ids}", headers=ref, limit=20_000_000)
+        marks = re.findall(r"(?s)<Placemark.*?</Placemark>", b)
+        print(f"--- buildEventsKMLi_Filtered?CategoryIDs={ids[:20]}: status {st_} bytes {len(b)} placemarks {len(marks)}", b[:300].replace("\n", " ") if st_ != 200 else "")
+        for m in marks[:2]:
+            print("   placemark:", re.sub(r"\s+", " ", m)[:1000])
+    head("West Virginia: a camera's video")
+    st_, _, _, cams = get(f"{site}/wsvc/gmap.asmx/buildCamerasJSONjs", headers=ref, limit=20_000_000)
+    m = re.search(r"var camera_data = (\{.*?\});?\s*$", cams, re.S)
+    data = None
+    if m:
+        try:
+            data = json.loads(m.group(1))
+        except ValueError as e:
+            print("   camera_data isn't JSON:", e)
+    cams_list = (data or {}).get("cams") or []
+    print("   cameras", len(cams_list), "icons", _tally([{"attributes": c} for c in cams_list], "icon"), "streaming", sum("STREAMING:1" in (c.get("description") or "") for c in cams_list))
+    if cams_list:
+        print("   one:", json.dumps(cams_list[0])[:1200])
+        cid = cams_list[0].get("md5")
+        for path in (f"/CameraListing.aspx?cam={cid}", f"/wsvc/gmap.asmx/getCameraStream?camId={cid}", f"/flowplayer/getCam.aspx?cam={cid}",
+                     f"/wsvc/gmap.asmx/GetCameraStreamURL?id={cid}"):
+            st_, _, h, b = get(site + path, headers=ref, limit=2_000_000)
+            print(f"   {path}: status {st_} type {h.get('Content-Type')} bytes {len(b)}", re.findall(r"https?://[^\"' <]+(?:m3u8|rtplive|stream)[^\"' <]*", b)[:5])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2465,7 +2509,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-10": dot_midwest_10,
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
-            "dot-south-4": dot_south_4, "dot-south-5": dot_south_5}
+            "dot-south-4": dot_south_4, "dot-south-5": dot_south_5,
+            "dot-south-6": dot_south_6}
 
 
 class Timeout(Exception):
