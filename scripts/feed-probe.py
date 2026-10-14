@@ -2043,6 +2043,108 @@ def dot_south():
     print(f"  alerts for all {len(every)} states in one request: status {st_} alerts {len(((_json(b) or {}).get('features')) or [])} bytes {len(b)}")
 
 
+def _strings(js, pattern, limit=80):
+    """The quoted strings in a script that match [pattern] (relative paths included), deduplicated, in order."""
+    seen = []
+    for s in re.findall(r"""["'`]([^"'`\s]{3,200})["'`]""", js):
+        if re.search(pattern, s, re.I) and s not in seen:
+            seen.append(s)
+    return seen[:limit]
+
+
+def _arcgis_layer(url, where="1=1", n=3, label=None):
+    """An ArcGIS layer: its fields, its row count, and a few rows of every field."""
+    st_, meta = try_json(url + "?f=json", label=f"{label or url} (layer)", sample=300)
+    if isinstance(meta, dict):
+        print("   name", meta.get("name"), "| geometry", meta.get("geometryType"), "| maxRecordCount", meta.get("maxRecordCount"))
+        print("   fields", [f.get("name") for f in meta.get("fields") or []][:60])
+    q = urllib.parse.urlencode({"where": where, "returnCountOnly": "true", "f": "json"})
+    try_json(f"{url}/query?{q}", label=f"{label or url} count", sample=200)
+    q = urllib.parse.urlencode({"where": where, "outFields": "*", "outSR": "4326", "resultRecordCount": n, "f": "json"})
+    st_, d = try_json(f"{url}/query?{q}", label=f"{label or url} rows", sample=2500)
+    if isinstance(d, dict):
+        for f in (d.get("features") or [])[1:n]:
+            print("   row:", json.dumps(f)[:2500])
+
+
+def dot_south_2():
+    """Second round: Virginia's 511 config and Iteris layers, West Virginia's site scripts, Kentucky's ArcGIS services."""
+    head("USDOT WZDx feed registry, the three states (compact)")
+    st_, _, _, body = get("https://data.transportation.gov/resource/69qe-yiui.json?$limit=500", limit=10_000_000)
+    rows = _json(body) if st_ == 200 else None
+    print("   registry status", st_, "rows", len(rows) if isinstance(rows, list) else None)
+    for row in rows or []:
+        text = json.dumps(row)
+        if re.search(r"Virginia|Kentucky|KYTC|VDOT|WVDOH|WVDOT|\"(VA|WV|KY)\"", text):
+            print("   ", text[:900])
+
+    head("Virginia: 511.vdot.virginia.gov's config and scripts")
+    try:
+        status, final, page = _site_marks("https://511.vdot.virginia.gov")
+        st_, _, h, cfg = get("https://511.vdot.virginia.gov/assets/config/config.json", headers=BROWSER, limit=2_000_000)
+        print(f"   assets/config/config.json: status {st_} type {h.get('Content-Type')} bytes {len(cfg)}\n{cfg[:7000]}")
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:10]:
+            src = urllib.parse.urljoin(final, src)
+            if "main-" not in src and "chunk" not in src:
+                continue
+            _, _, _, js = get(src, headers=BROWSER, limit=12_000_000)
+            print(f"   {src[-40:]} ({len(js)} bytes) data strings:",
+                  _strings(js, r"https?://|/api|geojson|\.json|iteris|events|camera|sign|dms|incident|layer|feed", 120))
+        st_, _, _, home = get("https://www.511virginia.org/", headers=BROWSER, limit=200_000)
+        print("   www.511virginia.org status", st_, "bytes", len(home))
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+    head("Virginia: Iteris aggregator, group vdot")
+    agg = "https://aggregator.iteris-atis.com/aggregator/services"
+    for path in ("layers/group/vdot/", "elements/group/vdot/current/", "layers/group/vdot/current/?layer_type=incident",
+                 "elements/group/vdot/current/?layer_type=incident"):
+        st_, d = try_json(f"{agg}/{path}", sample=1500)
+        feats = d.get("features") if isinstance(d, dict) else (d if isinstance(d, list) else None)
+        if isinstance(feats, list):
+            kinds = {}
+            for f in feats:
+                p = f.get("properties", f) if isinstance(f, dict) else {}
+                k = (p.get("content_type") or p.get("layer_type") or p.get("type") or p.get("name") or "?")
+                kinds[str(k)] = kinds.get(str(k), 0) + 1
+            print("   kinds:", sorted(kinds.items(), key=lambda kv: -kv[1])[:30])
+
+    head("West Virginia: wv511.org's scripts, every service-looking string")
+    try:
+        status, final, page = _site_marks("https://www.wv511.org")
+        print("   inline service-ish strings:", _strings(page, r"asmx|ashx|svc|json|kml|xml|Handler|Service|\.aspx|/api", 80))
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', page)[:20]:
+            src = urllib.parse.urljoin(final, html.unescape(src))
+            if any(x in src for x in ("jquery", "jqyery", "google", "gtag", "awstats", "WebResource")):
+                continue
+            _, _, _, js = get(src, headers=BROWSER, limit=8_000_000)
+            print(f"   {src[-60:]} ({len(js)} bytes):", _strings(js, r"asmx|ashx|svc|json|kml|xml|Handler|Service|\.aspx|/api|camera|incident|event|sign|dms|Get[A-Z]", 100))
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+
+    head("Kentucky: GoKY's script, every URL")
+    try:
+        st_, _, _, js = get("https://goky.ky.gov/index.js", headers=BROWSER, limit=8_000_000)
+        print("   index.js status", st_, "bytes", len(js))
+        print("   urls:", _strings(js, r"https?://", 120))
+        print("   paths:", _strings(js, r"^/|FeatureServer|MapServer|\.json|api", 80))
+    except Exception as e:
+        print("   failed:", repr(e)[:300])
+    head("Kentucky: KYTC's ArcGIS services")
+    try_json("https://maps.kytc.ky.gov/arcgis/rest/services/RealTime?f=json", sample=3000)
+    try_json("https://maps.kytc.ky.gov/arcgis/rest/services?f=json", sample=3000)
+    _arcgis_layer("https://services2.arcgis.com/CcI36Pduqd0OR4W9/ArcGIS/rest/services/trafficCamerasCur_Prd/FeatureServer/0", label="KYTC cameras")
+    _arcgis_layer("https://services1.arcgis.com/Mg7DLdfYcSWIaDnu/ArcGIS/rest/services/Traffic_Camera_Locations_Public_view/FeatureServer/0", label="Louisville cameras")
+    try_json("https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/kytc_incidents_reports_24hr/FeatureServer?f=json", sample=1500)
+    _arcgis_layer("https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/kytc_incidents_reports_24hr/FeatureServer/0", label="KYTC incidents 24 h")
+    try_json("https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/KYTC_KIR_KYEM_Public_Feed/FeatureServer?f=json", sample=1500)
+    _arcgis_layer("https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/KYTC_KIR_KYEM_Public_Feed/FeatureServer/0", label="KYTC KIR public")
+    for q in ("owner:KYTCGIS", "owner:kytc.gis_KYTC", "owner:KYTCBigData", "KYTC work zones", "KYTC message signs", "KYTC road closures", "goky incidents waze"):
+        st_, d = try_json("https://www.arcgis.com/sharing/rest/search?f=json&num=40&sortField=modified&sortOrder=desc&q=" + urllib.parse.quote(q), label=f"ArcGIS search {q!r}", sample=100)
+        for item in (d or {}).get("results", []) if isinstance(d, dict) else []:
+            if item.get("type") in ("Feature Service", "Map Service", "Web Mapping Application", "Web Map"):
+                print(f"      {item.get('type')} | {item.get('title')} | {item.get('owner')} | {item.get('url')} | {item.get('id')}")
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2053,7 +2155,8 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-midwest-6": dot_midwest_6, "dot-midwest-7": dot_midwest_7,
             "dot-midwest-8": dot_midwest_8, "dot-midwest-9": dot_midwest_9,
             "dot-midwest-10": dot_midwest_10,
-            "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south}
+            "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
+            "dot-south-2": dot_south_2}
 
 
 class Timeout(Exception):
