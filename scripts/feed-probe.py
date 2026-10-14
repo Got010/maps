@@ -2497,6 +2497,62 @@ def dot_south_6():
             print(f"   {path}: status {st_} type {h.get('Content-Type')} bytes {len(b)}", re.findall(r"https?://[^\"' <]+(?:m3u8|rtplive|stream)[^\"' <]*", b)[:5])
 
 
+def _function(js, name, limit=3000):
+    """The source of a script's `function name(...)` up to [limit] characters."""
+    i = js.find(f"function {name}(")
+    return js[i:i + limit] if i >= 0 else None
+
+
+def dot_south_7():
+    """Seventh round: WV511's incident filter and camera stream, and the last fixtures."""
+    site = "https://www.wv511.org"
+    ref = {**BROWSER, "Referer": "https://www.wv511.org/"}
+    head("West Virginia: the incident filter, whole")
+    _, _, _, webmap = get(site + "/js/webmap.min.js", headers=ref, limit=4_000_000)
+    print("   toggleIncidentTypes:", _function(webmap, "toggleIncidentTypes", 4000))
+    _, _, _, home = get(site + "/", headers=ref, limit=4_000_000)
+    print("   home's incident checkboxes:", re.findall(r'<input[^>]+id="chkIC[^"]*"[^>]*>', home)[:40])
+    for cats, sevs, only in (("", "1,2,3,", "0"), ("", "1,2,3,", "1"), ("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,", "1,2,3,", "0"), ("", "", "0")):
+        q = urllib.parse.urlencode({"CategoryIDs": cats, "SeverityIDs": sevs, "is511Only": only})
+        st_, _, h, b = get(f"{site}/wsvc/gmap.asmx/buildEventsKMLi_Filtered?{q}", headers=ref, limit=20_000_000)
+        marks = re.findall(r"(?s)<Placemark.*?</Placemark>", b)
+        names = {}
+        for m in marks:
+            n = (re.findall(r"<name><!\[CDATA\[(.*?)\]\]></name>", m, re.S) or ["?"])[0]
+            names[n[:40]] = names.get(n[:40], 0) + 1
+        print(f"--- {q}: status {st_} bytes {len(b)} placemarks {len(marks)} names {sorted(names.items(), key=lambda kv: -kv[1])[:15]}")
+        for m in marks[:3]:
+            print("   placemark:", re.sub(r"\s+", " ", m)[:1200])
+        if marks:
+            start = b.find("<Placemark")
+            _fixture(f"wv-incidents-{only}", re.sub(r"\s*\n\s*", " ", b[:start] + "".join(marks[:5]) + "</Document></kml>"))
+            break
+    head("West Virginia: how a camera's stream is played")
+    for path in ("/js/gmapi.cams.min.js", "/js/flowplayi.min.js", "/js/cam_stream_timeout.js"):
+        _, _, _, js = get(site + path, headers=ref, limit=4_000_000)
+        print(f"   {path}: {len(js)} bytes")
+        for name in ("LoadStreamingCam", "stopCameraPlayBack", "getStreamUrl", "playStream"):
+            src = _function(js, name, 2500)
+            if src:
+                print(f"   {path} {name}: {src}")
+        print("   urls:", _strings(js, r"https?://|m3u8|rtplive|wowza|stream|\.aspx|asmx", 40))
+
+    head("Kentucky: Kentucky's own cameras")
+    q = urllib.parse.urlencode({"where": "state='Kentucky'", "outFields": "*", "returnGeometry": "false", "resultRecordCount": 6, "f": "json"})
+    st_, _, _, b = get(f"https://services2.arcgis.com/CcI36Pduqd0OR4W9/ArcGIS/rest/services/trafficCamerasCur_Prd/FeatureServer/0/query?{q}", limit=10_000_000)
+    _fixture("ky-cameras-ky", b)
+    head("Virginia: the other layers' fixtures")
+    va = "https://511.vdot.virginia.gov/services/511/map/layers/map"
+    for ident, n in (("acon", 5), ("hpIncidents", 5), ("weatherClosures", 5), ("sEvents", 3), ("sActivity", 3)):
+        st_, _, _, b = get(f"{va}/{ident}", headers=BROWSER, limit=40_000_000)
+        dd = _json(b)
+        if isinstance(dd, dict) and isinstance(dd.get("features"), list):
+            print(f"   {ident}: {len(dd['features'])} features")
+            _fixture(f"va-{ident}", json.dumps({"type": "FeatureCollection", "features": dd["features"][:n]}))
+        else:
+            print(f"   {ident}: status {st_}", b[:200])
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2510,7 +2566,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "app-requests": app_requests, "iowa-slugs": iowa_slugs, "dot-south": dot_south,
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
             "dot-south-4": dot_south_4, "dot-south-5": dot_south_5,
-            "dot-south-6": dot_south_6}
+            "dot-south-6": dot_south_6, "dot-south-7": dot_south_7}
 
 
 class Timeout(Exception):
