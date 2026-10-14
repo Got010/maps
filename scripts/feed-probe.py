@@ -2679,6 +2679,24 @@ def dot_south_8():
             print(f"   {state}: FAILED {type(e).__name__}: {str(e)[:200]}")
 
 
+def dot_south_9():
+    """Ninth round: the stream host of WV511's cameras across the state (CAM117's was vtc1.roadsummary.com)."""
+    ref = {**BROWSER, "Referer": "https://www.wv511.org/"}
+    head("West Virginia: each camera's stream host")
+    _, _, _, js = get("https://www.wv511.org/wsvc/gmap.asmx/buildCamerasJSONjs", headers=ref, limit=4_000_000)
+    ids = re.findall(r'"md5"\s*:\s*"([^"]+)"', js)
+    print(f"   {len(ids)} cameras")
+    hosts = {}
+    for cam in ids[::9]:
+        st_, _, _, page = get(f"https://www.wv511.org/flowplayeri.aspx?CAMID={urllib.parse.quote(cam)}", headers=ref, limit=1_000_000)
+        streams = sorted(set(re.findall(r"https://[^\s'\"<>]+?\.m3u8", page)))
+        for u in streams:
+            h = urllib.parse.urlsplit(u).netloc
+            hosts[h] = hosts.get(h, 0) + 1
+        print(f"   {cam}: status {st_} {streams}")
+    print("   hosts:", hosts)
+
+
 SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, "511ny-travel": fiveeleven_travel,
             "addresses": addresses, "weather-alerts": weather_alerts, "weather-forecast": weather_forecast,
             "weather-radar": weather_radar, "weather-current": weather_current, "weather-states": weather_states,
@@ -2693,7 +2711,7 @@ SECTIONS = {"nycdot": nycdot, "511ny": fiveeleven, "511ny-new": fiveeleven_new, 
             "dot-south-2": dot_south_2, "dot-south-3": dot_south_3,
             "dot-south-4": dot_south_4, "dot-south-5": dot_south_5,
             "dot-south-6": dot_south_6, "dot-south-7": dot_south_7,
-            "dot-south-8": dot_south_8}
+            "dot-south-8": dot_south_8, "dot-south-9": dot_south_9}
 
 
 class Timeout(Exception):
