@@ -137,6 +137,7 @@ import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.RouteExposure
+import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.traffic.ClosureAvoidance
 import app.southbound.core.traffic.FasterRoute
@@ -150,6 +151,7 @@ import app.southbound.core.traffic.PoliceAlerts
 import app.southbound.core.traffic.RouteSlowdowns
 import app.southbound.core.traffic.RouteTraffic
 import app.southbound.core.traffic.SpeedBand
+import app.southbound.core.traffic.TrafficCamera
 import app.southbound.core.traffic.TrafficRanking
 import app.southbound.core.traffic.TrafficSnapshot
 import app.southbound.core.traffic.TripTraffic
@@ -229,6 +231,12 @@ private sealed interface ShownThing {
 
     /** A weather station's current conditions (its badge on the weather layer), by station id. */
     data class WeatherStation(val id: String) : ShownThing
+
+    /**
+     * A DOT traffic camera pinned on a route option (the pack's name and place, no feed id): the traffic feed's
+     * camera at that spot when it lists one, so the card shows its picture, else what the pack knows.
+     */
+    data class DotCamera(val camera: Landmark) : ShownThing
 }
 
 /** A paused trip: guidance stopped, what was left of it kept so Resume can route there again from here. */
@@ -1272,9 +1280,12 @@ internal fun ExploreMap(
             },
             obscured = PaddingValues(bottom = if (sheetOpen) SHEET_HEIGHT else 0.dp),
             onIncidentTap = { id ->
-                // A plate reader pinned on a route option opens its card, as its dot does.
+                // A plate reader pinned on a route option opens its card, as its dot does; a DOT camera, its own.
                 shownThing = traffic.incidents.firstOrNull { it.id == id }?.let(ShownThing::IncidentShown)
                     ?: cameraPins.firstOrNull { it.id == id }?.let(ShownThing::PlateReader)
+                    ?: (preview as? RoutePreviewState.Ready)?.exposure?.flatMap { it.marks }
+                        ?.firstOrNull { it.category == Landmark.DOT_CAMERA && it.toExposurePin().id == id }
+                        ?.let(ShownThing::DotCamera)
             },
             // A tap on another route's line picks it, as tapping its card does.
             onRouteTap = { rank ->
@@ -1491,7 +1502,7 @@ internal fun ExploreMap(
                                 } else {
                                     when (shownThing) {
                                         null, is ShownThing.PlateReader, is ShownThing.WeatherStation -> 28.dp
-                                        is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown -> 400.dp
+                                        is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown, is ShownThing.DotCamera -> 400.dp
                                         is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
                                     } + if (pausedTrip != null && !searchAtBottom) PAUSED_BAR_CLEARANCE else 0.dp // above the paused trip's bar
                                 },
@@ -1743,6 +1754,14 @@ internal fun ExploreMap(
             is ShownThing.WeatherStation -> weather.conditions.firstOrNull { it.station == shown.id }?.let { now ->
                 WeatherStationCard(now, onClose = { shownThing = null }, modifier = cardModifier)
             }
+            is ShownThing.DotCamera -> {
+                val live = traffic.cameras.liveAt(shown.camera.point)
+                if (live != null) {
+                    TrafficCameraCard(live, services.networkGate, onClose = { shownThing = null }, modifier = cardModifier)
+                } else {
+                    DotCameraCard(shown.camera.name, trafficOn, onClose = { shownThing = null }, modifier = cardModifier)
+                }
+            }
         }
     }
 }
@@ -1897,6 +1916,17 @@ private fun RouteSlowdowns.toSpeedLines(): List<SpeedLine> =
     segments.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) }
 
 private fun Incident.toPin() = IncidentPin(id, MapPoint(location.lat, location.lon), kind.name, isClosure)
+
+/**
+ * The traffic feed's camera at [point], within [DOT_CAMERA_MATCH_M] (the pack and the feed read the same 511 list),
+ * the nearest when several; null when the feed lists none there (traffic off, or another state's feed).
+ */
+private fun List<TrafficCamera>.liveAt(point: LatLon): TrafficCamera? =
+    map { it to RouteLine.distanceMeters(point, LatLon(it.lat, it.lon)) }
+        .filter { it.second <= DOT_CAMERA_MATCH_M }
+        .minByOrNull { it.second }?.first
+
+private const val DOT_CAMERA_MATCH_M = 50.0
 
 /** A camera counted on a route option, as a pin; a plate reader's id is its camera dot's, so a tap opens its card. */
 private fun Landmark.toExposurePin(): IncidentPin {
