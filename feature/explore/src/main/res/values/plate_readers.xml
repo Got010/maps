@@ -6,4 +6,8 @@
     <string name="explore_camera_unknown">License plate camera; maker not mapped</string>
     <string name="explore_camera_source">Mapped by volunteers in OpenStreetMap (DeFlock). It may have moved or be missing.</string>
     <string name="explore_camera_close">Close</string>
+    <!-- The card for a tapped DOT camera pin on a route option, when the traffic feed has no picture of it. -->
+    <string name="explore_dot_camera_title">DOT traffic camera</string>
+    <string name="explore_dot_camera_traffic_off">A state traffic camera from the map data. Turn on traffic in Settings to see its live picture.</string>
+    <string name="explore_dot_camera_no_picture">A state traffic camera from the map data. Its state\'s traffic feed has no live picture for it right now.</string>
 </resources>

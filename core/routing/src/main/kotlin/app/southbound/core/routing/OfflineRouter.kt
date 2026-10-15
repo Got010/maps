@@ -82,9 +82,9 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         val response = try {
             synchronized(valhalla) { valhalla.routeRaw(body(strictTolls = true)) }
         } catch (e: ValhallaException) {
-            // "Avoid tolls" leaves out every toll road; when there is no way around one (an island, a toll bridge
-            // across the only river crossing in reach), the route keeps as few tolls as it can instead.
-            val tollsOnly = mode == TravelMode.DRIVE && prefs.avoidTolls
+            // "Avoid tolls" and "Avoid plate readers" leave out every toll road; when there is no way around one (an
+            // island, a toll bridge across the only river crossing in reach), the route keeps as few tolls as it can.
+            val tollsOnly = mode == TravelMode.DRIVE && prefs.avoidsTolls
             try {
                 if (!tollsOnly) throw e
                 synchronized(valhalla) { valhalla.routeRaw(body(strictTolls = false)) }

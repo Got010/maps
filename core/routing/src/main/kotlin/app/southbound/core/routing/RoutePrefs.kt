@@ -119,6 +119,12 @@ data class RoutePrefs(
     /** The Valhalla costing model this profile routes with. */
     val costing: String get() = if (vehicle == VehicleKind.TRUCK) "truck" else TravelMode.DRIVE.valhallaCosting
 
+    /**
+     * Whether driving keeps off toll roads: "Avoid tolls", or "Avoid plate readers" (a toll gantry photographs
+     * every plate, and steering around one spot at a time can't get a route off a turnpike).
+     */
+    val avoidsTolls: Boolean get() = avoidTolls || avoidAlpr
+
     /** True when every driving option is at its default, so requests stay as Ferrostar built them. */
     val isDefault: Boolean get() = costingOptionsJson() == null && !avoidAlpr && !avoidDotCameras
 
@@ -137,16 +143,17 @@ data class RoutePrefs(
      * from a plain car trip (driving only; see [WalkPrefs] and [BikePrefs]).
      * Valhalla's 0 for use_tolls, use_highways and
      * use_ferry means avoid as far as possible; unset keeps its own default.
-     * Tolls are plate readers too, so [avoidTolls] also sets `exclude_tolls`:
-     * no toll road at all, however long the way around. [strictTolls] false
-     * leaves that out, for the trip with no way around a toll ([OfflineRouter]).
+     * Tolls are plate readers too, so [avoidTolls] and [avoidAlpr] alike
+     * ([avoidsTolls]) set use_tolls 0 and `exclude_tolls`: no toll road at
+     * all, however long the way around. [strictTolls] false leaves the
+     * exclusion out, for the trip with no way around a toll ([OfflineRouter]).
      * [useDistance] weighs distance into the route choice ([ShorterRoute]).
      */
     fun costingOptionsJson(useDistance: Double? = null, strictTolls: Boolean = true): String? {
         val parts = buildList {
             if (useDistance != null) add(""""use_distance":${num(useDistance)}""")
-            if (avoidTolls) add(""""use_tolls":0""")
-            if (avoidTolls && strictTolls) add(""""exclude_tolls":true""")
+            if (avoidsTolls) add(""""use_tolls":0""")
+            if (avoidsTolls && strictTolls) add(""""exclude_tolls":true""")
             if (avoidHighways) add(""""use_highways":0""")
             if (avoidFerries) add(""""use_ferry":0""")
             if (vehicle == VehicleKind.TRUCK) {
