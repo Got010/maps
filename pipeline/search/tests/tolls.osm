@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="southbound-test">
+  <!-- A toll road with no toll point mapped: 50-51-52-53. A ramp ends on it at 51, a road starts at its end 53,
+       a street crosses it at grade at 52, and its other end 50 joins nothing. -->
+  <node id="50" version="1" lat="41.0000" lon="-74.0000"/>
+  <node id="51" version="1" lat="41.0000" lon="-73.9900"/>
+  <node id="52" version="1" lat="41.0000" lon="-73.9800"/>
+  <node id="53" version="1" lat="41.0000" lon="-73.9700"/>
+  <node id="54" version="1" lat="41.0000" lon="-73.9600"/>
+  <node id="60" version="1" lat="41.0050" lon="-73.9950"/>
+  <node id="61" version="1" lat="41.0050" lon="-73.9800"/>
+  <node id="62" version="1" lat="40.9950" lon="-73.9800"/>
+  <way id="300" version="1">
+    <nd ref="50"/><nd ref="51"/><nd ref="52"/><nd ref="53"/>
+    <tag k="highway" v="motorway"/><tag k="toll" v="yes"/><tag k="name" v="Toll Parkway"/>
+  </way>
+  <way id="301" version="1"><nd ref="60"/><nd ref="51"/><tag k="highway" v="motorway_link"/></way>
+  <way id="302" version="1"><nd ref="53"/><nd ref="54"/><tag k="highway" v="primary"/><tag k="name" v="Free Road"/></way>
+  <way id="303" version="1">
+    <nd ref="61"/><nd ref="52"/><nd ref="62"/><tag k="highway" v="residential"/><tag k="name" v="Cross Street"/>
+  </way>
+  <!-- A footpath ending on the toll road is not a way on for cars. -->
+  <node id="63" version="1" lat="41.0050" lon="-74.0000"/>
+  <way id="304" version="1"><nd ref="63"/><nd ref="50"/><tag k="highway" v="footway"/></way>
+  <!-- A toll road with its gantry mapped (71): the road joining it 900 m on (72) is left to the gantry. -->
+  <node id="70" version="1" lat="42.0000" lon="-74.0000"/>
+  <node id="71" version="1" lat="42.0000" lon="-73.9900"><tag k="highway" v="toll_gantry"/></node>
+  <node id="72" version="1" lat="42.0000" lon="-73.9800"/>
+  <node id="73" version="1" lat="42.0000" lon="-73.9700"/>
+  <way id="310" version="1">
+    <nd ref="70"/><nd ref="71"/><nd ref="72"/><tag k="highway" v="motorway"/><tag k="toll" v="yes"/>
+  </way>
+  <way id="311" version="1"><nd ref="72"/><nd ref="73"/><tag k="highway" v="motorway"/></way>
+  <!-- A gantry drawn as a line across the road, and a booth drawn as a closed way: one point each. -->
+  <node id="80" version="1" lat="43.0000" lon="-74.0000"/>
+  <node id="81" version="1" lat="43.0000" lon="-73.9990"/>
+  <node id="82" version="1" lat="43.1000" lon="-74.0000"/>
+  <node id="83" version="1" lat="43.1000" lon="-73.9990"/>
+  <node id="84" version="1" lat="43.1010" lon="-73.9990"/>
+  <way id="320" version="1"><nd ref="80"/><nd ref="81"/><tag k="highway" v="toll_gantry"/></way>
+  <way id="321" version="1">
+    <nd ref="82"/><nd ref="83"/><nd ref="84"/><nd ref="82"/><tag k="barrier" v="toll_booth"/>
+  </way>
+  <!-- A toll enforcement relation whose device is an untagged node; a speed enforcement one is not a toll. -->
+  <node id="90" version="1" lat="44.0000" lon="-74.0000"/>
+  <node id="91" version="1" lat="44.1000" lon="-74.0000"/>
+  <relation id="400" version="1">
+    <member type="node" ref="90" role="device"/>
+    <tag k="type" v="enforcement"/><tag k="enforcement" v="toll"/>
+  </relation>
+  <relation id="401" version="1">
+    <member type="node" ref="91" role="device"/>
+    <tag k="type" v="enforcement"/><tag k="enforcement" v="maxspeed"/>
+  </relation>
+</osm>
