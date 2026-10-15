@@ -55,6 +55,10 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
      * best route only (the preview's shorter way, [ShorterRoute]). Blocking:
      * call off the main thread.
      *
+     * With tolls avoided ([RoutePrefs.avoidsTolls]) and no [excludePoints], a
+     * trip with no toll-free route is routed once more with tolls only
+     * discouraged, so an island or a lone toll bridge still gets a route.
+     *
      * @throws RoutingException when there is no route, e.g. a destination
      *   outside the routing pack.
      */
@@ -84,7 +88,10 @@ class OfflineRouter(context: Context, routingPack: File) : Closeable {
         } catch (e: ValhallaException) {
             // "Avoid tolls" and "Avoid plate readers" leave out every toll road; when there is no way around one (an
             // island, a toll bridge across the only river crossing in reach), the route keeps as few tolls as it can.
-            val tollsOnly = mode == TravelMode.DRIVE && prefs.avoidsTolls
+            // Only with no roads excluded: a failure with [excludePoints] means a camera sits on the only toll-free
+            // way, and that is for the caller to give up (CameraAvoidance.passable drops the camera, fromCar the
+            // spots), not the toll ban. Otherwise the preview's avoid loop and shorter way came back on toll roads.
+            val tollsOnly = mode == TravelMode.DRIVE && prefs.avoidsTolls && excludePoints.isEmpty()
             try {
                 if (!tollsOnly) throw e
                 synchronized(valhalla) { valhalla.routeRaw(body(strictTolls = false)) }
