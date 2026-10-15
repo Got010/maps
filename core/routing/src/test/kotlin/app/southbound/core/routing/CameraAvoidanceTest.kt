@@ -113,12 +113,17 @@ class CameraAvoidanceTest {
     }
 
     @Test
-    fun `avoiding plate readers is an option but not a costing option`() {
+    fun `avoiding plate readers keeps off toll roads too`() {
         val prefs = RoutePrefs(avoidAlpr = true)
         assertFalse(prefs.isDefault)
-        assertNull(prefs.costingOptionsJson())
         assertTrue(RoutePrefs.DEFAULT.isDefault)
+        // Tolls are plate readers: the same costing as "Avoid tolls", with the same way back when no route is left.
+        assertEquals(RoutePrefs(avoidTolls = true).costingOptionsJson(), prefs.costingOptionsJson())
+        assertEquals("""{"use_tolls":0,"exclude_tolls":true}""", prefs.costingOptionsJson())
+        assertEquals("""{"use_tolls":0}""", prefs.costingOptionsJson(strictTolls = false))
+        // DOT cameras are not tolls: avoiding them alone is still no costing option.
+        assertNull(RoutePrefs(avoidDotCameras = true).costingOptionsJson())
         val body = """{"format":"osrm","costing":"auto","locations":[]}"""
-        assertEquals(body, RouteOptions.withPrefs(body, TravelMode.DRIVE, prefs))
+        assertEquals(body, RouteOptions.withPrefs(body, TravelMode.DRIVE, RoutePrefs(avoidDotCameras = true)))
     }
 }
