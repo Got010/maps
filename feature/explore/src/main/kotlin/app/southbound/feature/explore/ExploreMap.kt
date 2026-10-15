@@ -589,7 +589,7 @@ internal fun ExploreMap(
         // Valhalla on the phone ranks without live speeds, so put the fastest option with traffic first
         // (when it gains 2+ min). The driver's avoid options win over a traffic estimate: with tolls, highways
         // or ferries avoided Valhalla's order stands, and no route with more plate readers than its first may lead.
-        val byTraffic = if (routePrefs.avoidTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
+        val byTraffic = if (routePrefs.avoidsTolls || routePrefs.avoidHighways || routePrefs.avoidFerries) {
             found.indices.toList()
         } else {
             TrafficRanking.order(
