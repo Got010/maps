@@ -313,5 +313,49 @@ class BuildTest(unittest.TestCase):
         self.assertIn("OpenStreetMap", meta["attribution"])
 
 
+class TollTest(unittest.TestCase):
+    """tolls.osm: every way a toll is mapped becomes one "toll" landmark."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.out = os.path.join(cls.tmp.name, "search-tolls.sqlite")
+        build_search.build(os.path.join(HERE, "tolls.osm"), cls.out, "test")
+        cls.db = sqlite3.connect(cls.out)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+        cls.tmp.cleanup()
+
+    def test_tolls(self):
+        rows = self.db.execute("SELECT category, name, lat, lon, direction FROM landmark ORDER BY lat, lon").fetchall()
+        self.assertEqual(
+            [
+                # Where the ramp ends on the toll road and where the free road starts at its end; not where the
+                # street crosses it, nor at the end only a footpath reaches.
+                ("toll", "Toll road", 41.0, -73.99, None),
+                ("toll", "Toll road", 41.0, -73.97, None),
+                # The mapped gantry, and not the join 900 m from it.
+                ("toll", "Toll gantry", 42.0, -73.99, None),
+                # Drawn as a line, and as a closed way (once, not again as an area).
+                ("toll", "Toll gantry", 43.0, -73.999, None),
+                ("toll", "Toll booth", 43.101, -73.999, None),
+                # The toll enforcement relation's device; the speed one's isn't a toll.
+                ("toll", "Toll", 44.0, -74.0, None),
+            ],
+            rows,
+        )
+
+    def test_toll_roads(self):
+        self.assertTrue(build_search.is_toll_road({"highway": "motorway", "toll": "yes"}))
+        self.assertTrue(build_search.is_toll_road({"highway": "primary", "toll:motorcar": "yes"}))
+        self.assertFalse(build_search.is_toll_road({"highway": "motorway", "toll": "no"}))
+        self.assertFalse(build_search.is_toll_road({"highway": "motorway", "toll:hgv": "yes"}))
+        self.assertFalse(build_search.is_toll_road({"highway": "footway", "toll": "yes"}))
+        self.assertTrue(build_search.is_toll_enforcement({"type": "enforcement", "enforcement": "toll"}))
+        self.assertFalse(build_search.is_toll_enforcement({"type": "enforcement", "enforcement": "traffic_signals"}))
+
+
 if __name__ == "__main__":
     unittest.main()
