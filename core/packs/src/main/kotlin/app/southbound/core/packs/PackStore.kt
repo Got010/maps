@@ -102,10 +102,23 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
      *
      * The copy lands under a temp name and is renamed only once it's
      * recognised, so a failed or cancelled import never replaces a working pack.
+     * A pack another app shares in goes through [stagePack] and [installStaged]
+     * instead, with the person's confirmation in between.
      *
      * @throws UnrecognizedPackException if [source] isn't a Southbound pack.
      */
-    fun importPack(source: InputStream, displayName: String?, fallbackRegion: String = DEFAULT_REGION): ImportedPack {
+    fun importPack(source: InputStream, displayName: String?, fallbackRegion: String = DEFAULT_REGION): ImportedPack =
+        installStaged(stagePack(source, displayName, fallbackRegion))
+
+    /**
+     * Copies a pack from [source] into private storage under a temp name and
+     * recognises it, without installing it: nothing installed changes until
+     * [installStaged]. [discardStaged] drops it instead. One left staged (the
+     * app stopped while asking) is removed by a later import once a day old.
+     *
+     * @throws UnrecognizedPackException if [source] isn't a Southbound pack (nothing is left behind).
+     */
+    fun stagePack(source: InputStream, displayName: String?, fallbackRegion: String = DEFAULT_REGION): StagedPack {
         packsDir.mkdirs()
         // A name of its own: two imports at once (two packs shared in a row) must not write into one file. One a
         // stopped import left behind goes once it is a day old.
@@ -116,13 +129,35 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
             val sha256 = copy(source, temp)
             val kind = PackKind.detect(temp) ?: throw UnrecognizedPackException()
             val region = PackKind.regionFromName(kind, displayName) ?: fallbackRegion
-            val target = File(packsDir, kind.fileName(region))
-            moveIntoPlace(temp, target)
-            writeChecksum(target, sha256)
-            return ImportedPack(kind, region, target)
-        } finally {
+            return StagedPack(kind, region, temp.length(), sha256, temp)
+        } catch (e: Throwable) {
             temp.delete()
+            throw e
         }
+    }
+
+    /**
+     * Installs a pack [stagePack] staged, replacing the installed one of its
+     * kind and region in one rename.
+     *
+     * @throws IOException if the staged copy is gone (discarded, or removed as a day old) or no longer that kind.
+     */
+    fun installStaged(staged: StagedPack): ImportedPack {
+        try {
+            if (!staged.file.isFile) throw IOException("The pack's copy is gone; share or pick the file again")
+            if (PackKind.detect(staged.file) != staged.kind) throw UnrecognizedPackException()
+            val target = File(packsDir, staged.kind.fileName(staged.region))
+            moveIntoPlace(staged.file, target)
+            writeChecksum(target, staged.sha256)
+            return ImportedPack(staged.kind, staged.region, target)
+        } finally {
+            staged.file.delete()
+        }
+    }
+
+    /** Drops a pack [stagePack] staged, leaving every installed pack as it was. */
+    fun discardStaged(staged: StagedPack) {
+        staged.file.delete()
     }
 
     /**
@@ -215,7 +250,7 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         private const val COPY_BUFFER_BYTES = 1 shl 20
         private val CHECKSUM_LINE = Regex("^[0-9a-f]{64}")
 
-        /** [importPack]'s and [importBasemap]'s temp files. */
+        /** [stagePack]'s and [importBasemap]'s temp files. */
         private val STALE_IMPORT = Regex("(import|basemap-[a-z0-9]+\\.pmtiles)-[0-9]+\\.part")
         private const val DAY_MS = 24L * 60 * 60 * 1000
 
@@ -226,6 +261,18 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
 }
 
 data class ImportedPack(val kind: PackKind, val region: String, val file: File)
+
+/**
+ * A pack copied into private storage and recognised, not installed yet ([PackStore.stagePack]): what it is, how big,
+ * and its SHA-256, for the person to confirm before [PackStore.installStaged] puts it in place.
+ */
+class StagedPack internal constructor(
+    val kind: PackKind,
+    val region: String,
+    val sizeBytes: Long,
+    val sha256: String,
+    internal val file: File,
+)
 
 open class UnrecognizedPackException(message: String = "Not a Southbound data pack") : IOException(message)
 
