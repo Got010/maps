@@ -18,12 +18,11 @@ import kotlin.math.sqrt
  * 5. Of every pass's routes, the plain one included, the one with the fewest cameras wins (quickest when tied): a
  *    late pass can be pushed onto streets with more cameras than the highway it left.
  *
- * Measured with pyvalhalla on the release's tiles and search pack (October 2026). Over 48 Hudson Valley trips past
+ * Measured with pyvalhalla on the release's tiles and search pack (October 2026). Over 48 trips past
  * plate readers, this clears every reader on 38 trips and leaves 20 of the 262 the plain routes met, for a median
  * 7 minutes more (p90 21); the squares did 31 trips and 42 left for 6.3 minutes. With DOT cameras avoided too (53
  * trips, 534 cameras): 32 trips cleared and 104 left against 28 and 178, for a median 12 minutes more (p90 34).
- * The owner's Pelham Manor to the Hudson Valley example went from 8 readers on every option to 2 (77 minutes
- * instead of 62). Squares (`exclude_polygons`) were used before: Valhalla caps their total perimeter at 10 km
+ * A long test trip went from 8 readers on every option to 2 (77 minutes instead of 62). Squares (`exclude_polygons`) were used before: Valhalla caps their total perimeter at 10 km
  * (60 cameras), which a long trip reached by its fifth pass; a pass that found no route ended the whole thing,
  * often on the first pass, leaving the plain route; and the last route was kept even when an earlier pass had
  * fewer cameras.

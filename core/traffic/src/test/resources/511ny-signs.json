@@ -1,13 +1,13 @@
 [
   {
-    "ID": "VMS-87-17N",
-    "Name": "I-87 NB before Exit 17",
+    "ID": "VMS-87-22N",
+    "Name": "I-87 NB before Exit 22",
     "Roadway": "I-87",
     "DirectionOfTravel": "Northbound",
-    "Messages": ["CRASH AT EXIT 17", "  RIGHT  LANE CLOSED ", "EXPECT DELAYS"],
+    "Messages": ["CRASH AT EXIT 22", "  RIGHT  LANE CLOSED ", "EXPECT DELAYS"],
     "LastUpdated": "10/02/2026 10:15:00 PM",
-    "Latitude": 41.40,
-    "Longitude": -74.07
+    "Latitude": 43.50,
+    "Longitude": -73.64
   },
   {
     "ID": "NYC-TT-12",
@@ -33,8 +33,8 @@
     "Direction": "Unknown",
     "Message": "AMBER ALERT<br/>CALL 911",
     "Message2": "TUNE TO 1610 AM",
-    "Latitude": 41.3,
-    "Longitude": -74.3
+    "Latitude": 42.1,
+    "Longitude": -75.9
   },
   {
     "ID": "NO-POSITION",

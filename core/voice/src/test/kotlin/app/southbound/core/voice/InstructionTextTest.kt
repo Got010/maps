@@ -98,12 +98,12 @@ class InstructionTextTest {
     @Test
     fun exitThenTurnAtTheLight() {
         assertEquals(
-            "Take exit 14S on the right, then turn left onto Route 9W.",
-            InstructionText.withFollowUp("Take exit 14S on the right.", "Turn left onto Route 9W."),
+            "Take exit 14S on the right, then turn left onto Main Street.",
+            InstructionText.withFollowUp("Take exit 14S on the right.", "Turn left onto Main Street."),
         )
         assertEquals(
-            "In a quarter mile, Take exit 14S on the right, then turn left onto Route 9W.",
-            InstructionText.withFollowUp("In a quarter mile, Take exit 14S on the right.", "In 300 feet, Turn left onto Route 9W."),
+            "In a quarter mile, Take exit 14S on the right, then turn left onto Main Street.",
+            InstructionText.withFollowUp("In a quarter mile, Take exit 14S on the right.", "In 300 feet, Turn left onto Main Street."),
         )
     }
 

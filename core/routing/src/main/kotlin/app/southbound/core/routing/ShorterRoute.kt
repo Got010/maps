@@ -6,13 +6,14 @@ import kotlin.math.sqrt
 /**
  * "Also offer the shorter way" (owner, October 2026). Valhalla picks driving routes by a cost that favours main
  * roads over residential streets, so a side street that is shorter, and faster by Valhalla's own estimate, can be
- * missing from the options: from Route 94 to the ShopRite at Vails Gate it chose Windsor Highway (2:07) over Old
- * Temple Hill Road (1:46), and neither alternative used it. The preview asks once more, for one route, with
- * distance weighed in ([USE_DISTANCE], Valhalla's `use_distance`) and offers it too when it is both faster and
- * shorter than the first route and not one already offered ([merge]). The first route stays first.
+ * missing from the options: on a short town trip measured on the release's tiles it chose a state route (2:07) over
+ * a residential street that cuts the corner (1:46), and neither alternative used the street. The preview asks once
+ * more, for one route, with distance weighed in ([USE_DISTANCE], Valhalla's `use_distance`) and offers it too when
+ * it is both faster and shorter than the first route and not one already offered ([merge]). The first route stays
+ * first.
  *
- * At 0.5 the Vails Gate route comes back first (at 0.3 only as an alternative). Over 61 random trips of 5 to 140 km
- * in the Hudson Valley on the release's tiles, 0.5 added an option to 5: the Vails Gate one, and long trips a few
+ * At 0.5 that town trip's street comes back first (at 0.3 only as an alternative). Over 61 random trips of 5 to
+ * 140 km in one region on the release's tiles, 0.5 added an option to 5: the town trip's, and long trips a few
  * seconds faster and 1 to 24 km shorter.
  */
 object ShorterRoute {

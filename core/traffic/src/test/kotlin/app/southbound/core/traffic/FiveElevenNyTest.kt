@@ -23,7 +23,7 @@ class FiveElevenNyTest {
         assertEquals(IncidentKind.CLOSURE, crash.kind) // a crash, but every lane is shut
         assertTrue(crash.isClosure)
         assertEquals("I-87 Northbound", crash.title)
-        assertEquals(GeoPoint(41.4518, -74.0547), crash.location)
+        assertEquals(GeoPoint(43.5300, -73.6200), crash.location)
         assertEquals("Major", crash.severity)
         assertEquals("All lanes closed", crash.lanesStatus)
         val expected = ZonedDateTime.of(2026, 10, 2, 22, 15, 0, 0, ZoneId.of("America/New_York")).toInstant().toEpochMilli()
