@@ -59,9 +59,9 @@ Southbound keeps itself current from its own releases (Settings > Updates):
 - **App updates** (off until you turn them on): a newer APK is downloaded,
   checked to be Southbound, newer, signed with the same key and matching its
   checksum, then handed to Android's installer. Android asks you to allow
-  "Install unknown apps" for Southbound and to confirm the first update. After
-  that Southbound is its own installer, so later updates install without a
-  prompt (Android 12+).
+  "Install unknown apps" for Southbound, and every update waits for you to
+  confirm it on Android's own screen (or from the "tap to install"
+  notification): no new version installs without a tap.
 - **GitHub token**: not needed. The repository is public (October 2026), so
   GitHub shows its releases to anyone; Obtainium and Settings > Updates work
   without one. A token pasted into Settings > Updates only lifts GitHub's limit
@@ -96,6 +96,9 @@ Load each one the same way:
 3. Get it into Southbound, either way:
    - In the browser's downloads, share the file and pick **Southbound**. This
      works with browsers such as DuckDuckGo that keep downloads to themselves.
+     Southbound first asks **Install this pack?**, naming the kind, region, size,
+     file and the app it came from; nothing changes until you tap **Install**
+     (any other app could share a file too).
    - Or, for a basemap, open Southbound, tap **Import map file** and pick
      the download.
 
@@ -134,8 +137,8 @@ another town and search there; distances are still from you. Chips by the box
 (Gas, Hotels, Food, Coffee, Groceries, Pharmacy, Parking, EV charging) list
 those places within 30 miles, nearest first, without typing. Driving routes may include a **Shorter way**: a side street that
 is shorter and faster than the first route, which the router's preference for
-main roads would otherwise leave out (it names the street, e.g. "via Old Temple
-Hill Road"). In route preview, Options avoids tolls, highways and ferries
+main roads would otherwise leave out (it names the street, e.g. "via Elm
+Street"). In route preview, Options avoids tolls, highways and ferries
 and switches to a truck or RV profile with your vehicle's size and weight;
 Add stop builds a trip with several stops, which you can reorder, remove or
 skip while driving. The navigation screen shows the road you're on and your
