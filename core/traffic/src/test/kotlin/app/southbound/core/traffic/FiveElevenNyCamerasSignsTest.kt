@@ -19,18 +19,18 @@ class FiveElevenNyCamerasSignsTest {
     @Test
     fun `parses cameras and skips rows without an id or a position`() {
         val list = FiveElevenNy.parseCameras(cameras)
-        assertEquals(listOf("NYSDOT_4616", "1204", "NYCDOT_311", "TT-77", "NO-IMAGE"), list.map { it.id })
+        assertEquals(listOf("NYSDOT_9022", "1204", "NYCDOT_311", "TT-77", "NO-IMAGE"), list.map { it.id })
 
-        val exit17 = list[0]
-        assertEquals("I-87 at Exit 17 (Newburgh)", exit17.name)
-        assertEquals("I-87", exit17.roadway)
-        assertEquals("Northbound", exit17.direction)
-        assertEquals(41.4518, exit17.lat, 1e-9)
-        assertEquals(-74.0547, exit17.lon, 1e-9)
+        val exit22 = list[0]
+        assertEquals("I-87 at Exit 22 (Lake George)", exit22.name)
+        assertEquals("I-87", exit22.roadway)
+        assertEquals("Northbound", exit22.direction)
+        assertEquals(43.5300, exit22.lat, 1e-9)
+        assertEquals(-73.6200, exit22.lon, 1e-9)
         // Plain http on 511NY's own host is upgraded; Android blocks cleartext.
-        assertEquals("https://511ny.org/map/Cctv/NYSDOT_4616", exit17.imageUrl)
-        assertFalse(exit17.disabled)
-        assertTrue(exit17.hasImage)
+        assertEquals("https://511ny.org/map/Cctv/NYSDOT_9022", exit22.imageUrl)
+        assertFalse(exit22.disabled)
+        assertTrue(exit22.hasImage)
     }
 
     @Test
@@ -51,7 +51,7 @@ class FiveElevenNyCamerasSignsTest {
 
         // The newer layout: Id, Location, Roadway, Direction and Views[].
         val ny17 = list.getValue("TT-77")
-        assertEquals("NY-17 at Exit 120", ny17.name)
+        assertEquals("NY-17 at Exit 72", ny17.name)
         assertEquals("NY-17", ny17.roadway)
         assertEquals("Westbound", ny17.direction)
         assertEquals("https://511ny.org/map/Cctv/TT-77--1", ny17.imageUrl)
@@ -67,11 +67,11 @@ class FiveElevenNyCamerasSignsTest {
     @Test
     fun `parses signs into display lines`() {
         val list = FiveElevenNy.parseSigns(signs)
-        assertEquals(listOf("VMS-87-17N", "NYC-TT-12", "VMS-BLANK", "5501", "NO-MESSAGES"), list.map { it.id })
+        assertEquals(listOf("VMS-87-22N", "NYC-TT-12", "VMS-BLANK", "5501", "NO-MESSAGES"), list.map { it.id })
 
         val crash = list[0]
-        assertEquals("I-87 NB before Exit 17", crash.name)
-        assertEquals(listOf("CRASH AT EXIT 17", "RIGHT LANE CLOSED", "EXPECT DELAYS"), crash.lines)
+        assertEquals("I-87 NB before Exit 22", crash.name)
+        assertEquals(listOf("CRASH AT EXIT 22", "RIGHT LANE CLOSED", "EXPECT DELAYS"), crash.lines)
         assertEquals("I-87", crash.roadway)
         assertEquals("Northbound", crash.direction)
         val expected = ZonedDateTime.of(2026, 10, 2, 22, 15, 0, 0, ZoneId.of("America/New_York")).toInstant().toEpochMilli()

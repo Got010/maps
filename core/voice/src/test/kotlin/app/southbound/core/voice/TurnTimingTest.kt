@@ -68,8 +68,8 @@ class TurnTimingTest {
     @Test
     fun afterAChainOnlyTheNowPromptIsSaid() {
         val light = listOf(
-            Prompt("In 1,000 feet, Turn left onto Route 9W.", 380.0),
-            Prompt("Turn left onto Route 9W.", 20.0),
+            Prompt("In 1,000 feet, Turn left onto Main Street.", 380.0),
+            Prompt("Turn left onto Main Street.", 20.0),
         )
         assertEquals(setOf(0), TurnTiming.skippedAfterChain(light))
         assertEquals(setOf(0, 1), TurnTiming.skippedAfterChain(exitStep))

@@ -27,8 +27,8 @@
     "Description": "Bridge work on NY-17 Westbound.",
     "LastUpdated": 1791334800000,
     "LanesAffected": "All lanes",
-    "Latitude": 41.3,
-    "Longitude": -74.3,
+    "Latitude": 42.1,
+    "Longitude": -75.9,
     "EventType": "roadwork",
     "EventSubType": "Bridge maintenance",
     "IsFullClosure": true

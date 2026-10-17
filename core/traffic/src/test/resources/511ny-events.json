@@ -4,8 +4,8 @@
     "Organization": "NYSDOT",
     "RoadwayName": "I-87",
     "DirectionOfTravel": "Northbound",
-    "Description": "Road closed on I-87 Northbound at Exit 17 due to a crash.",
-    "Location": "At Exit 17",
+    "Description": "Road closed on I-87 Northbound at Exit 22 due to a crash.",
+    "Location": "At Exit 22",
     "LanesAffected": "All lanes",
     "LanesStatus": "All lanes closed",
     "EventType": "accidentsAndIncidents",
@@ -13,8 +13,8 @@
     "Severity": "Major",
     "Reported": "10/02/2026 9:58:00 PM",
     "LastUpdated": "10/02/2026 10:15:00 PM",
-    "Latitude": 41.4518,
-    "Longitude": -74.0547
+    "Latitude": 43.5300,
+    "Longitude": -73.6200
   },
   {
     "ID": "NY-511-1002",
@@ -34,12 +34,12 @@
     "ID": "NY-511-1003",
     "RoadwayName": "NY-17",
     "DirectionOfTravel": "Westbound",
-    "Description": "Ramp closed from NY-17 Westbound to Exit 120.",
+    "Description": "Ramp closed from NY-17 Westbound to Exit 72.",
     "EventType": "closures",
     "EventSubType": "Ramp Closure",
     "LastUpdated": "not a date",
-    "Latitude": 41.3,
-    "Longitude": -74.3
+    "Latitude": 42.1,
+    "Longitude": -75.9
   },
   {
     "ID": "NY-511-1004",
@@ -75,10 +75,10 @@
     "ID": "NY-511-1007",
     "RoadwayName": "NY-17",
     "DirectionOfTravel": "Both Directions",
-    "Description": "Speed enforcement on NY-17 near Exit 130.",
+    "Description": "Speed enforcement on NY-17 near Exit 75.",
     "EventType": "generalInfo",
-    "Latitude": 41.35,
-    "Longitude": -74.45
+    "Latitude": 42.15,
+    "Longitude": -76.0
   },
   {
     "ID": "NY-511-1008",

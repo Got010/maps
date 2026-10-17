@@ -1,15 +1,15 @@
 [
   {
-    "ID": "NYSDOT_4616",
-    "Name": "I-87 at Exit 17 (Newburgh)",
+    "ID": "NYSDOT_9022",
+    "Name": "I-87 at Exit 22 (Lake George)",
     "DirectionOfTravel": "Northbound",
     "RoadwayName": "I-87",
-    "Url": "http://511ny.org/map/Cctv/NYSDOT_4616",
-    "VideoUrl": "https://s51.nysdot.skyvdn.com/rtplive/R8_017/playlist.m3u8",
+    "Url": "http://511ny.org/map/Cctv/NYSDOT_9022",
+    "VideoUrl": "https://s51.nysdot.skyvdn.com/rtplive/R1_022/playlist.m3u8",
     "Disabled": false,
     "Blocked": false,
-    "Latitude": 41.4518,
-    "Longitude": -74.0547
+    "Latitude": 43.5300,
+    "Longitude": -73.6200
   },
   {
     "ID": 1204,
@@ -33,11 +33,11 @@
   },
   {
     "Id": "TT-77",
-    "Location": "NY-17 at Exit 120",
+    "Location": "NY-17 at Exit 72",
     "Roadway": "NY-17",
     "Direction": "Westbound",
-    "Latitude": 41.3,
-    "Longitude": -74.3,
+    "Latitude": 42.1,
+    "Longitude": -75.9,
     "Views": [
       { "Id": 1, "Url": "https://511ny.org/map/Cctv/TT-77--1", "Status": "Enabled", "Description": "West" },
       { "Id": 2, "Url": "https://511ny.org/map/Cctv/TT-77--2", "Status": "Enabled" }
