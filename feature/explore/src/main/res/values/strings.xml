@@ -18,6 +18,17 @@
     <string name="explore_import_not_a_pack">That file isn\'t a Southbound map or data pack.</string>
     <string name="explore_import_failed">Import failed.</string>
     <string name="explore_import_ok">OK</string>
+    <string name="explore_import_declined">Not installed. Your packs are as they were.</string>
+    <string name="explore_shared_title">Install this pack?</string>
+    <string name="explore_shared_body">%1$s (%2$s), %3$s\nFile: %4$s\nFrom: %5$s\n\nThis file didn\'t come from Southbound\'s releases, so nothing has checked it. It replaces the one you have now, if any. Install it only if you made or downloaded it yourself.</string>
+    <string name="explore_shared_unknown">unknown</string>
+    <string name="explore_shared_install">Install</string>
+    <string name="explore_shared_decline">Don\'t install</string>
+    <string name="explore_shared_kind_basemap">Map</string>
+    <string name="explore_shared_kind_routing">Directions data</string>
+    <string name="explore_shared_kind_search">Search data</string>
+    <string name="explore_shared_kind_transit">Transit data</string>
+    <string name="explore_shared_kind_voice">Voice</string>
     <string name="explore_imported_basemap">Map installed.</string>
     <string name="explore_imported_routing">Directions data installed.</string>
     <string name="explore_imported_search">Search data installed.</string>

@@ -20,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -47,7 +48,9 @@ import java.io.File
  * The first screen: the map, or the setup screen while no map is installed.
  *
  * [sharedPack] is a file another app shared to Southbound (Share > Southbound).
- * It is imported as soon as it arrives, then [onSharedPackHandled] clears it.
+ * It is copied and recognised as soon as it arrives, but installed only when the
+ * person says yes to a question naming the pack and the app it came from; then
+ * [onSharedPackHandled] clears it.
  */
 @Composable
 fun ExploreScreen(
@@ -93,11 +96,30 @@ fun ExploreScreen(
         onPauseOrDispose { }
     }
 
+    // A shared pack waiting for the person's answer, copied but not installed.
+    var sharedOffer by remember { mutableStateOf<SharedPackOffer?>(null) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(sharedPack) {
         val uri = sharedPack ?: return@LaunchedEffect
+        // A newer share replaces one still waiting for an answer, which is then not installed.
+        sharedOffer?.let { discardSharedPack(packStore, it) }
+        sharedOffer = null
         importState = ImportState.Importing
-        onImportFinished(importPackFrom(context, packStore, uri))
-        onSharedPackHandled()
+        stageSharedPack(context, packStore, uri).fold(
+            onSuccess = {
+                importState = ImportState.Idle
+                sharedOffer = it
+            },
+            onFailure = {
+                onImportFinished(importFailure(it))
+                onSharedPackHandled()
+            },
+        )
+    }
+    // Gone with a question open (the activity recreated): the copy goes, nothing was installed. The share is still
+    // the activity's, so the question comes back.
+    DisposableEffect(packStore) {
+        onDispose { sharedOffer?.let { packStore.discardStaged(it.staged) } }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -115,6 +137,27 @@ fun ExploreScreen(
                 packStore = packStore,
                 onRetry = { basemaps = packStore.installedBasemaps() },
                 onOpenSettings = onOpenSettings,
+            )
+        }
+        sharedOffer?.let { offer ->
+            SharedPackDialog(
+                offer = offer,
+                onInstall = {
+                    sharedOffer = null
+                    importState = ImportState.Importing
+                    scope.launch {
+                        onImportFinished(installSharedPack(packStore, offer))
+                        onSharedPackHandled()
+                    }
+                },
+                onDecline = {
+                    sharedOffer = null
+                    scope.launch {
+                        discardSharedPack(packStore, offer)
+                        importState = ImportState.Declined
+                        onSharedPackHandled()
+                    }
+                },
             )
         }
         ImportBanner(

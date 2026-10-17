@@ -3,11 +3,13 @@ package app.southbound.feature.explore
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,11 +18,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
+import app.southbound.core.packs.Regions
+import app.southbound.core.packs.StagedPack
 import app.southbound.core.packs.UnrecognizedPackException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,6 +37,9 @@ sealed interface ImportState {
     data object Importing : ImportState
     data class Done(val pack: ImportedPack) : ImportState
     data class Failed(val notAPack: Boolean, val detail: String?) : ImportState
+
+    /** A shared pack the person chose not to install: nothing changed. */
+    data object Declined : ImportState
 }
 
 /** Copies the pack at [uri] into private storage. Runs on the IO dispatcher. */
@@ -42,9 +50,61 @@ suspend fun importPackFrom(context: Context, packStore: PackStore, uri: Uri): Im
             packStore.importPack(input, context.displayName(uri))
         }.fold(
             onSuccess = { ImportState.Done(it) },
-            onFailure = { ImportState.Failed(notAPack = it is UnrecognizedPackException, detail = it.message) },
+            onFailure = { importFailure(it) },
         )
     }
+
+/**
+ * A pack another app shared in, copied into private storage and recognised but not installed: what the
+ * confirmation names. [source] is the app that holds the file (the content provider's app), else its address.
+ */
+class SharedPackOffer(val staged: StagedPack, val fileName: String?, val source: String?)
+
+/**
+ * Copies and recognises the pack at [uri] without installing it, so the person can be asked first. Runs on the IO
+ * dispatcher. Returns the offer, or the failure to show.
+ */
+suspend fun stageSharedPack(context: Context, packStore: PackStore, uri: Uri): Result<SharedPackOffer> =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val name = context.displayName(uri)
+            val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Couldn't open the file")
+            val staged = input.use { packStore.stagePack(it, name) }
+            SharedPackOffer(staged, name, context.sourceOf(uri))
+        }
+    }
+
+/** The failure [stageSharedPack] or [installSharedPack] met, as the banner shows it. */
+fun importFailure(error: Throwable): ImportState.Failed =
+    ImportState.Failed(notAPack = error is UnrecognizedPackException, detail = error.message)
+
+/** Installs a confirmed [offer]. Runs on the IO dispatcher. */
+suspend fun installSharedPack(packStore: PackStore, offer: SharedPackOffer): ImportState =
+    withContext(Dispatchers.IO) {
+        runCatching { packStore.installStaged(offer.staged) }.fold(
+            onSuccess = { ImportState.Done(it) },
+            onFailure = { importFailure(it) },
+        )
+    }
+
+/** Drops a declined [offer]'s copy. Runs on the IO dispatcher. */
+suspend fun discardSharedPack(packStore: PackStore, offer: SharedPackOffer) {
+    withContext(Dispatchers.IO) { packStore.discardStaged(offer.staged) }
+}
+
+/**
+ * The app that holds the shared file: the label of the app whose content provider serves [uri] (Android lets an
+ * app see the app that granted it a file), else the provider's address. Read from the file's address, not from
+ * anything the sending app says about itself.
+ */
+@Suppress("DEPRECATION") // resolveContentProvider(String, ComponentInfoFlags) needs API 33; minSdk is 31.
+private fun Context.sourceOf(uri: Uri): String? {
+    val authority = uri.authority ?: return null
+    val label = runCatching {
+        packageManager.resolveContentProvider(authority, 0)?.applicationInfo?.loadLabel(packageManager)?.toString()
+    }.getOrNull()
+    return label?.takeIf { it.isNotBlank() } ?: authority
+}
 
 private fun Context.displayName(uri: Uri): String? =
     runCatching {
@@ -98,8 +158,52 @@ fun ImportBanner(state: ImportState, onDismiss: () -> Unit, modifier: Modifier =
                     )
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.explore_import_ok)) }
                 }
+                ImportState.Declined -> {
+                    Text(stringResource(R.string.explore_import_declined), Modifier.weight(1f, fill = false))
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.explore_import_ok)) }
+                }
                 ImportState.Idle -> Unit
             }
         }
     }
+}
+
+/**
+ * Asks before a pack shared in from another app replaces anything: what it is, how big, the file and the app it
+ * came from, and that no release vouches for it. Dismissing it is a no.
+ */
+@Composable
+fun SharedPackDialog(offer: SharedPackOffer, onInstall: () -> Unit, onDecline: () -> Unit) {
+    val context = LocalContext.current
+    val staged = offer.staged
+    val unknown = stringResource(R.string.explore_shared_unknown)
+    val what = stringResource(staged.kind.sharedLabel())
+    val region = if (staged.kind == PackKind.VOICE) staged.region else Regions.nameOf(staged.region)
+    AlertDialog(
+        onDismissRequest = onDecline,
+        title = { Text(stringResource(R.string.explore_shared_title)) },
+        text = {
+            Text(
+                stringResource(
+                    R.string.explore_shared_body,
+                    what,
+                    region,
+                    Formatter.formatShortFileSize(context, staged.sizeBytes),
+                    offer.fileName ?: unknown,
+                    offer.source ?: unknown,
+                ),
+            )
+        },
+        confirmButton = { TextButton(onClick = onInstall) { Text(stringResource(R.string.explore_shared_install)) } },
+        dismissButton = { TextButton(onClick = onDecline) { Text(stringResource(R.string.explore_shared_decline)) } },
+    )
+}
+
+@StringRes
+private fun PackKind.sharedLabel(): Int = when (this) {
+    PackKind.BASEMAP -> R.string.explore_shared_kind_basemap
+    PackKind.ROUTING -> R.string.explore_shared_kind_routing
+    PackKind.SEARCH -> R.string.explore_shared_kind_search
+    PackKind.TRANSIT -> R.string.explore_shared_kind_transit
+    PackKind.VOICE -> R.string.explore_shared_kind_voice
 }
