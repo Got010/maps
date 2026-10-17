@@ -6,7 +6,6 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -16,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Speech is rendered to a file rather than played by the engine, so
  * [GuidancePlayer] controls output device, volume and ducking the same way
- * for both engines.
+ * for both engines. The file is read into memory and deleted before the
+ * prompt plays; one a process death left behind is removed at the next start
+ * ([GuidanceAudioFiles.sweep]).
  */
 internal class SystemTtsEngine(context: Context) {
 
@@ -57,7 +58,7 @@ internal class SystemTtsEngine(context: Context) {
         tts.language = Locale.US
         tts.setSpeechRate(rate)
         val id = UUID.randomUUID().toString()
-        val file = File(cacheDir, "guidance-$id.wav")
+        val file = GuidanceAudioFiles.fileFor(cacheDir, id)
         val done = CompletableDeferred<Boolean>().also { pending[id] = it }
         try {
             if (tts.synthesizeToFile(text, Bundle(), file, id) != TextToSpeech.SUCCESS) return null

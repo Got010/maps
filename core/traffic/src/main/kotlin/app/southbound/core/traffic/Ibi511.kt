@@ -1,6 +1,7 @@
 package app.southbound.core.traffic
 
 import app.southbound.core.network.MiniJson
+import app.southbound.core.network.NetworkGate
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.time.LocalDateTime
@@ -101,10 +102,16 @@ object Ibi511 {
 
     val SITES: List<Site> = listOf(PA, CT, WI)
 
-    /** The bytes as text, gunzipped when the site sent gzip that wasn't asked for. */
-    fun text(bytes: ByteArray): String {
+    /**
+     * The bytes as text, gunzipped when the site sent gzip that wasn't asked for. The unzipped answer may be at most
+     * [maxUnzipped] bytes, the same cap the gate puts on a plain answer, so a small gzip that unzips to gigabytes
+     * (a gzip bomb) stops at the cap instead of running the phone out of memory.
+     *
+     * @throws java.io.IOException when the unzipped answer is larger than [maxUnzipped], or the gzip is damaged.
+     */
+    fun text(bytes: ByteArray, maxUnzipped: Int = NetworkGate.MAX_BYTES): String {
         val plain = if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-            GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+            GZIPInputStream(ByteArrayInputStream(bytes)).use { NetworkGate.readCapped(it, maxUnzipped, "the 511 site (unzipped)") }
         } else {
             bytes
         }
