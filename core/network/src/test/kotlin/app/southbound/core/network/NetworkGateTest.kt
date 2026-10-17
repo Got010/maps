@@ -16,6 +16,15 @@ class NetworkGateTest {
     }
 
     @Test
+    fun theUserAgentIsACommonOneThatNamesNeitherTheAppNorThePhone() {
+        // Southbound has one user, so its own name in every request would tie them together across VPN exits.
+        assertFalse(NetworkGate.USER_AGENT.contains("southbound", ignoreCase = true))
+        assertFalse(NetworkGate.USER_AGENT.contains("Android", ignoreCase = true))
+        assertFalse(NetworkGate.USER_AGENT.contains("Pixel", ignoreCase = true))
+        assertEquals("okhttp/4.12.0", NetworkGate.USER_AGENT)
+    }
+
+    @Test
     fun anAnswerLargerThanTheCapIsRefused() {
         val small = NetworkGate.readCapped(ByteArray(1000).inputStream(), 1000, "example.org")
         assertEquals(1000, small.size)
