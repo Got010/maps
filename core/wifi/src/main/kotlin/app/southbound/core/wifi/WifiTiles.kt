@@ -12,6 +12,7 @@ import kotlin.math.tan
  * is found by the same numbers on both sides.
  */
 object WifiTiles {
+    /** The zooms a pack has when it doesn't say otherwise (the first builds: 3 to 9); a pack's own come from [WifiPack.clusterZooms]. */
     const val MIN_ZOOM = 3
     const val MAX_ZOOM = 9
 
@@ -35,9 +36,26 @@ object WifiTiles {
         return Tile(x.coerceIn(0, n - 1), y.coerceIn(0, n - 1))
     }
 
-    /** The cluster zoom to draw at a map zoom of [mapZoom], within what the pack has. */
-    fun clusterZoom(mapZoom: Double): Int =
-        (floor(mapZoom).toInt() + CELL_ZOOM_OFFSET).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    /**
+     * The zooms a pack's `cluster` table has from `SELECT MIN(zoom), MAX(zoom)`: null for an empty table (both are
+     * NULL) or nonsense. Capped so that `1 shl zoom` stays an Int; no pack has cells anywhere near.
+     */
+    fun zoomsOf(min: Long?, max: Long?): IntRange? {
+        if (min == null || max == null) return null
+        val first = min.coerceAtLeast(0).toInt()
+        val last = max.coerceAtMost(MAX_CELL_ZOOM.toLong()).toInt()
+        return if (first <= last) first..last else null
+    }
+
+    private const val MAX_CELL_ZOOM = 24
+
+    /**
+     * The cluster zoom to draw at a map zoom of [mapZoom]: [CELL_ZOOM_OFFSET] finer than the map, within the zooms
+     * the pack has ([zooms]). A pack cut to zoom 9 stops there, one cut to zoom 11 gives finer circles up to map
+     * zoom 10.
+     */
+    fun clusterZoom(mapZoom: Double, zooms: IntRange = MIN_ZOOM..MAX_ZOOM): Int =
+        (floor(mapZoom).toInt() + CELL_ZOOM_OFFSET).coerceIn(zooms.first, zooms.last)
 
     /** Every tile of [zoom] the [box] touches: x from the west edge to the east, y from the north edge to the south. */
     fun range(box: NearbyBox, zoom: Int): Pair<IntRange, IntRange> {

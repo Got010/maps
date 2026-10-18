@@ -51,6 +51,35 @@ class WifiTilesTest {
     }
 
     @Test
+    fun `the cluster zoom stops at the pack's own last zoom`() {
+        val to9 = 3..9
+        val to11 = 3..11
+        // A 3 to 9 pack behaves as it always did.
+        assertEquals(9, WifiTiles.clusterZoom(7.0, to9))
+        assertEquals(9, WifiTiles.clusterZoom(9.99, to9))
+        // A 3 to 11 pack goes on two zooms finer than the map up to map zoom 9.99.
+        assertEquals(9, WifiTiles.clusterZoom(7.5, to11))
+        assertEquals(10, WifiTiles.clusterZoom(8.2, to11))
+        assertEquals(11, WifiTiles.clusterZoom(9.0, to11))
+        assertEquals(11, WifiTiles.clusterZoom(9.99, to11))
+        // Low zooms still start at the pack's first.
+        assertEquals(3, WifiTiles.clusterZoom(0.5, to11))
+        assertEquals(5, WifiTiles.clusterZoom(0.5, 5..11))
+        // The default is the first builds' range.
+        assertEquals(WifiTiles.clusterZoom(9.99, to9), WifiTiles.clusterZoom(9.99))
+    }
+
+    @Test
+    fun `the pack's cluster zooms come from its table, and an empty one has none`() {
+        assertEquals(3..9, WifiTiles.zoomsOf(3, 9))
+        assertEquals(3..11, WifiTiles.zoomsOf(3, 11))
+        // MIN and MAX of an empty table are NULL: nothing to draw below the zoom of single spots.
+        assertEquals(null, WifiTiles.zoomsOf(null, null))
+        assertEquals(null, WifiTiles.zoomsOf(5, 2))
+        assertEquals(0..24, WifiTiles.zoomsOf(-3, 99))
+    }
+
+    @Test
     fun `a box's tile range runs from its north-west corner to its south-east one`() {
         // A box around the zoom-9 tile (120, 194): the tile of its corners and everything between.
         val box = NearbyBox(south = 38.0, north = 40.0, west = -96.5, east = -94.5)
