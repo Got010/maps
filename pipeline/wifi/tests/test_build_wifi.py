@@ -134,6 +134,14 @@ class TierTest(unittest.TestCase):
         v = verdict(amenity="cafe", internet_access="wlan")
         self.assertEqual((2, None), (v.tier, v.name))
 
+    def test_a_nameless_tagged_chain_spot_takes_the_chains_name_too(self):
+        v = verdict(amenity="cafe", brand__wikidata=COFFEE, internet_access="wlan", internet_access__fee="no")
+        self.assertEqual((1, "Example Coffee"), (v.tier, v.name))
+        v = verdict(amenity="cafe", brand__wikidata=COFFEE, internet_access="wlan")
+        self.assertEqual((2, "Example Coffee"), (v.tier, v.name))
+        # A nameless spot of no configured chain stays NULL.
+        self.assertIsNone(verdict(amenity="cafe", brand__wikidata="Q99999999", internet_access="wlan").name)
+
     def test_a_nameless_chain_spot_takes_the_chains_name(self):
         v = verdict(amenity="cafe", brand__wikidata=COFFEE)
         self.assertEqual((3, "Example Coffee"), (v.tier, v.name))
@@ -165,6 +173,11 @@ class TierTest(unittest.TestCase):
             (dict(railway="station", office="company"), "station"),
         ):
             self.assertEqual(category, verdict(name="A", internet_access="wlan", **tags).category, tags)
+
+    def test_the_category_skip_is_case_insensitive(self):
+        self.assertEqual("place", verdict(name="A", internet_access="wlan", shop="Yes").category)
+        self.assertEqual("books", verdict(name="A", internet_access="wlan", amenity="YES", shop="books").category)
+        self.assertEqual("place", verdict(name="A", internet_access="wlan", highway="No").category)
 
     def test_the_category_is_never_yes(self):
         self.assertEqual("books", verdict(name="A", internet_access="wlan", amenity="yes", shop="books").category)
@@ -217,6 +230,22 @@ class ExclusionTest(unittest.TestCase):
             self.assertIsNone(verdict(name="A", internet_access="wlan", **{f"{prefix}__amenity": "cafe"}), prefix)
             self.assertEqual(2, verdict(name="A", internet_access="wlan", amenity="cafe",
                                         **{f"{prefix}__shop": "books"}).tier, prefix)
+
+    def test_only_a_prefixed_feature_key_marks_a_place_as_gone(self):
+        # History on a live object is not a death marker: was:operator, was:iata, old_name...
+        self.assertEqual(2, verdict(name="A", railway="station", was__operator="Example Rail",
+                                    internet_access="wlan").tier)
+        self.assertEqual("aerodrome", verdict(name="A", aeroway="aerodrome", was__iata="XXX", internet_access="wlan").category)
+        self.assertEqual(2, verdict(name="A", amenity="cafe", was__operator="X", disused__phone="1", internet_access="wlan").tier)
+        # ... but a prefixed railway, aeroway, historic... is, when nothing live is left.
+        for key in ("railway", "aeroway", "public_transport", "historic", "leisure", "office"):
+            self.assertIsNone(verdict(name="A", internet_access="wlan", **{f"disused__{key}": "x"}), key)
+
+    def test_vacant_shops_and_disused_yes_are_gone(self):
+        self.assertIsNone(verdict(name="A", shop="vacant", internet_access="wlan"))
+        self.assertIsNone(verdict(name="A", amenity="cafe", disused="yes", internet_access="wlan"))
+        self.assertIsNone(verdict(name="A", amenity="cafe", brand__wikidata=COFFEE, disused="yes"))
+        self.assertEqual(2, verdict(name="A", amenity="cafe", disused="no", internet_access="wlan").tier)
 
     def test_disused_and_abandoned_only(self):
         self.assertIsNone(verdict(name="A", disused__amenity="cafe", internet_access="wlan"))
