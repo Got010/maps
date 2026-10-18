@@ -63,7 +63,44 @@ class WifiQueriesTest {
     @Test
     fun `a limit is capped`() {
         val q = WifiQueries.inBox(box, all, 10_000_000, rtree = false)!!
-        assertTrue(q.sql.endsWith("LIMIT ${WifiQueries.MAX_ROWS}"))
+        assertTrue(q.sql.endsWith("LIMIT ${WifiQueries.MAX_SCAN_ROWS}"))
+        val n = WifiQueries.nearest(LatLon(39.5, -95.5), 10.0, all, 10_000_000, rtree = false)!!
+        assertTrue(n.sql.endsWith("LIMIT ${WifiQueries.MAX_ROWS}"))
+    }
+
+    @Test
+    fun `customers only adds the fee to tier 1 and asks for nothing without tier 1`() {
+        val q = WifiQueries.inBox(box, all, 10, rtree = false, customersOnly = true)!!
+        assertEquals(
+            "SELECT ${WifiQueries.SPOT_COLUMNS} FROM spot s WHERE s.lat BETWEEN ? AND ? AND s.lon BETWEEN ? AND ?" +
+                " AND s.tier = 1 AND s.fee = 'customers' ORDER BY s.tier, s.id LIMIT 10",
+            q.sql,
+        )
+        val tier1 = WifiQueries.inBox(box, setOf(WifiTier.TAGGED_FREE, WifiTier.LIKELY), 10, rtree = true, customersOnly = true)!!
+        // A chain's customers-only policy (tier 3, fee customers) is not this: the tier is pinned to 1.
+        assertTrue(tier1.sql, tier1.sql.contains("s.tier = 1 AND s.fee = 'customers'") && !tier1.sql.contains("s.tier IN"))
+        assertEquals(tier1.sql.count { it == '?' }, tier1.args.size)
+        assertNull(WifiQueries.inBox(box, setOf(WifiTier.CHAIN, WifiTier.LIKELY), 10, rtree = false, customersOnly = true))
+        // Off, the query is the one the layer always asked.
+        assertFalse(WifiQueries.inBox(box, all, 10, rtree = false)!!.sql.contains("s.fee ="))
+    }
+
+    @Test
+    fun `the circles' read takes five columns, no sort, and the same conditions`() {
+        val q = WifiQueries.points(box, setOf(WifiTier.TAGGED_FREE, WifiTier.CHAIN), rtree = false)!!
+        assertEquals(
+            "SELECT s.id, s.lat, s.lon, s.tier, s.category FROM spot s WHERE s.lat BETWEEN ? AND ? AND s.lon BETWEEN ? AND ?" +
+                " AND s.tier IN (1, 3) LIMIT ${WifiQueries.MAX_SCAN_ROWS}",
+            q.sql,
+        )
+        assertFalse(q.sql.contains("ORDER BY"))
+        assertEquals(q.sql.count { it == '?' }, q.args.size)
+        val rtree = WifiQueries.points(box, all, rtree = true, customersOnly = true)!!
+        assertTrue(rtree.sql, rtree.sql.contains("FROM wifi_rtree r CROSS JOIN spot s ON s.id = r.id WHERE r.maxlat >= ?"))
+        assertTrue(rtree.sql, rtree.sql.contains("s.tier = 1 AND s.fee = 'customers' LIMIT"))
+        assertEquals(rtree.sql.count { it == '?' }, rtree.args.size)
+        assertNull(WifiQueries.points(box, emptySet(), rtree = false))
+        assertNull(WifiQueries.points(box, setOf(WifiTier.CHAIN), rtree = false, customersOnly = true))
     }
 
     @Test
