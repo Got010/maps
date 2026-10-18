@@ -139,7 +139,8 @@ fun TransitPlanSheet(
                 )
                 is TransitPlanState.Ready -> LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 380.dp).padding(top = 8.dp, end = 8.dp),
+                    // Taller than the screen allows (a phone on its side): shrink to the room left under the header.
+                    modifier = Modifier.weight(1f, fill = false).heightIn(max = 380.dp).padding(top = 8.dp, end = 8.dp),
                 ) {
                     itemsIndexed(state.journeys) { i, journey ->
                         JourneyCard(journey, state.live, selected = i == selected, nowSeconds = nowSeconds, onClick = { onSelect(i) })
