@@ -14,6 +14,8 @@ trip planning, all on the phone, plus saved places and recents kept encrypted
 on the phone, speed limits while navigating and 3D buildings. Live transit
 times, each state's 511 incidents, cameras and signs (with routes steering
 around closures), weather and NYC DOT traffic speeds are opt-in extras.
+A free Wi-Fi layer (spots tagged free in OpenStreetMap, chains and places that usually have it, each labelled
+by how sure we are) is an opt-in pack in Settings > Maps, with a map button and a Wi-Fi chip in search.
 
 ### What each state has
 
