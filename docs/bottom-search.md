@@ -29,8 +29,9 @@ Everything you touch lives in one stack at the bottom, the **dock**. Bottom to t
    directions straight away, as the chips inside search do today. Unset ones don't show on the map;
    they are set from inside search, as now.
 
-Above the dock, at the right, the map buttons stand as today (weather, traffic, my location), lifted by
-the dock's height. The Re-center pill floats centred just above the dock. At the top, only the map's own
+Above the dock, at the right, the map's one **Map options** button stands (B32e; before it the weather, traffic,
+Wi-Fi and my-location buttons stood here, and the Re-center pill floated centred above the dock; both are folded into
+the button's list, see `docs/map-options.md`), lifted by the dock's height. At the top, only the map's own
 things remain: the compass (top right, as now) and the read-only "Here: 54°, partly cloudy" weather chip
 (top left).
 
