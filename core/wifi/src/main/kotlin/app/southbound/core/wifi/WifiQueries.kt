@@ -78,9 +78,10 @@ internal object WifiQueries {
     private data class Clauses(val from: String, val where: String, val args: List<Any>)
 
     /**
-     * The FROM and WHERE for a box. With the R-tree, its index finds the candidates (boxes inside the query box,
-     * widened by [RTREE_TOLERANCE]: the pack's R-tree holds 32-bit float point boxes) and the exact comparisons
-     * follow on the spot's own doubles. CROSS JOIN makes SQLite scan the R-tree first and look the spots up by id;
+     * The FROM and WHERE for a box. With the R-tree, its index finds the candidates: the boxes that overlap the query
+     * box (the overlap form, not containment: SQLite rounds a stored 32-bit float box outwards by up to about 1.5e-5
+     * degrees, which containment would lose at the box's edges), the query box widened by [RTREE_TOLERANCE] besides.
+     * The exact comparisons follow on the spot's own doubles. CROSS JOIN makes SQLite scan the R-tree first and look the spots up by id;
      * left to itself the planner drives from the (lat, lon) index and probes the R-tree per row, which is slower
      * (measured 380 ms against 139 ms on a 300,000-row pack). Without the R-tree, the (lat, lon) index does it.
      */
@@ -90,7 +91,7 @@ internal object WifiQueries {
         return if (rtree) {
             Clauses(
                 "wifi_rtree r CROSS JOIN spot s ON s.id = r.id",
-                "r.minlat >= ? AND r.maxlat <= ? AND r.minlon >= ? AND r.maxlon <= ? AND $exact",
+                "r.maxlat >= ? AND r.minlat <= ? AND r.maxlon >= ? AND r.minlon <= ? AND $exact",
                 listOf(box.south - RTREE_TOLERANCE, box.north + RTREE_TOLERANCE, box.west - RTREE_TOLERANCE, box.east + RTREE_TOLERANCE) + exactArgs,
             )
         } else {

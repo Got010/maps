@@ -395,8 +395,8 @@ class PackStoreTest {
         store.importPack(validPack.inputStream(), "basemap-hudson.pmtiles")
         store.importPack(tar().inputStream(), "routing-nys.tar")
         store.importPacksDir!!.mkdirs()
-        store.importPacksDir!!.resolve("basemap-western.pmtiles").writeBytes(validPack)
-        store.importPacksDir!!.resolve("basemap-li.pmtiles").writeBytes("junk".toByteArray())
+        store.importPacksDir.resolve("basemap-western.pmtiles").writeBytes(validPack)
+        store.importPacksDir.resolve("basemap-li.pmtiles").writeBytes("junk".toByteArray())
         store.packsDir.resolve("download").mkdirs()
         store.packsDir.resolve("import.part").writeBytes(validPack)
 
