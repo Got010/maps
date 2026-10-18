@@ -18,6 +18,12 @@ A spot takes the lowest tier it matches. `internet_access:fee=yes`, `internet_ac
 `access=private`, `access=no` and `disused:`/`abandoned:`/`was:`/`demolished:`/`removed:`/`razed:`/`destroyed:`
 tagging without a live feature (only a prefixed feature key counts: `was:operator` on a live station does not), `shop=vacant` and `disused=yes` exclude an object from every tier.
 
+Chain sub-objects: a Walmart's pharmacy and garden centre, a McDonald's PlayPlace or a charging station carry the
+chain's `brand:wikidata` too. Tier 3 spots of one chain within 60 m of each other are one store, and one row is
+kept: the one whose category is in the chain's `categories`, else the one named like the chain (case and spaces
+ignored), else the lowest OSM id. Tiers 1, 2 and 4 are never folded (a pharmacy tagged with Wi-Fi of its own stays).
+The build log counts the rows folded per chain.
+
 Names: `name`, else `brand`. A chain spot with neither is called by the chain's `name` in `chains.json`; any other
 spot with neither keeps a NULL name (the app shows a fallback from the category). The build log counts them per
 tier.
@@ -41,6 +47,9 @@ pack's `place_category` picks it, never `yes`), else `station` (railway or publi
   look at the `brand:wikidata` of one of its shops on openstreetmap.org (or in the Name Suggestion Index,
   `data/brands/` in github.com/osmlab/name-suggestion-index).
 - `fee`: `customers` (the default), `no` or `unknown`: the fee column of the chain's spots.
+- `categories`: optional list of the chain's main OSM categories, the `amenity`/`shop` value of its stores
+  (`["supermarket", "department_store"]` for Walmart, `["fuel"]` for a truck stop). Used only to pick which row
+  stands for a store (below); every chain in the file has them.
 - `note`: optional.
 
 A typo (unknown key, bad QID, the same QID under two chains, a bad `fee`) stops the build with a message. After a
@@ -55,7 +64,7 @@ names are the chain's.
   `chains_sha256` (also as `chains_version`), `schema` ("1"), `sources` (JSON list of states), `attribution`.
 - `spot(id, osm_type, osm_id, name, brand_wikidata, lat, lon, category, tier, fee, opening_hours, website)`;
   `fee` is `no`, `customers` or `unknown`.
-- `cluster(zoom, x, y, count, lat, lon, tier_min)`: Web Mercator tiles for zooms 3 to 9, mean position of the
+- `cluster(zoom, x, y, count, lat, lon, tier_min)`: Web Mercator tiles for zooms 3 to 11 (the app reads `MAX(zoom)`, so packs of either range work), mean position of the
   spots in a tile.
 - Indexes `spot_lat_lon(lat, lon)`, `spot_tier_lat_lon(tier, lat, lon)` and `cluster_zoom_x_y(zoom, x, y)`, and the R-tree table
   `wifi_rtree(id, minlat, maxlat, minlon, maxlon)` (same ids; absent only if the build's SQLite has no R-tree,
