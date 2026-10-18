@@ -4,6 +4,7 @@
 # Regions are listed in regions.json. Any pack builds as <kind>-<region>:
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
+# The Free Wi-Fi pack is one file for every covered state: make -C pipeline wifi-us (see wifi/README.md)
 
 REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks vae vaw wv ky nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
@@ -17,9 +18,12 @@ VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
 STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS) \
 	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split
+# The Free Wi-Fi pack (wifi/build.sh): one file for every covered state. Not in `state` or ALL_PACKS
+# until release.yml builds it (the app's pull request adds it to STATE_PACKS there).
+WIFI_PACKS := wifi-us
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
-.PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
+.PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) $(WIFI_PACKS) push-nyc styles glyphs test clean
 
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
@@ -59,6 +63,10 @@ $(addprefix transit-,$(REGIONS)): transit-%:
 $(VOICE_PACKS): voice-%:
 	voices/build.sh $*
 
+## wifi-us: the Free Wi-Fi pack for every state in regions.json (wifi-<region> runs wifi/build.sh <region>)
+$(WIFI_PACKS): wifi-%:
+	wifi/build.sh $*
+
 ## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium; duckdb, if installed, also tests the Overture fetch query)
 test:
 	python3 -m unittest discover -s search/tests
@@ -66,6 +74,7 @@ test:
 	python3 -m unittest discover -s tests
 	python3 -m unittest discover -s weather/tests
 	python3 -m unittest discover -s routing/tests
+	python3 -m unittest discover -s wifi/tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
