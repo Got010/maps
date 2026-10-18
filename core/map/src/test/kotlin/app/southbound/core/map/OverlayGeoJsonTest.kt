@@ -234,4 +234,91 @@ class OverlayGeoJsonTest {
         val cameras = MiniJson.parse(OverlayGeoJson.cameras(listOf(CameraPin("a", bad), CameraPin("b", good)))) as Map<*, *>
         assertEquals(listOf("b"), (cameras["features"] as List<*>).map { ((it as Map<*, *>)["properties"] as Map<*, *>)["id"] })
     }
+
+    @Test
+    fun wifiPinsNameTheirBadgeAndDrawTheBestTierOnTop() {
+        val json = OverlayGeoJson.wifiPins(
+            listOf(
+                WifiPin(11, MapPoint(39.5, -95.5), tier = 1, fee = "no"),
+                WifiPin(12, MapPoint(39.51, -95.51), tier = 4, fee = "unknown"),
+                WifiPin(13, MapPoint(39.52, -95.52), tier = 3, fee = "customers"),
+                WifiPin(14, MapPoint(39.53, -95.53), tier = 1, fee = "customers"),
+            ),
+        )
+        // Weakest first, so a tagged spot draws over a "likely" one; a tagged spot free for customers has the ringed
+        // badge, a chain's customers-only spot does not.
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":12,"tier":4,"icon":"southbound-wifi-t4"},"geometry":{"type":"Point","coordinates":[-95.510000,39.510000]}},""" +
+                """{"type":"Feature","properties":{"id":13,"tier":3,"icon":"southbound-wifi-t3"},"geometry":{"type":"Point","coordinates":[-95.520000,39.520000]}},""" +
+                """{"type":"Feature","properties":{"id":11,"tier":1,"icon":"southbound-wifi-t1"},"geometry":{"type":"Point","coordinates":[-95.500000,39.500000]}},""" +
+                """{"type":"Feature","properties":{"id":14,"tier":1,"icon":"southbound-wifi-t1-c"},"geometry":{"type":"Point","coordinates":[-95.530000,39.530000]}}]}""",
+            json,
+        )
+        assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.wifiPins(emptyList()))
+    }
+
+    @Test
+    fun wifiPinsLeaveOutWhatCannotBeDrawn() {
+        val good = MapPoint(39.5, -95.5)
+        val json = OverlayGeoJson.wifiPins(
+            listOf(
+                WifiPin(1, MapPoint(Double.NaN, -95.5), 1, "no"),
+                WifiPin(2, good, tier = 0, fee = "no"),
+                WifiPin(3, good, tier = 5, fee = "no"),
+                WifiPin(4, good, tier = 2, fee = "unknown"),
+            ),
+        )
+        val features = (MiniJson.parse(json) as Map<*, *>)["features"] as List<*>
+        assertEquals(listOf(4L), features.map { ((it as Map<*, *>)["properties"] as Map<*, *>)["id"] })
+    }
+
+    @Test
+    fun wifiBadgeNamesAreOnePerTierAndLook() {
+        val names = WifiPin.TIERS.flatMap { tier -> listOf(false, true).map { WifiPin.imageName(tier, it) } }
+        assertEquals(8, names.toSet().size)
+        assertEquals("southbound-wifi-t1-c", WifiPin(1, MapPoint(0.0, 0.0), 1, "customers").imageName)
+        // Only an OSM-tagged (tier 1) customers fee is ringed.
+        assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "customers").imageName)
+        assertEquals("southbound-wifi-t3", WifiPin(1, MapPoint(0.0, 0.0), 3, "customers").imageName)
+        assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "no").imageName)
+        assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "unknown").imageName)
+    }
+
+    @Test
+    fun wifiClustersCarryCountLabelAndTierColour() {
+        val json = OverlayGeoJson.wifiClusters(
+            listOf(
+                WifiClusterPin("9/120/194", MapPoint(39.49, -95.51), count = 5, tierMin = 1),
+                WifiClusterPin("9/121/194", MapPoint(39.4, -95.0), count = 12_345, tierMin = 4),
+                WifiClusterPin("9/1/1", MapPoint(39.4, -95.0), count = 0, tierMin = 4),
+                WifiClusterPin("9/2/2", MapPoint(39.4, -95.0), count = 3, tierMin = 9),
+            ),
+        )
+        assertEquals(
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","properties":{"id":"9/120/194","count":5,"tier":1,"color":"#1E8E3E","label":"5"},"geometry":{"type":"Point","coordinates":[-95.510000,39.490000]}},""" +
+                """{"type":"Feature","properties":{"id":"9/121/194","count":12345,"tier":4,"color":"#607D8B","label":"12k"},"geometry":{"type":"Point","coordinates":[-95.000000,39.400000]}}]}""",
+            json,
+        )
+    }
+
+    @Test
+    fun clusterLabelsFitASmallCircle() {
+        assertEquals("1", OverlayGeoJson.clusterLabel(1))
+        assertEquals("999", OverlayGeoJson.clusterLabel(999))
+        assertEquals("1k", OverlayGeoJson.clusterLabel(1_000))
+        assertEquals("1.2k", OverlayGeoJson.clusterLabel(1_234))
+        assertEquals("9.9k", OverlayGeoJson.clusterLabel(9_949))
+        assertEquals("34k", OverlayGeoJson.clusterLabel(34_567))
+    }
+
+    @Test
+    fun wifiColoursAreOnePerTierAndOpaque() {
+        assertEquals(4, (1..4).map { WifiColors.hex(it) }.toSet().size)
+        assertEquals(0xFF1E8E3E.toInt(), WifiColors.argb(1))
+        assertEquals(WifiColors.LIKELY, WifiColors.hex(0))
+        assertEquals(WifiColors.LIKELY, WifiColors.hex(7))
+        for (tier in 1..4) assertEquals(0xFF, (WifiColors.argb(tier) ushr 24) and 0xFF)
+    }
 }

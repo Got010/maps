@@ -37,6 +37,7 @@ import app.southbound.core.network.NetworkFeature
 import app.southbound.core.network.PreferenceNetworkToggles
 import app.southbound.core.network.SecretStore
 import app.southbound.core.packs.PackEvents
+import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
 import app.southbound.core.packs.Regions
 import app.southbound.core.packs.TileFolder
@@ -62,19 +63,19 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
     var networkPermitted by remember { mutableStateOf(UpdateScheduler.networkPermitted(context)) }
     val packStore = remember { PackStore(context.filesDir, context.getExternalFilesDir(null)) }
     val tiles = remember { TileFolder(context.filesDir) }
-    var packs by remember { mutableStateOf(installedPacks(packStore, tiles)) }
+    var packs by remember { mutableStateOf(installedPacks(context, packStore, tiles)) }
     var mobileData by remember { mutableStateOf(UpdateScheduler.allowMobileData(context)) }
     var canInstall by remember { mutableStateOf(context.packageManager.canRequestPackageInstalls()) }
     LifecycleResumeEffect(Unit) {
         canInstall = context.packageManager.canRequestPackageInstalls()
         networkPermitted = UpdateScheduler.networkPermitted(context)
-        packs = installedPacks(packStore, tiles)
+        packs = installedPacks(context, packStore, tiles)
         onPauseOrDispose { }
     }
     // A pack that lands or goes while Settings is open (an update round, an import, a region unticked) shows at once.
     LaunchedEffect(Unit) {
         merge(PackEvents.installed.map { }, PackEvents.removed.map { }).collect {
-            packs = withContext(Dispatchers.IO) { installedPacks(packStore, tiles) }
+            packs = withContext(Dispatchers.IO) { installedPacks(context, packStore, tiles) }
         }
     }
 
@@ -118,6 +119,7 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
     JumpTarget(R.string.regions_title) {
         SettingsCard(R.string.regions_title) { RegionPicker(packStore, colors = rowColors()) }
     }
+    SettingsCard(R.string.wifi_pack_card) { WifiPackRow(packStore, packDownloadsOn = toggles.getValue(NetworkFeature.PACK_DOWNLOADS)) }
     SettingsGroup(
         title = R.string.updates_packs_installed,
         summary = stringResource(R.string.updates_packs_count, packs.size, packs.sumOf { it.sizeMb }.toInt()),
@@ -129,8 +131,12 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
 
 private data class PackLine(val name: String, val sizeMb: Long, val modified: Long)
 
-private fun installedPacks(store: PackStore, tiles: TileFolder): List<PackLine> =
-    store.installed().map { PackLine("${it.file.name} (${Regions.nameOf(it.region)})", it.file.length() shr 20, it.file.lastModified()) } +
+private fun installedPacks(context: Context, store: PackStore, tiles: TileFolder): List<PackLine> =
+    store.installed().map {
+        // The Wi-Fi pack is one national file: its name says what it is, not "wifi-us.sqlite (us)".
+        val name = if (it.kind == PackKind.WIFI) context.getString(R.string.wifi_pack_list_name) else "${it.file.name} (${Regions.nameOf(it.region)})"
+        PackLine(name, it.file.length() shr 20, it.file.lastModified())
+    } +
         // Directions from southbound-v2.json's packs live unpacked in one folder: one line for all of them.
         listOfNotNull(tiles.summary()?.let { PackLine("routing (${it.packs} packs)", it.bytes shr 20, it.modified) })
 

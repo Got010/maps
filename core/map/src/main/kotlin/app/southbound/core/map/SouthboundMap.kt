@@ -122,6 +122,10 @@ fun SouthboundMap(
     onWeatherStationTap: ((String) -> Unit)? = null,
     /** The middle of the map each time the camera comes to rest, and once as the map is ready. */
     onCameraIdle: ((MapPoint) -> Unit)? = null,
+    /** What the map shows (its visible bounds and zoom), at the same moments as [onCameraIdle]. */
+    onViewportIdle: ((MapViewport) -> Unit)? = null,
+    /** A tap on a Wi-Fi spot or grid cell ([MapOverlays.wifi]); a camera, incident or message sign on top wins. */
+    onWifiTap: ((WifiTap) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val mapView = remember {
@@ -235,6 +239,21 @@ fun SouthboundMap(
         onDispose { loadedMap.removeOnCameraIdleListener(idle) }
     }
 
+    // What the map shows, e.g. for the Wi-Fi layer to ask its pack for the spots in view.
+    val currentOnViewportIdle by rememberUpdatedState(onViewportIdle)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        fun report() {
+            val handler = currentOnViewportIdle ?: return
+            val bounds = loadedMap.projection.visibleRegion.latLngBounds
+            handler(MapViewport(bounds.latitudeSouth, bounds.latitudeNorth, bounds.longitudeWest, bounds.longitudeEast, loadedMap.cameraPosition.zoom))
+        }
+        val idle = MapLibreMap.OnCameraIdleListener { report() }
+        loadedMap.addOnCameraIdleListener(idle)
+        report()
+        onDispose { loadedMap.removeOnCameraIdleListener(idle) }
+    }
+
     LaunchedEffect(style, overlays, darkTheme) {
         val loaded = style ?: return@LaunchedEffect
         OverlayLayers.update(loaded, overlays, darkTheme)
@@ -306,6 +325,37 @@ fun SouthboundMap(
             val hit = loadedMap.queryRenderedFeatures(box, OverlayLayers.CAMERAS).firstOrNull() ?: return@OnMapClickListener false
             val id = hit.getStringProperty("id") ?: return@OnMapClickListener false
             handler(id)
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
+    }
+
+    // Wi-Fi taps: after the plate readers' and the 511 cameras' listeners, which draw over the Wi-Fi layer, and before
+    // the incident one, whose weather areas cover everything. Of several under the finger, the nearest wins.
+    val currentOnWifiTap by rememberUpdatedState(onWifiTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val handler = currentOnWifiTap ?: return@OnMapClickListener false
+            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
+            val layers = listOf(OverlayLayers.WIFI, OverlayLayers.WIFI_CLUSTERS).filter { loadedStyle.getLayer(it) != null }
+            if (layers.isEmpty()) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, *layers.toTypedArray())
+                .mapNotNull { feature -> (feature.geometry() as? org.maplibre.geojson.Point)?.let { feature to it } }
+                .minByOrNull { (_, point) ->
+                    val at = loadedMap.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
+                    (at.x - screen.x) * (at.x - screen.x) + (at.y - screen.y) * (at.y - screen.y)
+                } ?: return@OnMapClickListener false
+            val (feature, point) = hit
+            if (feature.hasProperty("count")) {
+                handler(WifiTap.Cluster(MapPoint(point.latitude(), point.longitude())))
+            } else {
+                val id = feature.getNumberProperty("id")?.toLong() ?: return@OnMapClickListener false
+                handler(WifiTap.Spot(id))
+            }
             true
         }
         loadedMap.addOnMapClickListener(listener)
