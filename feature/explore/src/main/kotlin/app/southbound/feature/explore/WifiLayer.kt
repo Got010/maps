@@ -6,6 +6,7 @@ import app.southbound.core.map.WifiClusterPin
 import app.southbound.core.map.WifiOverlay
 import app.southbound.core.map.WifiPin
 import app.southbound.core.search.NearbyBox
+import app.southbound.core.wifi.WifiClusterView
 import app.southbound.core.wifi.WifiClusters
 import app.southbound.core.wifi.WifiFilter
 import app.southbound.core.wifi.WifiPack
@@ -41,15 +42,16 @@ internal object WifiLayer {
             // A pack without cells draws nothing below the zoom of single spots.
             val zoom = pack.clusterZoomFor(view.zoom) ?: return WifiOverlay.NONE
             val cells = if (filter.isDefault) {
-                pack.clusters(zoom, box)
+                WifiClusterView(pack.clusters(zoom, box), partial = false)
             } else {
-                // The cells' whole tiles are read, so a cell cut by the screen's edge still counts all its spots.
-                val spots = pack.inBox(WifiTiles.cellsBox(box, zoom), filter.tiers, WifiPack.SCAN_LIMIT, filter.customersOnly)
-                WifiClusters.inView(filter.applyKinds(spots), box, zoom)
+                // The cells' whole tiles are read, so a cell cut by the screen's edge still counts all its spots; the
+                // read is the lean one (no names, no sort), as it can be most of the pack.
+                val points = pack.points(WifiTiles.cellsBox(box, zoom), filter.tiers, filter.customersOnly)
+                WifiClusters.inView(points, filter, box, zoom)
             }
-            WifiOverlay(clusters = cells.map {
+            WifiOverlay(clusters = cells.clusters.map {
                 WifiClusterPin("${it.zoom}/${it.x}/${it.y}", MapPoint(it.lat, it.lon), it.count, it.tierMin.code)
-            })
+            }, partial = cells.partial)
         }
     }
 

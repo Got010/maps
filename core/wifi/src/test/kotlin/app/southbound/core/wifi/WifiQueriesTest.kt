@@ -86,6 +86,24 @@ class WifiQueriesTest {
     }
 
     @Test
+    fun `the circles' read takes five columns, no sort, and the same conditions`() {
+        val q = WifiQueries.points(box, setOf(WifiTier.TAGGED_FREE, WifiTier.CHAIN), rtree = false)!!
+        assertEquals(
+            "SELECT s.id, s.lat, s.lon, s.tier, s.category FROM spot s WHERE s.lat BETWEEN ? AND ? AND s.lon BETWEEN ? AND ?" +
+                " AND s.tier IN (1, 3) LIMIT ${WifiQueries.MAX_SCAN_ROWS}",
+            q.sql,
+        )
+        assertFalse(q.sql.contains("ORDER BY"))
+        assertEquals(q.sql.count { it == '?' }, q.args.size)
+        val rtree = WifiQueries.points(box, all, rtree = true, customersOnly = true)!!
+        assertTrue(rtree.sql, rtree.sql.contains("FROM wifi_rtree r CROSS JOIN spot s ON s.id = r.id WHERE r.maxlat >= ?"))
+        assertTrue(rtree.sql, rtree.sql.contains("s.tier = 1 AND s.fee = 'customers' LIMIT"))
+        assertEquals(rtree.sql.count { it == '?' }, rtree.args.size)
+        assertNull(WifiQueries.points(box, emptySet(), rtree = false))
+        assertNull(WifiQueries.points(box, setOf(WifiTier.CHAIN), rtree = false, customersOnly = true))
+    }
+
+    @Test
     fun `the tier condition lists the codes in order and is left out for all four`() {
         val some = WifiQueries.inBox(box, setOf(WifiTier.LIKELY, WifiTier.CHAIN), 10, rtree = false)!!
         assertTrue(some.sql, some.sql.contains("s.tier IN (3, 4)"))

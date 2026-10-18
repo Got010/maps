@@ -530,6 +530,12 @@ internal fun ExploreMap(
     // What the long-press chooser leaves on the map. View state like wifiVisible: kept through a rotation, never stored.
     var wifiFilter by rememberSaveable(stateSaver = WifiFilterSaver) { mutableStateOf(WifiFilter.DEFAULT) }
     var wifiChooser by rememberSaveable { mutableStateOf(false) }
+    // The sheet closes for good when the pack goes away, so it cannot open by itself when a pack comes back. (A pack
+    // that is still opening after a rotation is not "gone": the sheet waits for it.)
+    var wifiPackSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(wifiPack) {
+        if (wifiPack != null) wifiPackSeen = true else if (wifiPackSeen) wifiChooser = false
+    }
     var viewport by remember { mutableStateOf<MapViewport?>(null) }
     var wifiOverlay by remember { mutableStateOf(WifiOverlay.NONE) }
     var shownWifi by remember { mutableStateOf<WifiSpot?>(null) }
