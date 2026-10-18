@@ -225,6 +225,91 @@ class UserDataTest {
     }
 
     @Test
+    fun `wifi marks mark, flip, clear and the newest wins`() {
+        var d = UserData()
+        assertEquals(null, d.wifiMark("n1"))
+        d = d.markWifi("n1", worked = true, now = 100)
+        assertEquals(WifiMark("n1", true, 100), d.wifiMark("n1"))
+        // Marking the other way replaces it: one mark per spot, the newest wins.
+        d = d.markWifi("n1", worked = false, now = 200)
+        assertEquals(listOf(WifiMark("n1", false, 200)), d.wifiMarks)
+        // The same answer again only moves the time.
+        d = d.markWifi("n1", worked = false, now = 300)
+        assertEquals(listOf(WifiMark("n1", false, 300)), d.wifiMarks)
+        d = d.markWifi("w22", worked = true, now = 400)
+        assertEquals(listOf("n1", "w22"), d.wifiMarks.map { it.osmRef })
+        // Clearing one leaves the other; clearing a spot with no mark changes nothing.
+        d = d.clearWifiMark("n1")
+        assertEquals(null, d.wifiMark("n1"))
+        assertEquals(listOf(WifiMark("w22", true, 400)), d.wifiMarks)
+        assertEquals(d, d.clearWifiMark("n1"))
+        // A mark is not a saved place, a recent or a list change.
+        assertEquals(UserData().saved, d.saved)
+        assertEquals(UserData().recents, d.recents)
+    }
+
+    @Test
+    fun `wifi marks round-trip through the codec and the store`() {
+        val d = UserData().save(cafe, UserData.FAVORITES_ID, 100).markWifi("n1", true, 500).markWifi("r7", false, 600)
+        val json = UserDataCodec.encode(d)
+        assertTrue(json.contains(""""wifiMarks":[{"osmRef":"n1","worked":true,"markedAt":500},{"osmRef":"r7","worked":false,"markedAt":600}]"""))
+        assertEquals(d, UserDataCodec.decode(json))
+        // The version stays 1: the field is optional on read, as home and work were.
+        assertTrue(json.startsWith("""{"version":1,"""))
+
+        val file = tmp.root.resolve("m/places.sealed")
+        var now = 700L
+        val store = UserDataStore(file, PlainSealer) { now }
+        store.markWifi("n5", true)
+        now = 800
+        store.markWifi("n5", false)
+        store.markWifi("w9", true)
+        store.clearWifiMark("w9")
+        assertEquals(listOf(WifiMark("n5", false, 800)), UserDataStore(file, PlainSealer).data.value.wifiMarks)
+    }
+
+    @Test
+    fun `a document without wifiMarks still loads, with none`() {
+        // A document as the app wrote it before the marks existed: no wifiMarks field at all.
+        val old = """{"version":1,"lastId":3,"lists":[{"id":1,"name":"Favorites","builtIn":true},{"id":2,"name":"Want to go","builtIn":true}],""" +
+            """"saved":[{"id":3,"list":1,"savedAt":100,"place":{"name":"Joe's","lat":40.7,"lon":-74.0,"address":null,"category":"cafe","osmRef":"n1"}}],""" +
+            """"recents":[]}"""
+        val d = UserDataCodec.decode(old)
+        assertEquals(emptyList<WifiMark>(), d.wifiMarks)
+        assertEquals(1, d.saved.size)
+        // And through the store: the file opens (it is not "unreadable") and the first mark is added to what was there.
+        val file = tmp.root.resolve("old/places.sealed")
+        file.parentFile!!.mkdirs()
+        file.writeBytes(PlainSealer.seal(old.toByteArray()))
+        val store = UserDataStore(file, PlainSealer)
+        assertEquals(LoadState.Loaded, store.loadState.value)
+        store.markWifi("n1", true)
+        val back = UserDataStore(file, PlainSealer).data.value
+        assertEquals(1, back.saved.size)
+        assertEquals(listOf("n1"), back.wifiMarks.map { it.osmRef })
+    }
+
+    @Test
+    fun `two marks for one spot in a document keep the newest`() {
+        val json = UserDataCodec.encode(UserData()).replace(
+            """"wifiMarks":[]""",
+            """"wifiMarks":[{"osmRef":"n1","worked":true,"markedAt":10},{"osmRef":"n1","worked":false,"markedAt":20},{"osmRef":"n2","worked":true,"markedAt":5}]""",
+        )
+        assertEquals(listOf(WifiMark("n1", false, 20), WifiMark("n2", true, 5)), UserDataCodec.decode(json).wifiMarks)
+        for (bad in listOf(
+            """"wifiMarks":[{"osmRef":"n1","markedAt":10}]""",
+            """"wifiMarks":[{"osmRef":"n1","worked":"yes","markedAt":10}]""",
+            """"wifiMarks":[{"worked":true,"markedAt":10}]""",
+        )) {
+            try {
+                UserDataCodec.decode(UserDataCodec.encode(UserData()).replace(""""wifiMarks":[]""", bad))
+                fail("accepted $bad")
+            } catch (expected: IllegalArgumentException) {
+            }
+        }
+    }
+
+    @Test
     fun `reload after a temporary failure ends loaded with the data`() {
         val file = tmp.root.resolve("places.sealed")
         UserDataStore(file, PlainSealer).save(cafe, UserData.FAVORITES_ID)

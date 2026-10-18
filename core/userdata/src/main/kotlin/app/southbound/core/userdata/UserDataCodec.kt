@@ -13,6 +13,8 @@ object UserDataCodec {
             "lists" to data.lists.map { mapOf("id" to it.id, "name" to it.name, "builtIn" to it.builtIn) },
             "saved" to data.saved.map { mapOf("id" to it.id, "list" to it.listId, "savedAt" to it.savedAt, "place" to place(it.place)) },
             "recents" to data.recents.map { mapOf("seenAt" to it.seenAt, "place" to place(it.place)) },
+            // Written even when empty, so the export's strict reader (schema 9) always finds it. A document without it still loads.
+            "wifiMarks" to data.wifiMarks.map { mapOf("osmRef" to it.osmRef, "worked" to it.worked, "markedAt" to it.markedAt) },
         ) + listOfNotNull(
             data.home?.let { "home" to place(it) },
             data.work?.let { "work" to place(it) },
@@ -36,11 +38,17 @@ object UserDataCodec {
             val m = item as Map<*, *>
             RecentPlace(placeRef(m["place"]), m.long("seenAt"))
         }
+        // Added with the Wi-Fi marks without a version bump, as home and work were: absent means none.
+        val wifiMarks = (root["wifiMarks"] as? List<*>).orEmpty().map { item ->
+            val m = item as Map<*, *>
+            WifiMark(m.string("osmRef"), m["worked"] as? Boolean ?: throw IllegalArgumentException("user data: no worked"), m.long("markedAt"))
+        }.groupBy { it.osmRef }.values.map { marks -> marks.maxBy { it.markedAt } }
         val lastId = (root["lastId"] as? Long) ?: maxOf(lists.maxOfOrNull { it.id } ?: 0, saved.maxOfOrNull { it.id } ?: 0)
         return UserData(
             lists.ifEmpty { UserData.DEFAULT_LISTS }, saved, recents, lastId,
             home = root["home"]?.let(::placeRef),
             work = root["work"]?.let(::placeRef),
+            wifiMarks = wifiMarks,
         )
     }
 
