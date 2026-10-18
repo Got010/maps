@@ -42,6 +42,12 @@ import org.maplibre.android.style.layers.PropertyFactory.lineJoin
 import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
+import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.textColor
+import org.maplibre.android.style.layers.PropertyFactory.textField
+import org.maplibre.android.style.layers.PropertyFactory.textFont
+import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
@@ -112,6 +118,15 @@ internal object OverlayLayers {
     private const val WEATHER_MINOR = "#F9AB00"
     private const val WEATHER_OTHER = "#5F6368"
 
+    /**
+     * Free Wi-Fi spots from the Wi-Fi pack: badges drawn in code (WifiIcons) from [WIFI_MIN_ZOOM]; below it the pack's
+     * grid cells as circles with their counts. Over the routes, under the pins.
+     */
+    const val WIFI = "southbound-wifi"
+    const val WIFI_CLUSTERS = "southbound-wifi-clusters"
+    private const val WIFI_CLUSTER_COUNTS = "southbound-wifi-cluster-counts"
+    const val WIFI_MIN_ZOOM = 10f
+
     // Alerts from the map data, pinned along the route while navigating.
     private const val ALERT_SPEED_CAMERA = "#1A73E8"
     private const val ALERT_ALPR_CAMERA = "#7B1FA2"
@@ -126,6 +141,8 @@ internal object OverlayLayers {
         style.addSource(GeoJsonSource(INCIDENTS, OverlayGeoJson.incidents(emptyList())))
         style.addSource(GeoJsonSource(CAMERAS, OverlayGeoJson.cameras(emptyList())))
         style.addSource(GeoJsonSource(WEATHER_AREAS, OverlayGeoJson.weatherAreas(emptyList())))
+        style.addSource(GeoJsonSource(WIFI, OverlayGeoJson.wifiPins(emptyList())))
+        style.addSource(GeoJsonSource(WIFI_CLUSTERS, OverlayGeoJson.wifiClusters(emptyList())))
 
         val speedColor = step(
             get("speed"), literal(SPEED_STOPPED),
@@ -211,6 +228,7 @@ internal object OverlayLayers {
             style.addLayer(slowdowns)
             style.addLayer(threads)
         }
+        installWifi(style)
         style.addLayer(
             CircleLayer(PINS, PINS).withProperties(
                 circleRadius(9f),
@@ -276,6 +294,52 @@ internal object OverlayLayers {
         )
     }
 
+    /**
+     * The Wi-Fi layer: the badges (every tier, and its ringed look for free-for-customers) are drawn once into the
+     * style; a spot names its own in its "icon" property. Cells below [WIFI_MIN_ZOOM] are circles sized by their
+     * count and coloured by their best tier ("color"), with the count over them. Nothing hides another (a hidden spot
+     * or cell could not be tapped).
+     */
+    private fun installWifi(style: Style) {
+        for (tier in WifiPin.TIERS) {
+            for (ringed in listOf(false, true)) {
+                style.addImage(WifiPin.imageName(tier, ringed), WifiIcons.badge(tier, ringed))
+            }
+        }
+        style.addLayer(
+            CircleLayer(WIFI_CLUSTERS, WIFI_CLUSTERS).withProperties(
+                circleRadius(
+                    step(
+                        get("count"), literal(12f),
+                        stop(10, literal(15f)), stop(100, literal(18f)), stop(1000, literal(22f)), stop(10000, literal(26f)),
+                    ),
+                ),
+                circleColor(toColor(get("color"))),
+                circleStrokeColor("#FFFFFF"),
+                circleStrokeWidth(2f),
+            ).also { it.maxZoom = WIFI_MIN_ZOOM },
+        )
+        // The basemap's own glyphs (styles/glyphs), so no font is fetched from anywhere.
+        style.addLayer(
+            SymbolLayer(WIFI_CLUSTER_COUNTS, WIFI_CLUSTERS).withProperties(
+                textField(get("label")),
+                textFont(arrayOf("NotoSans-Medium")),
+                textSize(12f),
+                textColor("#FFFFFF"),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+            ).also { it.maxZoom = WIFI_MIN_ZOOM },
+        )
+        style.addLayer(
+            SymbolLayer(WIFI, WIFI).withProperties(
+                iconImage(get("icon")),
+                iconSize(interpolate(linear(), zoom(), stop(WIFI_MIN_ZOOM, 0.7f), stop(14, 0.9f), stop(18, 1.1f))),
+                iconAllowOverlap(true),
+                iconIgnorePlacement(true),
+            ).also { it.minZoom = WIFI_MIN_ZOOM },
+        )
+    }
+
     /** 511NY cameras and signs: icons drawn in code, over everything else, so a tap finds them. */
     private fun installTrafficCamerasAndSigns(style: Style) {
         style.addImage(TRAFFIC_CAMERA_ICON, TrafficIcons.camera(TrafficIcons.CAMERA_TEAL))
@@ -313,12 +377,16 @@ internal object OverlayLayers {
         trafficCamerasSource.update(style, overlays.trafficCameras) { OverlayGeoJson.trafficCameras(it) }
         messageSignsSource.update(style, overlays.messageSigns) { OverlayGeoJson.messageSigns(it) }
         weatherAreasSource.update(style, overlays.weather.areas) { OverlayGeoJson.weatherAreas(it) }
+        wifiPinsSource.update(style, overlays.wifi.pins) { OverlayGeoJson.wifiPins(it) }
+        wifiClustersSource.update(style, overlays.wifi.clusters) { OverlayGeoJson.wifiClusters(it) }
         updateBadges(style, overlays.weather.stations)
         weatherStationsSource.update(style, overlays.weather.stations) { OverlayGeoJson.weatherStations(it) }
     }
 
     private val weatherAreasSource = ListSource<WeatherArea>(WEATHER_AREAS)
     private val weatherStationsSource = ListSource<WeatherStationPin>(WEATHER_STATIONS)
+    private val wifiPinsSource = ListSource<WifiPin>(WIFI)
+    private val wifiClustersSource = ListSource<WifiClusterPin>(WIFI_CLUSTERS)
 
     // The station badge images on the style. Each look is drawn once; a look no longer shown is removed, or a long
     // session would keep a bitmap for every sky, day or night and temperature it has seen. The previous list's looks
