@@ -15,7 +15,9 @@ on the phone, speed limits while navigating and 3D buildings. Live transit
 times, each state's 511 incidents, cameras and signs (with routes steering
 around closures), weather and NYC DOT traffic speeds are opt-in extras.
 A free Wi-Fi layer (spots tagged free in OpenStreetMap, chains and places that usually have it, each labelled
-by how sure we are) is an opt-in pack in Settings > Maps, with a map button and a Wi-Fi chip in search.
+by how sure we are) is an opt-in pack in Settings > Maps, with a map button and a Wi-Fi chip in search. Two buttons
+on a spot's sheet, "Wi-Fi worked" and "Didn't work", keep your own mark on this phone (it replaces our label for you,
+and a spot that didn't work sorts last); the marks are part of the export and never leave the phone otherwise.
 
 ### What each state has
 
@@ -115,7 +117,7 @@ file to Southbound the same way; it replaces the old one.
 
 ## Back up and restore
 
-Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, API keys and
+Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, Wi-Fi marks, API keys and
 preferences to one file, sealed with a passphrase you choose (at least 12 characters, typed twice, never
 stored). **Import** puts such a file back, on this phone or a new one, replacing what is there. Pick the file with
 the system file picker; Southbound asks for no storage permission. A file from another app, a wrong passphrase or
