@@ -304,13 +304,14 @@ class ClusterTest(unittest.TestCase):
 
     def test_tile_of_matches_the_textbook_formula_at_two_zooms(self):
         for lat, lon in ((38.5, -98.0), (40.0, -100.0), (47.6, -122.3), (25.8, -80.2), (44.9, -68.7)):
-            for zoom in (3, 9):
+            for zoom in (3, 9, 11):
                 self.assertEqual(self.reference_tile(lat, lon, zoom), build_wifi.tile_of(lat, lon, zoom), (lat, lon, zoom))
 
     def test_tile_of_concrete_cells(self):
         self.assertEqual((1, 3), build_wifi.tile_of(38.5, -98.0, 3))
         self.assertEqual((116, 196), build_wifi.tile_of(38.5, -98.0, 9))
         self.assertEqual((113, 193), build_wifi.tile_of(40.0, -100.0, 9))
+        self.assertEqual((466, 786), build_wifi.tile_of(38.5, -98.0, 11))
 
     def test_tile_of_clamps_the_edges(self):
         self.assertEqual((7, 7), build_wifi.tile_of(-90.0, 180.0, 3))
@@ -328,10 +329,10 @@ class ClusterTest(unittest.TestCase):
         self.assertEqual([(3, 38.503333, -97.67, 1)], [(c, la, lo, t) for c, la, lo, t in z3])
         z9 = sorted(v for k, v in rows.items() if k[0] == 9)
         self.assertEqual([(1, 38.5, -97.0, 4), (2, 38.505, -98.005, 1)], z9)
-        self.assertEqual({3, 4, 5, 6, 7, 8, 9}, {k[0] for k in rows})
+        self.assertEqual({3, 4, 5, 6, 7, 8, 9, 10, 11}, {k[0] for k in rows})
 
-    def test_every_zoom_from_3_to_9_and_no_other(self):
-        self.assertEqual([3, 4, 5, 6, 7, 8, 9], list(build_wifi.CLUSTER_ZOOMS))
+    def test_every_zoom_from_3_to_11_and_no_other(self):
+        self.assertEqual([3, 4, 5, 6, 7, 8, 9, 10, 11], list(build_wifi.CLUSTER_ZOOMS))
 
 
 class ChainsTest(unittest.TestCase):
@@ -350,6 +351,19 @@ class ChainsTest(unittest.TestCase):
         self.assertEqual(len(chains.by_qid), sum(len(c["wikidata"]) for c in chains.chains))
         self.assertEqual("Q37158", chains.by_qid["Q37158"]["wikidata"][0])
         self.assertEqual(64, len(chains.sha256))
+
+    def test_categories_are_optional_and_lower_cased(self):
+        chains = parse_chains(json.dumps({"chains": [{"name": "X", "wikidata": ["Q1"], "categories": [" Cafe ", "fast_food"]},
+                                                     {"name": "Y", "wikidata": ["Q2"]}]}))
+        self.assertEqual(["cafe", "fast_food"], chains.by_qid["Q1"]["categories"])
+        self.assertEqual([], chains.by_qid["Q2"]["categories"])
+
+    def test_every_real_chain_lists_its_main_categories(self):
+        chains = build_wifi.load_chains(os.path.join(WIFI, "chains.json"))
+        for chain in chains.chains:
+            self.assertTrue(chain["categories"], chain["name"])
+        self.assertEqual(["supermarket", "department_store"], chains.by_qid["Q483551"]["categories"])
+        self.assertEqual(["fuel"], chains.by_qid["Q64128179"]["categories"])
 
     def test_loading_the_test_config(self):
         self.assertEqual(["Q37158", "Q38076", "Q483551", "Q7963529"], CHAINS.qids())
@@ -381,6 +395,9 @@ class ChainsTest(unittest.TestCase):
             "bad fee": self.good(fee="free"),
             "unknown key": self.good(wikidta=["Q2"]),
             "note not text": self.good(note=5),
+            "categories a string": self.good(categories="cafe"),
+            "categories with a number": self.good(categories=["cafe", 5]),
+            "categories with an empty value": self.good(categories=[" "]),
             "same QID twice": json.dumps({"chains": [{"name": "A", "wikidata": ["Q1"]}, {"name": "B", "wikidata": ["Q1"]}]}),
         }
         for label, text in bad.items():
@@ -400,6 +417,127 @@ class ChainsTest(unittest.TestCase):
             finally:
                 sys.argv = old
             self.assertIn("not valid JSON", str(raised.exception))
+
+
+class FoldTest(unittest.TestCase):
+    """In-store sub-objects that share a chain's brand:wikidata fold into their store."""
+
+    MART, BURGERS, COFFEE_QID = "Q483551", "Q38076", "Q37158"
+    METRE = 1 / 110540.0  # degrees of latitude
+
+    def spot(self, osm_id, category, name, qid, dlat_m=0.0, dlon_m=0.0, tier=3, osm_type="n", base=(38.5, -98.0)):
+        lat = base[0] + dlat_m * self.METRE
+        lon = base[1] + dlon_m / (111320.0 * math.cos(math.radians(base[0])))
+        verdict = build_wifi.Verdict(tier, "customers", category, name, qid, None, None)
+        return build_wifi.Spot(osm_type, osm_id, round(lat, 6), round(lon, 6), verdict)
+
+    def fold(self, *spots):
+        kept, folded = build_wifi.fold_sub_objects(list(spots), CHAINS)
+        return sorted(s.osm_id for s in kept), dict(folded)
+
+    def test_a_store_and_its_pharmacy_30_m_apart_are_one_row(self):
+        store = self.spot(10, "supermarket", "Example Mart Supercenter", self.MART)
+        pharmacy = self.spot(5, "pharmacy", "Example Mart Pharmacy", self.MART, dlat_m=30)
+        self.assertEqual(([10], {self.MART: 1}), self.fold(store, pharmacy))
+        self.assertEqual(([10], {self.MART: 1}), self.fold(pharmacy, store))  # input order does not matter
+
+    def test_two_stores_500_m_apart_both_stay(self):
+        a = self.spot(1, "fast_food", "Example Burgers", self.BURGERS)
+        b = self.spot(2, "fast_food", "Example Burgers", self.BURGERS, dlat_m=500)
+        self.assertEqual(([1, 2], {}), self.fold(a, b))
+
+    def test_a_lone_pharmacy_stays(self):
+        pharmacy = self.spot(5, "pharmacy", "Example Mart Pharmacy", self.MART)
+        far_store = self.spot(10, "supermarket", "Example Mart Supercenter", self.MART, dlat_m=400)
+        self.assertEqual(([5, 10], {}), self.fold(pharmacy, far_store))
+        self.assertEqual(([5], {}), self.fold(pharmacy))
+
+    def test_the_distance_is_60_metres_in_any_direction(self):
+        store = self.spot(10, "supermarket", "S", self.MART)
+        for dlat, dlon, expected in ((58, 0, [10]), (62, 0, [4, 10]), (0, 58, [10]), (0, 62, [4, 10]),
+                                     (41, 41, [10]), (45, 45, [4, 10])):
+            self.assertEqual(expected, self.fold(store, self.spot(4, "pharmacy", "P", self.MART, dlat, dlon))[0],
+                             (dlat, dlon))
+
+    def test_a_grid_cell_edge_does_not_split_a_store(self):
+        # Two points 20 m apart with a 0.001 degree cell boundary between them.
+        a = self.spot(1, "supermarket", "S", self.MART, base=(38.4999, -98.0))
+        b = self.spot(2, "pharmacy", "P", self.MART, dlat_m=20, base=(38.4999, -98.0))
+        self.assertNotEqual(int(a.lat / 0.001), int(b.lat / 0.001))
+        self.assertEqual(([1], {self.MART: 1}), self.fold(a, b))
+
+    def test_far_north_a_cell_is_narrower_than_60_m(self):
+        a = self.spot(1, "supermarket", "S", self.MART, base=(65.0, -150.0))
+        b = self.spot(2, "pharmacy", "P", self.MART, dlon_m=55, base=(65.0, -150.0))
+        self.assertEqual(([1], {self.MART: 1}), self.fold(a, b))
+
+    def test_other_brands_and_other_tiers_are_never_folded(self):
+        store = self.spot(10, "supermarket", "S", self.MART)
+        self.assertEqual(([2, 10], {}), self.fold(store, self.spot(2, "cafe", "C", self.COFFEE_QID, dlat_m=10)))
+        # A sub-object with Wi-Fi tagged on it is tier 1 and stays.
+        tagged = self.spot(3, "pharmacy", "P", self.MART, dlat_m=10, tier=1)
+        self.assertEqual(([3, 10], {}), self.fold(store, tagged))
+        # So does a tier 4 spot, and two tier 1 spots of one chain next to each other.
+        self.assertEqual(([3, 4], {}), self.fold(self.spot(3, "library", "L", None, tier=4),
+                                                 self.spot(4, "library", "L", None, dlat_m=5, tier=4)))
+        self.assertEqual(([3, 4], {}), self.fold(tagged, self.spot(4, "pharmacy", "P", self.MART, dlat_m=5, tier=1)))
+
+    def test_a_group_chains_through_its_members(self):
+        a = self.spot(1, "supermarket", "S", self.MART)
+        b = self.spot(2, "garden_centre", "G", self.MART, dlat_m=50)
+        c = self.spot(3, "pharmacy", "P", self.MART, dlat_m=100)  # 100 m from a, 50 m from b
+        self.assertEqual(([1], {self.MART: 2}), self.fold(a, b, c))
+
+    def test_the_main_category_is_preferred_then_the_chains_name_then_the_lowest_id(self):
+        # 1. The chain's own list of categories, even over a row with the chain's name and a lower id.
+        named = self.spot(1, "pharmacy", "Example Mart", self.MART)
+        store = self.spot(9, "department_store", "Example Mart Supercenter", self.MART, dlat_m=10)
+        self.assertEqual(([9], {self.MART: 1}), self.fold(named, store))
+        # ... and the first of two rows in the list is just as good: the lower id wins between them.
+        other = self.spot(4, "supermarket", "Other", self.MART, dlat_m=20)
+        self.assertEqual(([4], {self.MART: 2}), self.fold(named, store, other))
+        # 2. No row in the list: the row named like the chain, ignoring case and spaces.
+        a = self.spot(1, "pharmacy", "Example Mart Pharmacy", self.MART)
+        b = self.spot(7, "garden_centre", "  EXAMPLE mart ", self.MART, dlat_m=10)
+        self.assertEqual(([7], {self.MART: 1}), self.fold(a, b))
+        # 3. Neither: the lowest OSM id.
+        c = self.spot(8, "garden_centre", "G", self.MART, dlat_m=10)
+        d = self.spot(3, "pharmacy", "P", self.MART)
+        self.assertEqual(([3], {self.MART: 1}), self.fold(c, d))
+
+    def test_without_a_category_list_the_name_decides(self):
+        chains = parse_chains(json.dumps({"chains": [{"name": "Shop", "wikidata": ["Q1"]}]}))
+        a = self.spot(1, "pharmacy", "Shop Pharmacy", "Q1")
+        b = self.spot(9, "supermarket", "shop", "Q1", dlat_m=10)
+        kept, folded = build_wifi.fold_sub_objects([a, b], chains)
+        self.assertEqual([9], [s.osm_id for s in kept])
+
+    def test_build_folds_before_writing_and_says_so(self):
+        lines = []
+        objs = [
+            ("n", 10, {"shop": "supermarket", "name": "Example Mart Supercenter", "brand:wikidata": self.MART}, 38.5, -98.0),
+            ("n", 11, {"shop": "chemist", "name": "Example Mart Pharmacy", "brand:wikidata": self.MART}, 38.50027, -98.0),
+            ("n", 12, {"shop": "chemist", "name": "Example Mart Pharmacy", "brand:wikidata": self.MART,
+                       "internet_access": "wlan", "internet_access:fee": "no"}, 38.50030, -98.0),
+            ("n", 13, {"amenity": "fast_food", "name": "Example Burgers", "brand:wikidata": self.BURGERS}, 38.6, -98.0),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "p.sqlite")
+            tiers = build_wifi.build(objs, out, CHAINS, SOURCES, log=lines.append)
+            db = sqlite3.connect(out)
+            try:
+                ids = [r[0] for r in db.execute("SELECT osm_id FROM spot ORDER BY osm_id")]
+                zooms = [r[0] for r in db.execute("SELECT DISTINCT zoom FROM cluster ORDER BY zoom")]
+            finally:
+                db.close()
+        self.assertEqual([10, 12, 13], ids)
+        self.assertEqual({1: 1, 3: 2}, tiers)
+        self.assertEqual(list(range(3, 12)), zooms)
+        text = "\n".join(lines)
+        self.assertIn("1 chain sub-objects folded into their stores (", text)
+        self.assertIn("Example Mart: 1 chain sub-objects folded into their stores", text)
+        self.assertIn("Q483551 Example Mart: 3 seen, 2 kept, 1 folded", text)
+        self.assertIn("cluster rows for zooms 3 to 11", text)
 
 
 class SourcesTest(unittest.TestCase):
@@ -508,7 +646,7 @@ class WriterTest(unittest.TestCase):
     def test_clusters_cover_every_spot_at_every_zoom(self):
         for zoom in build_wifi.CLUSTER_ZOOMS:
             self.assertEqual(4, self.db.execute("SELECT SUM(count) FROM cluster WHERE zoom = ?", (zoom,)).fetchone()[0], zoom)
-        self.assertEqual(0, self.db.execute("SELECT count(*) FROM cluster WHERE zoom NOT BETWEEN 3 AND 9").fetchone()[0])
+        self.assertEqual(0, self.db.execute("SELECT count(*) FROM cluster WHERE zoom NOT BETWEEN 3 AND 11").fetchone()[0])
         # One tile holds all four at zoom 3 (best tier 1); at zoom 9 there are three cells.
         self.assertEqual([(4, 1)], self.db.execute("SELECT count, tier_min FROM cluster WHERE zoom = 3").fetchall())
         self.assertEqual([1, 1, 2], [r[0] for r in self.db.execute("SELECT count FROM cluster WHERE zoom = 9 ORDER BY count")])

@@ -23,6 +23,11 @@ abandoned:, was:, demolished:, removed:, razed:, destroyed: with no live feature
 name and no brand are kept: a chain's (any tier) takes the chain's name from chains.json, the others have a NULL name (the
 app shows a fallback from the category).
 
+Tier 3 spots of one chain within 60 m of each other are one store: a Walmart's pharmacy and garden centre, a
+McDonald's PlayPlace or a charging station carry the chain's brand:wikidata too. One row is kept per store (the
+chain's "categories" first, then the row named like the chain, then the lowest OSM id); the build log says how
+many were folded. Tiers 1, 2 and 4 are never folded.
+
 chains.json (edited by hand; the build fails loudly when it is malformed):
 
   {"chains": [
@@ -33,9 +38,12 @@ chains.json (edited by hand; the build fails loudly when it is malformed):
   name      the chain's name: for the build log, and the name of a spot of the chain that has none of its own
   wikidata  one or more brand:wikidata QIDs (the chain is matched by these, never by name)
   fee       "no", "customers" (the default) or "unknown": the fee column of the chain's spots
+  categories optional: the chain's main OSM categories (the amenity/shop value of its stores, e.g. "supermarket"
+            for Walmart, "fuel" for a truck stop). Used only to choose which of several rows one store is made of
+            (see fold_sub_objects)
   note      optional, ignored
 
-The output is SQLite: meta, spot, cluster (a Web Mercator tile grid for zoom 3 to 9, for the map's low
+The output is SQLite: meta, spot, cluster (a Web Mercator tile grid for zoom 3 to 11, for the map's low
 zooms), the B-tree indexes spot_lat_lon and spot_tier_lat_lon, and the R-tree table wifi_rtree when this
 SQLite has the module. application_id 0x53425731 ("SBW1"), user_version 1. The build prints the rows per
 tier and category and, for every QID in chains.json, how many objects carry it and its three commonest
@@ -55,7 +63,7 @@ import time
 
 APPLICATION_ID = 0x53425731  # "SBW1"
 SCHEMA_VERSION = 1
-CLUSTER_ZOOMS = range(3, 10)  # 3..9 inclusive
+CLUSTER_ZOOMS = range(3, 12)  # 3..11 inclusive (the app reads MAX(zoom) from the table, so either range works)
 MAX_LATITUDE = 85.05112878  # Web Mercator's edge
 
 WLAN = ("wlan", "yes", "wifi")
@@ -146,9 +154,9 @@ def parse_chains(text, label="chains.json"):
         where = f"{label}: chain {i + 1}"
         if not isinstance(entry, dict):
             raise ChainsError(f"{where} must be an object")
-        extra = set(entry) - {"name", "wikidata", "fee", "note"}
+        extra = set(entry) - {"name", "wikidata", "fee", "categories", "note"}
         if extra:
-            raise ChainsError(f"{where} has unknown keys {sorted(extra)} (allowed: name, wikidata, fee, note)")
+            raise ChainsError(f"{where} has unknown keys {sorted(extra)} (allowed: name, wikidata, fee, categories, note)")
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ChainsError(f'{where} needs a "name"')
@@ -167,7 +175,11 @@ def parse_chains(text, label="chains.json"):
             raise ChainsError(f'{where}: "fee" must be one of {", ".join(FEES)}, not {fee!r}')
         if "note" in entry and not isinstance(entry["note"], str):
             raise ChainsError(f'{where}: "note" must be text')
-        chains.append({"name": name.strip(), "wikidata": list(qids), "fee": fee})
+        categories = entry.get("categories", [])
+        if not isinstance(categories, list) or not all(isinstance(c, str) and c.strip() for c in categories):
+            raise ChainsError(f'{where}: "categories" must be a list of OSM values like "supermarket"')
+        chains.append({"name": name.strip(), "wikidata": list(qids), "fee": fee,
+                       "categories": [c.strip().lower() for c in categories]})
     return Chains(chains, hashlib.sha256(text.encode("utf-8")).hexdigest())
 
 
@@ -378,6 +390,87 @@ def read_objects(pbf):
                 break
 
 
+# ---- Chain sub-objects ----------------------------------------------------------------------------------
+
+FOLD_METRES = 60.0
+FOLD_CELL = 0.001  # degrees: a grid cell is about 110 m high, so a neighbour search finds everything within 60 m
+
+Spot = collections.namedtuple("Spot", "osm_type osm_id lat lon verdict")
+
+
+def metres_between(a, b):
+    """Distance in metres between two spots (flat-earth, good to well under a metre at 60 m)."""
+    dlat = (a.lat - b.lat) * 110540.0
+    dlon = (a.lon - b.lon) * 111320.0 * math.cos(math.radians((a.lat + b.lat) / 2))
+    return math.hypot(dlat, dlon)
+
+
+def fold_sub_objects(spots, chains):
+    """Folds in-store sub-objects into their stores: Walmart's pharmacy, a McDonald's PlayPlace, a garden centre
+    or a charging station all carry the chain's brand:wikidata, and would show as chain spots of their own.
+
+    Among tier 3 spots with the same brand_wikidata, any two within 60 m are one store (a chain of such pairs is
+    one store too); one row is kept per store: the one whose category is in the chain's "categories" (when
+    chains.json lists them), else the one named like the chain, else the lowest OSM id. Only tier 3 is touched:
+    a sub-object tagged with Wi-Fi of its own is tier 1 or 2 and stays. Returns (the spots that are left, a
+    Counter of the rows folded away per QID). A grid of FOLD_CELL degrees keeps it linear."""
+    by_qid = collections.defaultdict(list)
+    for i, spot in enumerate(spots):
+        qid = spot.verdict.brand_wikidata
+        if spot.verdict.tier == 3 and qid in chains.by_qid:
+            by_qid[qid].append(i)
+    dropped = set()
+    folded = collections.Counter()
+    for qid, indexes in by_qid.items():
+        if len(indexes) < 2:
+            continue
+        parent = {i: i for i in indexes}
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        grid = collections.defaultdict(list)
+        for i in indexes:
+            grid[(math.floor(spots[i].lat / FOLD_CELL), math.floor(spots[i].lon / FOLD_CELL))].append(i)
+        for i in indexes:
+            here = spots[i]
+            row, col = math.floor(here.lat / FOLD_CELL), math.floor(here.lon / FOLD_CELL)
+            # Cells are narrower than 60 m in longitude far to the north: look as many cells aside as it takes.
+            reach = max(1, math.ceil(FOLD_METRES / (111320.0 * max(math.cos(math.radians(here.lat)), 0.05) * FOLD_CELL)))
+            for dr in (-1, 0, 1):
+                for dc in range(-reach, reach + 1):
+                    for j in grid.get((row + dr, col + dc), ()):
+                        if j > i and metres_between(here, spots[j]) <= FOLD_METRES:
+                            parent[find(j)] = find(i)
+        stores = collections.defaultdict(list)
+        for i in indexes:
+            stores[find(i)].append(i)
+        chain = chains.by_qid[qid]
+        main = set(chain.get("categories", []))
+        chain_name = chain["name"].strip().lower()
+
+        def preference(i):
+            spot = spots[i]
+            return (
+                0 if spot.verdict.category.lower() in main else 1,
+                0 if (spot.verdict.name or "").strip().lower() == chain_name else 1,
+                spot.osm_id,
+                spot.osm_type,
+            )
+
+        for members in stores.values():
+            if len(members) > 1:
+                keep = min(members, key=preference)
+                for i in members:
+                    if i != keep:
+                        dropped.add(i)
+                        folded[qid] += 1
+    return [spot for i, spot in enumerate(spots) if i not in dropped], folded
+
+
 # ---- The pack --------------------------------------------------------------------------------------------
 
 
@@ -430,6 +523,7 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
     fees = collections.Counter()
     nameless = collections.Counter()
     rows = []
+    spots = []
     qid_seen = collections.Counter()
     qid_kept = collections.Counter()
     qid_names = collections.defaultdict(collections.Counter)
@@ -447,12 +541,18 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
             continue
         if qid in chains.by_qid:
             qid_kept[qid] += 1
-        lat, lon = round(lat, 6), round(lon, 6)
+        spots.append(Spot(osm_type, osm_id, round(lat, 6), round(lon, 6), verdict))
+
+    spots, folded = fold_sub_objects(spots, chains)
+    for qid, count in folded.items():
+        qid_kept[qid] -= count
+    for spot in spots:
+        verdict = spot.verdict
         rows.append((
-            osm_type, osm_id, verdict.name, verdict.brand_wikidata, lat, lon, verdict.category,
+            spot.osm_type, spot.osm_id, verdict.name, verdict.brand_wikidata, spot.lat, spot.lon, verdict.category,
             verdict.tier, verdict.fee, verdict.opening_hours, verdict.website,
         ))
-        clusters.add(lat, lon, verdict.tier)
+        clusters.add(spot.lat, spot.lon, verdict.tier)
         tiers[verdict.tier] += 1
         categories[(verdict.tier, verdict.category)] += 1
         if verdict.name is None:
@@ -462,7 +562,8 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
             flush(db, rows)
     flush(db, rows)
 
-    db.executemany("INSERT INTO cluster VALUES (?,?,?,?,?,?,?)", clusters.rows())
+    cluster_rows = clusters.rows()
+    db.executemany("INSERT INTO cluster VALUES (?,?,?,?,?,?,?)", cluster_rows)
     rtree = True
     try:
         db.execute(RTREE)
@@ -502,12 +603,19 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
         by_category = sorted(((c, n) for (t, c), n in categories.items() if t == tier), key=lambda cn: -cn[1])
         if by_category:
             log(f"  tier {tier} categories: " + ", ".join(f"{c} {n}" for c, n in by_category[:30]))
-    log("chains (QID: objects with the tag, kept; the three commonest names):")
+    log(f"{len(cluster_rows)} cluster rows for zooms {CLUSTER_ZOOMS[0]} to {CLUSTER_ZOOMS[-1]}")
+    log("chains (QID: objects with the tag, kept, folded into their store; the three commonest names):")
     for chain in chains.chains:
         for qid in chain["wikidata"]:
             flag = "" if qid_seen[qid] else "  <-- NONE SEEN: wrong QID, or a build without the whole country?"
-            log(f"  {qid} {chain['name']}: {qid_seen[qid]} seen, {qid_kept[qid]} kept; "
+            log(f"  {qid} {chain['name']}: {qid_seen[qid]} seen, {qid_kept[qid]} kept, {folded[qid]} folded; "
                 f"{top_names(qid_names[qid])}{flag}")
+    log(f"{sum(folded.values())} chain sub-objects folded into their stores (tier 3 spots of one chain within"
+        f" {FOLD_METRES:g} m of each other are one store):")
+    for chain in chains.chains:
+        count = sum(folded[qid] for qid in chain["wikidata"])
+        if count:
+            log(f"  {chain['name']}: {count} chain sub-objects folded into their stores")
     log("extracts: " + ", ".join(f"{name} {date}" for name, date in sorted(dates.items())))
     log(f"extract_date {newest}, built_at {built_at}")
     log(f"{os.path.basename(output)}: {size_mb:.1f} MB")

@@ -67,4 +67,7 @@ jobs:
           assert one("PRAGMA application_id") == 0x53425731 and one("PRAGMA user_version") == 1
           assert spots > 20000, "far fewer spots than the covered states hold: has a filter or a tag changed?"
           assert set(tiers) == {1, 2, 3, 4}, f"a tier is empty: {tiers}"
+          zooms = db.execute("SELECT min(zoom), max(zoom) FROM cluster").fetchone()
+          print("cluster zooms", zooms)
+          assert zooms == (3, 11), f"cluster zooms {zooms}"
           PY
