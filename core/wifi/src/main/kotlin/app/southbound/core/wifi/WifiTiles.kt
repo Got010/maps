@@ -3,7 +3,9 @@ package app.southbound.core.wifi
 import app.southbound.core.search.NearbyBox
 import kotlin.math.PI
 import kotlin.math.asinh
+import kotlin.math.atan
 import kotlin.math.floor
+import kotlin.math.sinh
 import kotlin.math.tan
 
 /**
@@ -62,5 +64,25 @@ object WifiTiles {
         val northWest = tileOf(box.north, box.west, zoom)
         val southEast = tileOf(box.south, box.east, zoom)
         return northWest.x..southEast.x to northWest.y..southEast.y
+    }
+
+    /** Degrees (about a centimetre) [cellsBox] reaches past the tiles' edges, so rounding never leaves a spot out. */
+    private const val EDGE_MARGIN = 1e-7
+
+    /**
+     * The box that covers every tile of [zoom] the [box] touches, so the spots read for it fill the edge
+     * cells whole (the pack's own cells count every spot of a cell, however little of it is on screen). The edges
+     * are the tiles' own (a hair wider), with the north and south clamped at [MAX_LATITUDE] like [tileOf].
+     */
+    fun cellsBox(box: NearbyBox, zoom: Int): NearbyBox {
+        val (xs, ys) = range(box, zoom)
+        val n = (1 shl zoom).toDouble()
+        fun lat(row: Int) = Math.toDegrees(atan(sinh(PI * (1.0 - 2.0 * row / n))))
+        return NearbyBox(
+            south = lat(ys.last + 1).coerceAtLeast(-MAX_LATITUDE) - EDGE_MARGIN,
+            north = lat(ys.first).coerceAtMost(MAX_LATITUDE) + EDGE_MARGIN,
+            west = xs.first / n * 360.0 - 180.0 - EDGE_MARGIN,
+            east = (xs.last + 1) / n * 360.0 - 180.0 + EDGE_MARGIN,
+        )
     }
 }

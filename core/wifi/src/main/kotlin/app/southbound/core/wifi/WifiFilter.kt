@@ -1,5 +1,7 @@
 package app.southbound.core.wifi
 
+import app.southbound.core.search.NearbyBox
+
 /**
  * The kinds of place the map's Wi-Fi chooser offers ("Cafés and food", "Libraries", ...), from a spot's category.
  * The pack stores the OSM value without its key ("cafe", "supermarket"), so the shops are an explicit list; anything
@@ -129,6 +131,16 @@ object WifiClusters {
     }
 
     /** To six decimals, as the pack's cells are, so the same spots in any order give the same position. */
+    /**
+     * The cells of [zoom] for what the map shows: [spots] read for [WifiTiles.cellsBox] of [box] make the cells, and
+     * a cell outside the tiles [box] touches (a spot a hair over an edge) is dropped, so the circles are the ones
+     * the pack's own cells would draw, but only of the spots that pass the filter.
+     */
+    fun inView(spots: List<WifiSpot>, box: NearbyBox, zoom: Int): List<WifiCluster> {
+        val (xs, ys) = WifiTiles.range(box, zoom)
+        return fromSpots(spots, zoom).filter { it.x in xs && it.y in ys }
+    }
+
     private fun round6(degrees: Double): Double = Math.round(degrees * 1_000_000.0) / 1_000_000.0
 
     private class Cell(val x: Int, val y: Int) {
