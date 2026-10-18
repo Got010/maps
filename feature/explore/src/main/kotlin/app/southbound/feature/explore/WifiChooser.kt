@@ -62,7 +62,7 @@ internal val WifiFilter.canApply: Boolean
 /**
  * "Show on the map": what the Free Wi-Fi layer draws. The choices are a draft: Done applies them (and turns the layer
  * on), Reset ticks everything again, and closing the sheet any other way applies them too (as Done does) when they show
- * something; when nothing is ticked, closing it leaves the map as it was.
+ * something; when they show nothing, closing it leaves the map as it was.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable

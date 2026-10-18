@@ -150,22 +150,22 @@ fun RoutePreviewSheet(
     // The options scroll when the screen is short, and a scroll takes the touch from the sheet's own drag.
     // So when the body has nothing left to scroll (at its top, finger moving down; or all of it, when it fits),
     // the rest of the movement shrinks the sheet, as a swipe on the handle does.
+    // The connection is remembered once, so `follow` and `settle` must keep reading `drag` and `collapsed` through
+    // their State delegates; capturing a plain value of either here would freeze it.
     val bodySwipe = remember(threshold, flingSpeed) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Finger moving back up while the sheet is pulled down: undo the pull before the body scrolls.
-                if (source != NestedScrollSource.UserInput || collapsed || drag <= 0f || available.y >= 0f) return Offset.Zero
-                return Offset(0f, follow(available.y))
+                val delta = SheetSwipe.preScrollDelta(drag, available.y, collapsed, source == NestedScrollSource.UserInput)
+                return if (delta == 0f) Offset.Zero else Offset(0f, follow(delta))
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.UserInput || collapsed || available.y <= 0f) return Offset.Zero
-                return Offset(0f, follow(available.y))
+                val delta = SheetSwipe.postScrollDelta(available.y, collapsed, source == NestedScrollSource.UserInput)
+                return if (delta == 0f) Offset.Zero else Offset(0f, follow(delta))
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // Only a sheet the finger has pulled down is settled here; a flick that merely scrolls the body is not.
-                if (collapsed || drag <= 0f) return Velocity.Zero
+                if (!SheetSwipe.takesFling(drag, collapsed)) return Velocity.Zero
                 settle(available.y)
                 return available
             }
@@ -307,6 +307,23 @@ internal object SheetSwipe {
     /** The pull after the finger moves by [delta] (down is positive): down when open, up when shrunk. */
     fun follow(drag: Float, delta: Float, collapsed: Boolean, threshold: Float): Float =
         if (collapsed) (drag + delta).coerceIn(-threshold * 2, 0f) else (drag + delta).coerceIn(0f, threshold * 4)
+
+    /**
+     * What to hand to [follow] before the body scrolls: a finger moving back up ([availableY] negative) while the
+     * sheet is pulled down undoes the pull first. Zero means take nothing and let the body scroll.
+     */
+    fun preScrollDelta(drag: Float, availableY: Float, collapsed: Boolean, isUserInput: Boolean): Float =
+        if (!isUserInput || collapsed || drag <= 0f || availableY >= 0f) 0f else availableY
+
+    /**
+     * What to hand to [follow] after the body has scrolled: downward movement it could not take pulls the sheet.
+     * Zero means take nothing.
+     */
+    fun postScrollDelta(availableY: Float, collapsed: Boolean, isUserInput: Boolean): Float =
+        if (!isUserInput || collapsed || availableY <= 0f) 0f else availableY
+
+    /** Whether a fling is settled by the sheet: only one the finger has pulled down, not a flick that scrolls the body. */
+    fun takesFling(drag: Float, collapsed: Boolean): Boolean = !collapsed && drag > 0f
 
     /** Whether the sheet is shrunk once the finger lets go: a long drag or a quick flick toggles it. */
     fun settle(drag: Float, velocity: Float, collapsed: Boolean, threshold: Float, flingSpeed: Float): Boolean = when {
