@@ -65,6 +65,8 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     fun unsave(place: PlaceRef, listId: Long) = update { it.unsave(place, listId) }
     fun recordRecent(place: PlaceRef) = update(explicit = false) { it.recordRecent(place, clock()) }
     fun setShortcut(kind: Shortcut, place: PlaceRef?) = update { it.withShortcut(kind, place) }
+    fun markWifi(osmRef: String, worked: Boolean) = update { it.markWifi(osmRef, worked, clock()) }
+    fun clearWifiMark(osmRef: String) = update { it.clearWifiMark(osmRef) }
 
     /**
      * Reads the file again while it is unreadable, since the failure may have been temporary
