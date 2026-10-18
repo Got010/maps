@@ -97,6 +97,9 @@ data class WifiPin(val id: Long, val point: MapPoint, val tier: Int, val fee: St
 
     companion object {
         const val FEE_CUSTOMERS = "customers"
+
+        /** The map zoom from which single spots are drawn; below it the grid cells are. */
+        const val MIN_ZOOM = 10.0
         private const val IMAGE_PREFIX = "southbound-wifi-t"
 
         /** The tiers the pack has; a number outside them is not drawn. */

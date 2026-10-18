@@ -43,9 +43,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
 import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
+import androidx.compose.material.icons.outlined.Wifi as WifiOutlined
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -98,6 +100,9 @@ import app.southbound.core.map.TrafficCameraPin
 import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
 import app.southbound.core.map.WeatherOverlay
+import app.southbound.core.map.MapViewport
+import app.southbound.core.map.WifiOverlay
+import app.southbound.core.map.WifiTap
 import app.southbound.core.map.NYC_CENTER
 import app.southbound.core.map.NightMode
 import app.southbound.core.map.SouthboundMap
@@ -139,6 +144,8 @@ import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchRanking
+import app.southbound.core.wifi.WifiPack
+import app.southbound.core.wifi.WifiSpot
 import app.southbound.core.traffic.ClosureAvoidance
 import app.southbound.core.traffic.FasterRoute
 import app.southbound.core.traffic.Geo
@@ -177,6 +184,7 @@ import app.southbound.feature.navigation.drivingMapBottomCenter
 import app.southbound.feature.navigation.rememberDrivingLandscape
 import app.southbound.feature.navigation.rememberDrivingPanelWidth
 import app.southbound.feature.search.PlaceCard
+import app.southbound.feature.search.WifiDetails
 import app.southbound.feature.search.SearchPanel
 import app.southbound.feature.search.ShortcutSlot
 import app.southbound.feature.transit.StationBoard
@@ -513,6 +521,38 @@ internal fun ExploreMap(
     LaunchedEffect(searchIndex) {
         val index = searchIndex
         cameraPins = if (index == null) emptyList() else withContext(Dispatchers.IO) { attempt { PlateReaders.pins(index) } }.orEmpty()
+    }
+
+    // Free Wi-Fi (Settings > Maps): the pack, the layer's button, what the map shows, and the spot whose sheet is open.
+    // All of it reads the Wi-Fi pack on the phone.
+    var wifiPack by remember { mutableStateOf<WifiPack?>(null) }
+    var wifiVisible by rememberSaveable { mutableStateOf(false) }
+    var viewport by remember { mutableStateOf<MapViewport?>(null) }
+    var wifiOverlay by remember { mutableStateOf(WifiOverlay.NONE) }
+    var shownWifi by remember { mutableStateOf<WifiSpot?>(null) }
+    // The pack installed or removed while the app runs (a download, Settings, an import).
+    var wifiChanges by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        launch { PackEvents.installed.collect { if (it.kind == PackKind.WIFI) wifiChanges++ } }
+        launch { PackEvents.removed.collect { if (it.first == PackKind.WIFI) wifiChanges++ } }
+    }
+    LaunchedEffect(packGeneration, resumes, wifiChanges) {
+        wifiPack = withContext(Dispatchers.IO) { attempt { services.openWifi() } }
+    }
+    // Grid cells below zoom 10, the spots in view from it, asked for each time the camera comes to rest.
+    LaunchedEffect(wifiPack, wifiVisible, viewport) {
+        val pack = wifiPack
+        val view = viewport
+        if (pack == null || !wifiVisible || view == null) {
+            wifiOverlay = WifiOverlay.NONE
+            return@LaunchedEffect
+        }
+        delay(WIFI_QUERY_DEBOUNCE_MS)
+        wifiOverlay = withContext(Dispatchers.IO) { attempt { WifiLayer.overlay(pack, view) } } ?: WifiOverlay.NONE
+    }
+    fun showWifiSpot(spot: WifiSpot) {
+        shownWifi = spot
+        showPlace(spot.toPlace())
     }
 
     // Route preview: recompute when the destination or mode changes, or when
@@ -1266,6 +1306,7 @@ internal fun ExploreMap(
                 trafficCameras = if (trafficVisible && trafficOn) trafficCameraPins else emptyList(),
                 messageSigns = if (trafficVisible && trafficOn) messageSignPins else emptyList(),
                 weather = weatherOverlay,
+                wifi = if (wifiVisible && wifiPack != null) wifiOverlay else WifiOverlay.NONE,
             ),
             cameraRequest = cameraRequest,
             navigating = inTrip,
@@ -1307,6 +1348,22 @@ internal fun ExploreMap(
             onWeatherAreaTap = { id -> shownThing = ShownThing.WeatherAlertShown(id) },
             onWeatherStationTap = { id -> shownThing = ShownThing.WeatherStation(id) },
             onCameraIdle = { mapCenter = LatLon(it.lat, it.lon) },
+            onViewportIdle = { viewport = it },
+            onWifiTap = { tap ->
+                when (tap) {
+                    is WifiTap.Spot -> {
+                        val pack = wifiPack
+                        scope.launch {
+                            val spot = withContext(Dispatchers.IO) { pack?.let { attempt { it.spot(tap.id) } } }
+                            if (spot != null) showWifiSpot(spot)
+                        }
+                    }
+                    is WifiTap.Cluster -> {
+                        following = false
+                        cameraRequest = CameraRequest.Show(tap.point, WifiLayer.zoomAfterClusterTap(viewport?.zoom))
+                    }
+                }
+            },
         )
 
         if (userDataState is LoadState.Unreadable && !unreadableAcknowledged) {
@@ -1490,6 +1547,7 @@ internal fun ExploreMap(
                         horizontalAlignment = Alignment.End,
                     ) {
                         if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
+                        if (wifiPack != null) WifiButton(wifiVisible, { wifiVisible = !wifiVisible })
                         if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
                         if (location != null) RecenterButton(following, { following = true }, Modifier)
                     }
@@ -1562,6 +1620,8 @@ internal fun ExploreMap(
                         null
                     },
                     index = searchIndex,
+                    wifi = wifiPack,
+                    onPickWifi = ::showWifiSpot,
                     near = near,
                     // Around the user while the map follows them; once it is moved (a pan, a place or a route shown),
                     // around where it is. Before the first fix, around the map too.
@@ -1623,11 +1683,14 @@ internal fun ExploreMap(
                         }
                         // Reports came in but none is close: say so rather than show a far station's weather.
                         val noneNear = weatherOn && here == null && weather.conditions.isNotEmpty()
-                        if (here == null && !noneNear && forecastDays.isEmpty() && boards.isEmpty()) {
+                        // The Wi-Fi spot this sheet was opened for (not any place that shares nothing with it).
+                        val wifiSpot = shownWifi?.takeIf { it.osmRef == current.place.osmRef }
+                        if (wifiSpot == null && here == null && !noneNear && forecastDays.isEmpty() && boards.isEmpty()) {
                             null
                         } else {
                             {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    wifiSpot?.let { WifiDetails(it, wifiPack?.extractDate) }
                                     here?.let { WeatherNowRow(it, Modifier.padding(end = 12.dp)) }
                                     if (forecastDays.isNotEmpty()) ForecastStrip(forecastDays, Modifier.padding(end = 12.dp))
                                     if (noneNear) {
@@ -1833,6 +1896,8 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
     }
 }
 
+/** A short wait after the map comes to rest before the Wi-Fi pack is asked, so a fling that settles in two steps asks once. */
+private const val WIFI_QUERY_DEBOUNCE_MS = 150L
 private const val TRAFFIC_POLL_MS = 60_000L
 
 /** How far Re-center moves up while the paused trip's bar is at the bottom of the map. */
@@ -1973,6 +2038,21 @@ private fun PausedTripBar(destination: String, onEnd: () -> Unit, onResume: () -
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.explore_trip_resume))
             }
         }
+    }
+}
+
+@Composable
+private fun WifiButton(shown: Boolean, onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Icon(
+            if (shown) Icons.Filled.Wifi else Icons.Outlined.WifiOutlined,
+            contentDescription = stringResource(if (shown) R.string.explore_wifi_hide else R.string.explore_wifi_show),
+        )
     }
 }
 

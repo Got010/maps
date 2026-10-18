@@ -31,6 +31,7 @@ import app.southbound.core.search.SearchPacks
 import app.southbound.core.traffic.TrafficFeed
 import app.southbound.core.weather.GitHubForecastSource
 import app.southbound.core.weather.WeatherFeed
+import app.southbound.core.wifi.WifiPack
 import app.southbound.core.transit.AndroidTransitDb
 import app.southbound.core.transit.TransitPack
 import app.southbound.core.transit.TransitRealtime
@@ -147,6 +148,7 @@ class ExploreServices private constructor(context: Context) {
     private var search: Pair<String, PlaceSearch>? = null
     private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
+    private var wifi: Opened<WifiPack>? = null
 
     /**
      * Search over every installed search pack (New York's, and one per region in the other states), reopened when
@@ -223,6 +225,24 @@ class ExploreServices private constructor(context: Context) {
         transit = null
         return runCatching { AndroidTransitDb.open(file).also { it.network } }.getOrNull()
             ?.also { transit = Opened(file, it) }
+    }
+
+    /**
+     * The free Wi-Fi pack, reopened when the file is replaced and closed when it is removed. Null without one, or
+     * when the file isn't a readable Wi-Fi pack (it stays on the phone either way).
+     */
+    @Synchronized
+    fun openWifi(): WifiPack? {
+        val file = installed(PackKind.WIFI)
+        if (file == null) {
+            wifi?.value?.close()
+            wifi = null
+            return null
+        }
+        wifi?.takeIf { it.matches(file) }?.let { return it.value }
+        wifi?.value?.close()
+        wifi = null
+        return runCatching { WifiPack.open(file) }.getOrNull()?.also { wifi = Opened(file, it) }
     }
 
     fun hasPack(kind: PackKind): Boolean =
