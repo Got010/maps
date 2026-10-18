@@ -70,10 +70,18 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
 
     /**
      * The spots inside [box] of one of [tiers] (at most [limit], the better tiers first when the box holds more),
-     * for the map from the zoom where single spots are drawn.
+     * for the map from the zoom where single spots are drawn. With [customersOnly] only the tagged-free spots whose
+     * fee is "customers". [limit] is capped at [WifiQueries.MAX_SCAN_ROWS].
      */
-    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int): List<WifiSpot> =
-        read { rtree -> WifiQueries.inBox(box, tiers, limit, rtree) }
+    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, customersOnly: Boolean = false): List<WifiSpot> =
+        read({ rtree -> WifiQueries.inBox(box, tiers, limit, rtree, customersOnly) }) { it.readSpot() }
+
+    /**
+     * The same spots as [inBox] reduced to what the map's circles need (see [WifiQueries.POINT_COLUMNS]), unordered,
+     * at most [SCAN_LIMIT]: a read of exactly that many may have been cut. Much lighter than [inBox] for a whole view.
+     */
+    fun points(box: NearbyBox, tiers: Set<WifiTier>, customersOnly: Boolean = false): List<WifiPoint> =
+        read({ rtree -> WifiQueries.points(box, tiers, rtree, customersOnly) }) { it.readPoint() }
 
     /**
      * The spots of one of [tiers] within [radiusKm] of [center], nearest first, at most [limit]. With [openNow]
@@ -90,7 +98,7 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
         hoursUnknownCounts: Boolean = true,
     ): List<WifiResult> {
         val rows = WifiResults.candidateRows(limit, openNow)
-        val found = read { rtree -> WifiQueries.nearest(center, radiusKm, tiers, rows, rtree) }
+        val found = read({ rtree -> WifiQueries.nearest(center, radiusKm, tiers, rows, rtree) }) { it.readSpot() }
         return WifiResults.select(found, center, radiusKm * 1000, tiers, openNow, now, hoursUnknownCounts, limit)
     }
 
@@ -135,30 +143,33 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
     }
 
     /** Runs the spot query [build] makes (given whether to use the R-tree), falling back to the B-tree if the R-tree read fails. */
-    private fun read(build: (rtree: Boolean) -> WifiQueries.Query?): List<WifiSpot> {
+    private fun <T : Any> read(build: (rtree: Boolean) -> WifiQueries.Query?, row: (SQLiteStatement) -> T?): List<T> {
         val rtree = usesRtree
         return try {
-            rows(build(rtree) ?: return emptyList())
+            rows(build(rtree) ?: return emptyList(), row)
         } catch (e: Exception) {
             if (!rtree) return emptyList()
             // The module or the table is not what it was said to be: this pack is read without it from now on.
             rtreeFailed = true
             try {
-                rows(build(false) ?: return emptyList())
+                rows(build(false) ?: return emptyList(), row)
             } catch (e2: Exception) {
                 emptyList()
             }
         }
     }
 
-    private fun rows(q: WifiQueries.Query): List<WifiSpot> = synchronized(connection) {
+    private fun <T : Any> rows(q: WifiQueries.Query, row: (SQLiteStatement) -> T?): List<T> = synchronized(connection) {
         connection.prepare(q.sql).use { stmt ->
             stmt.bindAll(q.args)
-            buildList { while (stmt.step()) stmt.readSpot()?.let { add(it) } }
+            buildList { while (stmt.step()) row(stmt)?.let { add(it) } }
         }
     }
 
     companion object {
+        /** The most spots one box read returns: the map under a filter reads the whole view to cut it and to count its circles. */
+        const val SCAN_LIMIT = WifiQueries.MAX_SCAN_ROWS
+
         /**
          * Opens [file] read-only. Throws if it isn't a Wi-Fi pack; the file is never changed or deleted here (a pack
          * that can't be opened stays on the phone, and Settings says so).
@@ -189,6 +200,12 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
         }
 
         private fun SQLiteStatement.textOrNull(index: Int): String? = if (isNull(index)) null else getText(index)
+
+        /** A row of [WifiQueries.POINT_COLUMNS]; null for a tier this app doesn't know. */
+        private fun SQLiteStatement.readPoint(): WifiPoint? {
+            val tier = WifiTier.of(getInt(3)) ?: return null
+            return WifiPoint(getLong(0), getDouble(1), getDouble(2), tier, getText(4))
+        }
 
         /** A row of [WifiQueries.SPOT_COLUMNS]; null for a tier this app doesn't know (a newer pack's), never shown as confirmed. */
         private fun SQLiteStatement.readSpot(): WifiSpot? {

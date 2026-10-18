@@ -94,4 +94,26 @@ class WifiTilesTest {
         // North is the smaller y.
         assertTrue(ys.first <= ys.last)
     }
+
+    @Test
+    fun `the cells box covers every tile the box touches, whole`() {
+        val box = NearbyBox(south = 39.2, north = 39.7, west = -95.9, east = -95.2)
+        for (zoom in 3..11) {
+            val cells = WifiTiles.cellsBox(box, zoom)
+            assertTrue(cells.south < box.south && cells.north > box.north && cells.west < box.west && cells.east > box.east)
+            // Its corners, just inside, are in the first and last tile of the box's range, and just outside are not.
+            val (xs, ys) = WifiTiles.range(box, zoom)
+            val e = 1e-5
+            assertEquals(WifiTiles.Tile(xs.first, ys.first), WifiTiles.tileOf(cells.north - e, cells.west + e, zoom))
+            assertEquals(WifiTiles.Tile(xs.last, ys.last), WifiTiles.tileOf(cells.south + e, cells.east - e, zoom))
+            assertEquals(xs.first - 1, WifiTiles.tileOf(cells.north - e, cells.west - e, zoom).x)
+            assertEquals(ys.last + 1, WifiTiles.tileOf(cells.south - e, cells.east + e, zoom).y)
+        }
+    }
+
+    @Test
+    fun `the cells box at the edge of the map stays on the map`() {
+        val cells = WifiTiles.cellsBox(NearbyBox(south = 80.0, north = 89.0, west = -10.0, east = 10.0), 5)
+        assertTrue(cells.north < 85.06)
+    }
 }

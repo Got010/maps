@@ -48,6 +48,29 @@
     <string name="explore_start_from">Directions start from %1$s</string>
     <string name="explore_wifi_show">Free Wi-Fi</string>
     <string name="explore_wifi_hide">Hide free Wi-Fi</string>
+    <string name="explore_wifi_choose">Choose Wi-Fi types</string>
+    <string name="explore_wifi_filtered">Some types are hidden</string>
+    <!-- The Free Wi-Fi chooser, opened by a long press on the map button. -->
+    <string name="explore_wifi_chooser_title">Show on the map</string>
+    <string name="explore_wifi_confidence">How sure</string>
+    <string name="explore_wifi_tier_free">Tagged free</string>
+    <string name="explore_wifi_tier_unstated">Tagged Wi-Fi (fee not stated)</string>
+    <string name="explore_wifi_tier_chain">Chain policy</string>
+    <string name="explore_wifi_tier_likely">Likely</string>
+    <string name="explore_wifi_customers_only">Free for customers only</string>
+    <string name="explore_wifi_customers_only_note">Only spots where OpenStreetMap says the Wi-Fi is free for customers.</string>
+    <string name="explore_wifi_kinds">Kind of place</string>
+    <string name="explore_wifi_kind_all">All</string>
+    <string name="explore_wifi_kind_food">Cafés and food</string>
+    <string name="explore_wifi_kind_shops">Shops</string>
+    <string name="explore_wifi_kind_libraries">Libraries</string>
+    <string name="explore_wifi_kind_hotels">Hotels and motels</string>
+    <string name="explore_wifi_kind_rest">Rest areas and visitor centers</string>
+    <string name="explore_wifi_kind_fuel">Truck stops and fuel</string>
+    <string name="explore_wifi_kind_other">Other</string>
+    <string name="explore_wifi_nothing">With these choices nothing will show.</string>
+    <string name="explore_wifi_reset">Reset</string>
+    <string name="explore_wifi_done">Done</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_weather_show">Show weather radar and alerts</string>
     <!-- Current weather at the nearest station (an airport's report). -->
