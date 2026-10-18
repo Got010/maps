@@ -6,10 +6,12 @@ fixture file (synthetic points and generic names) skips itself without it."""
 import json
 import math
 import os
+import re
 import sqlite3
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WIFI = os.path.dirname(HERE)
@@ -125,11 +127,19 @@ class TierTest(unittest.TestCase):
         ):
             self.assertIsNone(verdict(name="A", **tags), tags)
 
-    def test_tier_4_may_be_nameless_but_the_others_may_not(self):
-        v = verdict(highway="rest_area")
-        self.assertEqual((4, None), (v.tier, v.name))
-        self.assertIsNone(verdict(amenity="cafe", internet_access="wlan"))
-        self.assertIsNone(verdict(amenity="cafe", brand__wikidata=COFFEE))
+    def test_nameless_objects_are_kept_in_every_tier(self):
+        self.assertEqual((4, None), (lambda v: (v.tier, v.name))(verdict(highway="rest_area")))
+        v = verdict(amenity="cafe", internet_access="wlan", internet_access__fee="no")
+        self.assertEqual((1, None, "cafe"), (v.tier, v.name, v.category))
+        v = verdict(amenity="cafe", internet_access="wlan")
+        self.assertEqual((2, None), (v.tier, v.name))
+
+    def test_a_nameless_chain_spot_takes_the_chains_name(self):
+        v = verdict(amenity="cafe", brand__wikidata=COFFEE)
+        self.assertEqual((3, "Example Coffee"), (v.tier, v.name))
+        # Its own name or brand wins.
+        self.assertEqual("Own", verdict(amenity="cafe", brand__wikidata=COFFEE, name="Own").name)
+        self.assertEqual("Own Brand", verdict(amenity="cafe", brand__wikidata=COFFEE, brand="Own Brand").name)
 
     def test_name_falls_back_to_brand(self):
         v = verdict(shop="books", brand="Example Brand", internet_access="wlan")
@@ -143,9 +153,24 @@ class TierTest(unittest.TestCase):
             (dict(tourism="attraction"), "attraction"),
             (dict(highway="services"), "services"),
             (dict(office="company"), "company"),
-            (dict(leisure="park"), "place"),
+            (dict(leisure="park"), "park"),
+            (dict(railway="station"), "station"),
+            (dict(railway="halt"), "halt"),
+            (dict(public_transport="station"), "station"),
+            (dict(aeroway="aerodrome"), "aerodrome"),
+            (dict(building="yes"), "place"),
+            # The search pack's order: leisure, craft, healthcare, historic before office and highway.
+            (dict(office="company", leisure="park"), "park"),
+            (dict(highway="services", craft="brewery"), "brewery"),
+            (dict(railway="station", office="company"), "station"),
         ):
             self.assertEqual(category, verdict(name="A", internet_access="wlan", **tags).category, tags)
+
+    def test_the_category_is_never_yes(self):
+        self.assertEqual("books", verdict(name="A", internet_access="wlan", amenity="yes", shop="books").category)
+        self.assertEqual("place", verdict(name="A", internet_access="wlan", amenity="yes").category)
+        self.assertEqual("place", verdict(name="A", internet_access="wlan", highway="yes").category)
+        self.assertEqual("books", verdict(name="A", internet_access="wlan", shop="books", leisure="bench").category)
 
     def test_hours_website_and_wikidata_are_copied(self):
         v = verdict(amenity="cafe", name="A", internet_access="wlan", opening_hours="Mo-Fr 08:00-17:00",
@@ -178,6 +203,20 @@ class ExclusionTest(unittest.TestCase):
     def test_terminals_are_not_wifi(self):
         for tags in (dict(amenity="library"), dict(amenity="cafe", brand__wikidata=COFFEE)):
             self.assertIsNone(verdict(name="A", internet_access="terminal", **tags), tags)
+
+    def test_private_and_no_access_exclude_everywhere(self):
+        for access in ("private", "no", " Private "):
+            for tags in (dict(amenity="library"), dict(tourism="hotel"), dict(amenity="cafe", internet_access="wlan"),
+                         dict(amenity="cafe", brand__wikidata=COFFEE)):
+                self.assertIsNone(verdict(name="A", access=access, **tags), (access, tags))
+        for access in ("yes", "customers", "permissive"):
+            self.assertEqual(4, verdict(name="A", amenity="library", access=access).tier, access)
+
+    def test_every_gone_prefix(self):
+        for prefix in ("disused", "abandoned", "was", "demolished", "removed", "razed", "destroyed"):
+            self.assertIsNone(verdict(name="A", internet_access="wlan", **{f"{prefix}__amenity": "cafe"}), prefix)
+            self.assertEqual(2, verdict(name="A", internet_access="wlan", amenity="cafe",
+                                        **{f"{prefix}__shop": "books"}).tier, prefix)
 
     def test_disused_and_abandoned_only(self):
         self.assertIsNone(verdict(name="A", disused__amenity="cafe", internet_access="wlan"))
@@ -397,7 +436,7 @@ class WriterTest(unittest.TestCase):
 
     def test_tables_and_indexes(self):
         names = {r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'index')")}
-        self.assertLessEqual({"meta", "spot", "cluster", "spot_lat_lon", "spot_tier_lat_lon"}, names)
+        self.assertLessEqual({"meta", "spot", "cluster", "spot_lat_lon", "spot_tier_lat_lon", "cluster_zoom_x_y"}, names)
         spot = [r[1] for r in self.db.execute("PRAGMA table_info(spot)")]
         self.assertEqual(["id", "osm_type", "osm_id", "name", "brand_wikidata", "lat", "lon", "category", "tier",
                           "fee", "opening_hours", "website"], spot)
@@ -405,6 +444,7 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(["zoom", "x", "y", "count", "lat", "lon", "tier_min"], cluster)
         self.assertEqual(["lat", "lon"], [r[2] for r in self.db.execute("PRAGMA index_info(spot_lat_lon)")])
         self.assertEqual(["tier", "lat", "lon"], [r[2] for r in self.db.execute("PRAGMA index_info(spot_tier_lat_lon)")])
+        self.assertEqual(["zoom", "x", "y"], [r[2] for r in self.db.execute("PRAGMA index_info(cluster_zoom_x_y)")])
 
     def test_rows(self):
         rows = self.db.execute("SELECT osm_type, osm_id, name, tier, fee, category, opening_hours FROM spot ORDER BY id").fetchall()
@@ -446,7 +486,7 @@ class WriterTest(unittest.TestCase):
 
     def test_the_log_names_tiers_chains_dates_and_size(self):
         text = "\n".join(self.lines)
-        for needle in ("tier 1 Tagged free: 1", "tier 3 Chain policy: 1", "tier 4 Likely: 2", "Q37158 Example Coffee: 2 seen, 1 kept",
+        for needle in ("tier 1 Tagged free: 1 (0 without a name)", "tier 3 Chain policy: 1 (0", "tier 4 Likely: 2 (1 without a name)", "Q37158 Example Coffee: 2 seen, 1 kept",
                        "Q38076 Example Burgers: 0 seen", "NONE SEEN", "kansas 2026-10-17", "extract_date 2026-10-17", "MB"):
             self.assertIn(needle, text)
 
@@ -467,6 +507,75 @@ class WriterTest(unittest.TestCase):
             self.assertEqual(2, db.execute("SELECT count(*) FROM spot").fetchone()[0])
         finally:
             db.close()
+
+
+class FilterTest(unittest.TestCase):
+    """build.sh's osmium filter and the classifier must stay in step: everything classify() accepts has to get
+    through the filter, or the pack silently loses it.
+
+    The filter is exact-case (osmium matches values byte for byte); OSM values are lower-case in practice, so the
+    classifier's case-folding of internet_access and the fee tags is belt and braces and not covered here."""
+
+    @staticmethod
+    def filters(qids):
+        with open(os.path.join(WIFI, "build.sh")) as f:
+            match = re.search(r'^FILTERS="([^"]+)"', f.read(), re.M)
+        assert match, "build.sh has no FILTERS=\"...\" line"
+        return match.group(1).replace("$QIDS", ",".join(qids)).split()
+
+    @staticmethod
+    def matches(expressions, osm_type, tags):
+        """osmium tags-filter's rule: [types/]key[=value,value...], any expression matching keeps the object."""
+        for expression in expressions:
+            types, _, rest = expression.rpartition("/") if "/" in expression else ("nwr", "", expression)
+            key, _, values = rest.partition("=")
+            if osm_type in types and key in tags and (not values or tags[key] in values.split(",")):
+                return True
+        return False
+
+    @staticmethod
+    def fixture_objects():
+        root = ET.parse(os.path.join(HERE, "fixture.osm")).getroot()
+        for element in root:
+            if element.tag in ("node", "way", "relation"):
+                yield element.tag[0], element.get("id"), {t.get("k"): t.get("v") for t in element.findall("tag")}
+
+    def test_everything_the_classifier_accepts_passes_the_filter(self):
+        expressions = self.filters(CHAINS.qids())
+        accepted = 0
+        for osm_type, osm_id, tags in self.fixture_objects():
+            if classify(tags, CHAINS) is not None:
+                accepted += 1
+                self.assertTrue(self.matches(expressions, osm_type, tags), f"{osm_type}{osm_id} {tags}")
+        self.assertGreater(accepted, 20)
+
+    def test_every_tier_4_rule_passes_the_filter(self):
+        expressions = self.filters(CHAINS.qids())
+        for tags in (dict(amenity="library"), dict(tourism="hotel"), dict(tourism="motel"), dict(highway="rest_area"),
+                     dict(tourism="information", information="office"),
+                     dict(tourism="information", information="visitor_centre", operator__wikidata="Q308439")):
+            tags = {k.replace("__", ":"): v for k, v in tags.items()}
+            self.assertIsNotNone(classify({"name": "A", **tags}, CHAINS), tags)
+            self.assertTrue(self.matches(expressions, "n", {"name": "A", **tags}), tags)
+
+    def test_the_real_config_chains_pass_the_filter(self):
+        chains = build_wifi.load_chains(os.path.join(WIFI, "chains.json"))
+        expressions = self.filters(chains.qids())
+        for qid in chains.qids():
+            self.assertTrue(self.matches(expressions, "n", {"shop": "x", "brand:wikidata": qid}), qid)
+
+    def test_the_test_has_teeth(self):
+        expressions = [e for e in self.filters(CHAINS.qids()) if "library" not in e]
+        library = {"amenity": "library", "name": "A"}
+        self.assertIsNotNone(classify(library, CHAINS))
+        self.assertFalse(self.matches(expressions, "n", library))
+        self.assertFalse(self.matches(self.filters(CHAINS.qids()), "n", {"tourism": "information", "information": "board"}))
+
+    def test_the_filter_keeps_ways_relations_and_their_nodes(self):
+        with open(os.path.join(WIFI, "build.sh")) as f:
+            text = f.read()
+        self.assertTrue(all(e.startswith("nwr/") for e in self.filters(CHAINS.qids())))
+        self.assertNotRegex(re.sub(r"^#.*$", "", text, flags=re.M), r"--omit-referenced|tags-filter[^\n]* -R\b")
 
 
 @unittest.skipUnless(HAVE_OSMIUM, "pyosmium is not installed")
@@ -492,7 +601,7 @@ class FixtureTest(unittest.TestCase):
             " FROM spot WHERE osm_type = ? AND osm_id = ?", (osm_type, osm_id)).fetchone()
 
     def test_counts(self):
-        self.assertEqual({1: 6, 2: 4, 3: 2, 4: 11}, self.tiers)
+        self.assertEqual({1: 8, 2: 6, 3: 3, 4: 12}, self.tiers)
 
     def test_every_rule_on_a_node(self):
         expected = {
@@ -513,7 +622,13 @@ class FixtureTest(unittest.TestCase):
             26: ("Example Brand", 2, "unknown", "books"),
             27: ("Fixture Federal Visitor Center", 4, "unknown", "visitor_centre"),
             28: ("Fixture Hotel Twenty-eight", 1, "customers", "hotel"),
+            21: (None, 2, "unknown", "cafe"),
+            25: ("Example Burgers", 3, "customers", "supermarket"),
             30: ("Example Mart", 3, "customers", "department_store"),
+            36: ("Fixture Station", 2, "unknown", "station"),
+            37: ("Fixture Books", 1, "no", "books"),
+            38: (None, 1, "no", "cafe"),
+            39: ("Fixture Public Library", 4, "unknown", "library"),
             31: ("Fixture Cafe Far", 1, "no", "cafe"),
             32: ("Fixture Library Far", 4, "unknown", "library"),
         }
@@ -521,7 +636,7 @@ class FixtureTest(unittest.TestCase):
             self.assertEqual(row, self.spot("n", osm_id)[:4], osm_id)
 
     def test_what_is_left_out(self):
-        for osm_id in (6, 7, 8, 11, 12, 19, 20, 21, 22, 23, 25, 29):
+        for osm_id in (6, 7, 8, 11, 12, 19, 20, 22, 23, 29, 33, 34, 35):
             self.assertIsNone(self.spot("n", osm_id), osm_id)
 
     def test_fields_are_copied(self):

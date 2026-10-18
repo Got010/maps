@@ -17,8 +17,11 @@ and never presents tiers 2 to 4 as confirmed):
                               visitor centers
 
 A spot takes the lowest tier it matches. internet_access:fee=yes, internet_access=no and
-internet_access=terminal exclude an object from every tier, even a chain or a library; so does tagging that
-only says the place is disused or abandoned.
+internet_access=terminal exclude an object from every tier, even a chain or a library; so do access=private and
+access=no (a staff-only room, a school's library) and tagging that only says the place is gone (disused:,
+abandoned:, was:, demolished:, removed:, razed:, destroyed: with no live feature of its own). Objects with no
+name and no brand are kept: a chain's takes the chain's name from chains.json, the others have a NULL name (the
+app shows a fallback from the category).
 
 chains.json (edited by hand; the build fails loudly when it is malformed):
 
@@ -27,7 +30,7 @@ chains.json (edited by hand; the build fails loudly when it is malformed):
     {"name": "Pilot", "wikidata": ["Q64128179"], "fee": "customers", "note": "free text, not read"}
   ]}
 
-  name      the chain's name, for the build log
+  name      the chain's name: for the build log, and the name of a spot of the chain that has none of its own
   wikidata  one or more brand:wikidata QIDs (the chain is matched by these, never by name)
   fee       "no", "customers" (the default) or "unknown": the fee column of the chain's spots
   note      optional, ignored
@@ -60,8 +63,14 @@ FEES = ("no", "customers", "unknown")
 TIER_LABELS = {1: "Tagged free", 2: "Tagged Wi-Fi (fee not stated)", 3: "Chain policy", 4: "Likely"}
 NPS_QID = "Q308439"  # National Park Service
 QID = re.compile(r"^Q[0-9]+$")
-# A feature key that is live on an object (so that a leftover disused:/abandoned: key beside it is noise).
+# A feature key that is live on an object (so that a leftover disused: key beside it is noise).
 FEATURE_KEYS = ("amenity", "shop", "tourism", "highway", "office", "leisure", "craft", "healthcare", "club")
+GONE_PREFIXES = ("disused:", "abandoned:", "was:", "demolished:", "removed:", "razed:", "destroyed:")
+# What makes an object a place, in search/build_search.py's order (PLACE_KEYS, SKIP_VALUES, STATION_TAGS), then
+# office and highway. The literal "yes" is never a category.
+PLACE_KEYS = ("amenity", "shop", "tourism", "leisure", "craft", "healthcare", "historic")
+SKIP_VALUES = ("yes", "no", "parking_space", "bench", "waste_basket", "vending_machine", "bicycle_parking")
+STATION_TAGS = (("railway", "station"), ("railway", "halt"), ("public_transport", "station"), ("aeroway", "aerodrome"))
 
 SCHEMA = f"""
 PRAGMA application_id = {APPLICATION_ID};
@@ -94,6 +103,7 @@ CREATE TABLE cluster (
 INDEXES = """
 CREATE INDEX spot_lat_lon ON spot(lat, lon);
 CREATE INDEX spot_tier_lat_lon ON spot(tier, lat, lon);
+CREATE INDEX cluster_zoom_x_y ON cluster(zoom, x, y);
 """
 RTREE = "CREATE VIRTUAL TABLE wifi_rtree USING rtree(id, minlat, maxlat, minlon, maxlon)"
 ATTRIBUTION = "© OpenStreetMap contributors, ODbL"
@@ -185,10 +195,10 @@ def text(tags, key):
 
 
 def is_lifecycle_dead(tags):
-    """True when the object says only that the place is gone: disused:amenity=cafe, abandoned:shop=... with no
-    live amenity, shop, tourism... of its own."""
+    """True when the object says only that the place is gone: disused:amenity=cafe, abandoned:shop=... (also
+    was:, demolished:, removed:, razed:, destroyed:) with no live amenity, shop, tourism... of its own."""
     for key in tags:
-        for prefix in ("disused:", "abandoned:"):
+        for prefix in GONE_PREFIXES:
             if key.startswith(prefix) and key[len(prefix):] and key[len(prefix):] not in tags:
                 return not any(tags.get(k) for k in FEATURE_KEYS)
     return False
@@ -215,10 +225,19 @@ def likely_category(tags):
 
 
 def osm_category(tags):
-    """The OSM value that names the kind of place: amenity, else shop, tourism, highway, office, else "place"."""
-    for key in ("amenity", "shop", "tourism", "highway", "office"):
+    """The OSM value that names the kind of place, as the search pack's place_category picks it: amenity, shop,
+    tourism, leisure, craft, healthcare, historic; then a station or aerodrome; then office, then highway.
+    Never "yes" (or the other values the search pack skips); "place" when nothing is left."""
+    for key in PLACE_KEYS:
         v = text(tags, key)
-        if v:
+        if v and v not in SKIP_VALUES:
+            return v
+    for key, wanted in STATION_TAGS:
+        if value(tags, key) == wanted:
+            return "station" if key in ("railway", "public_transport") and wanted == "station" else wanted
+    for key in ("office", "highway"):
+        v = text(tags, key)
+        if v and v not in SKIP_VALUES:
             return v
     return "place"
 
@@ -231,10 +250,13 @@ Verdict = collections.namedtuple(
 def classify(tags, chains):
     """The Verdict for an object's tags (a dict), or None when it is not a Wi-Fi spot.
 
-    Order: exclusions first (they beat every tier), then the lowest tier that matches."""
+    Order: exclusions first (they beat every tier), then the lowest tier that matches. A tier 3 spot with no name
+    or brand of its own is called by its chain's name; the others keep a NULL name."""
     internet = value(tags, "internet_access")
     internet_fee = value(tags, "internet_access:fee")
-    if internet_fee == "yes" or internet in ("no", "terminal") or is_lifecycle_dead(tags):
+    if internet_fee == "yes" or internet in ("no", "terminal") or value(tags, "access") in ("private", "no"):
+        return None
+    if is_lifecycle_dead(tags):
         return None
 
     tier = fee = None
@@ -261,8 +283,8 @@ def classify(tags, chains):
     if tier is None:
         return None
     name = text(tags, "name") or text(tags, "brand")
-    if name is None and tier != 4:
-        return None
+    if name is None and tier == 3:
+        name = chain["name"]
     if category is None:
         category = osm_category(tags)
     return Verdict(
@@ -398,6 +420,7 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
     tiers = collections.Counter()
     categories = collections.Counter()
     fees = collections.Counter()
+    nameless = collections.Counter()
     rows = []
     qid_seen = collections.Counter()
     qid_kept = collections.Counter()
@@ -424,6 +447,8 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
         clusters.add(lat, lon, verdict.tier)
         tiers[verdict.tier] += 1
         categories[(verdict.tier, verdict.category)] += 1
+        if verdict.name is None:
+            nameless[verdict.tier] += 1
         fees[verdict.fee] += 1
         if len(rows) >= 50_000:
             flush(db, rows)
@@ -463,7 +488,7 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
     log(f"{seen} objects read, {sum(tiers.values())} spots kept, {skipped} not Wi-Fi spots or excluded"
         f" ({'with' if rtree else 'WITHOUT'} R-tree), in {time.time() - started:.0f}s")
     for tier in sorted(TIER_LABELS):
-        log(f"tier {tier} {TIER_LABELS[tier]}: {tiers[tier]}")
+        log(f"tier {tier} {TIER_LABELS[tier]}: {tiers[tier]} ({nameless[tier]} without a name)")
     log("fee: " + ", ".join(f"{fee} {fees[fee]}" for fee in FEES))
     for tier in sorted(TIER_LABELS):
         by_category = sorted(((c, n) for (t, c), n in categories.items() if t == tier), key=lambda cn: -cn[1])
