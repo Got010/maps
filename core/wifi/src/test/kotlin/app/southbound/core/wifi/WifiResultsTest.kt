@@ -166,3 +166,16 @@ class WifiResultsTest {
         assertTrue(spot(2, 0.0).osmRef.startsWith("n"))
     }
 }
+
+class WifiLikelyGroupTest {
+    @Test
+    fun `tier 4 categories map to the sheet's wording`() {
+        assertEquals(WifiLikelyGroup.LIBRARIES, WifiLikelyGroup.of("library"))
+        assertEquals(WifiLikelyGroup.HOTEL_LOBBIES, WifiLikelyGroup.of("hotel"))
+        assertEquals(WifiLikelyGroup.HOTEL_LOBBIES, WifiLikelyGroup.of("motel"))
+        assertEquals(WifiLikelyGroup.REST_AREAS, WifiLikelyGroup.of("rest_area"))
+        assertEquals(WifiLikelyGroup.VISITOR_CENTERS, WifiLikelyGroup.of("welcome_center"))
+        assertEquals(WifiLikelyGroup.VISITOR_CENTERS, WifiLikelyGroup.of("visitor_centre"))
+        assertEquals(WifiLikelyGroup.OTHER, WifiLikelyGroup.of("cafe"))
+    }
+}
