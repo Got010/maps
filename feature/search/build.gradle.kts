@@ -9,6 +9,7 @@ android {
 
 dependencies {
     api(project(":core:search"))
+    api(project(":core:wifi"))
     implementation(project(":core:map"))
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.kotlinx.coroutines.android)
