@@ -29,6 +29,19 @@ internal object PlacesEntry {
         return UserDataCodec.encode(data).toByteArray(Charsets.UTF_8)
     }
 
+    /**
+     * The text earlier versions wrote for [data]: the same without the `wifiMarks` field, which only exists to be
+     * empty here, or null when there are marks (an earlier version had none to write). Only the import journal's
+     * "are these the same places" check uses it. A name can't contain the field's text, as quotes in strings are escaped.
+     */
+    fun encodeBeforeSchema9(data: UserData): ByteArray? {
+        if (data.wifiMarks.isNotEmpty()) return null
+        check(data)
+        return UserDataCodec.encode(data).replaceFirst(EMPTY_MARKS, "").toByteArray(Charsets.UTF_8)
+    }
+
+    private const val EMPTY_MARKS = ",\"wifiMarks\":[]"
+
     private val ROOT_1 = setOf("version", "lastId", "lists", "saved", "recents")
 
     /** Schema 9: the Wi-Fi marks, always present (an empty list when there are none). */

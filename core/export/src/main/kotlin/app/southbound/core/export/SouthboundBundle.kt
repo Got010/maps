@@ -32,7 +32,7 @@ import java.util.TimeZone
  * Schema 7 added the driving setting `search_at_bottom`; an older bundle imports with the search bar at the bottom.
  * Schema 8 added `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`; an older bundle imports with them off.
  * Schema 9 (the free Wi-Fi layer) added `places.json`'s `wifiMarks`, `settings.json`'s `packs.wifi` and the manifest's
- * `wifi_marks` count; an older bundle imports with no marks and the Wi-Fi switch off.
+ * `wifi_marks` count; an older bundle imports with no marks and leaves the Wi-Fi switch as it is on the phone.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"

@@ -328,15 +328,86 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a bundle before schema 9 leaves the Wi-Fi switch as it is, schema 9 restores it exactly`() {
+        val eight = Samples.fwxFile(Samples.schema8("0.1.60"), schema = 8)
+        for (phoneHasItOn in listOf(true, false)) {
+            val b = device("old-$phoneHasItOn")
+            b.stores.settings = Samples.defaultSettings().copy(wifi = phoneHasItOn)
+            val outcome = import(b, eight) as ImportOutcome.Done
+            // Left alone, and not reported as turned on; the marks the old bundle never had are replaced by none.
+            assertEquals(phoneHasItOn, b.stores.settings.wifi)
+            assertFalse(outcome.wifiTurnedOn)
+            assertEquals(0, outcome.counts.wifiMarks)
+            // The rest of its settings did land.
+            assertEquals(Samples.settings().copy(wifi = phoneHasItOn), b.stores.settings)
+        }
+        // A schema 9 bundle sets it exactly: on over off, off over on, and no turn-on is claimed for off.
+        for ((bundleWifi, phoneWifi) in listOf(true to false, false to true, true to true, false to false)) {
+            val a = filled("a-$bundleWifi-$phoneWifi")
+            a.stores.settings = Samples.settings().copy(wifi = bundleWifi)
+            val file = export(a)
+            val b = device("b-$bundleWifi-$phoneWifi")
+            b.stores.settings = Samples.defaultSettings().copy(wifi = phoneWifi)
+            val outcome = import(b, file) as ImportOutcome.Done
+            assertEquals(bundleWifi, b.stores.settings.wifi)
+            assertEquals(bundleWifi && !phoneWifi, outcome.wifiTurnedOn)
+        }
+    }
+
+    @Test
+    fun `an import kept by an earlier version resumes at start over the same places`() {
+        // What version 8 left behind: the entries of a schema 8 bundle, and the mark = the print of the places as
+        // that version encoded them (no wifiMarks field).
+        val entries = Samples.schema8("0.1.60", Samples.data().let { BackupData(it.userData.copy(wifiMarks = emptyList()), it.apiKeys, it.settings) })
+        fun legacyPrint(d: UserData): String {
+            val text = app.southbound.core.userdata.UserDataCodec.encode(d)
+            assertTrue(text.contains(",\"wifiMarks\":[]"))
+            val old = text.replace(",\"wifiMarks\":[]", "").toByteArray()
+            return java.security.MessageDigest.getInstance("SHA-256").digest(old).joinToString("") { "%02x".format(it) }
+        }
+        val found = UserData().save(Samples.cafe, UserData.FAVORITES_ID, 7)
+
+        // The import stopped before the places landed: they are still the ones it found.
+        val b = device("b")
+        b.stores.places.update { found }
+        b.stores.settings = Samples.defaultSettings().copy(wifi = true)
+        b.journal.write(entries, legacyPrint(found))
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertFalse((resumed as ResumeOutcome.Applied).wifiTurnedOn)
+        assertEquals(Samples.userData().copy(wifiMarks = emptyList()), b.stores.places.data.value)
+        // The bundle had no Wi-Fi value: the phone's switch stayed on.
+        assertEquals(true, b.stores.settings.wifi)
+        assertFalse(b.journal.exists())
+
+        // It stopped after the places landed: they are the import's own.
+        val c = device("c")
+        c.stores.places.update { Samples.userData().copy(wifiMarks = emptyList()) }
+        c.journal.write(entries, legacyPrint(found))
+        assertTrue(runBlocking { c.service.resume(automatic = true) } is ResumeOutcome.Applied)
+
+        // Places changed since (the print matches neither): it still waits.
+        val d = device("d")
+        d.stores.places.update { found.recordRecent(Samples.pin, 9) }
+        d.journal.write(entries, legacyPrint(found))
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), runBlocking { d.service.resume(automatic = true) })
+        // A mark made since also counts as a change.
+        val e = device("e")
+        e.stores.places.update { found.markWifi("n5", true, 3) }
+        e.journal.write(entries, legacyPrint(found))
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), runBlocking { e.service.resume(automatic = true) })
+    }
+
+    @Test
     fun `the Wi-Fi marks and switch come back, and the summary says when the switch goes on`() {
         val a = filled() // two marks, Wi-Fi switch on
         val file = export(a)
         val b = device("b") // Wi-Fi switch off
-        assertFalse(b.stores.settings.wifi)
+        assertEquals(false, b.stores.settings.wifi)
         val outcome = import(b, file) as ImportOutcome.Done
         assertTrue(outcome.wifiTurnedOn)
         assertEquals(2, outcome.counts.wifiMarks)
-        assertTrue(b.stores.settings.wifi)
+        assertEquals(true, b.stores.settings.wifi)
         assertEquals(
             listOf(Samples.WIFI_WORKED to true, Samples.WIFI_FAILED to false),
             b.stores.places.data.value.wifiMarks.map { it.osmRef to it.worked },
@@ -350,7 +421,7 @@ class BackupServiceTest {
         assertTrue((import(c, file) as ImportOutcome.Pending).wifiTurnedOn)
         c.stores.failApply = false
         assertTrue((runBlocking { c.service.resume() } as ResumeOutcome.Applied).wifiTurnedOn)
-        assertTrue(c.stores.settings.wifi)
+        assertEquals(true, c.stores.settings.wifi)
     }
 
     @Test

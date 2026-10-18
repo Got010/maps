@@ -91,8 +91,9 @@ class AndroidBackupStores(
         // The updater downloads a voice pack only for the voice in this list; Settings keeps it in step when open.
         voiceSelection.replace(s.voice.builtInVoice.takeUnless { it.bundled }?.id)
         regions.replaceBasemaps(s.regions)
-        // The Settings > Maps switch for the free Wi-Fi pack; the updater downloads or drops the pack to match.
-        wifi.replace(s.wifi)
+        // The Settings > Maps switch for the free Wi-Fi pack; the updater downloads or drops the pack to match. A
+        // bundle before schema 9 has no value: the phone's switch is left as it is (writing "off" would delete the pack).
+        s.wifi?.let { wifi.replace(it) }
         UpdateScheduler.replaceAllowMobileData(context, s.allowMobileData)
     }
 

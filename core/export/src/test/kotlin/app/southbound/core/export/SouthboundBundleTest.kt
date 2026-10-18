@@ -100,7 +100,7 @@ class SouthboundBundleTest {
     fun `marks and the Wi-Fi switch round trip through the bundle`() {
         val data = Samples.data()
         assertEquals(2, data.userData.wifiMarks.size)
-        assertTrue(data.settings.wifi)
+        assertEquals(true, data.settings.wifi)
         val entries = SouthboundBundle.encode(data, "0.1.61")
         assertTrue(
             text(entries, "places.json").contains(
@@ -112,7 +112,7 @@ class SouthboundBundleTest {
         val back = SouthboundBundle.decode(read(file(entries)))
         assertEquals(data.userData.wifiMarks, back.userData.wifiMarks)
         assertEquals(data.userData, back.userData)
-        assertTrue(back.settings.wifi)
+        assertEquals(true, back.settings.wifi)
         assertEquals(2, back.counts().wifiMarks)
         // None and off round trip too: the field is always written, as an empty list.
         val none = SouthboundBundle.encode(Samples.emptyData(), "x")
@@ -182,31 +182,10 @@ class SouthboundBundleTest {
     /** Samples.data() without its marks: what any bundle before schema 9 imports as. */
     private val NO_MARKS = Samples.data().userData.copy(wifiMarks = emptyList())
 
-    /**
-     * The entries as the schema 8 writer wrote them (v0.1.5x): schema 8 in the manifest, no `wifi_marks` count, no
-     * `wifiMarks` in places.json, no `wifi` in the packs group, 75 settings. Derived from today's writer by taking
-     * out exactly what schema 9 added; the older-schema tests below strip further from here.
-     */
-    private fun schema8(version: String): LinkedHashMap<String, ByteArray> {
-        val out = linkedMapOf<String, ByteArray>()
-        for ((name, bytes) in SouthboundBundle.encode(Samples.data(), version)) {
-            val t = String(bytes, Charsets.UTF_8)
-                .replace("\"schema\":9", "\"schema\":8")
-                .replace("\"settings\":76", "\"settings\":75")
-                .replace(",\"wifi_marks\":2", "")
-                .replace(",\"wifi\":true", "")
-                .replace(""","wifiMarks":[{"osmRef":"${Samples.WIFI_WORKED}","worked":true,"markedAt":600},{"osmRef":"${Samples.WIFI_FAILED}","worked":false,"markedAt":700}]""", "")
-            out[name] = t.toByteArray()
-        }
-        // The derivation took out all of it.
-        for ((name, bytes) in out) {
-            assertFalse(name, Samples.contains(bytes, "wifi"))
-        }
-        return out
-    }
+    private fun schema8(version: String) = Samples.schema8(version)
 
     @Test
-    fun `a schema 8 file still imports, with no marks and the Wi-Fi switch off`() {
+    fun `a schema 8 file still imports, with no marks and no value for the Wi-Fi switch`() {
         val eight = schema8("0.1.60")
         // Exactly what the schema 8 writer produced for the manifest and the packs group.
         assertEquals(
@@ -218,7 +197,7 @@ class SouthboundBundleTest {
         val bytes = raw(*eight.map { it.key to it.value }.toTypedArray(), schema = 8)
         assertEquals(8L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        assertEquals(Samples.data().settings.copy(wifi = false), data.settings)
+        assertEquals(Samples.data().settings.copy(wifi = null), data.settings)
         assertEquals(NO_MARKS, data.userData)
         assertEquals(0, data.counts().wifiMarks)
         assertEquals(Samples.data().apiKeys, data.apiKeys)
@@ -268,7 +247,7 @@ class SouthboundBundleTest {
         val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
         assertEquals(1L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         assertEquals(
             expected.copy(searchAtBottom = true, route = expected.route.copy(avoidDotCameras = false), network = expected.network + newerOff(NetworkFeature.WEATHER)),
             data.settings,
@@ -292,7 +271,7 @@ class SouthboundBundleTest {
         }
         val bytes = raw(*two.map { it.key to it.value }.toTypedArray(), schema = 2)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         assertEquals(expected.copy(searchAtBottom = true, network = expected.network + newerOff(NetworkFeature.WEATHER)), data.settings)
     }
 
@@ -312,7 +291,7 @@ class SouthboundBundleTest {
         val bytes = raw(*three.map { it.key to it.value }.toTypedArray(), schema = 3)
         assertEquals(3L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         assertEquals(expected.copy(searchAtBottom = true, network = expected.network + newerOff()), data.settings)
         assertEquals(NO_MARKS, data.userData)
     }
@@ -333,7 +312,7 @@ class SouthboundBundleTest {
         val bytes = raw(*four.map { it.key to it.value }.toTypedArray(), schema = 4)
         assertEquals(4L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         val newest = (listOf(NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT, NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST,
             NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
             NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO) + SINCE_8)
@@ -358,7 +337,7 @@ class SouthboundBundleTest {
         val bytes = raw(*five.map { it.key to it.value }.toTypedArray(), schema = 5)
         assertEquals(5L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         val newest = (listOf(NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
             NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO) + SINCE_8)
             .associateWith { false }
@@ -382,7 +361,7 @@ class SouthboundBundleTest {
         val bytes = raw(*six.map { it.key to it.value }.toTypedArray(), schema = 6)
         assertEquals(6L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         assertEquals(expected.copy(searchAtBottom = true, network = expected.network + SINCE_8.associateWith { false }), data.settings)
         assertEquals(NO_MARKS, data.userData)
     }
@@ -402,7 +381,7 @@ class SouthboundBundleTest {
         val bytes = raw(*seven.map { it.key to it.value }.toTypedArray(), schema = 7)
         assertEquals(7L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = false)
+        val expected = Samples.data().settings.copy(wifi = null)
         assertTrue(expected.network.getValue(NetworkFeature.TRAFFIC_511VA))
         assertEquals(expected.copy(network = expected.network + SINCE_8.associateWith { false }), data.settings)
         assertEquals(NO_MARKS, data.userData)

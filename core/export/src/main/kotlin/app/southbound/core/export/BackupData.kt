@@ -29,8 +29,12 @@ data class AppSettings(
     val allowMobileData: Boolean,
     /** Settings > Driving: the map's search bar at the bottom (schema 7; an older bundle imports with it on). */
     val searchAtBottom: Boolean,
-    /** Settings > Maps > Free Wi-Fi: keep the Wi-Fi pack on the phone (schema 9; an older bundle imports with it off). */
-    val wifi: Boolean,
+    /**
+     * Settings > Maps > Free Wi-Fi: keep the Wi-Fi pack on the phone (schema 9). Null in what a schema 1 to 8 bundle
+     * read as: those bundles never knew the switch, so an import leaves it as it is on the phone. An export always
+     * writes a real value, never null.
+     */
+    val wifi: Boolean?,
 )
 
 /**
