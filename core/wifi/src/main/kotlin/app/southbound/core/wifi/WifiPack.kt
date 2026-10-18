@@ -85,7 +85,7 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
                     stmt.bindAll(query.args)
                     buildList {
                         while (stmt.step()) {
-                            val tier = WifiTier.of(stmt.getInt(6)) ?: continue
+                            val tier = WifiTier.ofClusterMin(stmt.getInt(6))
                             add(WifiCluster(stmt.getInt(0), stmt.getInt(1), stmt.getInt(2), stmt.getInt(3), stmt.getDouble(4), stmt.getDouble(5), tier))
                         }
                     }

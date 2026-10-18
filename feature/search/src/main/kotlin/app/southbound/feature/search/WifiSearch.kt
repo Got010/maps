@@ -34,7 +34,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Units
 import app.southbound.core.map.WifiColors
-import app.southbound.core.wifi.WifiFee
 import app.southbound.core.wifi.WifiLikelyGroup
 import app.southbound.core.wifi.WifiResult
 import app.southbound.core.wifi.WifiSpot
@@ -119,7 +118,7 @@ fun WifiDetails(
         if (mark == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 WifiBadge(stringResource(spot.fullLabel()), spot.tier)
-                if (spot.fee == WifiFee.CUSTOMERS) WifiBadge(stringResource(R.string.wifi_fee_customers), spot.tier)
+                if (spot.freeForCustomers) WifiBadge(stringResource(R.string.wifi_fee_customers), spot.tier)
             }
         }
         WifiMarkButtons(mark, onMark)
@@ -136,7 +135,7 @@ fun WifiDetails(
             // What the pack says, kept but smaller.
             val pack = stringResource(spot.fullLabel())
             Text(
-                if (spot.fee == WifiFee.CUSTOMERS) "$pack · ${stringResource(R.string.wifi_fee_customers)}" else pack,
+                if (spot.freeForCustomers) "$pack · ${stringResource(R.string.wifi_fee_customers)}" else pack,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

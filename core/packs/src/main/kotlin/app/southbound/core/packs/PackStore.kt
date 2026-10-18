@@ -83,6 +83,18 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
     }
 
     /**
+     * Deletes every pack of [kind] whatever its region, with its checksum, from private storage and the import
+     * folder, including a file named like one that isn't a valid pack (a Wi-Fi switch-off leaves none behind).
+     */
+    fun deleteAll(kind: PackKind) {
+        for (dir in listOfNotNull(packsDir, importPacksDir)) {
+            for (file in dir.listFiles().orEmpty()) {
+                if (file.isFile && PackKind.regionFromName(kind, file.name.removeSuffix(".sha256")) != null) file.delete()
+            }
+        }
+    }
+
+    /**
      * After installing a pack of a kind the app uses one of (routing, search,
      * transit), drops the other regions' copies: a phone that moved from
      * routing-nyc to routing-nys shouldn't keep both. Basemaps and voices
@@ -129,7 +141,9 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         try {
             val sha256 = copy(source, temp)
             val kind = PackKind.detect(temp) ?: throw UnrecognizedPackException()
-            val region = PackKind.regionFromName(kind, displayName) ?: fallbackRegion
+            // The Wi-Fi pack is one national file: a name that doesn't say so (or none) must not file it under
+            // the fallback region, where a switch-off that deletes wifi-us would never find it.
+            val region = if (kind == PackKind.WIFI) PackKind.WIFI_REGION else PackKind.regionFromName(kind, displayName) ?: fallbackRegion
             return StagedPack(kind, region, temp.length(), sha256, temp)
         } catch (e: Throwable) {
             temp.delete()

@@ -22,8 +22,7 @@ and search pack in "regions": a routing pack's from routing-packs.json
 (split_tiles.py; an empty list, routing-main.tar, is every phone's), a search
 pack's is its own region, when regions.json has that basemap region. A pack
 without "regions" goes by its kind as before: a basemap for its own region,
-voices when picked, transit for every phone. wifi-us.sqlite (the free Wi-Fi spots) is listed in southbound-v2.json
-only, with no "regions": the app fetches it when its owner turned Free Wi-Fi on.
+voices when picked, transit for every phone.
 """
 
 import argparse
@@ -33,7 +32,7 @@ import os
 import re
 import sys
 
-PACK = re.compile(r"^(basemap|routing|search|transit|voice|wifi)-([a-z0-9-]+)\.(pmtiles|tar|sqlite|zip)$")
+PACK = re.compile(r"^(basemap|routing|search|transit|voice)-([a-z0-9-]+)\.(pmtiles|tar|sqlite|zip)$")
 ROUTING_PACKS = "routing-packs.json"
 
 
