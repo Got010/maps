@@ -172,11 +172,12 @@ fun SearchPanel(
     LaunchedEffect(Unit) { focus.requestFocus() }
     // Again once there is a position: results looked up before the first fix carry no distances and rank as if far.
     // Again when the map moves to somewhere else to look (beside the search on a wide screen).
-    LaunchedEffect(query, browsing, index, near != null, area) {
+    LaunchedEffect(query, browsing, index, near != null, area, wifiMode) {
         val asked = query
         val category = browsing
         val center = area ?: near
-        if (index == null || asked.isBlank() || (category != null && center == null)) {
+        // The Wi-Fi chip has its own list below; its name in the box is not a search.
+        if (index == null || asked.isBlank() || wifiMode || (category != null && center == null)) {
             results = emptyList()
             error = null
             resultsFor = asked
@@ -207,7 +208,6 @@ fun SearchPanel(
             wifiFailed = false
             return@LaunchedEffect
         }
-        wifiResults = null
         val outcome = withContext(Dispatchers.IO) {
             runCatching { wifi.nearest(center, WIFI_RADIUS_KM, wifiTier.tiers, wifiOpenNow, now, WIFI_LIMIT) }
         }
