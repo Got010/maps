@@ -50,8 +50,8 @@
     <string name="explore_wifi_hide">Hide free Wi-Fi</string>
     <string name="explore_wifi_choose">Choose Wi-Fi types</string>
     <string name="explore_options">Map options</string>
-    <string name="explore_options_open">Open</string>
-    <string name="explore_options_closed">Closed</string>
+    <string name="explore_options_expanded">Expanded</string>
+    <string name="explore_options_collapsed">Collapsed</string>
     <string name="explore_options_layer_on">a layer is showing</string>
     <string name="explore_options_my_location">My location</string>
     <string name="explore_options_traffic">Traffic</string>

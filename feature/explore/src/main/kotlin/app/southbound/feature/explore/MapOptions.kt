@@ -42,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,10 +57,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import app.southbound.core.map.WifiColors
 
 /**
@@ -83,17 +87,28 @@ internal fun BoxScope.MapOptions(
     bottomInset: Dp,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    // Every row can disappear (the fix is lost, the toggles are off): then there is nothing to open.
-    val shown = open && state.rows.isNotEmpty()
-    if (state.rows.isEmpty()) return
+    // Every row can disappear (the fix is lost, the toggles are off): then there is nothing to open, and the list must
+    // not open by itself when rows come back.
+    val empty = state.rows.isEmpty()
+    LaunchedEffect(empty) { if (empty) open = false }
+    if (empty) return
+    val shown = open
 
     BackHandler(enabled = shown) { open = false }
     if (shown) {
-        // Declared before the column, so it sits over the rest of the screen and under the list.
-        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { open = false } })
+        // Over the rest of the screen, the pin cards and the traffic notes included (they are drawn after this
+        // composable), and under the list.
+        Box(Modifier.zIndex(1f).fillMaxSize().pointerInput(Unit) { detectTapGestures { open = false } })
     }
     Column(
-        Modifier.align(Alignment.BottomEnd).padding(bottom = bottomInset).safeDrawingPadding().padding(16.dp),
+        Modifier
+            .align(Alignment.BottomEnd)
+            .zIndex(2f)
+            .padding(bottom = bottomInset)
+            .safeDrawingPadding()
+            .padding(16.dp)
+            // The button first, then the rows it opens: TalkBack reads what a tap on the button just revealed next.
+            .semantics { isTraversalGroup = true },
         horizontalAlignment = Alignment.End,
     ) {
         AnimatedVisibility(
@@ -102,7 +117,13 @@ internal fun BoxScope.MapOptions(
             exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
         ) {
             Column(
-                Modifier.padding(bottom = 12.dp).width(IntrinsicSize.Max),
+                Modifier
+                    .padding(bottom = 12.dp)
+                    .width(IntrinsicSize.Max)
+                    .semantics {
+                        isTraversalGroup = true
+                        traversalIndex = 1f
+                    },
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.End,
             ) {
@@ -158,9 +179,14 @@ internal fun BoxScope.MapOptions(
 @Composable
 private fun MapOptionsButton(open: Boolean, dot: MapOptionsDot, onClick: () -> Unit) {
     val container = if (open) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val state = stringResource(if (open) R.string.explore_options_open else R.string.explore_options_closed) +
+    val state = stringResource(if (open) R.string.explore_options_expanded else R.string.explore_options_collapsed) +
         if (dot != MapOptionsDot.NONE) ", " + stringResource(R.string.explore_options_layer_on) else ""
-    Box {
+    Box(
+        Modifier.semantics {
+            isTraversalGroup = true
+            traversalIndex = 0f
+        },
+    ) {
         FloatingActionButton(
             onClick = onClick,
             // On reads clearly in dynamic dark mode too, where primary and onSurfaceVariant look alike.

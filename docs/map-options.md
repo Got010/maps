@@ -12,8 +12,9 @@ A tap opens a short list above it, one pill per control, top to bottom:
 | Weather | the Live-data weather toggle is on | shows or hides the layer; the list stays open | |
 | Free Wi-Fi | the Free Wi-Fi pack is installed | shows or hides the layer; the list stays open | opens "Show on the map" (the types chooser) and closes the list |
 
-A tap outside the list or the back gesture closes it; rotating the phone keeps it open. The button has a small dot
-while any layer is showing: the primary colour, or gold (the Wi-Fi gold) when a Wi-Fi type filter is active. The
+The list and its scrim are drawn above pin cards and traffic notes. A tap outside the list or the back gesture closes it; rotating the phone keeps it open. The button has a small dot
+while any layer is showing: the primary colour, or gold (the Wi-Fi gold) when the Wi-Fi layer is showing with a type
+filter active. The
 Free Wi-Fi row has its own gold dot while a filter is active.
 
 New controls for the map go into this list, not onto the map.

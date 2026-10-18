@@ -54,10 +54,12 @@ class MapOptionsStateTest {
     }
 
     @Test
-    fun goldDotWhenAWifiFilterIsActiveAndALayerShows() {
+    fun goldDotOnlyWhenTheWifiLayerShowsWithAFilter() {
         assertEquals(MapOptionsDot.WIFI_FILTERED, everything.copy(wifiVisible = true, wifiFiltered = true).dot)
-        // The filter colours the dot even when the visible layer is another one.
-        assertEquals(MapOptionsDot.WIFI_FILTERED, everything.copy(trafficVisible = true, wifiFiltered = true).dot)
+        assertEquals(MapOptionsDot.WIFI_FILTERED, everything.copy(wifiVisible = true, trafficVisible = true, wifiFiltered = true).dot)
+        // A filter on a hidden Wi-Fi layer gives no gold, even while another layer shows.
+        assertEquals(MapOptionsDot.LAYER, everything.copy(trafficVisible = true, wifiFiltered = true).dot)
+        assertEquals(MapOptionsDot.LAYER, everything.copy(weatherVisible = true, wifiFiltered = true).dot)
     }
 
     @Test

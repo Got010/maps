@@ -52,6 +52,9 @@ things remain: the compass (top right, as now) and the read-only "Here: 54°, pa
 +--------------------------------+
 ```
 
+This diagram predates B32e: the weather, traffic and my-location buttons and the Re-center pill in it are now one
+Map options button at the right (`docs/map-options.md`).
+
 The dock's height is measured, never assumed: the buttons, the Re-center pill, the traffic notes and
 the map's attribution all sit relative to it. With a large font or the paused-trip bar showing,
 everything moves up together. Today these use fixed offsets (the Re-center pill's 28, 190 and 400 dp, the
@@ -152,8 +155,9 @@ no gate baseline change and no data rebuild.
 
 ### As built
 
-- The dock is `ExploreMap`'s `Panel.Browse` branch; its measured height (`dockHeight`) lifts the map's buttons (when
-  the dock spans the width), the Re-center pill, the traffic notes and the map's attribution. From 672 dp wide the
+- The dock is `ExploreMap`'s `Panel.Browse` branch; its measured height (`dockHeight`) lifts the Map options button
+  (when the dock spans the width; B32e), the traffic notes and the map's attribution. The Re-center pill is now
+  only on the trip screen. From 672 dp wide the
   dock keeps to the left at 560 dp, with the buttons beside it.
 - `SearchPanel(fieldAtBottom = true)` puts the field under the lists, which run `reverseLayout` so the first result
   and the latest recent sit nearest it; a drag on either list hides the keyboard; the results list goes back to
