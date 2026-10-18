@@ -10,8 +10,9 @@ import android.graphics.RectF
 
 /**
  * The map badges for free Wi-Fi spots, drawn in code (no drawable resources or asset files): a white Wi-Fi fan on
- * a round badge in the tier's colour ([WifiColors]). A spot that is free for customers only has a ring round the
- * badge. Sizes are in dp.
+ * a round badge in the tier's colour ([WifiColors]). A spot that is free for customers only has a solid gold ring
+ * ([WifiColors.CUSTOMERS_GOLD]) round the badge, a third of the badge's radius thick. No badge has a white ring.
+ * Sizes are in dp.
  */
 internal object WifiIcons {
     private val density: Float get() = Resources.getSystem().displayMetrics.density
@@ -27,19 +28,12 @@ internal object WifiIcons {
         paint.style = Paint.Style.FILL
         val c = SIZE_DP / 2
         if (ringed) {
-            // A thin ring in the tier's colour, a white gap, then the badge.
-            paint.color = tint
-            canvas.drawCircle(c, c, 14f, paint)
-            paint.color = Color.WHITE
-            canvas.drawCircle(c, c, 12.6f, paint)
-            paint.color = tint
-            canvas.drawCircle(c, c, 11.2f, paint)
-        } else {
-            paint.color = Color.WHITE
-            canvas.drawCircle(c, c, 13f, paint)
-            paint.color = tint
-            canvas.drawCircle(c, c, 11.5f, paint)
+            // Gold from the edge in, then the badge straight on it: no white between.
+            paint.color = Color.parseColor(WifiColors.CUSTOMERS_GOLD)
+            canvas.drawCircle(c, c, BODY_RADIUS + RING_WIDTH, paint)
         }
+        paint.color = tint
+        canvas.drawCircle(c, c, BODY_RADIUS, paint)
         drawFan(canvas)
         return bitmap
     }
@@ -50,7 +44,7 @@ internal object WifiIcons {
         paint.color = Color.WHITE
         paint.style = Paint.Style.FILL
         val cx = SIZE_DP / 2
-        val cy = 18f
+        val cy = SIZE_DP / 2 + 4f
         canvas.drawCircle(cx, cy, 1.7f, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 1.9f
@@ -61,6 +55,12 @@ internal object WifiIcons {
         }
     }
 
-    /** Every badge is this many dp square, ringed or not. */
-    const val SIZE_DP = 28f
+    /** The coloured disc, the same size ringed or not. */
+    private const val BODY_RADIUS = 11.25f
+
+    /** The gold ring: a third of the body's radius. */
+    private const val RING_WIDTH = BODY_RADIUS / 3
+
+    /** Every badge is this many dp square, ringed or not: the ringed one fills it. */
+    const val SIZE_DP = 2 * (BODY_RADIUS + RING_WIDTH)
 }
