@@ -125,7 +125,7 @@ internal object OverlayLayers {
     const val WIFI = "southbound-wifi"
     const val WIFI_CLUSTERS = "southbound-wifi-clusters"
     private const val WIFI_CLUSTER_COUNTS = "southbound-wifi-cluster-counts"
-    const val WIFI_MIN_ZOOM = 10f
+    private val WIFI_MIN_ZOOM = WifiPin.MIN_ZOOM.toFloat()
 
     // Alerts from the map data, pinned along the route while navigating.
     private const val ALERT_SPEED_CAMERA = "#1A73E8"
