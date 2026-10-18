@@ -42,4 +42,33 @@
     <string name="search_category_ev_charging">EV charging</string>
     <string name="search_category_none">None within 30 miles in the search data.</string>
     <string name="search_category_no_place">Turn on location, or move the map to where you want to look.</string>
+    <!-- Free Wi-Fi: the chip, the list under it and the sheet. Only the first tier is confirmed; the others never read as if they were. -->
+    <string name="wifi_chip">Wi-Fi</string>
+    <string name="wifi_tier_heading">Tier</string>
+    <string name="wifi_filter_all">All</string>
+    <string name="wifi_filter_tagged">Tagged</string>
+    <string name="wifi_filter_chain">Chain</string>
+    <string name="wifi_filter_likely">Likely</string>
+    <string name="wifi_open_now">Open now</string>
+    <string name="wifi_none">No Wi-Fi spots within 30 miles in the Wi-Fi data.</string>
+    <string name="wifi_none_open_now">None known to be open now. Turn off Open now to see them all.</string>
+    <string name="wifi_failed">The Wi-Fi data couldn\'t be read.</string>
+    <string name="wifi_no_place">Turn on location, or move the map to where you want to look.</string>
+    <string name="wifi_short_tagged_free">Tagged free</string>
+    <string name="wifi_short_tagged_unstated">Tagged, fee not stated</string>
+    <string name="wifi_short_chain">Chain policy</string>
+    <string name="wifi_short_likely">Likely</string>
+    <string name="wifi_label_tagged_free">Tagged free</string>
+    <string name="wifi_label_tagged_unstated">Tagged Wi-Fi (fee not stated)</string>
+    <string name="wifi_label_chain">Chain policy: usually free, not confirmed here</string>
+    <string name="wifi_label_likely_libraries">Likely: most libraries have it</string>
+    <string name="wifi_label_likely_hotels">Likely: most hotel lobbies have it</string>
+    <string name="wifi_label_likely_rest_areas">Likely: most rest areas have it</string>
+    <string name="wifi_label_likely_visitor_centers">Likely: most visitor centers have it</string>
+    <string name="wifi_label_likely_other">Likely: most places like this have it</string>
+    <string name="wifi_fee_customers">Free for customers</string>
+    <string name="wifi_chain_name">Chain: %1$s</string>
+    <string name="wifi_data_from">Data from %1$s (OpenStreetMap)</string>
+    <string name="wifi_data_from_unknown">Data from OpenStreetMap</string>
+    <string name="wifi_captive_note">Captive portals may ask for an email or a tap on a terms page</string>
 </resources>

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
@@ -76,6 +77,10 @@ import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.SearchQuery
 import app.southbound.core.search.SearchRanking
 import app.southbound.core.search.SearchResult
+import app.southbound.core.wifi.WifiPack
+import app.southbound.core.wifi.WifiResult
+import app.southbound.core.wifi.WifiSpot
+import app.southbound.core.wifi.WifiTierFilter
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -130,12 +135,26 @@ fun SearchPanel(
      * still show their distance from [near].
      */
     area: LatLon? = null,
+    /**
+     * The Wi-Fi pack, when one is installed: adds the Wi-Fi chip, which lists the nearest free Wi-Fi from the same
+     * place the other chips look. Null hides the chip.
+     */
+    wifi: WifiPack? = null,
+    /** A Wi-Fi row was picked: its spot (with its tier, for the sheet). */
+    onPickWifi: ((WifiSpot) -> Unit)? = null,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     // A category chip's places ("Gas", "Hotels"), its name in the box until the box is edited.
     var browsing by rememberSaveable { mutableStateOf<PlaceCategory?>(null) }
+    // The Wi-Fi chip's list, and its two filters.
+    var wifiMode by rememberSaveable { mutableStateOf(false) }
+    var wifiTier by rememberSaveable { mutableStateOf(WifiTierFilter.ALL) }
+    var wifiOpenNow by rememberSaveable { mutableStateOf(false) }
+    // Null while looking, then the rows (maybe none); an error shows instead of "None".
+    var wifiResults by remember { mutableStateOf<List<WifiResult>?>(null) }
+    var wifiFailed by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
     // The query [results] answer: the Search key only ever opens a result for what is typed now.
     var resultsFor by remember { mutableStateOf<String?>(null) }
@@ -178,6 +197,22 @@ fun SearchPanel(
         results = outcome.getOrDefault(emptyList())
         error = outcome.exceptionOrNull()?.let { "${it::class.simpleName}: ${it.message}" }
         resultsFor = asked
+    }
+    // The nearest free Wi-Fi: from the same place the category chips look, again when a filter changes (and, with
+    // Open now, as the minute turns).
+    LaunchedEffect(wifiMode, wifiTier, wifiOpenNow, wifi, near != null, area, if (wifiOpenNow) now else null) {
+        val center = area ?: near
+        if (!wifiMode || wifi == null || center == null) {
+            wifiResults = null
+            wifiFailed = false
+            return@LaunchedEffect
+        }
+        wifiResults = null
+        val outcome = withContext(Dispatchers.IO) {
+            runCatching { wifi.nearest(center, WIFI_RADIUS_KM, wifiTier.tiers, wifiOpenNow, now, WIFI_LIMIT) }
+        }
+        wifiFailed = outcome.isFailure
+        wifiResults = outcome.getOrDefault(emptyList())
     }
     // With the field at the bottom, dragging a list puts the keyboard away so more of it shows.
     LaunchedEffect(fieldAtBottom) {
@@ -223,6 +258,7 @@ fun SearchPanel(
                     query = it
                     // Typing over a chip's name searches for what is typed.
                     browsing = null
+                    wifiMode = false
                     pickWhenReady = false
                 },
                 placeholder = { Text(stringResource(R.string.search_hint)) },
@@ -234,6 +270,7 @@ fun SearchPanel(
                         IconButton(onClick = {
                             query = ""
                             browsing = null
+                            wifiMode = false
                         }) {
                             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.search_clear))
                         }
@@ -269,12 +306,26 @@ fun SearchPanel(
     // Places by kind without typing: around the user, or around the map once it has been moved off them.
     val categories: @Composable () -> Unit = {
         if (query.isBlank() && index != null) {
-            CategoryChips(onTap = { category, label ->
-                keyboard?.hide()
-                query = label
-                browsing = category
-                pickWhenReady = false
-            })
+            CategoryChips(
+                onTap = { category, label ->
+                    keyboard?.hide()
+                    query = label
+                    browsing = category
+                    wifiMode = false
+                    pickWhenReady = false
+                },
+                onWifi = if (wifi != null) {
+                    { label ->
+                        keyboard?.hide()
+                        query = label
+                        browsing = null
+                        wifiMode = true
+                        pickWhenReady = false
+                    }
+                } else {
+                    null
+                },
+            )
         }
     }
     val note: @Composable () -> Unit = {
@@ -327,6 +378,37 @@ fun SearchPanel(
                                 )
                             }
                             if (fieldAtBottom) item(key = "title:${group.title}") { GroupTitle(group, onClearRecents) }
+                        }
+                    }
+                    wifiMode && wifi != null -> Column(Modifier.fillMaxSize()) {
+                        WifiFilters(wifiTier, { wifiTier = it }, wifiOpenNow, { wifiOpenNow = it })
+                        val rows = wifiResults
+                        Box(
+                            Modifier.weight(1f).fillMaxWidth(),
+                            contentAlignment = if (fieldAtBottom) Alignment.BottomStart else Alignment.TopStart,
+                        ) {
+                            when {
+                                (area ?: near) == null -> Message(stringResource(R.string.wifi_no_place))
+                                wifiFailed -> Message(stringResource(R.string.wifi_failed))
+                                rows == null -> Unit
+                                rows.isEmpty() -> Message(
+                                    stringResource(if (wifiOpenNow) R.string.wifi_none_open_now else R.string.wifi_none),
+                                )
+                                else -> LazyColumn(Modifier.fillMaxWidth(), reverseLayout = fieldAtBottom) {
+                                    items(rows, key = { it.spot.id }) { row ->
+                                        // Looked for around the map: the distance is still the user's.
+                                        val distance = if (area == null) {
+                                            row.distanceMeters
+                                        } else {
+                                            near?.let { SearchRanking.distanceMeters(it, row.spot.lat, row.spot.lon) }
+                                        }
+                                        WifiRow(row, distance, now, onClick = {
+                                            keyboard?.hide()
+                                            onPickWifi?.invoke(row.spot)
+                                        })
+                                    }
+                                }
+                            }
                         }
                     }
                     index == null -> Message(stringResource(R.string.search_no_pack))
@@ -407,7 +489,7 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
 
 /** Gas, Hotels, Food, Coffee and the rest, one tap each, in a row that scrolls sideways. */
 @Composable
-private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit) {
+private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit, onWifi: ((String) -> Unit)?) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -418,6 +500,15 @@ private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit) {
                 onClick = { onTap(category, label) },
                 label = { Text(label) },
                 leadingIcon = { Icon(category.icon(), contentDescription = null, Modifier.size(18.dp)) },
+            )
+        }
+        // After the others, and only with the Wi-Fi pack installed.
+        if (onWifi != null) {
+            val label = stringResource(R.string.wifi_chip)
+            AssistChip(
+                onClick = { onWifi(label) },
+                label = { Text(label) },
+                leadingIcon = { Icon(Icons.Filled.Wifi, contentDescription = null, Modifier.size(18.dp)) },
             )
         }
     }
@@ -503,3 +594,7 @@ fun PlaceKind.icon(): ImageVector = when (this) {
 }
 
 private const val TYPING_DEBOUNCE_MS = 120L
+
+/** How far the Wi-Fi chip looks, as the other chips do: 30 miles. */
+private const val WIFI_RADIUS_KM = PlaceCategory.RADIUS_KM
+private const val WIFI_LIMIT = PlaceCategory.LIMIT
