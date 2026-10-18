@@ -20,7 +20,7 @@ A spot takes the lowest tier it matches. internet_access:fee=yes, internet_acces
 internet_access=terminal exclude an object from every tier, even a chain or a library; so do access=private and
 access=no (a staff-only room, a school's library) and tagging that only says the place is gone (disused:,
 abandoned:, was:, demolished:, removed:, razed:, destroyed: with no live feature of its own). Objects with no
-name and no brand are kept: a chain's takes the chain's name from chains.json, the others have a NULL name (the
+name and no brand are kept: a chain's (any tier) takes the chain's name from chains.json, the others have a NULL name (the
 app shows a fallback from the category).
 
 chains.json (edited by hand; the build fails loudly when it is malformed):
@@ -63,8 +63,10 @@ FEES = ("no", "customers", "unknown")
 TIER_LABELS = {1: "Tagged free", 2: "Tagged Wi-Fi (fee not stated)", 3: "Chain policy", 4: "Likely"}
 NPS_QID = "Q308439"  # National Park Service
 QID = re.compile(r"^Q[0-9]+$")
-# A feature key that is live on an object (so that a leftover disused: key beside it is noise).
-FEATURE_KEYS = ("amenity", "shop", "tourism", "highway", "office", "leisure", "craft", "healthcare", "club")
+# A feature key that is live on an object (so that a leftover disused: key beside it is noise), and the keys a
+# gone-prefix counts against: disused:amenity is a death marker, was:operator or was:iata is not.
+FEATURE_KEYS = ("amenity", "shop", "tourism", "highway", "office", "leisure", "craft", "healthcare", "club",
+                "railway", "public_transport", "aeroway", "historic")
 GONE_PREFIXES = ("disused:", "abandoned:", "was:", "demolished:", "removed:", "razed:", "destroyed:")
 # What makes an object a place, in search/build_search.py's order (PLACE_KEYS, SKIP_VALUES, STATION_TAGS), then
 # office and highway. The literal "yes" is never a category.
@@ -196,10 +198,15 @@ def text(tags, key):
 
 def is_lifecycle_dead(tags):
     """True when the object says only that the place is gone: disused:amenity=cafe, abandoned:shop=... (also
-    was:, demolished:, removed:, razed:, destroyed:) with no live amenity, shop, tourism... of its own."""
+    was:, demolished:, removed:, razed:, destroyed:) with no live amenity, shop, tourism... of its own, or a
+    vacant shop (shop=vacant) or disused=yes. Only a prefixed feature key counts (was:operator and was:iata
+    on a live station or aerodrome are ordinary history)."""
+    if value(tags, "shop") == "vacant" or value(tags, "disused") == "yes":
+        return True
     for key in tags:
         for prefix in GONE_PREFIXES:
-            if key.startswith(prefix) and key[len(prefix):] and key[len(prefix):] not in tags:
+            base = key[len(prefix):] if key.startswith(prefix) else None
+            if base in FEATURE_KEYS and base not in tags:
                 return not any(tags.get(k) for k in FEATURE_KEYS)
     return False
 
@@ -225,19 +232,20 @@ def likely_category(tags):
 
 
 def osm_category(tags):
-    """The OSM value that names the kind of place, as the search pack's place_category picks it: amenity, shop,
-    tourism, leisure, craft, healthcare, historic; then a station or aerodrome; then office, then highway.
-    Never "yes" (or the other values the search pack skips); "place" when nothing is left."""
+    """The OSM value that names the kind of place, in the search pack's place_category order (PLACE_KEYS:
+    amenity, shop, tourism, leisure, craft, healthcare, historic; then a station or aerodrome), then office and
+    highway, which come later here than office does in the search pack (it has office before craft). Values the
+    search pack skips ("yes", "no", benches... in any case) never count; "place" when nothing is left."""
     for key in PLACE_KEYS:
         v = text(tags, key)
-        if v and v not in SKIP_VALUES:
+        if v and v.lower() not in SKIP_VALUES:
             return v
     for key, wanted in STATION_TAGS:
         if value(tags, key) == wanted:
             return "station" if key in ("railway", "public_transport") and wanted == "station" else wanted
     for key in ("office", "highway"):
         v = text(tags, key)
-        if v and v not in SKIP_VALUES:
+        if v and v.lower() not in SKIP_VALUES:
             return v
     return "place"
 
@@ -250,8 +258,8 @@ Verdict = collections.namedtuple(
 def classify(tags, chains):
     """The Verdict for an object's tags (a dict), or None when it is not a Wi-Fi spot.
 
-    Order: exclusions first (they beat every tier), then the lowest tier that matches. A tier 3 spot with no name
-    or brand of its own is called by its chain's name; the others keep a NULL name."""
+    Order: exclusions first (they beat every tier), then the lowest tier that matches. A spot of a configured
+    chain (any tier) with no name or brand of its own is called by the chain's name; the others keep a NULL name."""
     internet = value(tags, "internet_access")
     internet_fee = value(tags, "internet_access:fee")
     if internet_fee == "yes" or internet in ("no", "terminal") or value(tags, "access") in ("private", "no"):
@@ -283,7 +291,7 @@ def classify(tags, chains):
     if tier is None:
         return None
     name = text(tags, "name") or text(tags, "brand")
-    if name is None and tier == 3:
+    if name is None and chain is not None:
         name = chain["name"]
     if category is None:
         category = osm_category(tags)

@@ -2,7 +2,7 @@
 # installs from (.github/pipeline-requirements.txt) counts as part of the pipeline.
 # NYC only, since it finishes in under an hour; the statewide packs build the
 # same scripts with other regions in release.yml after the PR is merged. The Free Wi-Fi pack gets a smoke
-# build here from Washington, DC alone (a few minutes); the full pack builds in wifi.yml when pipeline/wifi changes.
+# build here from Washington, DC alone (a few minutes), on every pipeline change but pipeline/wifi, which wifi.yml builds in full.
 name: Map data
 
 on:
@@ -12,7 +12,6 @@ on:
       - 'pipeline/routing/**'
       - 'pipeline/search/**'
       - 'pipeline/transit/**'
-      - 'pipeline/wifi/**'
       - 'pipeline/lib/**'
       - 'pipeline/regions.json'
       - 'pipeline/Makefile'

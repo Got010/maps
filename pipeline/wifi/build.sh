@@ -27,7 +27,7 @@
 #   FREE_SOURCES   1: delete each extract once it is filtered (release.yml and wifi.yml set it), so at most
 #                  one extract is on disk at a time
 #   WIFI_SOURCES   space-separated Geofabrik names (district-of-columbia): build from these extracts only, not
-#                  from regions.json's list. For a quick smoke build (data.yml builds DC so); such a pack covers
+#                  from regions.json's list (blank is the same as unset). For a quick smoke build (data.yml builds DC so); such a pack covers
 #                  only those states and must not be shipped.
 #   WIFI_ALLOW_NO_RTREE  1: accept a pack without the wifi_rtree table (build_wifi.py warns when this SQLite has
 #                  no R-tree module). Default: fail, since every published pack should carry it.
@@ -55,8 +55,10 @@ QIDS="$(python3 "$PIPELINE_DIR/wifi/build_wifi.py" --chains "$CHAINS" --print-qi
 FILTERS="nwr/internet_access=wlan,yes,wifi nwr/brand:wikidata=$QIDS nwr/amenity=library nwr/tourism=hotel,motel nwr/highway=rest_area nwr/information=office,visitor_centre"
 
 SOURCES=()
-if [[ -n "${WIFI_SOURCES:-}" ]]; then
-  read -r -a SOURCES <<< "$WIFI_SOURCES"
+# A blank WIFI_SOURCES is the same as unset (release.yml sets it to "" so nothing can narrow a published pack).
+read -r -a REQUESTED <<< "${WIFI_SOURCES:-}"
+if (( ${#REQUESTED[@]} > 0 )); then
+  SOURCES=("${REQUESTED[@]}")
   for source in "${SOURCES[@]}"; do
     is_known_source "$source" || { echo "Unknown source '$source' in WIFI_SOURCES. Known: Geofabrik's US state names (district-of-columbia, new-york, ...)." >&2; exit 2; }
   done
@@ -67,7 +69,7 @@ else
   done < <(all_sources)
 fi
 if (( ${#SOURCES[@]} == 0 )); then
-  echo "No extracts to build from: pipeline/regions.json names no sources (or WIFI_SOURCES is blank)." >&2
+  echo "No extracts to build from: pipeline/regions.json names no sources." >&2
   exit 2
 fi
 echo "==> ${#SOURCES[@]} extracts: ${SOURCES[*]}"
@@ -77,7 +79,7 @@ echo "==> ${#SOURCES[@]} extracts: ${SOURCES[*]}"
 OSMIUM_CONTAINER=""
 stop_osmium() {
   if [[ -n "$OSMIUM_CONTAINER" ]]; then
-    docker stop "$OSMIUM_CONTAINER" >/dev/null 2>&1 || true
+    docker stop -t 0 "$OSMIUM_CONTAINER" >/dev/null 2>&1 || true
   fi
 }
 trap stop_osmium EXIT
@@ -177,6 +179,7 @@ then
     echo "::warning::$OUTPUT has no wifi_rtree table (WIFI_ALLOW_NO_RTREE=1)"
   else
     echo "$OUTPUT has no wifi_rtree table: the Python in the container has no R-tree module. Set WIFI_ALLOW_NO_RTREE=1 to accept that." >&2
+    rm -f "$DATA_DIR/out/$OUTPUT"
     exit 1
   fi
 fi
