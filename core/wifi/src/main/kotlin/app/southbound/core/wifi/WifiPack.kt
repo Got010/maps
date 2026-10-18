@@ -70,10 +70,11 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
 
     /**
      * The spots inside [box] of one of [tiers] (at most [limit], the better tiers first when the box holds more),
-     * for the map from the zoom where single spots are drawn.
+     * for the map from the zoom where single spots are drawn. With [customersOnly] only the tagged-free spots whose
+     * fee is "customers". [limit] is capped at [WifiQueries.MAX_SCAN_ROWS].
      */
-    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int): List<WifiSpot> =
-        read { rtree -> WifiQueries.inBox(box, tiers, limit, rtree) }
+    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, customersOnly: Boolean = false): List<WifiSpot> =
+        read { rtree -> WifiQueries.inBox(box, tiers, limit, rtree, customersOnly) }
 
     /**
      * The spots of one of [tiers] within [radiusKm] of [center], nearest first, at most [limit]. With [openNow]

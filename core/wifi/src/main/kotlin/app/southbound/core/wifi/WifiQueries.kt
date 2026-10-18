@@ -33,13 +33,20 @@ internal object WifiQueries {
     private fun tierCondition(tiers: Set<WifiTier>): String? =
         if (tiers.size >= WifiTier.entries.size) null else tiers.map { it.code }.sorted().joinToString(", ", "s.tier IN (", ")")
 
-    /** The spots inside [box], the best tiers first when [limit] cuts them. Null when no tier is wanted. */
-    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, rtree: Boolean): Query? {
+    /**
+     * The spots inside [box], the best tiers first when [limit] cuts them. With [customersOnly] only tier 1 spots whose
+     * fee is "customers" (the map chooser's "Free for customers only"; none when tier 1 isn't among [tiers]). Null
+     * when nothing can match.
+     */
+    fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, rtree: Boolean, customersOnly: Boolean = false): Query? {
         if (tiers.isEmpty() || limit <= 0) return null
+        if (customersOnly && WifiTier.TAGGED_FREE !in tiers) return null
         val (from, where, args) = boxClauses(box, rtree)
-        val conditions = listOfNotNull(where, tierCondition(tiers))
+        // A chain's customers-only policy (tier 3, fee "customers" too) is not an OSM tag and is never this.
+        val tierAndFee = if (customersOnly) "s.tier = ${WifiTier.TAGGED_FREE.code} AND s.fee = '${WifiFee.CUSTOMERS.code}'" else tierCondition(tiers)
+        val conditions = listOfNotNull(where, tierAndFee)
         return Query(
-            "SELECT $SPOT_COLUMNS FROM $from WHERE ${conditions.joinToString(" AND ")} ORDER BY s.tier, s.id LIMIT ${limit.coerceAtMost(MAX_ROWS)}",
+            "SELECT $SPOT_COLUMNS FROM $from WHERE ${conditions.joinToString(" AND ")} ORDER BY s.tier, s.id LIMIT ${limit.coerceAtMost(MAX_SCAN_ROWS)}",
             args,
         )
     }
@@ -102,8 +109,14 @@ internal object WifiQueries {
     /** Degrees the R-tree's box is widened by: its 32-bit floats are off by about 1e-6 at US longitudes. */
     const val RTREE_TOLERANCE = 1e-5
 
-    /** No more than this many rows from one query, whatever the caller asks. */
+    /** No more than this many rows from one nearest query, whatever the caller asks. */
     const val MAX_ROWS = 20_000
+
+    /**
+     * No more than this many rows from one box query: the map under a filter reads the whole view to cut it by kind
+     * and to work out its circles (the whole pack is about 71,000 spots, 12 columns each, read in one pass).
+     */
+    const val MAX_SCAN_ROWS = 80_000
 
     /** Cells of one zoom on a screen: a handful; this only bounds a bad box. */
     const val MAX_CLUSTERS = 2_000
