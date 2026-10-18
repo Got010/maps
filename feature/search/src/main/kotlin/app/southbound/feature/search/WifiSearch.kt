@@ -27,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Units
 import app.southbound.core.map.WifiColors
-import app.southbound.core.wifi.WifiFee
 import app.southbound.core.wifi.WifiLikelyGroup
 import app.southbound.core.wifi.WifiResult
 import app.southbound.core.wifi.WifiSpot
@@ -90,7 +89,7 @@ fun WifiDetails(spot: WifiSpot, extractDate: String?, modifier: Modifier = Modif
     Column(modifier.padding(top = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             WifiBadge(stringResource(spot.fullLabel()), spot.tier)
-            if (spot.fee == WifiFee.CUSTOMERS) WifiBadge(stringResource(R.string.wifi_fee_customers), spot.tier)
+            if (spot.freeForCustomers) WifiBadge(stringResource(R.string.wifi_fee_customers), spot.tier)
         }
         if (spot.tier == WifiTier.CHAIN) {
             spot.name?.takeIf { it.isNotBlank() }?.let {
