@@ -148,7 +148,7 @@ class BackupService(
             val wifiTurnedOn = wifiTurnedOn(data)
             // The places as they are before the import, kept with it: a resume at start goes ahead only while the
             // places are these or the import's own ([resume]).
-            val before = placesPrint { stores.read().userData }
+            val before = placesPrints { stores.read().userData }?.first()
             // The commit point. If this throws, nothing has changed.
             journal.write(entries, before)
             try {
@@ -184,8 +184,11 @@ class BackupService(
             // The same refusal as a fresh import: never overwrite what can't be read.
             stores.ensureReadable()
             if (automatic) {
-                val now = placesPrint { stores.read().userData }
-                if (now == null || now !in setOfNotNull(journal.mark(), placesPrint { data.userData })) {
+                // Either form of each print: an import kept by an earlier version holds the print of places encoded
+                // without the marks field, which this version writes (as an empty list) for the same places.
+                val now = placesPrints { stores.read().userData }
+                val allowed = setOfNotNull(journal.mark()) + placesPrints { data.userData }.orEmpty()
+                if (now == null || now.none { it in allowed }) {
                     return@withLock ResumeOutcome.Failed(CHANGED_REASON, unreadable = false)
                 }
             }
@@ -212,18 +215,27 @@ class BackupService(
         return NetworkFeature.entries.filter { data.settings.network[it] == true && now[it] != true }
     }
 
-    /** Whether the bundle switches the free Wi-Fi pack from off to on. */
-    private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi && !stores.wifiWanted()
+    /** Whether the bundle switches the free Wi-Fi pack from off to on (a bundle before schema 9 leaves it alone). */
+    private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi == true && !stores.wifiWanted()
 
-    /** A digest of [places] as an export would write them, or null when they can't be read. */
-    private suspend fun placesPrint(places: suspend () -> UserData): String? = try {
-        val bytes = PlacesEntry.encode(places())
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }.also { bytes.fill(0) }
+    /**
+     * Digests of [places] as an export would write them, the current form first, or null when they can't be read. With
+     * no Wi-Fi marks a second digest is of the form before schema 9 (no `wifiMarks` field), which an import kept by an
+     * earlier version recorded.
+     */
+    private suspend fun placesPrints(places: suspend () -> UserData): List<String>? = try {
+        val data = places()
+        val bytes = PlacesEntry.encode(data)
+        val forms = mutableListOf(bytes)
+        PlacesEntry.encodeBeforeSchema9(data)?.let { forms += it }
+        forms.map { form -> digest(form).also { form.fill(0) } }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         null
     }
+
+    private fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     /** A short reason that holds no contents: the exception's own message, or its kind. */
     private fun reasonOf(e: Throwable): String = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName

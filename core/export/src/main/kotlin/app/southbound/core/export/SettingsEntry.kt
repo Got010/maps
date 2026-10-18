@@ -30,7 +30,7 @@ import app.southbound.core.voice.VoiceSettings
  * `TRAFFIC_OHGO`; an older bundle reads with each off; schema 7 the driving group's `search_at_bottom`, which an older
  * bundle reads as on, the app's default; schema 8 the network group's `TRAFFIC_511VA`, `TRAFFIC_WV511` and
  * `TRAFFIC_KYTC`, which an older bundle reads as off; schema 9 the packs group's `wifi`, the Settings > Maps switch for
- * the free Wi-Fi pack, which an older bundle reads as off); an enum is its constant's name; a number
+ * the free Wi-Fi pack, which an older bundle does not have: it reads as unset and an import leaves the switch as it is); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
@@ -90,6 +90,7 @@ internal object SettingsEntry {
 
     fun encode(s: AppSettings): ByteArray {
         check(s)
+        if (s.wifi == null) invalid("the Wi-Fi switch has no value")
         return MiniJson.stringify(tree(s)).toByteArray(Charsets.UTF_8)
     }
 
@@ -169,7 +170,7 @@ internal object SettingsEntry {
      * `WEATHER` toggle, schemas 1 to 3 no `TRAFFIC_511PA` or `TRAFFIC_CTROADS`, schemas 1 to 4 no
      * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
      * `TRAFFIC_OHGO`) and schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
-     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as off).
+     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as null: unset, so an import leaves the switch alone).
      */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
@@ -249,8 +250,8 @@ internal object SettingsEntry {
             if (region !in REGION_IDS || !regions.add(region)) packs.bad("regions")
         }
 
-        // Before schema 9 there was no switch: an older bundle leaves the free Wi-Fi pack off.
-        val wifi = schema >= 9 && packs.bool("wifi")
+        // Before schema 9 there was no switch: null, so an import leaves the phone's Wi-Fi switch as it is.
+        val wifi: Boolean? = if (schema >= 9) packs.bool("wifi") else null
 
         val allowMobile = root.obj("updates", setOf("allow_mobile_data")).bool("allow_mobile_data")
 
