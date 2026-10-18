@@ -183,7 +183,7 @@
 
     <!-- Backup: export and import (docs/EXPORT.md). Nothing here shows a key or a place name. -->
     <string name="backup_title">Backup</string>
-    <string name="backup_body">Export saves your saved places, lists, recents, Home and Work, API keys and preferences to one file sealed with a passphrase. Keep the file somewhere safe: anyone with the file and the passphrase has all of it. Import puts such a file back, on this phone or a new one.</string>
+    <string name="backup_body">Export saves your saved places, lists, recents, Home and Work, Wi-Fi marks, API keys and preferences to one file sealed with a passphrase. Keep the file somewhere safe: anyone with the file and the passphrase has all of it. Import puts such a file back, on this phone or a new one.</string>
     <string name="backup_export">Export…</string>
     <string name="backup_import">Import…</string>
     <string name="backup_cancel">Cancel</string>
@@ -203,6 +203,8 @@
     <string name="backup_network_none">Network features turned on: none.</string>
     <string name="backup_network_will_on">When finished it will turn on these network features: %1$s.</string>
     <string name="backup_network_will_none">When finished it will turn no network feature on.</string>
+    <string name="backup_wifi_on">Free Wi-Fi spots turned on in Maps: the Wi-Fi data downloads with the next map update.</string>
+    <string name="backup_wifi_will_on">When finished it will also turn on free Wi-Fi spots in Maps, which downloads the Wi-Fi data with the next map update.</string>
     <string name="backup_net_pack_downloads">map pack downloads</string>
     <string name="backup_net_app_updates">app updates</string>
     <string name="backup_net_511">511NY traffic</string>
@@ -231,9 +233,9 @@
     <string name="backup_net_wv511">WV511 (West Virginia) traffic</string>
     <string name="backup_net_kytc">KYTC (Kentucky) traffic</string>
     <string name="backup_export_failed_kept">Export failed: %1$s. The partial file could not be deleted; delete it yourself.</string>
-    <string name="backup_summary">%1$d saved places in %2$d lists, %3$d recents, Home and Work set: %4$d, %5$d API keys, %6$d preference values</string>
+    <string name="backup_summary">%1$d saved places in %2$d lists, %3$d recents, Home and Work set: %4$d, %5$d API keys, %6$d preference values, %7$d Wi-Fi marks</string>
     <string name="backup_import_title">Import</string>
-    <string name="backup_import_replaces">Import replaces your saved places, lists, recents, Home and Work, API keys and preferences with what is in the file. It does not add to them. Export first if you want to keep what is on this phone now.</string>
+    <string name="backup_import_replaces">Import replaces your saved places, lists, recents, Home and Work, Wi-Fi marks, API keys and preferences with what is in the file. It does not add to them. Export first if you want to keep what is on this phone now.</string>
     <string name="backup_import_choose">Choose file</string>
     <string name="backup_import_header">Not yet verified: this file says it was made on %1$s (%2$s UTC), bundle version %3$d. Enter its passphrase to check and import it.</string>
     <string name="backup_import_start">Import</string>
