@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 75), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 76, wifiMarks = 2), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -325,6 +325,32 @@ class BackupServiceTest {
         assertTrue(runBlocking { b.service.resume() } is ResumeOutcome.Applied)
         assertFalse(b.journal.exists())
         assertEquals(Samples.settings(), b.stores.settings)
+    }
+
+    @Test
+    fun `the Wi-Fi marks and switch come back, and the summary says when the switch goes on`() {
+        val a = filled() // two marks, Wi-Fi switch on
+        val file = export(a)
+        val b = device("b") // Wi-Fi switch off
+        assertFalse(b.stores.settings.wifi)
+        val outcome = import(b, file) as ImportOutcome.Done
+        assertTrue(outcome.wifiTurnedOn)
+        assertEquals(2, outcome.counts.wifiMarks)
+        assertTrue(b.stores.settings.wifi)
+        assertEquals(
+            listOf(Samples.WIFI_WORKED to true, Samples.WIFI_FAILED to false),
+            b.stores.places.data.value.wifiMarks.map { it.osmRef to it.worked },
+        )
+        // Already on, or a bundle that leaves it off: nothing to name.
+        assertFalse((import(b, file) as ImportOutcome.Done).wifiTurnedOn)
+        assertFalse((import(device("d"), export(device("plain"))) as ImportOutcome.Done).wifiTurnedOn)
+        // A kept import says the same before it lands, and after.
+        val c = device("c")
+        c.stores.failApply = true
+        assertTrue((import(c, file) as ImportOutcome.Pending).wifiTurnedOn)
+        c.stores.failApply = false
+        assertTrue((runBlocking { c.service.resume() } as ResumeOutcome.Applied).wifiTurnedOn)
+        assertTrue(c.stores.settings.wifi)
     }
 
     @Test

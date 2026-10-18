@@ -38,6 +38,9 @@ object Samples {
     const val BUS_KEY = "mta-bus-key-0123456789"
     const val GH_TOKEN = "fake-token-for-tests-0001"
 
+    const val WIFI_WORKED = "n7001"
+    const val WIFI_FAILED = "w7002"
+
     val cafe = PlaceRef(CAFE_NAME, 40.7, -74.0, "1 Main St", "cafe", "n1")
     val pin = PlaceRef("Dropped pin", 40.75, -73.98)
     val home = PlaceRef("Home", 40.6501, -73.9496, "9 Elm Rd")
@@ -47,6 +50,8 @@ object Samples {
         var d = UserData().save(cafe, UserData.FAVORITES_ID, 100).save(pin, UserData.WANT_TO_GO_ID, 200).createList("Pizza")
         d = d.save(PlaceRef("Slice", 40.73, -74.0, category = "restaurant", osmRef = "n99"), d.lists.last().id, 300)
         d = d.recordRecent(pin, 400).recordRecent(cafe, 500)
+        // Two Wi-Fi marks, one each way (synthetic OSM refs).
+        d = d.markWifi(WIFI_WORKED, worked = true, now = 600).markWifi(WIFI_FAILED, worked = false, now = 700)
         return d.withShortcut(Shortcut.HOME, home).withShortcut(Shortcut.WORK, work)
     }
 
@@ -65,6 +70,7 @@ object Samples {
         regions = setOf("nyc"),
         allowMobileData = false,
         searchAtBottom = true,
+        wifi = false,
     )
 
     /** Every setting away from its default, with values that are floats in the real stores. */
@@ -87,6 +93,7 @@ object Samples {
         regions = setOf("nyc", "li", "njn"),
         allowMobileData = true,
         searchAtBottom = false,
+        wifi = true,
     )
 
     fun data() = BackupData(userData(), keys(), settings())
@@ -163,6 +170,8 @@ class FakeStores(dir: File, clock: () -> Long = { 1_000L }) : BackupStores {
     }
 
     override fun networkToggles(): Map<NetworkFeature, Boolean> = settings.network
+
+    override fun wifiWanted(): Boolean = settings.wifi
 
     /** Everything the stores hold, compared by value. */
     fun snapshot(): List<Any> = listOf(places.data.value, keys, settings)

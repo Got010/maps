@@ -29,6 +29,8 @@ data class AppSettings(
     val allowMobileData: Boolean,
     /** Settings > Driving: the map's search bar at the bottom (schema 7; an older bundle imports with it on). */
     val searchAtBottom: Boolean,
+    /** Settings > Maps > Free Wi-Fi: keep the Wi-Fi pack on the phone (schema 9; an older bundle imports with it off). */
+    val wifi: Boolean,
 )
 
 /**
@@ -48,6 +50,7 @@ class BackupData(
         work = if (userData.work != null) 1 else 0,
         apiKeys = apiKeys.size,
         settings = SettingsEntry.count(settings),
+        wifiMarks = userData.wifiMarks.size,
     )
 
     override fun toString(): String = "BackupData(${counts()})"
@@ -64,4 +67,6 @@ data class BackupCounts(
     val work: Int,
     val apiKeys: Int,
     val settings: Int,
+    /** The user's Wi-Fi worked / didn't work marks (schema 9; 0 in an older bundle). */
+    val wifiMarks: Int,
 )
