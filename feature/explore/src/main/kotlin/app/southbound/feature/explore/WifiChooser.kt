@@ -1,9 +1,6 @@
 package app.southbound.feature.explore
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,24 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.outlined.Wifi as WifiOutlined
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,12 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.WifiColors
 import app.southbound.core.wifi.WifiFilter
@@ -63,61 +50,6 @@ import app.southbound.core.wifi.WifiTier
  * saved-instance state, never in the preferences, and a killed app starts with everything shown.
  */
 internal val WifiFilterSaver: Saver<WifiFilter, String> = Saver(save = { it.encode() }, restore = { WifiFilter.decode(it) })
-
-/**
- * The Free Wi-Fi map button. A tap shows or hides the layer; a long press (with a buzz) opens the chooser. A dot on
- * the corner says that [filtered] types are hidden.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun WifiButton(shown: Boolean, filtered: Boolean, onClick: () -> Unit, onChoose: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    val container = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-    val content = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val filteredText = stringResource(R.string.explore_wifi_filtered)
-    Box(Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
-        // The size, shape and elevation of the other map buttons, which are floating action buttons; those have no
-        // long press, so this one is a surface with a combined click.
-        Surface(
-            shape = MaterialTheme.shapes.large,
-            color = container,
-            contentColor = content,
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Box(
-                Modifier
-                    .size(56.dp)
-                    .combinedClickable(
-                        onClick = onClick,
-                        onLongClickLabel = stringResource(R.string.explore_wifi_choose),
-                        onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onChoose()
-                        },
-                        role = Role.Button,
-                    )
-                    .semantics { if (filtered) stateDescription = filteredText },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (shown) Icons.Filled.Wifi else Icons.Outlined.WifiOutlined,
-                    contentDescription = stringResource(if (shown) R.string.explore_wifi_hide else R.string.explore_wifi_show),
-                )
-            }
-        }
-        if (filtered) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 8.dp)
-                    .size(12.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    .border(2.dp, container, CircleShape),
-            )
-        }
-    }
-}
 
 /**
  * "Show on the map": what the Free Wi-Fi layer draws. The choices are a draft: Done applies them (and turns the layer
