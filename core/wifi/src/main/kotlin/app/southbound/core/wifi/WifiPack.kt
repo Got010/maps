@@ -42,6 +42,25 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
     val usesRtree: Boolean
         get() = rtreeAvailable && !rtreeFailed
 
+    /**
+     * The zooms the pack's `cluster` table has (3 to 9 in the first builds, 3 to 11 after), read once as it opens;
+     * null when the table is empty or can't be read, and then nothing is drawn below the zoom of single spots.
+     */
+    val clusterZooms: IntRange? = try {
+        connection.prepare("SELECT MIN(zoom), MAX(zoom) FROM cluster").use { stmt ->
+            if (stmt.step()) {
+                WifiTiles.zoomsOf(if (stmt.isNull(0)) null else stmt.getLong(0), if (stmt.isNull(1)) null else stmt.getLong(1))
+            } else {
+                null
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** The cluster zoom to ask for at a map zoom of [mapZoom], or null when the pack has no cells. */
+    fun clusterZoomFor(mapZoom: Double): Int? = clusterZooms?.let { WifiTiles.clusterZoom(mapZoom, it) }
+
     /** The date of the OpenStreetMap extract the pack was built from (YYYY-MM-DD), when it says. */
     val extractDate: String? = try {
         connection.prepare("SELECT value FROM meta WHERE key = 'extract_date'").use { if (it.step() && !it.isNull(0)) it.getText(0) else null }
@@ -75,9 +94,9 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
         return WifiResults.select(found, center, radiusKm * 1000, tiers, openNow, now, hoursUnknownCounts, limit)
     }
 
-    /** The cluster cells of [zoom] (the pack has zooms 3 to 9, see [WifiTiles.clusterZoom]) the [box] touches. */
+    /** The cluster cells of [zoom] (one of [clusterZooms], see [clusterZoomFor]) the [box] touches. */
     fun clusters(zoom: Int, box: NearbyBox): List<WifiCluster> {
-        if (zoom !in WifiTiles.MIN_ZOOM..WifiTiles.MAX_ZOOM) return emptyList()
+        if (clusterZooms?.contains(zoom) != true) return emptyList()
         val query = WifiQueries.clusters(zoom, box)
         return try {
             synchronized(connection) {

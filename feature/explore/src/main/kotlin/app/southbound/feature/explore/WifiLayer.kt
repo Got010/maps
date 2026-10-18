@@ -8,7 +8,6 @@ import app.southbound.core.map.WifiPin
 import app.southbound.core.search.NearbyBox
 import app.southbound.core.wifi.WifiPack
 import app.southbound.core.wifi.WifiTier
-import app.southbound.core.wifi.WifiTiles
 
 /** The free Wi-Fi layer's data for what the map shows. Everything reads the pack on the phone; nothing is fetched. */
 internal object WifiLayer {
@@ -24,7 +23,8 @@ internal object WifiLayer {
                 WifiPin(it.id, MapPoint(it.lat, it.lon), it.tier.code, it.fee.code)
             })
         } else {
-            val zoom = WifiTiles.clusterZoom(view.zoom)
+            // A pack without cells draws nothing below the zoom of single spots.
+            val zoom = pack.clusterZoomFor(view.zoom) ?: return WifiOverlay.NONE
             WifiOverlay(clusters = pack.clusters(zoom, box).map {
                 WifiClusterPin("${it.zoom}/${it.x}/${it.y}", MapPoint(it.lat, it.lon), it.count, it.tierMin.code)
             })
