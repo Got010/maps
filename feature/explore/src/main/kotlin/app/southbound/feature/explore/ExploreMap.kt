@@ -37,17 +37,12 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
-import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
 import androidx.compose.material3.ElevatedAssistChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,7 +70,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
@@ -1552,16 +1546,28 @@ internal fun ExploreMap(
                             }
                         }
                     }
-                    // The map's buttons: above the dock when it spans the width, beside it when it keeps to the left.
-                    Column(
-                        Modifier.align(Alignment.BottomEnd).padding(bottom = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp),
-                        horizontalAlignment = Alignment.End,
-                    ) {
-                        if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
-                        if (wifiPack != null) WifiButton(wifiVisible, !wifiFilter.isDefault, { wifiVisible = !wifiVisible }, { wifiChooser = true })
-                        if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
-                        if (location != null) RecenterButton(following, { following = true }, Modifier)
-                    }
+                    // One Map options button where the buttons were: above the dock when it spans the width, beside it
+                    // when it keeps to the left. Its list holds Re-center, Traffic, Weather and Free Wi-Fi (a long press
+                    // there opens the same chooser the Wi-Fi button's did), each under the condition its button had.
+                    MapOptions(
+                        state = MapOptionsState(
+                            hasLocation = location != null,
+                            following = following,
+                            trafficAvailable = trafficOn,
+                            trafficVisible = trafficVisible,
+                            weatherAvailable = weatherOn,
+                            weatherVisible = weatherVisible,
+                            wifiAvailable = wifiPack != null,
+                            wifiVisible = wifiVisible,
+                            wifiFiltered = !wifiFilter.isDefault,
+                        ),
+                        onRecenter = { following = true },
+                        onToggleTraffic = { trafficVisible = !trafficVisible },
+                        onToggleWeather = { weatherVisible = !weatherVisible },
+                        onToggleWifi = { wifiVisible = !wifiVisible },
+                        onChooseWifi = { wifiChooser = true },
+                        bottomInset = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp,
+                    )
                     if (wifiChooser && wifiPack != null) {
                         WifiChooserSheet(
                             current = wifiFilter,
@@ -1572,22 +1578,6 @@ internal fun ExploreMap(
                                 wifiChooser = false
                             },
                             onDismiss = { wifiChooser = false },
-                        )
-                    }
-                    if (!following && location != null) {
-                        RecenterPill(
-                            { following = true },
-                            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(
-                                bottom = if (dockShown) {
-                                    dockHeight + DOCK_MARGIN + 12.dp
-                                } else {
-                                    when (shownThing) {
-                                        null, is ShownThing.PlateReader, is ShownThing.WeatherStation -> 28.dp
-                                        is ShownThing.TrafficCam, is ShownThing.WeatherAlertShown, is ShownThing.DotCamera -> 400.dp
-                                        is ShownThing.IncidentShown, is ShownThing.Sign -> 190.dp
-                                    } + if (pausedTrip != null && !searchAtBottom) PAUSED_BAR_CLEARANCE else 0.dp // above the paused trip's bar
-                                },
-                            ),
                         )
                     }
                     // Why the traffic layer may look empty: say so instead of showing nothing.
@@ -1939,9 +1929,6 @@ private fun LocationStatus(hasPermission: Boolean, location: Location?, asked: B
 private const val WIFI_QUERY_DEBOUNCE_MS = 150L
 private const val TRAFFIC_POLL_MS = 60_000L
 
-/** How far Re-center moves up while the paused trip's bar is at the bottom of the map. */
-private val PAUSED_BAR_CLEARANCE = 72.dp
-
 /** The bottom search bar's dock: its margin from the screen's edges, and its width when it keeps to the left. */
 private val DOCK_MARGIN = 12.dp
 private val DOCK_MAX_WIDTH = 560.dp
@@ -2043,19 +2030,6 @@ private fun Landmark.toExposurePin(): IncidentPin {
     return IncidentPin(id, MapPoint(lat, lon), kind, closure = false)
 }
 
-@Composable
-private fun TrafficButton(shown: Boolean, onClick: () -> Unit) {
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        // On reads clearly in dynamic dark mode too, where primary and onSurfaceVariant look alike.
-        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Icon(if (shown) Icons.Filled.Traffic else Icons.Outlined.TrafficOutlined, contentDescription = stringResource(if (shown) R.string.explore_traffic_hide else R.string.explore_traffic_show))
-    }
-}
-
 /** The paused trip's bar: "Paused, to Joe's Pizza", then End (X) and Resume on the far right. */
 @Composable
 private fun PausedTripBar(destination: String, onEnd: () -> Unit, onResume: () -> Unit, modifier: Modifier) {
@@ -2077,21 +2051,6 @@ private fun PausedTripBar(destination: String, onEnd: () -> Unit, onResume: () -
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.explore_trip_resume))
             }
         }
-    }
-}
-
-@Composable
-private fun WeatherButton(shown: Boolean, onClick: () -> Unit) {
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Icon(
-            if (shown) Icons.Filled.Cloud else Icons.Outlined.CloudOutlined,
-            contentDescription = stringResource(if (shown) R.string.explore_weather_hide else R.string.explore_weather_show),
-        )
     }
 }
 
@@ -2136,21 +2095,6 @@ private fun TrafficSnapshot.toOverlay() = TrafficOverlay(
     speeds = speeds.map { SpeedLine(it.points.map { p -> MapPoint(p.lat, p.lon) }, it.speedMph) },
     incidents = incidents.map { it.toPin() },
 )
-
-@Composable
-private fun RecenterButton(following: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = modifier.safeDrawingPadding().padding(16.dp),
-        containerColor = if (following) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (following) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_my_location),
-            contentDescription = stringResource(R.string.explore_my_location),
-        )
-    }
-}
 
 /** Estimated gallons for each route at [mpg], with the live-traffic delay of each spent idling. */
 private fun fuelGallonsFor(routes: List<Route>, delaySeconds: List<Double>, mpg: Double): List<Double> =
