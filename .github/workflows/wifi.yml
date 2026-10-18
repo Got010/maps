@@ -1,10 +1,12 @@
 # Test build of the Free Wi-Fi pack (owner, October 2026: "Free Wi-Fi" layer; pipeline/wifi/). Builds
 # wifi-us.sqlite from the Geofabrik extracts of every state in pipeline/regions.json (about 4.6 GB downloaded, each
-# filtered and deleted as it goes, FREE_SOURCES=1), prints the size, the sha256, the rows per tier and category and
-# each chain's QID with the commonest names behind it, and checks the pack opens with its marks and tables.
-# Publishes nothing and uploads nothing: read the job log. It runs on a pull request that changes the Wi-Fi
-# pipeline, or from the Actions tab (Wi-Fi pack test build > Run workflow). Unlike states.yml it also runs in a
-# private repository: one job on a standard runner, roughly 30 to 60 billed minutes.
+# filtered and deleted as it goes: FREE_SOURCES=1 keeps at most one extract on disk, so no disk clean-up is
+# needed), prints the size, the sha256, the rows per tier and category and each chain's QID with the commonest
+# names behind it, and checks the pack opens with its marks and tables.
+# Publishes nothing and uploads nothing: read the job log. It runs on a pull request that changes pipeline/wifi
+# (or this file), or from the Actions tab (Wi-Fi pack test build > Run workflow). Other pipeline changes get the
+# short smoke in data.yml (Washington, DC only). Unlike states.yml it also runs in a private repository: one
+# job on a standard runner, roughly 30 to 60 billed minutes.
 name: Wi-Fi pack test build
 
 on:
@@ -12,10 +14,6 @@ on:
   pull_request:
     paths:
       - 'pipeline/wifi/**'
-      - 'pipeline/lib/common.sh'
-      - 'pipeline/Makefile'
-      - 'pipeline/regions.json'
-      - '.github/pipeline-requirements.txt'
       - '.github/workflows/wifi.yml'
 
 permissions: {}
@@ -36,14 +34,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # The extracts (about 4.6 GB), the filtered files and Docker's images side by side need room.
-      - name: Free disk space
-        run: |
-          echo "cores $(nproc)"; free -g; df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell /usr/lib/jvm
-          sudo docker image prune -af >/dev/null 2>&1 || true
-          df -h /
 
       - name: Build wifi-us.sqlite
         run: |
