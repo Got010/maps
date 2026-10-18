@@ -18,7 +18,7 @@ filter active. The
 Free Wi-Fi row has its own gold dot while a filter is active.
 
 "Show on the map" applies on any way out: Done, a swipe down, a tap outside or Back all set the filter and turn the
-Free Wi-Fi layer on, as long as the choices show something. With nothing ticked (Done is disabled) closing it changes
+Free Wi-Fi layer on, as long as the choices show something. When the choices show nothing (Done is disabled), closing it changes
 nothing. Reset ticks everything again.
 
 New controls for the map go into this list, not onto the map.
