@@ -78,8 +78,9 @@ internal object WifiQueries {
     private data class Clauses(val from: String, val where: String, val args: List<Any>)
 
     /**
-     * The FROM and WHERE for a box. With the R-tree, its index finds the candidates and the exact comparisons
-     * follow (the R-tree stores 32-bit floats and rounds outwards); without it, the (lat, lon) index does.
+     * The FROM and WHERE for a box. With the R-tree, its index finds the candidates, asked with the box widened by
+     * [RTREE_TOLERANCE] (the pack's R-tree holds 32-bit float point boxes), and the exact comparisons follow on the
+     * spot's own doubles; without it, the (lat, lon) index does.
      */
     private fun boxClauses(box: NearbyBox, rtree: Boolean): Clauses {
         val exact = "s.lat BETWEEN ? AND ? AND s.lon BETWEEN ? AND ?"
@@ -88,12 +89,15 @@ internal object WifiQueries {
             Clauses(
                 "spot s JOIN wifi_rtree r ON r.id = s.id",
                 "r.maxlat >= ? AND r.minlat <= ? AND r.maxlon >= ? AND r.minlon <= ? AND $exact",
-                listOf(box.south, box.north, box.west, box.east) + exactArgs,
+                listOf(box.south - RTREE_TOLERANCE, box.north + RTREE_TOLERANCE, box.west - RTREE_TOLERANCE, box.east + RTREE_TOLERANCE) + exactArgs,
             )
         } else {
             Clauses("spot s", exact, exactArgs)
         }
     }
+
+    /** Degrees the R-tree's box is widened by: its 32-bit floats are off by about 1e-6 at US longitudes. */
+    const val RTREE_TOLERANCE = 1e-5
 
     /** No more than this many rows from one query, whatever the caller asks. */
     const val MAX_ROWS = 20_000

@@ -115,3 +115,28 @@ data class WifiCluster(
     val lon: Double,
     val tierMin: WifiTier,
 )
+
+/**
+ * What a "Likely" spot is, for the sheet's sentence ("most libraries have it"): the pack's category values the
+ * pipeline gives tier 4 (library, hotel and motel, rest_area, welcome_center and visitor_centre).
+ */
+enum class WifiLikelyGroup {
+    LIBRARIES,
+    HOTEL_LOBBIES,
+    REST_AREAS,
+    VISITOR_CENTERS,
+
+    /** A category the pipeline gives tier 4 that this app has no wording for. */
+    OTHER,
+    ;
+
+    companion object {
+        fun of(category: String): WifiLikelyGroup = when (category) {
+            "library" -> LIBRARIES
+            "hotel", "motel" -> HOTEL_LOBBIES
+            "rest_area" -> REST_AREAS
+            "welcome_center", "visitor_centre", "information" -> VISITOR_CENTERS
+            else -> OTHER
+        }
+    }
+}

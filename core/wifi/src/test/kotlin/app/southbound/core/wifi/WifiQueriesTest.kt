@@ -46,7 +46,9 @@ class WifiQueriesTest {
                 " ORDER BY s.tier, s.id LIMIT 500",
             q.sql,
         )
-        assertEquals(listOf(39.0, 40.0, -96.0, -95.0, 39.0, 40.0, -96.0, -95.0), q.args)
+        val t = WifiQueries.RTREE_TOLERANCE
+        // The R-tree is asked with a box widened a little; the exact comparisons use the box itself.
+        assertEquals(listOf(39.0 - t, 40.0 + t, -96.0 - t, -95.0 + t, 39.0, 40.0, -96.0, -95.0), q.args)
         assertEquals(q.sql.count { it == '?' }, q.args.size)
     }
 
