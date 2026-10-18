@@ -30,6 +30,12 @@ data class SavedPlace(val id: Long, val listId: Long, val place: PlaceRef, val s
 data class RecentPlace(val place: PlaceRef, val seenAt: Long)
 
 /**
+ * The user's own word on a free Wi-Fi spot: it [worked] or it didn't, as of [markedAt] (epoch millis). [osmRef] is
+ * the spot's OSM object ("n123", "w456", "r789"), the key the Wi-Fi pack and saved places share.
+ */
+data class WifiMark(val osmRef: String, val worked: Boolean, val markedAt: Long)
+
+/**
  * Everything the user has kept: lists, the places in them and recents. Small,
  * so it lives whole in memory and is written whole, encrypted, on every change.
  */
@@ -42,6 +48,8 @@ data class UserData(
     // Phase 6: Home and Work shortcuts.
     val home: PlaceRef? = null,
     val work: PlaceRef? = null,
+    // Free Wi-Fi: one mark per spot, the newest wins. A document written before this field loads with none.
+    val wifiMarks: List<WifiMark> = emptyList(),
 ) {
     fun shortcut(kind: Shortcut): PlaceRef? = if (kind == Shortcut.HOME) home else work
 
@@ -93,6 +101,16 @@ data class UserData(
     fun forgetRecent(place: PlaceRef): UserData = copy(recents = recents.filterNot { it.place.sameAs(place) })
 
     fun clearRecents(): UserData = copy(recents = emptyList())
+
+    /** The user's mark on the Wi-Fi spot [osmRef], or null when there is none. */
+    fun wifiMark(osmRef: String): WifiMark? = wifiMarks.firstOrNull { it.osmRef == osmRef }
+
+    /** Marks the spot as worked or not; an earlier mark on the same spot is replaced, so there is one per spot. */
+    fun markWifi(osmRef: String, worked: Boolean, now: Long): UserData =
+        copy(wifiMarks = wifiMarks.filterNot { it.osmRef == osmRef } + WifiMark(osmRef, worked, now))
+
+    /** Removes the mark on [osmRef], if any. */
+    fun clearWifiMark(osmRef: String): UserData = copy(wifiMarks = wifiMarks.filterNot { it.osmRef == osmRef })
 
     companion object {
         const val FAVORITES_ID = 1L

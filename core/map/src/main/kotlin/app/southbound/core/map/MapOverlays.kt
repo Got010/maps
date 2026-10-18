@@ -88,9 +88,9 @@ data class WeatherOverlay(
 /**
  * A free Wi-Fi spot from the Wi-Fi pack, drawn from zoom 10. [id] is the pack's spot id and comes back from a tap;
  * [tier] is the pack's tier (1 tagged free, 2 tagged with the fee not stated, 3 chain policy, 4 likely) and picks
- * the badge's colour; [fee] is the pack's fee word. A ring round the badge ([ringed]) means free for customers as
+ * the badge's colour; [fee] is the pack's fee word. A solid gold ring round the badge ([ringed]) means free for customers as
  * OpenStreetMap tags it: fee "customers" on a tier 1 spot. A chain's customers-only policy is the owner's own
- * list, not a tag, and gets no ring.
+ * list, not a tag, and gets no ring. No badge has a white ring.
  */
 data class WifiPin(val id: Long, val point: MapPoint, val tier: Int, val fee: String) {
     /** The map image for this badge: one per tier, and per tier a ringed one for free-for-customers. */

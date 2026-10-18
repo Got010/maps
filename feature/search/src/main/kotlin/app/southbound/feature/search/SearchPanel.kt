@@ -79,6 +79,7 @@ import app.southbound.core.search.SearchRanking
 import app.southbound.core.search.SearchResult
 import app.southbound.core.wifi.WifiPack
 import app.southbound.core.wifi.WifiResult
+import app.southbound.core.wifi.WifiResults
 import app.southbound.core.wifi.WifiSpot
 import app.southbound.core.wifi.WifiTierFilter
 import java.time.LocalDateTime
@@ -142,6 +143,8 @@ fun SearchPanel(
     wifi: WifiPack? = null,
     /** A Wi-Fi row was picked: its spot (with its tier, for the sheet). */
     onPickWifi: ((WifiSpot) -> Unit)? = null,
+    /** The user's own "worked" / "didn't work" marks on Wi-Fi spots, by OSM reference (they override the label and sort the list). */
+    wifiMarks: Map<String, WifiMarkInfo> = emptyMap(),
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
@@ -152,6 +155,7 @@ fun SearchPanel(
     var wifiMode by rememberSaveable { mutableStateOf(false) }
     var wifiTier by rememberSaveable { mutableStateOf(WifiTierFilter.ALL) }
     var wifiOpenNow by rememberSaveable { mutableStateOf(false) }
+    var wifiHideDidntWork by rememberSaveable { mutableStateOf(false) }
     // Null while looking, then the rows (maybe none); an error shows instead of "None".
     var wifiResults by remember { mutableStateOf<List<WifiResult>?>(null) }
     var wifiFailed by remember { mutableStateOf(false) }
@@ -381,8 +385,15 @@ fun SearchPanel(
                         }
                     }
                     wifiMode && wifi != null -> Column(Modifier.fillMaxSize()) {
-                        WifiFilters(wifiTier, { wifiTier = it }, wifiOpenNow, { wifiOpenNow = it })
-                        val rows = wifiResults
+                        WifiFilters(wifiTier, { wifiTier = it }, wifiOpenNow, { wifiOpenNow = it }, wifiHideDidntWork, { wifiHideDidntWork = it })
+                        val found = wifiResults
+                        // The spots marked "didn't work" go last (or out): the marks change under an open list, so this is
+                        // done here and not when the pack is read.
+                        val rows = remember(found, wifiMarks, wifiHideDidntWork) {
+                            found?.let {
+                                WifiResults.arrange(it, wifiMarks.filterValues { m -> !m.worked }.keys, hide = wifiHideDidntWork)
+                            }
+                        }
                         Box(
                             Modifier.weight(1f).fillMaxWidth(),
                             contentAlignment = if (fieldAtBottom) Alignment.BottomStart else Alignment.TopStart,
@@ -392,7 +403,13 @@ fun SearchPanel(
                                 wifiFailed -> Message(stringResource(R.string.wifi_failed))
                                 rows == null -> Unit
                                 rows.isEmpty() -> Message(
-                                    stringResource(if (wifiOpenNow) R.string.wifi_none_open_now else R.string.wifi_none),
+                                    stringResource(
+                                        when {
+                                            !found.isNullOrEmpty() -> R.string.wifi_none_hidden
+                                            wifiOpenNow -> R.string.wifi_none_open_now
+                                            else -> R.string.wifi_none
+                                        },
+                                    ),
                                 )
                                 else -> LazyColumn(Modifier.fillMaxWidth(), reverseLayout = fieldAtBottom) {
                                     items(rows, key = { it.spot.id }) { row ->
@@ -402,7 +419,7 @@ fun SearchPanel(
                                         } else {
                                             near?.let { SearchRanking.distanceMeters(it, row.spot.lat, row.spot.lon) }
                                         }
-                                        WifiRow(row, distance, now, onClick = {
+                                        WifiRow(row, distance, wifiMarks[row.spot.osmRef], now, onClick = {
                                             keyboard?.hide()
                                             onPickWifi?.invoke(row.spot)
                                         })

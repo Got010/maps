@@ -8,6 +8,7 @@ import app.southbound.core.network.SecretUnreadableException
 import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.Regions
 import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.packs.WifiSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
 import app.southbound.core.routing.RouteOptionsStore
@@ -32,6 +33,7 @@ class AndroidBackupStores(
     private val voice: VoiceSettingsStore,
     private val regions: RegionSelection,
     private val voiceSelection: VoiceSelection,
+    private val wifi: WifiSelection,
 ) : BackupStores {
 
     override fun blocker(): String? =
@@ -61,12 +63,15 @@ class AndroidBackupStores(
             regions = regions.own intersect Regions.basemaps.map { it.id }.toSet(),
             allowMobileData = UpdateScheduler.allowMobileData(context),
             searchAtBottom = driving.searchAtBottom.value,
+            wifi = wifi.wanted.value,
         )
         // readAll throws if a saved key can't be decrypted, rather than leaving it out of the export.
         return BackupData(userData.data.value, secrets.readAll(), settings)
     }
 
     override fun networkToggles(): Map<NetworkFeature, Boolean> = NetworkFeature.entries.associateWith { network.isEnabled(it) }
+
+    override fun wifiWanted(): Boolean = wifi.wanted.value
 
     /**
      * Every write here is durable when it returns (a synchronous commit, a fsynced file replace, or DataStore's
@@ -86,6 +91,9 @@ class AndroidBackupStores(
         // The updater downloads a voice pack only for the voice in this list; Settings keeps it in step when open.
         voiceSelection.replace(s.voice.builtInVoice.takeUnless { it.bundled }?.id)
         regions.replaceBasemaps(s.regions)
+        // The Settings > Maps switch for the free Wi-Fi pack; the updater downloads or drops the pack to match. A
+        // bundle before schema 9 has no value: the phone's switch is left as it is (writing "off" would delete the pack).
+        s.wifi?.let { wifi.replace(it) }
         UpdateScheduler.replaceAllowMobileData(context, s.allowMobileData)
     }
 

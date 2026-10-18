@@ -15,7 +15,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 4 (schemas 1 to 3 are
+ * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 9 (schemas 1 to 8 are
  * still read). The entries, in
  * this order and all required: [MANIFEST], [PLACES], [API_KEYS], [SETTINGS]. docs/EXPORT.md lists what each holds.
  * The bundle is sealed with the passphrase alone, so it opens on a phone that has none of this phone's Keystore keys.
@@ -31,10 +31,12 @@ import java.util.TimeZone
  * `TRAFFIC_DELDOT`, schema 6 `TRAFFIC_511WI` and `TRAFFIC_TRAVEL_MIDWEST`; an older bundle imports with them off.
  * Schema 7 added the driving setting `search_at_bottom`; an older bundle imports with the search bar at the bottom.
  * Schema 8 added `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`; an older bundle imports with them off.
+ * Schema 9 (the free Wi-Fi layer) added `places.json`'s `wifiMarks`, `settings.json`'s `packs.wifi` and the manifest's
+ * `wifi_marks` count; an older bundle imports with no marks and leaves the Wi-Fi switch as it is on the phone.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 8L
+    const val SCHEMA = 9L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */
@@ -55,9 +57,22 @@ object SouthboundBundle {
 
     private val ENTRY_NAMES = LIMITS.keys.toList()
 
+    /** The manifest's fields in schemas 1 to 8; schema 9 adds [WIFI_MARKS] at the end. */
     private val MANIFEST_KEYS = listOf(
         "app", "schema", "app_version", "lists", "saved_places", "recents", "home", "work", "api_keys", "settings",
     )
+    private const val WIFI_MARKS = "wifi_marks"
+
+    /**
+     * Parses the manifest with exactly the fields of the schema it names: [WIFI_MARKS] is required from schema 9 on
+     * and not allowed before. A schema outside [SCHEMA_RANGE] is refused by the caller.
+     */
+    private fun readManifest(bytes: ByteArray): Obj {
+        val manifest = Obj.of(parseJson(bytes, MANIFEST), "manifest", MANIFEST_KEYS.toSet(), setOf(WIFI_MARKS))
+        val schema = manifest.long("schema", 0, Long.MAX_VALUE)
+        if (manifest.has(WIFI_MARKS) != (schema >= 9)) invalid("the manifest doesn't have the fields its schema lists")
+        return manifest
+    }
 
     /** What the error messages call the other apps (the FWX app ID registry, spec section 7). */
     private val APP_NAMES = mapOf(
@@ -96,12 +111,12 @@ object SouthboundBundle {
      */
     fun decode(entries: Map<String, ByteArray>): BackupData {
         if (entries.keys.toList() != ENTRY_NAMES) invalid("the entries are not the four Southbound entries")
-        val manifest = Obj.of(parseJson(entries.getValue(MANIFEST), MANIFEST), "manifest", MANIFEST_KEYS.toSet())
+        val manifest = readManifest(entries.getValue(MANIFEST))
         val schema = manifest.long("schema", 0, Long.MAX_VALUE)
         if (manifest.string("app", 32) != APP_ID || schema !in SCHEMA_RANGE) {
             invalid("the manifest doesn't describe a Southbound export")
         }
-        val userData = PlacesEntry.decode(entries.getValue(PLACES))
+        val userData = PlacesEntry.decode(entries.getValue(PLACES), schema)
         val keys = KeysEntry.decode(entries.getValue(API_KEYS), schema)
         val settings = SettingsEntry.decode(entries.getValue(SETTINGS), schema)
         val data = BackupData(userData, keys, settings)
@@ -113,6 +128,10 @@ object SouthboundBundle {
         val names = MANIFEST_KEYS.drop(3)
         for ((i, name) in names.withIndex()) {
             if (manifest.long(name, 0, Long.MAX_VALUE) != listed[i].toLong()) invalid("the contents don't match the manifest")
+        }
+        // The marks are counted from schema 9 (an older file has none and no such field).
+        if (schema >= 9 && manifest.long(WIFI_MARKS, 0, Long.MAX_VALUE) != c.wifiMarks.toLong()) {
+            invalid("the contents don't match the manifest")
         }
         return data
     }
@@ -190,7 +209,7 @@ object SouthboundBundle {
                 if (entries.size != ENTRY_NAMES.size) invalid("entries are missing")
                 // The entries are read with the manifest's schema, and the import dialog showed the header's: one file,
                 // one schema (EXPORT.md).
-                val manifest = Obj.of(parseJson(entries.getValue(MANIFEST), MANIFEST), "manifest", MANIFEST_KEYS.toSet())
+                val manifest = readManifest(entries.getValue(MANIFEST))
                 if (manifest.long("schema", 0, Long.MAX_VALUE) != reader.header.schemaVersion) {
                     invalid("the manifest's schema isn't the header's")
                 }
@@ -217,6 +236,7 @@ object SouthboundBundle {
         tree["schema"] = SCHEMA
         tree["app_version"] = version
         for ((i, name) in MANIFEST_KEYS.drop(3).withIndex()) tree[name] = values[i]
+        tree[WIFI_MARKS] = counts.wifiMarks
         return MiniJson.stringify(tree).toByteArray(Charsets.UTF_8)
     }
 }
