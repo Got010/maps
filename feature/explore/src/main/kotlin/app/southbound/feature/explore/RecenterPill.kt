@@ -17,7 +17,8 @@ import androidx.compose.ui.unit.dp
 /**
  * "Re-center" while a trip is on: shown as soon as the map is panned, rotated or tilted away from the puck. Tapping
  * it returns to following (heading-up); that also happens by itself after 10 seconds without a touch. Outside a trip
- * the Re-center row of the Map options list does this job ([MapOptions]); the trip screen has no such button.
+ * the Re-center row of the Map options list does this job ([MapOptions]); the trip screen has no Map options
+ * button, so it keeps this pill.
  */
 @Composable
 internal fun RecenterPill(onClick: () -> Unit, modifier: Modifier = Modifier) {

@@ -11,7 +11,7 @@ internal enum class MapOptionsDot {
     /** A layer is showing: the primary colour. */
     LAYER,
 
-    /** A layer is showing and a Wi-Fi type filter is active: the Wi-Fi gold. */
+    /** The Wi-Fi layer is showing with a type filter active: the Wi-Fi gold. */
     WIFI_FILTERED,
 }
 
@@ -48,13 +48,13 @@ internal data class MapOptionsState(
     val anyLayerVisible: Boolean
         get() = (trafficAvailable && trafficVisible) || (weatherAvailable && weatherVisible) || (wifiAvailable && wifiVisible)
 
-    /** The Wi-Fi row's filter dot: only with the pack installed. */
+    /** The Wi-Fi row's filter dot: only with the pack installed. The button's dot is gold only while the layer shows too. */
     val wifiRowFiltered: Boolean get() = wifiAvailable && wifiFiltered
 
     val dot: MapOptionsDot
         get() = when {
             !anyLayerVisible -> MapOptionsDot.NONE
-            wifiRowFiltered -> MapOptionsDot.WIFI_FILTERED
+            wifiVisible && wifiRowFiltered -> MapOptionsDot.WIFI_FILTERED
             else -> MapOptionsDot.LAYER
         }
 }
