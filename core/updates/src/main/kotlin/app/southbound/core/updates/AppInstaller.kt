@@ -9,10 +9,11 @@ import android.os.Build
 import java.io.File
 
 /**
- * Hands a checked APK to Android's installer. Southbound asks to update itself
- * without a prompt; Android allows that once Southbound is its own installer
- * of record (after the first update you confirm). Otherwise Android asks, and
- * [InstallResultReceiver] brings up the confirmation.
+ * Hands a checked APK to Android's installer, which always asks the person to
+ * confirm: every update needs a tap on Android's own "Update Southbound?"
+ * screen, so no new version runs on the phone unseen. [InstallResultReceiver]
+ * brings up that confirmation (over the app, or as a "tap to install"
+ * notification).
  */
 object AppInstaller {
 
@@ -21,7 +22,8 @@ object AppInstaller {
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(apk.length())
-            setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            // Android's confirmation every time, even once Southbound is its own installer of record.
+            setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 setPackageSource(PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
             }
@@ -66,8 +68,13 @@ class InstallResultReceiver : BroadcastReceiver() {
                 UpdateStatus.requestConfirm(confirm)
                 UpdateNotifications.confirmInstall(context, confirm)
             }
-            PackageInstaller.STATUS_SUCCESS -> UpdateStatus.set(UpdateState.Idle)
+            PackageInstaller.STATUS_SUCCESS -> {
+                UpdateScheduler.clearPendingInstall(context)
+                UpdateStatus.set(UpdateState.Idle)
+            }
             else -> {
+                // Dismissed or refused: the next round offers it again.
+                UpdateScheduler.clearPendingInstall(context)
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 val text = if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
                     "The update was cancelled. Southbound will offer it again next time."

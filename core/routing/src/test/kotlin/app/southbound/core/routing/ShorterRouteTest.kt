@@ -8,50 +8,50 @@ import org.junit.Test
 
 class ShorterRouteTest {
 
-    // Vails Gate, measured on the release's tiles: Route 94 to the ShopRite by Windsor Highway or Old Temple Hill Road.
-    private val windsor = ShorterRoute.Option(127.0, 1440.0, listOf(41.4565 to -74.0480, 41.4535 to -74.0573, 41.4575 to -74.0560))
-    private val oldTempleHill = ShorterRoute.Option(106.0, 1053.0, listOf(41.4565 to -74.0480, 41.4550 to -74.0552, 41.4575 to -74.0571))
-    private val forgeHill = ShorterRoute.Option(133.0, 1133.0, listOf(41.4565 to -74.0480, 41.4570 to -74.0540, 41.4575 to -74.0560))
+    // A short town trip (synthetic points): the main road the router prefers, the shorter side street, another street.
+    private val mainRoad = ShorterRoute.Option(127.0, 1440.0, listOf(43.2000 to -75.9000, 43.1970 to -75.9093, 43.2010 to -75.9080))
+    private val sideStreet = ShorterRoute.Option(106.0, 1053.0, listOf(43.2000 to -75.9000, 43.1985 to -75.9072, 43.2010 to -75.9091))
+    private val otherStreet = ShorterRoute.Option(133.0, 1133.0, listOf(43.2000 to -75.9000, 43.2005 to -75.9060, 43.2010 to -75.9080))
 
     private fun merge(options: List<ShorterRoute.Option>, shorter: ShorterRoute.Option?) = ShorterRoute.merge(options, shorter) { it }
 
     @Test
     fun `a faster and shorter way is offered after the others`() {
-        assertEquals(listOf(windsor, forgeHill, oldTempleHill), merge(listOf(windsor, forgeHill), oldTempleHill))
+        assertEquals(listOf(mainRoad, otherStreet, sideStreet), merge(listOf(mainRoad, otherStreet), sideStreet))
         // With two alternatives already, it takes the last one's place: three options, three colours.
-        val third = forgeHill.copy(line = listOf(41.0 to -74.0, 41.1 to -74.1))
-        assertEquals(listOf(windsor, forgeHill, oldTempleHill), merge(listOf(windsor, forgeHill, third), oldTempleHill))
+        val third = otherStreet.copy(line = listOf(43.10 to -76.00, 43.15 to -76.05))
+        assertEquals(listOf(mainRoad, otherStreet, sideStreet), merge(listOf(mainRoad, otherStreet, third), sideStreet))
     }
 
     @Test
     fun `not when it is slower or longer than the first`() {
-        assertEquals(listOf(windsor), merge(listOf(windsor), oldTempleHill.copy(seconds = 130.0)))
-        assertEquals(listOf(windsor), merge(listOf(windsor), oldTempleHill.copy(meters = 1500.0)))
-        assertEquals(listOf(windsor), merge(listOf(windsor), null))
-        assertEquals(emptyList<ShorterRoute.Option>(), merge(emptyList(), oldTempleHill))
+        assertEquals(listOf(mainRoad), merge(listOf(mainRoad), sideStreet.copy(seconds = 130.0)))
+        assertEquals(listOf(mainRoad), merge(listOf(mainRoad), sideStreet.copy(meters = 1500.0)))
+        assertEquals(listOf(mainRoad), merge(listOf(mainRoad), null))
+        assertEquals(emptyList<ShorterRoute.Option>(), merge(emptyList(), sideStreet))
     }
 
     @Test
     fun `not when it is a route already offered`() {
         // The same line a few metres off, a little faster by rounding: no second copy.
-        val again = windsor.copy(seconds = 120.0, meters = 1400.0, line = windsor.line.map { (lat, lon) -> lat + 0.00005 to lon })
-        assertEquals(listOf(windsor, forgeHill), merge(listOf(windsor, forgeHill), again))
+        val again = mainRoad.copy(seconds = 120.0, meters = 1400.0, line = mainRoad.line.map { (lat, lon) -> lat + 0.00005 to lon })
+        assertEquals(listOf(mainRoad, otherStreet), merge(listOf(mainRoad, otherStreet), again))
     }
 
     @Test
     fun `the shorter way is only where merge put it`() {
-        val merged = merge(listOf(windsor, forgeHill), oldTempleHill)
-        assertEquals(2, ShorterRoute.indexIn(merged, oldTempleHill))
+        val merged = merge(listOf(mainRoad, otherStreet), sideStreet)
+        assertEquals(2, ShorterRoute.indexIn(merged, sideStreet))
         // Traffic may reorder the options; the shorter way is found wherever it went.
-        assertEquals(0, ShorterRoute.indexIn(listOf(oldTempleHill, windsor, forgeHill), oldTempleHill))
+        assertEquals(0, ShorterRoute.indexIn(listOf(sideStreet, mainRoad, otherStreet), sideStreet))
         // Valhalla's distance-weighted answer can be the first route itself. Merge refuses it, and an equal copy is
         // no shorter way: before, it was found "in" the one option and the preview crashed telling it apart.
-        val again = windsor.copy()
-        assertEquals(listOf(windsor), merge(listOf(windsor), again))
-        assertNull(ShorterRoute.indexIn(listOf(windsor), again))
+        val again = mainRoad.copy()
+        assertEquals(listOf(mainRoad), merge(listOf(mainRoad), again))
+        assertNull(ShorterRoute.indexIn(listOf(mainRoad), again))
         // Nor is an alternative it happens to equal.
-        assertNull(ShorterRoute.indexIn(listOf(windsor, forgeHill), forgeHill.copy()))
-        assertNull(ShorterRoute.indexIn(listOf(windsor), null))
+        assertNull(ShorterRoute.indexIn(listOf(mainRoad, otherStreet), otherStreet.copy()))
+        assertNull(ShorterRoute.indexIn(listOf(mainRoad), null))
     }
 
     @Test
@@ -84,9 +84,9 @@ class ShorterRouteTest {
 
     @Test
     fun `via names the road the shorter way doesn't share`() {
-        val roads = listOf("NY 94" to 600.0, "Old Temple Hill Road" to 230.0, null to 160.0)
-        assertEquals("NY 94", RouteSummary.longestRoad(roads))
-        assertEquals("Old Temple Hill Road", RouteSummary.longestRoad(roads, except = setOf("NY 94", "Windsor Highway")))
-        assertNull(RouteSummary.longestRoad(roads, except = setOf("NY 94", "Old Temple Hill Road")))
+        val roads = listOf("State Route 1" to 600.0, "Elm Street" to 230.0, null to 160.0)
+        assertEquals("State Route 1", RouteSummary.longestRoad(roads))
+        assertEquals("Elm Street", RouteSummary.longestRoad(roads, except = setOf("State Route 1", "Main Street")))
+        assertNull(RouteSummary.longestRoad(roads, except = setOf("State Route 1", "Elm Street")))
     }
 }

@@ -175,7 +175,13 @@ class NetworkGate(private val toggles: NetworkToggles) {
         }
 
     companion object {
-        const val USER_AGENT = "Southbound"
+        /**
+         * The user agent of every request: OkHttp's default, which a great many Android apps send, so a request
+         * says nothing about which app or which phone made it. Not the app's name (one user, so it would tie every
+         * request to one person across VPN exits), and not the platform default, which names the phone's model and
+         * build.
+         */
+        const val USER_AGENT = "okhttp/4.12.0"
 
         /** The largest answer a feed may send: well above the biggest statewide feed, far below what would hurt the phone. */
         const val MAX_BYTES = 32 shl 20

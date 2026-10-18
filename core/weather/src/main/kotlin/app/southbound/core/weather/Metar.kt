@@ -29,7 +29,7 @@ data class CurrentConditions(
  * reporting station in a state (the NWS Aviation Weather Center; `@XX` names a state's stations), no
  * key, the same for every phone. One request per covered state ([URLS], twenty-one since Virginia, West Virginia and Kentucky): the API takes a single
  * `@XX` group per request (a list of them came back as New York's alone), and a box (`bbox=`) leaves
- * out stations by its own density, LaGuardia and Stewart among them. Seen on 2026-10-11 (feed
+ * out stations by its own density, LaGuardia among them. Seen on 2026-10-11 (feed
  * probe): New York 49 stations (21 KB), New Jersey 17, Connecticut 11, Pennsylvania 45, Maryland 23,
  * Delaware 4, about 67 KB in all.
  */

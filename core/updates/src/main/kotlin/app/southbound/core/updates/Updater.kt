@@ -70,16 +70,16 @@ class Updater(context: Context) {
      * would write the same download files and each start a tile generation. A round asked for while one runs leaves
      * it to finish and returns where that one is.
      */
-    suspend fun run(beforeDownload: suspend (UpdatePlan) -> Unit = {}): UpdateState {
+    suspend fun run(asked: Boolean = false, beforeDownload: suspend (UpdatePlan) -> Unit = {}): UpdateState {
         if (!ROUND.tryLock()) return UpdateStatus.state.value
         try {
-            return round(beforeDownload)
+            return round(asked, beforeDownload)
         } finally {
             ROUND.unlock()
         }
     }
 
-    private suspend fun round(beforeDownload: suspend (UpdatePlan) -> Unit): UpdateState = withContext(Dispatchers.IO) {
+    private suspend fun round(asked: Boolean, beforeDownload: suspend (UpdatePlan) -> Unit): UpdateState = withContext(Dispatchers.IO) {
         val packsOn = gate.isAllowed(NetworkFeature.PACK_DOWNLOADS)
         val appOn = gate.isAllowed(NetworkFeature.APP_UPDATES)
         if (!packsOn && !appOn) return@withContext publish(UpdateState.Idle)
@@ -114,9 +114,15 @@ class Updater(context: Context) {
             val routing = if (v2) UpdatePlan.wanted(manifest, picked, wantedKinds).filter { it.kind == PackKind.ROUTING } else emptyList()
             val routingChanged = v2 && packsOn && routing.isNotEmpty() && routing.associate { it.file.name to it.file.sha256 } != tiles.installed()
             val others = plan.packs.filterNot { v2 && it.kind == PackKind.ROUTING }
-            if (others.isEmpty() && plan.app == null && !routingChanged) {
+            // An app update handed to Android before and still waiting for the person's tap is not downloaded again
+            // (PendingInstall); the round says it is waiting.
+            val (pending, since) = UpdateScheduler.pendingInstall(app)
+            val appWaiting = plan.app != null &&
+                !PendingInstall.shouldDownload(pending, since, manifest.version, System.currentTimeMillis(), asked)
+            val appToFetch = plan.app.takeUnless { appWaiting }
+            if (others.isEmpty() && appToFetch == null && !routingChanged) {
                 if (v2 && packsOn) dropUnwanted(manifest, picked)
-                return@withContext publish(UpdateState.UpToDate(manifest.version))
+                return@withContext publish(if (appWaiting) UpdateState.AwaitingInstall(manifest.version) else UpdateState.UpToDate(manifest.version))
             }
 
             var generation: TileFolder.Generation? = null
@@ -130,7 +136,7 @@ class Updater(context: Context) {
                 }
                 // Routing first, its generation in before any map: a region's map arriving means its directions
                 // work too, so a route preview waiting on a trip region can route as soon as the map is there.
-                val downloads = UpdatePlan(routingDownloads + others, plan.app)
+                val downloads = UpdatePlan(routingDownloads + others, appToFetch)
                 // What an earlier, stopped round fetched of these packs is carried on; any other leftover goes.
                 val downloadDir = packStore.downloadDir.apply { mkdirs() }
                 val parts = downloads.packs.map { partName(it) }.toSet()
@@ -189,7 +195,9 @@ class Updater(context: Context) {
                 commitRouting()
                 if (v2 && packsOn) dropUnwanted(manifest, picked)
 
-                val apk = plan.app ?: return@withContext publish(UpdateState.Updated(installedNames, null))
+                val apk = downloads.app ?: return@withContext publish(
+                    if (appWaiting) UpdateState.AwaitingInstall(manifest.version) else UpdateState.Updated(installedNames, null),
+                )
                 val asset = release.asset(apk.name) ?: throw IOException("The release is missing ${apk.name}")
                 val dir = File(app.noBackupFilesDir, "updates").apply { deleteRecursively(); mkdirs() }
                 val file = File(dir, apk.name)
@@ -204,7 +212,13 @@ class Updater(context: Context) {
                     ApkCheck.Verdict.Ok -> Unit
                 }
                 publish(UpdateState.AwaitingInstall(manifest.version))
-                AppInstaller.install(app, file)
+                UpdateScheduler.recordPendingInstall(app, manifest.version)
+                try {
+                    AppInstaller.install(app, file)
+                } catch (e: Exception) {
+                    UpdateScheduler.clearPendingInstall(app)
+                    throw e
+                }
                 return@withContext UpdateStatus.state.value
             } finally {
                 if (!committed) generation?.abandon()

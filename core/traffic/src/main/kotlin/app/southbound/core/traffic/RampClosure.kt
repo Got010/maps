@@ -2,7 +2,7 @@ package app.southbound.core.traffic
 
 /**
  * An event that shuts a ramp, not the road it leaves or joins: "Exit ramp closed", "I-80 eastbound: Entrance ramp
- * closed, because of roadwork.", "Ramp closed from NY-17 Westbound to Exit 120.". The feeds put its point at the
+ * closed, because of roadwork.", "Ramp closed from NY-17 Westbound to Exit 72.". The feeds put its point at the
  * gore, on the mainline, so taken as a closure it said "Road closed ahead" and put an exclusion square across an
  * open highway. The readers make it road work or other instead, still on the map with its words.
  */

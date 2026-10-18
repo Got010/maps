@@ -65,8 +65,8 @@ class PlaceCategoryTest {
             // Shell again, 20 m off: the same station.
             candidate(SearchIndex.OVERTURE_ID_BASE + 1, "Shell", "fuel", 40.7481, -73.9895, PlaceSource.OVERTURE),
             candidate(SearchIndex.OVERTURE_ID_BASE + 2, "Sunoco", "fuel", 40.7450, -73.9897, PlaceSource.OVERTURE),
-            // About 70 km north, past the radius though inside a looser box.
-            candidate(SearchIndex.OVERTURE_ID_BASE + 3, "Far Gas", "fuel", 41.37, -73.9897, PlaceSource.OVERTURE),
+            // About 70 km east, past the radius though inside a looser box.
+            candidate(SearchIndex.OVERTURE_ID_BASE + 3, "Far Gas", "fuel", 40.7480, -73.16, PlaceSource.OVERTURE),
         )
         val found = PlaceCategory.nearest(osm, overture, flatiron, limit = 10)
         assertEquals(listOf("Mobil", "Sunoco", "Shell"), found.map { it.place.name })
