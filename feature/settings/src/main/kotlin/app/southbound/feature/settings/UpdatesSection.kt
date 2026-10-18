@@ -118,6 +118,7 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
     JumpTarget(R.string.regions_title) {
         SettingsCard(R.string.regions_title) { RegionPicker(packStore, colors = rowColors()) }
     }
+    SettingsCard(R.string.wifi_pack_card) { WifiPackRow(packStore) }
     SettingsGroup(
         title = R.string.updates_packs_installed,
         summary = stringResource(R.string.updates_packs_count, packs.size, packs.sumOf { it.sizeMb }.toInt()),
