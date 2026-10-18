@@ -31,8 +31,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The Wi-Fi pack's region: it is one national file, `wifi-us.sqlite`. */
-private const val WIFI_REGION = "us"
+private const val WIFI_REGION = PackKind.WIFI_REGION
 
 /** Whole megabytes for the row, never "0 MB" for a pack that has some bytes. */
 internal fun megabytes(bytes: Long): Long = ((bytes + (1L shl 19)) shr 20).coerceAtLeast(1)
@@ -43,7 +42,7 @@ internal fun megabytes(bytes: Long): Long = ((bytes + (1L shl 19)) shr 20).coerc
  * manifest an update round read (the cache `Get for this trip` reads), "size unknown" before the first.
  */
 @Composable
-internal fun WifiPackRow(packStore: PackStore) {
+internal fun WifiPackRow(packStore: PackStore, packDownloadsOn: Boolean) {
     val context = LocalContext.current
     val selection = remember { WifiSelection.get(context) }
     val wanted by selection.wanted.collectAsState()
@@ -76,8 +75,8 @@ internal fun WifiPackRow(packStore: PackStore) {
                         } else {
                             // Off: the file goes and the map screen is told, even if Settings is left at once.
                             scope.launch(NonCancellable) {
-                                withContext(Dispatchers.IO) { packStore.delete(PackKind.WIFI, WIFI_REGION) }
-                                PackEvents.emitRemoved(PackKind.WIFI, WIFI_REGION)
+                                withContext(Dispatchers.IO) { packStore.deleteAll(PackKind.WIFI) }
+                                PackEvents.emitRemoved(PackKind.WIFI, PackKind.WIFI_REGION)
                                 status = withContext(Dispatchers.IO) { packStore.status(PackKind.WIFI, WIFI_REGION) }
                             }
                         }
@@ -91,7 +90,7 @@ internal fun WifiPackRow(packStore: PackStore) {
         is PackStatus.Installed -> stringResource(R.string.wifi_pack_installed, megabytes(s.file.length()))
         // There, but not a Wi-Fi pack (or cut short): left alone, and an update round puts a good one over it.
         is PackStatus.Invalid -> stringResource(R.string.wifi_pack_invalid)
-        else -> if (wanted) stringResource(R.string.wifi_pack_pending) else null
+        else -> if (!wanted) null else stringResource(if (packDownloadsOn) R.string.wifi_pack_pending else R.string.wifi_pack_pending_off)
     }
     if (line != null) {
         Text(

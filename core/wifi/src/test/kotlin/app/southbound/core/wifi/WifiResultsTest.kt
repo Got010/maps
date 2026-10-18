@@ -120,6 +120,10 @@ class WifiResultsTest {
         assertEquals(WifiTier.CHAIN, WifiTier.of(3))
         assertNull(WifiTier.of(0))
         assertNull(WifiTier.of(5))
+        // A cluster cell with a code from a newer pack is kept, as the least confident tier.
+        assertEquals(WifiTier.LIKELY, WifiTier.ofClusterMin(9))
+        assertEquals(WifiTier.LIKELY, WifiTier.ofClusterMin(0))
+        assertEquals(WifiTier.TAGGED_FREE, WifiTier.ofClusterMin(1))
     }
 
     @Test
@@ -155,6 +159,16 @@ class WifiResultsTest {
         assertEquals("w456", p.osmRef)
         assertEquals(here.lat, p.lat, 0.0)
         assertNull(p.address)
+    }
+
+    @Test
+    fun `free for customers is an OSM-tagged fee only, never a chain's policy`() {
+        val customers = spot(1, 0.0).copy(fee = WifiFee.CUSTOMERS)
+        assertTrue(customers.freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.CHAIN).freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.TAGGED_UNSTATED).freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.LIKELY).freeForCustomers)
+        assertFalse(customers.copy(fee = WifiFee.NO).freeForCustomers)
     }
 
     @Test

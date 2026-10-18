@@ -50,6 +50,9 @@ enum class PackKind(val prefix: String, val extension: String) {
         const val TRANSIT_APPLICATION_ID = 0x53425431
         const val WIFI_APPLICATION_ID = 0x53425731
 
+        /** The Wi-Fi pack has exactly one region, whatever an imported file is called. */
+        const val WIFI_REGION = "us"
+
         private val PMTILES_MAGIC = "PMTiles".toByteArray(Charsets.US_ASCII)
         private const val PMTILES_VERSION: Byte = 3
         private val SQLITE_MAGIC = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)

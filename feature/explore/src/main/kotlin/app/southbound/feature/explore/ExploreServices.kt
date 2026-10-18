@@ -234,7 +234,9 @@ class ExploreServices private constructor(context: Context) {
      */
     @Synchronized
     fun openWifi(): WifiPack? {
-        val file = installed(PackKind.WIFI)
+        // Region "us" first; any other installed Wi-Fi pack (an old import's name) rather than none.
+        val packs = packStore.installed().filter { it.kind == PackKind.WIFI }
+        val file = (packs.firstOrNull { it.region == PackKind.WIFI_REGION } ?: packs.firstOrNull())?.file
         if (file == null) {
             wifi?.value?.close()
             wifi = null

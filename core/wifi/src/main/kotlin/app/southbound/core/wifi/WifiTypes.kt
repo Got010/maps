@@ -24,6 +24,12 @@ enum class WifiTier(val code: Int, val confirmed: Boolean) {
     companion object {
         /** The tier with this pack code, or null for a number this app doesn't know (a newer pack's). */
         fun of(code: Int): WifiTier? = entries.firstOrNull { it.code == code }
+
+        /**
+         * The best tier of a cluster cell: a code this app doesn't know (a newer pack's) is read as the least
+         * confident tier, so the cell is still drawn, never as if it were confirmed.
+         */
+        fun ofClusterMin(code: Int): WifiTier = of(code) ?: LIKELY
     }
 }
 
@@ -72,6 +78,13 @@ data class WifiSpot(
     val openingHours: String?,
     val website: String?,
 ) {
+    /**
+     * Free for customers as OpenStreetMap tags it: fee "customers" on a tier 1 spot. A chain's customers-only policy
+     * (tier 3, from the owner's own list) is not a tag and is not this.
+     */
+    val freeForCustomers: Boolean
+        get() = fee == WifiFee.CUSTOMERS && tier == WifiTier.TAGGED_FREE
+
     /** "n123", "w456" or "r789": the OSM object, as [Place.osmRef] and saved places keep it. */
     val osmRef: String
         get() = osmType + osmId

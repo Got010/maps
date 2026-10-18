@@ -163,6 +163,31 @@ class PackStoreTest {
     }
 
     @Test
+    fun wifiPackIsFiledUnderUsWhateverItsFileIsCalled() {
+        val store = store()
+        for (name in listOf(null, "download.bin", "wifi_us.sqlite", "wifi-nyc.sqlite", "Free Wi-Fi.sqlite")) {
+            val pack = store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), name)
+            assertEquals(ImportedPack(PackKind.WIFI, "us", store.packsDir.resolve("wifi-us.sqlite")), pack)
+        }
+        assertEquals(listOf("wifi-us.sqlite", "wifi-us.sqlite.sha256"), store.packsDir.list()!!.sorted())
+        // A search pack with no usable name still goes by the fallback region, as before.
+        assertEquals("nyc", store.importPack(sqlite(PackKind.SEARCH_APPLICATION_ID).inputStream(), null).region)
+    }
+
+    @Test
+    fun deleteAllTakesEveryPackOfAKindAndLeavesTheRest() {
+        val store = store()
+        store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), "wifi-us.sqlite")
+        // Left by an older build under another region, and one that isn't a valid pack.
+        store.packsDir.resolve("wifi-nyc.sqlite").writeBytes(sqlite(PackKind.WIFI_APPLICATION_ID))
+        store.packsDir.resolve("wifi-nyc.sqlite.sha256").writeText("x")
+        store.packsDir.resolve("wifi-ct.sqlite").writeBytes("junk".toByteArray())
+        store.importPack(sqlite(PackKind.SEARCH_APPLICATION_ID).inputStream(), "search-nyc.sqlite")
+        store.deleteAll(PackKind.WIFI)
+        assertEquals(listOf("search-nyc.sqlite", "search-nyc.sqlite.sha256"), store.packsDir.list()!!.sorted())
+    }
+
+    @Test
     fun voicePackIsRecognisedByZipMagic() {
         val store = store()
         val voice = store.importPack(zip().inputStream(), "voice-norman (1).zip")
