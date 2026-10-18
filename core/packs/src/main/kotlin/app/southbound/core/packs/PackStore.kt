@@ -114,7 +114,8 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
      * Copies a pack from [source] into private storage under a temp name and
      * recognises it, without installing it: nothing installed changes until
      * [installStaged]. [discardStaged] drops it instead. One left staged (the
-     * app stopped while asking) is removed by a later import once a day old.
+     * app stopped while asking) goes at the next start ([sweepStaged]), or with a
+     * later import once a day old.
      *
      * @throws UnrecognizedPackException if [source] isn't a Southbound pack (nothing is left behind).
      */
@@ -158,6 +159,16 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
     /** Drops a pack [stagePack] staged, leaving every installed pack as it was. */
     fun discardStaged(staged: StagedPack) {
         staged.file.delete()
+    }
+
+    /**
+     * Deletes every staged or half-copied import ([stagePack]'s and [importBasemap]'s temp files), whatever its
+     * age: a share left waiting when the app stopped, or a copy a newer share cut off. Call only when no import can
+     * be running, at app start. Returns how many are still there (0 unless a delete failed).
+     */
+    fun sweepStaged(): Int {
+        val left = packsDir.listFiles()?.filter { it.isFile && STALE_IMPORT.matches(it.name) }.orEmpty()
+        return left.count { !it.delete() && it.exists() }
     }
 
     /**

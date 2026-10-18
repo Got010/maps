@@ -12,6 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.util.concurrent.TimeUnit
@@ -28,6 +29,11 @@ object UpdateScheduler {
     private const val KEY_MOBILE = "allow_mobile_data"
     private const val KEY_LAST_CHECK = "last_check"
     private const val KEY_LATEST = "latest_version"
+    private const val KEY_PENDING = "pending_install_version"
+    private const val KEY_PENDING_SINCE = "pending_install_since"
+
+    /** Input of a round the person started (Check now, Download now), which asks again for a pending update. */
+    const val KEY_ASKED = "asked"
     private const val RECHECK_HOURS = 6L
 
     fun allowMobileData(context: Context): Boolean = prefs(context).getBoolean(KEY_MOBILE, false)
@@ -50,6 +56,18 @@ object UpdateScheduler {
 
     internal fun recordCheck(context: Context, version: String) {
         prefs(context).edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).putString(KEY_LATEST, version).apply()
+    }
+
+    /** The app update waiting for Android's confirmation and since when ([PendingInstall]); null when none. */
+    internal fun pendingInstall(context: Context): Pair<String?, Long> =
+        prefs(context).let { it.getString(KEY_PENDING, null) to it.getLong(KEY_PENDING_SINCE, 0) }
+
+    internal fun recordPendingInstall(context: Context, version: String) {
+        prefs(context).edit().putString(KEY_PENDING, version).putLong(KEY_PENDING_SINCE, System.currentTimeMillis()).apply()
+    }
+
+    internal fun clearPendingInstall(context: Context) {
+        prefs(context).edit().remove(KEY_PENDING).remove(KEY_PENDING_SINCE).apply()
     }
 
     /** Call at app start: keeps the daily job and checks now if it's been a while. */
@@ -96,6 +114,8 @@ object UpdateScheduler {
             return
         }
         val request = OneTimeWorkRequestBuilder<UpdateWorker>()
+            // A tap that widens the network is the person asking: a pending app update is offered again.
+            .setInputData(workDataOf(KEY_ASKED to anyNetwork))
             .setConstraints(constraints(context, anyNetwork))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
             .build()

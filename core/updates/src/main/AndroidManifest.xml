@@ -3,9 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Installing a newer Southbound from its own release. Android asks the
-         user to confirm every update (AppInstaller asks for USER_ACTION_REQUIRED).
-         UPDATE_PACKAGES_WITHOUT_USER_ACTION is no longer used by the code; removing
-         it changes the release gate's baseline, so it goes in a gate-change PR. -->
+         user the first time; after that, as the app's installer of record,
+         Southbound may update itself without asking (Android 12+). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 

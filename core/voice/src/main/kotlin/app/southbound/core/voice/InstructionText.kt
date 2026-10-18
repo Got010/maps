@@ -102,9 +102,9 @@ object InstructionText {
 
     /**
      * Names the exit's number where the sentence leaves it out, as Valhalla's early prompts do:
-     * "In 2 miles, Take the exit on the right." + "14" -> "In 2 miles, Take exit 14 on the right.";
-     * "Take the I 87 North exit toward Albany." -> "Take exit 14, the I 87 North exit, toward Albany."
-     * Unchanged when it already has a number, or doesn't mention an exit ("Continue on I 87 for 2 miles.").
+     * "In 2 miles, Take the exit on the right." + "5" -> "In 2 miles, Take exit 5 on the right.";
+     * "Take the I 90 West exit toward Lakeview." -> "Take exit 5, the I 90 West exit, toward Lakeview."
+     * Unchanged when it already has a number, or doesn't mention an exit ("Continue on I 90 for 2 miles.").
      * Only for a highway exit with a number on its sign; a roundabout's "2nd exit" is never touched.
      */
     fun withExitNumber(text: String, number: String): String {

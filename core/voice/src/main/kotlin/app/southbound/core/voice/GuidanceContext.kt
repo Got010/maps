@@ -30,7 +30,7 @@ interface GuidanceContext {
      */
     fun followUpLanesFor(instruction: SpokenInstruction): String? = null
 
-    /** The number of the exit [instruction] announces ("14", "14S"), from the step's sign; null when none. */
+    /** The number of the exit [instruction] announces ("5", "5A"), from the step's sign; null when none. */
     fun exitNumberFor(instruction: SpokenInstruction): String? = null
 
     /**

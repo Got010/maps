@@ -98,21 +98,21 @@ class InstructionTextTest {
     @Test
     fun exitThenTurnAtTheLight() {
         assertEquals(
-            "Take exit 14S on the right, then turn left onto Main Street.",
-            InstructionText.withFollowUp("Take exit 14S on the right.", "Turn left onto Main Street."),
+            "Take exit 5A on the right, then turn left onto Main Street.",
+            InstructionText.withFollowUp("Take exit 5A on the right.", "Turn left onto Main Street."),
         )
         assertEquals(
-            "In a quarter mile, Take exit 14S on the right, then turn left onto Main Street.",
-            InstructionText.withFollowUp("In a quarter mile, Take exit 14S on the right.", "In 300 feet, Turn left onto Main Street."),
+            "In a quarter mile, Take exit 5A on the right, then turn left onto Main Street.",
+            InstructionText.withFollowUp("In a quarter mile, Take exit 5A on the right.", "In 300 feet, Turn left onto Main Street."),
         )
     }
 
     @Test
     fun theExitNumberIsSaidOnEveryPromptForIt() {
-        assertEquals("In 2 miles, Take exit 14 on the right.", InstructionText.withExitNumber("In 2 miles, Take the exit on the right.", "14"))
+        assertEquals("In 2 miles, Take exit 5 on the right.", InstructionText.withExitNumber("In 2 miles, Take the exit on the right.", "5"))
         assertEquals(
-            "In 2 miles, Take exit 14S on the right toward Albany.",
-            InstructionText.withExitNumber("In 2 miles, Take the exit on the right toward Albany.", "14S"),
+            "In 2 miles, Take exit 5A on the right toward Lakeview.",
+            InstructionText.withExitNumber("In 2 miles, Take the exit on the right toward Lakeview.", "5A"),
         )
         assertEquals(
             "In 1 mile, Take exit 24, the I 90 East exit, toward Boston.",
@@ -123,8 +123,8 @@ class InstructionTextTest {
             InstructionText.withExitNumber("Take the I 90 East exit.", "24"),
         )
         // Already numbered, not about an exit, or a roundabout's: unchanged.
-        assertEquals("Take exit 14 on the right.", InstructionText.withExitNumber("Take exit 14 on the right.", "14"))
-        assertEquals("Continue on I 87 for 2 miles.", InstructionText.withExitNumber("Continue on I 87 for 2 miles.", "14"))
+        assertEquals("Take exit 5 on the right.", InstructionText.withExitNumber("Take exit 5 on the right.", "5"))
+        assertEquals("Continue on I 90 for 2 miles.", InstructionText.withExitNumber("Continue on I 90 for 2 miles.", "5"))
         assertEquals(
             "Enter the roundabout and take the 2nd exit onto Main Street.",
             InstructionText.withExitNumber("Enter the roundabout and take the 2nd exit onto Main Street.", "3"),
