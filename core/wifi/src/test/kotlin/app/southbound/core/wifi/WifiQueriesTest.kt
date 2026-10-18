@@ -41,7 +41,7 @@ class WifiQueriesTest {
         val q = WifiQueries.inBox(box, setOf(WifiTier.TAGGED_FREE, WifiTier.TAGGED_UNSTATED), 500, rtree = true)!!
         assertEquals(
             "SELECT ${WifiQueries.SPOT_COLUMNS} FROM wifi_rtree r CROSS JOIN spot s ON s.id = r.id" +
-                " WHERE r.minlat >= ? AND r.maxlat <= ? AND r.minlon >= ? AND r.maxlon <= ?" +
+                " WHERE r.maxlat >= ? AND r.minlat <= ? AND r.maxlon >= ? AND r.minlon <= ?" +
                 " AND s.lat BETWEEN ? AND ? AND s.lon BETWEEN ? AND ? AND s.tier IN (1, 2)" +
                 " ORDER BY s.tier, s.id LIMIT 500",
             q.sql,
@@ -90,7 +90,7 @@ class WifiQueriesTest {
     @Test
     fun `the nearest query with the R-tree binds the box twice, then the centre`() {
         val q = WifiQueries.nearest(LatLon(39.5, -95.5), 10.0, all, 40, rtree = true)!!
-        assertTrue(q.sql.contains("FROM wifi_rtree r CROSS JOIN spot s ON s.id = r.id WHERE r.minlat >= ?"))
+        assertTrue(q.sql.contains("FROM wifi_rtree r CROSS JOIN spot s ON s.id = r.id WHERE r.maxlat >= ?"))
         assertEquals(q.sql.count { it == '?' }, q.args.size)
         assertEquals(13, q.args.size)
     }
