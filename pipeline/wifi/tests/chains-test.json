@@ -1,0 +1,7 @@
+{
+  "chains": [
+    {"name": "Example Coffee", "wikidata": ["Q37158"], "fee": "customers"},
+    {"name": "Example Burgers", "wikidata": ["Q38076"]},
+    {"name": "Example Mart", "wikidata": ["Q483551", "Q7963529"], "fee": "customers", "note": "two brands, one chain"}
+  ]
+}

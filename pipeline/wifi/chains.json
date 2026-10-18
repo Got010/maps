@@ -1,0 +1,21 @@
+{
+  "chains": [
+    {"name": "Starbucks", "wikidata": ["Q37158"], "fee": "customers"},
+    {"name": "Panera Bread", "wikidata": ["Q7130852"], "fee": "customers"},
+    {"name": "McDonald's", "wikidata": ["Q38076"], "fee": "customers"},
+    {"name": "Dunkin'", "wikidata": ["Q847743"], "fee": "customers"},
+    {"name": "Chick-fil-A", "wikidata": ["Q491516"], "fee": "customers"},
+    {"name": "Taco Bell", "wikidata": ["Q752941"], "fee": "customers"},
+    {"name": "Target", "wikidata": ["Q1046951"], "fee": "customers"},
+    {"name": "Walmart", "wikidata": ["Q483551"], "fee": "customers"},
+    {"name": "Best Buy", "wikidata": ["Q533415"], "fee": "customers"},
+    {"name": "Apple Store", "wikidata": ["Q421253"], "fee": "customers"},
+    {"name": "The Home Depot", "wikidata": ["Q864407"], "fee": "customers"},
+    {"name": "Lowe's", "wikidata": ["Q1373493"], "fee": "customers"},
+    {"name": "Pilot", "wikidata": ["Q64128179"], "fee": "customers", "note": "Pilot Flying J and Pilot Travel Centers: OpenStreetMap tags both as Pilot"},
+    {"name": "Flying J", "wikidata": ["Q64130592"], "fee": "customers"},
+    {"name": "Love's Travel Stops", "wikidata": ["Q1872496"], "fee": "customers"},
+    {"name": "TravelCenters of America", "wikidata": ["Q7835892"], "fee": "customers", "note": "OpenStreetMap's brand is TA"},
+    {"name": "Petro Stopping Centers", "wikidata": ["Q64051305"], "fee": "customers", "note": "OpenStreetMap's brand is Petro"}
+  ]
+}
