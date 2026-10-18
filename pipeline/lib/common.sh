@@ -80,21 +80,31 @@ if value is not None:
 PY
 }
 
-# Downloads a Geofabrik extract by source name (any US state, DC or Puerto Rico: new-york, pennsylvania, ...) into
-# sources/<name>-latest.osm.pbf and verifies it against its .md5. Sets
-# SOURCE_FILE.
-fetch_source() {
-  local name="$1" url
-  case "$name" in
+# True when $1 is a Geofabrik extract fetch_source knows: a US state, DC or Puerto Rico, by Geofabrik's name.
+is_known_source() {
+  case "$1" in
     alabama | alaska | arizona | arkansas | california | colorado | connecticut | delaware | district-of-columbia | \
       florida | georgia | hawaii | idaho | illinois | indiana | iowa | kansas | kentucky | louisiana | maine | maryland | \
       massachusetts | michigan | minnesota | mississippi | missouri | montana | nebraska | nevada | new-hampshire | \
       new-jersey | new-mexico | new-york | north-carolina | north-dakota | ohio | oklahoma | oregon | pennsylvania | \
       puerto-rico | rhode-island | south-carolina | south-dakota | tennessee | texas | utah | vermont | virginia | \
       washington | west-virginia | wisconsin | wyoming)
-      url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
-    *) echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2; exit 2 ;;
+      return 0 ;;
+    *) return 1 ;;
   esac
+}
+
+# Downloads a Geofabrik extract by source name (any US state, DC or Puerto Rico: new-york, pennsylvania, ...)
+# into sources/<name>-latest.osm.pbf and verifies it against its .md5. Sets
+# SOURCE_FILE.
+fetch_source() {
+  local name="$1" url
+  if is_known_source "$name"; then
+    url="$GEOFABRIK_URL/$name-latest.osm.pbf"
+  else
+    echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2
+    exit 2
+  fi
   SOURCE_FILE="$DATA_DIR/sources/$name-latest.osm.pbf"
   echo "==> Fetching $url"
   # -z only re-downloads when Geofabrik has a newer extract.

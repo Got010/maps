@@ -19,9 +19,18 @@
 #   information=office,visitor_centre  tier 4: welcome centers and visitor centers (build_wifi.py then keeps
 #                                      the offices, and the visitor centers of the National Park Service)
 #
+# osmium runs in one container for the whole build (the pinned OSMIUM_IMAGE, osmium-tool installed once, a
+# `docker exec` per step), stopped when the script ends.
+#
 # Optional settings (environment variables):
 #   WIFI_MAX_MB    fail if the pack is bigger (default 60)
-#   FREE_SOURCES   1: delete each extract once it is filtered (release.yml and wifi.yml set it)
+#   FREE_SOURCES   1: delete each extract once it is filtered (release.yml and wifi.yml set it), so at most
+#                  one extract is on disk at a time
+#   WIFI_SOURCES   space-separated Geofabrik names (district-of-columbia): build from these extracts only, not
+#                  from regions.json's list. For a quick smoke build (data.yml builds DC so); such a pack covers
+#                  only those states and must not be shipped.
+#   WIFI_ALLOW_NO_RTREE  1: accept a pack without the wifi_rtree table (build_wifi.py warns when this SQLite has
+#                  no R-tree module). Default: fail, since every published pack should carry it.
 #
 # Usage: build.sh us      (or: make -C pipeline wifi-us)
 set -euo pipefail
@@ -46,10 +55,46 @@ QIDS="$(python3 "$PIPELINE_DIR/wifi/build_wifi.py" --chains "$CHAINS" --print-qi
 FILTERS="nwr/internet_access=wlan,yes,wifi nwr/brand:wikidata=$QIDS nwr/amenity=library nwr/tourism=hotel,motel nwr/highway=rest_area nwr/information=office,visitor_centre"
 
 SOURCES=()
-while IFS= read -r source; do
-  SOURCES+=("$source")
-done < <(all_sources)
+if [[ -n "${WIFI_SOURCES:-}" ]]; then
+  read -r -a SOURCES <<< "$WIFI_SOURCES"
+  for source in "${SOURCES[@]}"; do
+    is_known_source "$source" || { echo "Unknown source '$source' in WIFI_SOURCES. Known: Geofabrik's US state names (district-of-columbia, new-york, ...)." >&2; exit 2; }
+  done
+  echo "==> WIFI_SOURCES is set: the pack covers only ${SOURCES[*]} and is for testing"
+else
+  while IFS= read -r source; do
+    SOURCES+=("$source")
+  done < <(all_sources)
+fi
+if (( ${#SOURCES[@]} == 0 )); then
+  echo "No extracts to build from: pipeline/regions.json names no sources (or WIFI_SOURCES is blank)." >&2
+  exit 2
+fi
 echo "==> ${#SOURCES[@]} extracts: ${SOURCES[*]}"
+
+# One osmium container for every step, started when the first one needs it (a rerun that reuses everything
+# starts none) and stopped on exit. Its image is the same pinned OSMIUM_IMAGE osmium_run uses.
+OSMIUM_CONTAINER=""
+stop_osmium() {
+  if [[ -n "$OSMIUM_CONTAINER" ]]; then
+    docker stop "$OSMIUM_CONTAINER" >/dev/null 2>&1 || true
+  fi
+}
+trap stop_osmium EXIT
+# Like osmium_run: $1 is a script using /data paths, the rest are the files it writes, handed back to the caller.
+osmium_step() {
+  local script="$1"
+  shift
+  if [[ -z "$OSMIUM_CONTAINER" ]]; then
+    OSMIUM_CONTAINER="$(docker run -d --rm -v "$DATA_DIR:/data" "$OSMIUM_IMAGE" sleep infinity)"
+    docker exec "$OSMIUM_CONTAINER" bash -c "apt-get update -qq >/dev/null && apt-get install -y -qq osmium-tool >/dev/null"
+  fi
+  docker exec "$OSMIUM_CONTAINER" bash -c "
+    set -e
+    $script
+    chown $(id -u):$(id -g) $*
+  "
+}
 
 FILTERED=()
 for source in "${SOURCES[@]}"; do
@@ -65,7 +110,7 @@ for source in "${SOURCES[@]}"; do
   else
     echo "==> Filtering $base"
     # The replication timestamp is read from the extract itself: it is the date of the data in the pack.
-    osmium_run "osmium fileinfo -g header.option.osmosis_replication_timestamp /data/sources/$base > /data/tmp/wifi-$source.timestamp
+    osmium_step "osmium fileinfo -g header.option.osmosis_replication_timestamp /data/sources/$base > /data/tmp/wifi-$source.timestamp
       osmium tags-filter --overwrite -o /data/tmp/wifi-$source.part.osm.pbf /data/sources/$base $FILTERS
       mv /data/tmp/wifi-$source.part.osm.pbf /data/tmp/wifi-$source.osm.pbf" \
       "/data/tmp/wifi-$source.timestamp" "/data/tmp/wifi-$source.osm.pbf"
@@ -80,7 +125,10 @@ for source in "${SOURCES[@]}"; do
 done
 
 MERGED="$DATA_DIR/tmp/wifi-$REGION.osm.pbf"
-if fresh_against "$MERGED" "${FILTERED[@]}" "$CHAINS" "$THIS_SCRIPT"; then
+# The states the merged file holds, so a file merged from another set (WIFI_SOURCES) is never reused.
+SOURCES_STAMP="$DATA_DIR/tmp/wifi-$REGION.sources"
+if fresh_against "$MERGED" "${FILTERED[@]}" "$CHAINS" "$THIS_SCRIPT" "$REGIONS_JSON" \
+  && [[ "$(cat "$SOURCES_STAMP" 2>/dev/null)" == "${SOURCES[*]}" ]]; then
   echo "==> Reusing $(basename "$MERGED")"
 else
   echo "==> Merging ${#FILTERED[@]} filtered extracts -> $(basename "$MERGED")"
@@ -89,10 +137,11 @@ else
     merge_inputs+=" /data/tmp/$(basename "$filtered")"
   done
   # merge keeps both versions of an object two extracts carry at different times; time-filter keeps the newest.
-  osmium_run "osmium merge --overwrite -o /data/tmp/wifi-$REGION.merged.osm.pbf$merge_inputs
+  osmium_step "osmium merge --overwrite -o /data/tmp/wifi-$REGION.merged.osm.pbf$merge_inputs
     osmium time-filter --overwrite -o /data/tmp/wifi-$REGION.part.osm.pbf /data/tmp/wifi-$REGION.merged.osm.pbf
     mv /data/tmp/wifi-$REGION.part.osm.pbf /data/tmp/wifi-$REGION.osm.pbf
     rm -f /data/tmp/wifi-$REGION.merged.osm.pbf" "/data/tmp/wifi-$REGION.osm.pbf"
+  echo "${SOURCES[*]}" > "$SOURCES_STAMP"
 fi
 
 # The extract dates, read from the headers above, as build_wifi.py's --sources.
@@ -116,5 +165,20 @@ docker run --rm \
     python -B /wifi/build_wifi.py /data/tmp/wifi-$REGION.osm.pbf /data/out/$OUTPUT --chains /wifi/chains.json --max-mb $WIFI_MAX_MB --sources /data/tmp/wifi-sources.json
     chown $(id -u):$(id -g) /data/out/$OUTPUT
   " 2>&1 | tee "$LOG"
+
+# Every published pack carries the R-tree; build_wifi.py only warns when this SQLite lacks the module.
+if ! python3 - "$DATA_DIR/out/$OUTPUT" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+sys.exit(0 if db.execute("SELECT count(*) FROM sqlite_master WHERE name = 'wifi_rtree'").fetchone()[0] else 1)
+PY
+then
+  if [[ "${WIFI_ALLOW_NO_RTREE:-}" == 1 ]]; then
+    echo "::warning::$OUTPUT has no wifi_rtree table (WIFI_ALLOW_NO_RTREE=1)"
+  else
+    echo "$OUTPUT has no wifi_rtree table: the Python in the container has no R-tree module. Set WIFI_ALLOW_NO_RTREE=1 to accept that." >&2
+    exit 1
+  fi
+fi
 
 report_pack "$DATA_DIR/out/$OUTPUT"

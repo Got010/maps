@@ -32,6 +32,13 @@
   <node id="30" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.97"><tag k="shop" v="department_store"/><tag k="name" v="Example Mart"/><tag k="brand:wikidata" v="Q483551"/><tag k="fee" v="no"/></node>
   <node id="31" version="1" timestamp="2026-10-01T00:00:00Z" lat="40.0" lon="-100.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Far"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/></node>
   <node id="32" version="1" timestamp="2026-10-01T00:00:00Z" lat="40.0004" lon="-100.0004"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Far"/></node>
+  <node id="33" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.97"><tag k="amenity" v="library"/><tag k="name" v="Fixture School Library"/><tag k="access" v="private"/></node>
+  <node id="34" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.97"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Staff Only"/><tag k="internet_access" v="wlan"/><tag k="access" v="no"/></node>
+  <node id="35" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.97"><tag k="was:amenity" v="cafe"/><tag k="name" v="Fixture Former Cafe"/><tag k="internet_access" v="wlan"/></node>
+  <node id="36" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.97"><tag k="railway" v="station"/><tag k="name" v="Fixture Station"/><tag k="internet_access" v="wlan"/></node>
+  <node id="37" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.97"><tag k="amenity" v="yes"/><tag k="shop" v="books"/><tag k="name" v="Fixture Books"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/></node>
+  <node id="38" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.97"><tag k="amenity" v="cafe"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/></node>
+  <node id="39" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.97"><tag k="amenity" v="library"/><tag k="name" v="Fixture Public Library"/><tag k="access" v="yes"/></node>
   <node id="101" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-97.0"/>
   <node id="102" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-96.998"/>
   <node id="103" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.002" lon="-96.998"/>
