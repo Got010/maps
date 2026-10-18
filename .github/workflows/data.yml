@@ -1,7 +1,8 @@
 # Proves the data pipeline still builds, on pull requests that touch it. The pip lock the search container
 # installs from (.github/pipeline-requirements.txt) counts as part of the pipeline.
 # NYC only, since it finishes in under an hour; the statewide packs build the
-# same scripts with other regions in release.yml after the PR is merged.
+# same scripts with other regions in release.yml after the PR is merged. The Free Wi-Fi pack gets a smoke
+# build here from Washington, DC alone (a few minutes); the full pack builds in wifi.yml when pipeline/wifi changes.
 name: Map data
 
 on:
@@ -11,6 +12,7 @@ on:
       - 'pipeline/routing/**'
       - 'pipeline/search/**'
       - 'pipeline/transit/**'
+      - 'pipeline/wifi/**'
       - 'pipeline/lib/**'
       - 'pipeline/regions.json'
       - 'pipeline/Makefile'
@@ -48,6 +50,27 @@ jobs:
 
       - name: Build transit-nyc.sqlite
         run: make -C pipeline transit-nyc
+
+      # The Wi-Fi pipeline end to end on the smallest extract: DC alone, a few minutes. WIFI_SOURCES makes this a
+      # test pack (it is not published); the full country build is wifi.yml's.
+      - name: Build wifi-us.sqlite (DC only, smoke)
+        env:
+          WIFI_SOURCES: district-of-columbia
+          FREE_SOURCES: 1
+          WIFI_MAX_MB: 10
+        run: |
+          make -C pipeline wifi-us
+          ls -lh pipeline/data/out/wifi-us.sqlite
+          sed -n '/== Wi-Fi pack summary ==/,$p' pipeline/data/tmp/wifi-us.log
+          python3 - pipeline/data/out/wifi-us.sqlite <<'PY'
+          import sqlite3, sys
+          db = sqlite3.connect(sys.argv[1])
+          one = lambda sql: db.execute(sql).fetchone()[0]
+          assert one("PRAGMA application_id") == 0x53425731 and one("PRAGMA user_version") == 1
+          spots = one("SELECT count(*) FROM spot")
+          print("spots", spots, "tiers", dict(db.execute("SELECT tier, count(*) FROM spot GROUP BY tier")))
+          assert spots > 0, "no spots from the DC extract"
+          PY
 
       - name: Checksum
         run: |
