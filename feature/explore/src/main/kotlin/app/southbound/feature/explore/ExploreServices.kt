@@ -16,6 +16,7 @@ import app.southbound.core.packs.Regions
 import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.packs.WifiSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
 import app.southbound.core.routing.GasPrices
@@ -113,7 +114,7 @@ class ExploreServices private constructor(context: Context) {
         BackupService(
             AndroidBackupStores(
                 appContext, userData, secrets, networkToggles, RouteOptionsStore.get(appContext), DrivingPrefs.get(appContext),
-                fuelPrefs, voiceStore, RegionSelection.get(appContext), VoiceSelection.get(appContext),
+                fuelPrefs, voiceStore, RegionSelection.get(appContext), VoiceSelection.get(appContext), WifiSelection.get(appContext),
             ),
             ImportJournal.at(appContext.noBackupFilesDir, KeystoreSealer()),
             appVersion = version ?: "unknown",

@@ -30,6 +30,9 @@ interface BackupStores {
     /** Which network features are on now, so an import can say which ones it turns on. */
     fun networkToggles(): Map<NetworkFeature, Boolean>
 
+    /** Whether the free Wi-Fi pack is wanted now (Settings > Maps), so an import can say when it turns it on. */
+    fun wifiWanted(): Boolean
+
     /** Everything an export carries. Throws if a part can't be read; never returns a part as empty to hide that. */
     suspend fun read(): BackupData
 
@@ -50,19 +53,24 @@ class ReadBackFailedException : IOException("The file written did not read back 
 /** What an import came to. */
 sealed interface ImportOutcome {
     /** Applied: the stores now hold the bundle. */
-    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ImportOutcome
+    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ImportOutcome
 
     /**
      * The bundle verified and was kept to apply, but applying stopped ([reason]). It is finished at the next
      * start, or with [BackupService.resume]; nothing is lost.
      */
-    data class Pending(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val reason: String) : ImportOutcome
+    data class Pending(
+        val counts: BackupCounts,
+        val turnedOn: List<NetworkFeature>,
+        val reason: String,
+        val wifiTurnedOn: Boolean,
+    ) : ImportOutcome
 }
 
 /** What [BackupService.resume] found. */
 sealed interface ResumeOutcome {
     data object NothingPending : ResumeOutcome
-    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ResumeOutcome
+    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ResumeOutcome
 
     /** [unreadable]: the kept import itself can't be opened (so it can only be discarded). */
     data class Failed(val reason: String, val unreadable: Boolean) : ResumeOutcome
@@ -137,19 +145,20 @@ class BackupService(
             val data = SouthboundBundle.decode(entries)
             val counts = data.counts()
             val turnedOn = turnedOn(data)
+            val wifiTurnedOn = wifiTurnedOn(data)
             // The places as they are before the import, kept with it: a resume at start goes ahead only while the
             // places are these or the import's own ([resume]).
-            val before = placesPrint { stores.read().userData }
+            val before = placesPrints { stores.read().userData }?.first()
             // The commit point. If this throws, nothing has changed.
             journal.write(entries, before)
             try {
                 stores.apply(data)
                 journal.clear()
-                ImportOutcome.Done(counts, turnedOn)
+                ImportOutcome.Done(counts, turnedOn, wifiTurnedOn)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ImportOutcome.Pending(counts, turnedOn, reasonOf(e))
+                ImportOutcome.Pending(counts, turnedOn, reasonOf(e), wifiTurnedOn)
             }
         } finally {
             SouthboundBundle.wipe(entries)
@@ -175,15 +184,19 @@ class BackupService(
             // The same refusal as a fresh import: never overwrite what can't be read.
             stores.ensureReadable()
             if (automatic) {
-                val now = placesPrint { stores.read().userData }
-                if (now == null || now !in setOfNotNull(journal.mark(), placesPrint { data.userData })) {
+                // Either form of each print: an import kept by an earlier version holds the print of places encoded
+                // without the marks field, which this version writes (as an empty list) for the same places.
+                val now = placesPrints { stores.read().userData }
+                val allowed = setOfNotNull(journal.mark()) + placesPrints { data.userData }.orEmpty()
+                if (now == null || now.none { it in allowed }) {
                     return@withLock ResumeOutcome.Failed(CHANGED_REASON, unreadable = false)
                 }
             }
             val turnedOn = turnedOn(data)
+            val wifiTurnedOn = wifiTurnedOn(data)
             stores.apply(data)
             journal.clear()
-            ResumeOutcome.Applied(data.counts(), turnedOn)
+            ResumeOutcome.Applied(data.counts(), turnedOn, wifiTurnedOn)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -202,15 +215,27 @@ class BackupService(
         return NetworkFeature.entries.filter { data.settings.network[it] == true && now[it] != true }
     }
 
-    /** A digest of [places] as an export would write them, or null when they can't be read. */
-    private suspend fun placesPrint(places: suspend () -> UserData): String? = try {
-        val bytes = PlacesEntry.encode(places())
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }.also { bytes.fill(0) }
+    /** Whether the bundle switches the free Wi-Fi pack from off to on (a bundle before schema 9 leaves it alone). */
+    private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi == true && !stores.wifiWanted()
+
+    /**
+     * Digests of [places] as an export would write them, the current form first, or null when they can't be read. With
+     * no Wi-Fi marks a second digest is of the form before schema 9 (no `wifiMarks` field), which an import kept by an
+     * earlier version recorded.
+     */
+    private suspend fun placesPrints(places: suspend () -> UserData): List<String>? = try {
+        val data = places()
+        val bytes = PlacesEntry.encode(data)
+        val forms = mutableListOf(bytes)
+        PlacesEntry.encodeBeforeSchema9(data)?.let { forms += it }
+        forms.map { form -> digest(form).also { form.fill(0) } }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         null
     }
+
+    private fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     /** A short reason that holds no contents: the exception's own message, or its kind. */
     private fun reasonOf(e: Throwable): String = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName

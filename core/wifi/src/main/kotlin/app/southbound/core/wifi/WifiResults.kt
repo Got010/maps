@@ -37,6 +37,17 @@ object WifiResults {
             .take(limit.coerceAtLeast(0))
             .toList()
 
+    /**
+     * The list the user sees: [results] (nearest first) with the spots the user marked "didn't work" ([didntWork], by
+     * [WifiSpot.osmRef]) after every other row, or left out with [hide]. The order within each part is unchanged
+     * (a stable partition), so the pipeline's distance order still holds for both.
+     */
+    fun arrange(results: List<WifiResult>, didntWork: Set<String>, hide: Boolean): List<WifiResult> {
+        if (didntWork.isEmpty()) return results
+        val (failed, rest) = results.partition { it.spot.osmRef in didntWork }
+        return if (hide) rest else rest + failed
+    }
+
     /** Whether [openingHours] allow a visit at [now]; see [select] for [unknownCounts]. */
     fun isOpen(openingHours: String?, now: LocalDateTime, unknownCounts: Boolean): Boolean =
         when (OpeningHours.statusOf(openingHours, now)) {

@@ -179,6 +179,26 @@ class WifiResultsTest {
         assertFalse(spot(1, 0.0, name = null).toPlace().name.isBlank())
         assertTrue(spot(2, 0.0).osmRef.startsWith("n"))
     }
+
+    @Test
+    fun `failed spots sort after every other row and each part keeping its distance order`() {
+        val rows = select(listOf(spot(1, 0.001), spot(2, 0.002), spot(3, 0.003, WifiTier.LIKELY), spot(4, 0.004), spot(5, 0.005)))
+        assertEquals(listOf(1L, 2L, 3L, 4L, 5L), ids(rows))
+        // Spots 1 and 3 failed for the user: they go last, still nearest first among themselves.
+        val failed = setOf(rows[0].spot.osmRef, rows[2].spot.osmRef)
+        assertEquals(listOf(2L, 4L, 5L, 1L, 3L), ids(WifiResults.arrange(rows, failed, hide = false)))
+        // Hiding leaves them out altogether.
+        assertEquals(listOf(2L, 4L, 5L), ids(WifiResults.arrange(rows, failed, hide = true)))
+        // No failed marks: the list as it came, even when hiding.
+        assertEquals(ids(rows), ids(WifiResults.arrange(rows, emptySet(), hide = false)))
+        assertEquals(ids(rows), ids(WifiResults.arrange(rows, emptySet(), hide = true)))
+        // A mark on a spot that is not in the list changes nothing.
+        assertEquals(ids(rows), ids(WifiResults.arrange(rows, setOf("n99999"), hide = false)))
+        // Every row failed: all kept in order, or none when hiding.
+        val all = rows.map { it.spot.osmRef }.toSet()
+        assertEquals(ids(rows), ids(WifiResults.arrange(rows, all, hide = false)))
+        assertTrue(WifiResults.arrange(rows, all, hide = true).isEmpty())
+    }
 }
 
 class WifiLikelyGroupTest {

@@ -29,7 +29,8 @@ import app.southbound.core.voice.VoiceSettings
  * schema 5 its `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 6 the eleven Midwest toggles, `TRAFFIC_511WI` to
  * `TRAFFIC_OHGO`; an older bundle reads with each off; schema 7 the driving group's `search_at_bottom`, which an older
  * bundle reads as on, the app's default; schema 8 the network group's `TRAFFIC_511VA`, `TRAFFIC_WV511` and
- * `TRAFFIC_KYTC`, which an older bundle reads as off); an enum is its constant's name; a number
+ * `TRAFFIC_KYTC`, which an older bundle reads as off; schema 9 the packs group's `wifi`, the Settings > Maps switch for
+ * the free Wi-Fi pack, which an older bundle does not have: it reads as unset and an import leaves the switch as it is); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
@@ -79,12 +80,17 @@ internal object SettingsEntry {
         "distance_style", "built_in_voice", "instruction_chime", "alert_chime", "haptic_turns", "speed_camera_alerts",
         "alpr_camera_alerts", "school_zone_alerts",
     )
+
+    /** The packs group: the user's regions, and from schema 9 the free Wi-Fi switch. */
+    private val PACKS_KEYS_1 = setOf("regions")
+    private val PACKS_KEYS = PACKS_KEYS_1 + "wifi"
     private val GROUPS = setOf("network", "route", "driving", "fuel", "voice", "packs", "updates")
 
     private val REGION_IDS: Set<String> get() = Regions.basemaps.map { it.id }.toSet()
 
     fun encode(s: AppSettings): ByteArray {
         check(s)
+        if (s.wifi == null) invalid("the Wi-Fi switch has no value")
         return MiniJson.stringify(tree(s)).toByteArray(Charsets.UTF_8)
     }
 
@@ -95,10 +101,12 @@ internal object SettingsEntry {
      * [count] as a bundle of [schema] lists them: schema 1 had no `avoid_dot_cameras`, schemas 1 and 2 no `WEATHER`,
      * schemas 1 to 3 neither `TRAFFIC_511PA` nor `TRAFFIC_CTROADS`, schemas 1 to 4 neither `TRAFFIC_CHART_MD` nor
      * `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven (`TRAFFIC_511WI` to `TRAFFIC_OHGO`), schemas 1 to 6
-     * no `search_at_bottom`, schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`).
+     * no `search_at_bottom`, schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
+     * schemas 1 to 8 no `wifi`.
      */
     fun count(s: AppSettings, schema: Long): Int =
-        count(s) - (if (schema < 2) 1 else 0) - (if (schema < 7) 1 else 0) - NetworkFeature.entries.count { !inSchema(it, schema) }
+        count(s) - (if (schema < 2) 1 else 0) - (if (schema < 7) 1 else 0) - (if (schema < 9) 1 else 0) -
+            NetworkFeature.entries.count { !inSchema(it, schema) }
 
     private fun tree(s: AppSettings): Map<String, Any?> = linkedMapOf(
         "network" to NetworkFeature.entries.associate { it.name to (s.network[it] ?: false) },
@@ -153,16 +161,16 @@ internal object SettingsEntry {
             "alpr_camera_alerts" to s.voice.alprCameraAlerts,
             "school_zone_alerts" to s.voice.schoolZoneAlerts,
         ),
-        "packs" to linkedMapOf<String, Any?>("regions" to s.regions.sorted()),
+        "packs" to linkedMapOf<String, Any?>("regions" to s.regions.sorted(), "wifi" to s.wifi),
         "updates" to linkedMapOf<String, Any?>("allow_mobile_data" to s.allowMobileData),
     )
 
     /**
-     * Reads settings written with bundle [schema] (1 to 8; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
+     * Reads settings written with bundle [schema] (1 to 9; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
      * `WEATHER` toggle, schemas 1 to 3 no `TRAFFIC_511PA` or `TRAFFIC_CTROADS`, schemas 1 to 4 no
      * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
      * `TRAFFIC_OHGO`) and schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
-     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on).
+     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as null: unset, so an import leaves the switch alone).
      */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
@@ -235,16 +243,19 @@ internal object SettingsEntry {
             schoolZoneAlerts = v.bool("school_zone_alerts"),
         )
 
-        val packs = root.obj("packs", setOf("regions"))
+        val packs = root.obj("packs", if (schema >= 9) PACKS_KEYS else PACKS_KEYS_1)
         val regions = LinkedHashSet<String>()
         for (id in packs.list("regions", REGION_IDS.size)) {
             val region = id as? String ?: packs.bad("regions")
             if (region !in REGION_IDS || !regions.add(region)) packs.bad("regions")
         }
 
+        // Before schema 9 there was no switch: null, so an import leaves the phone's Wi-Fi switch as it is.
+        val wifi: Boolean? = if (schema >= 9) packs.bool("wifi") else null
+
         val allowMobile = root.obj("updates", setOf("allow_mobile_data")).bool("allow_mobile_data")
 
-        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom).also { check(it) }
+        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom, wifi).also { check(it) }
     }
 
     /** Range checks for settings that did not come from [decode] (an export of what the stores hold). */
