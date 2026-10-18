@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBike
@@ -47,8 +48,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -57,6 +62,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import app.southbound.core.map.Eta
@@ -129,27 +135,53 @@ fun RoutePreviewSheet(
     var drag by remember { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { SWIPE_THRESHOLD.toPx() }
     val flingSpeed = with(LocalDensity.current) { FLING_SPEED.toPx() }
-    val dragState = rememberDraggableState { delta ->
-        // Follow the finger the way the sheet can go: down when open, up when shrunk.
-        drag = if (collapsed) (drag + delta).coerceIn(-threshold * 2, 0f) else (drag + delta).coerceIn(0f, threshold * 4)
+    // Moves the sheet with the finger and returns how much of the movement it took.
+    val follow = { delta: Float ->
+        val before = drag
+        drag = SheetSwipe.follow(before, delta, collapsed, threshold)
+        drag - before
+    }
+    // The finger let go: shrink or grow the sheet if the drag was long or quick enough.
+    val settle = { velocity: Float ->
+        collapsed = SheetSwipe.settle(drag, velocity, collapsed, threshold, flingSpeed)
+        drag = 0f
+    }
+    val dragState = rememberDraggableState { delta -> follow(delta) }
+    // The options scroll when the screen is short, and a scroll takes the touch from the sheet's own drag.
+    // So when the body has nothing left to scroll (at its top, finger moving down; or all of it, when it fits),
+    // the rest of the movement shrinks the sheet, as a swipe on the handle does.
+    val bodySwipe = remember(threshold, flingSpeed) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Finger moving back up while the sheet is pulled down: undo the pull before the body scrolls.
+                if (source != NestedScrollSource.UserInput || collapsed || drag <= 0f || available.y >= 0f) return Offset.Zero
+                return Offset(0f, follow(available.y))
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput || collapsed || available.y <= 0f) return Offset.Zero
+                return Offset(0f, follow(available.y))
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // Only a sheet the finger has pulled down is settled here; a flick that merely scrolls the body is not.
+                if (collapsed || drag <= 0f) return Velocity.Zero
+                settle(available.y)
+                return available
+            }
+        }
     }
     val toggleLabel = stringResource(if (collapsed) R.string.directions_show_options else R.string.directions_hide_options)
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .offset { IntOffset(0, if (collapsed) 0 else drag.roundToInt()) }
+            .nestedScroll(bodySwipe)
             .draggable(
                 dragState,
                 Orientation.Vertical,
-                onDragStopped = { velocity ->
-                    // A long drag or a quick flick does it.
-                    if (!collapsed && (drag > threshold || velocity > flingSpeed)) {
-                        collapsed = true
-                    } else if (collapsed && (drag < -threshold || velocity < -flingSpeed)) {
-                        collapsed = false
-                    }
-                    drag = 0f
-                },
+                // A long drag or a quick flick does it.
+                onDragStopped = { velocity -> settle(velocity) },
             )
             .animateContentSize(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -189,78 +221,98 @@ fun RoutePreviewSheet(
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.directions_close))
                 }
             }
-            ModeChips(mode, onModeChange, transitSelected = false, onTransit = onTransit)
-            afterModes?.invoke() // Phase 6
-            startName?.let {
-                Text(
-                    stringResource(R.string.directions_from, it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 8.dp, end = 8.dp),
-            ) {
-                when (state) {
-                    RoutePreviewState.Loading -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(vertical = 16.dp),
-                    ) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text(stringResource(R.string.directions_finding))
-                    }
-                    is RoutePreviewState.Failed -> if (state.reason == RoutePreviewState.Reason.NO_ROUTE && regionOffer != null) {
-                        // No route because a region at an end of the trip isn't on the phone: the offer says so.
-                        Column(Modifier.padding(vertical = 8.dp)) { regionOffer() }
-                    } else {
-                        Text(
-                            stringResource(
-                                when (state.reason) {
-                                    RoutePreviewState.Reason.NO_ROUTE -> R.string.directions_no_route
-                                    RoutePreviewState.Reason.NO_LOCATION -> R.string.directions_no_location
-                                },
-                            ),
-                            color = MaterialTheme.colorScheme.error,
+            // Everything under the title scrolls when the screen is too short for it (a phone on its side); the
+            // handle and title stay put. When it fits, this is as tall as its content and looks as before.
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                ModeChips(mode, onModeChange, transitSelected = false, onTransit = onTransit)
+                afterModes?.invoke() // Phase 6
+                startName?.let {
+                    Text(
+                        stringResource(R.string.directions_from, it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp, end = 8.dp),
+                ) {
+                    when (state) {
+                        RoutePreviewState.Loading -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.padding(vertical = 16.dp),
-                        )
-                    }
-                    is RoutePreviewState.Ready -> {
-                        // With only one route there is nothing to compare, so no efficiency badge.
-                        val thriftiest = if (state.fuelGallons.size == state.summaries.size && state.summaries.size > 1) {
-                            FuelModel.mostEfficient(state.fuelGallons)
-                        } else {
-                            null
+                        ) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text(stringResource(R.string.directions_finding))
                         }
-                        // The fastest with traffic, which the shorter way can be though it isn't first.
-                        val fastestIndex = state.summaries.indices.minByOrNull { state.summaries[it].durationSeconds + state.delaySeconds.getOrElse(it) { 0.0 } }
-                        state.summaries.forEachIndexed { i, summary ->
-                            RouteOption(
-                                summary,
-                                delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
-                                selected = i == state.selected,
-                                fastest = i == fastestIndex,
-                                shorterWay = i == state.shorter,
-                                rank = i,
-                                fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
-                                leastGas = i == thriftiest,
-                                onClick = { onSelect(i) },
-                                exposure = state.exposure.getOrNull(i),
+                        is RoutePreviewState.Failed -> if (state.reason == RoutePreviewState.Reason.NO_ROUTE && regionOffer != null) {
+                            // No route because a region at an end of the trip isn't on the phone: the offer says so.
+                            Column(Modifier.padding(vertical = 8.dp)) { regionOffer() }
+                        } else {
+                            Text(
+                                stringResource(
+                                    when (state.reason) {
+                                        RoutePreviewState.Reason.NO_ROUTE -> R.string.directions_no_route
+                                        RoutePreviewState.Reason.NO_LOCATION -> R.string.directions_no_location
+                                    },
+                                ),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(vertical = 16.dp),
                             )
                         }
-                        if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
-                        regionOffer?.invoke()
-                        beforeStart?.invoke() // Phase 6
-                        Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
-                            Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))
+                        is RoutePreviewState.Ready -> {
+                            // With only one route there is nothing to compare, so no efficiency badge.
+                            val thriftiest = if (state.fuelGallons.size == state.summaries.size && state.summaries.size > 1) {
+                                FuelModel.mostEfficient(state.fuelGallons)
+                            } else {
+                                null
+                            }
+                            // The fastest with traffic, which the shorter way can be though it isn't first.
+                            val fastestIndex = state.summaries.indices.minByOrNull { state.summaries[it].durationSeconds + state.delaySeconds.getOrElse(it) { 0.0 } }
+                            state.summaries.forEachIndexed { i, summary ->
+                                RouteOption(
+                                    summary,
+                                    delaySeconds = state.delaySeconds.getOrElse(i) { 0.0 },
+                                    selected = i == state.selected,
+                                    fastest = i == fastestIndex,
+                                    shorterWay = i == state.shorter,
+                                    rank = i,
+                                    fuelCost = state.fuelGallons.getOrNull(i)?.let { FuelModel.cost(it, fuel.effectivePrice) },
+                                    leastGas = i == thriftiest,
+                                    onClick = { onSelect(i) },
+                                    exposure = state.exposure.getOrNull(i),
+                                )
+                            }
+                            if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
+                            regionOffer?.invoke()
+                            beforeStart?.invoke() // Phase 6
+                            Button(onClick = onStart, enabled = startName == null, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Filled.Navigation, contentDescription = null, Modifier.size(18.dp))
+                                Text(stringResource(R.string.directions_start), Modifier.padding(start = 8.dp))
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * How the sheet follows a swipe and when it lets go, apart from the screen so the thresholds can be tested.
+ */
+internal object SheetSwipe {
+    /** The pull after the finger moves by [delta] (down is positive): down when open, up when shrunk. */
+    fun follow(drag: Float, delta: Float, collapsed: Boolean, threshold: Float): Float =
+        if (collapsed) (drag + delta).coerceIn(-threshold * 2, 0f) else (drag + delta).coerceIn(0f, threshold * 4)
+
+    /** Whether the sheet is shrunk once the finger lets go: a long drag or a quick flick toggles it. */
+    fun settle(drag: Float, velocity: Float, collapsed: Boolean, threshold: Float, flingSpeed: Float): Boolean = when {
+        !collapsed && (drag > threshold || velocity > flingSpeed) -> true
+        collapsed && (drag < -threshold || velocity < -flingSpeed) -> false
+        else -> collapsed
     }
 }
 
