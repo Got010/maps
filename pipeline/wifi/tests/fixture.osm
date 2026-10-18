@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="synthetic">
+  <node id="1" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe One"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/><tag k="opening_hours" v="Mo-Fr 08:00-17:00"/><tag k="website" v="https://example.org/one"/></node>
+  <node id="2" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Two"/><tag k="internet_access" v="yes"/><tag k="fee" v="no"/></node>
+  <node id="3" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Three"/><tag k="internet_access" v="wifi"/><tag k="internet_access:fee" v="customers"/></node>
+  <node id="4" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Four"/><tag k="internet_access" v="wlan"/></node>
+  <node id="5" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Five"/><tag k="internet_access" v="yes"/><tag k="fee" v="yes"/></node>
+  <node id="6" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Six"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="yes"/></node>
+  <node id="7" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-98.0"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Seven"/><tag k="internet_access" v="no"/></node>
+  <node id="8" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Eight"/><tag k="internet_access" v="terminal"/></node>
+  <node id="9" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-98.0"><tag k="amenity" v="cafe"/><tag k="name" v="Example Coffee"/><tag k="brand" v="Example Coffee"/><tag k="brand:wikidata" v="Q37158"/><tag k="opening_hours" v="24/7"/></node>
+  <node id="10" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.99"><tag k="amenity" v="cafe"/><tag k="name" v="Example Coffee"/><tag k="brand:wikidata" v="Q37158"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/></node>
+  <node id="11" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.99"><tag k="amenity" v="cafe"/><tag k="name" v="Example Coffee"/><tag k="brand:wikidata" v="Q37158"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="yes"/></node>
+  <node id="12" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.99"><tag k="amenity" v="cafe"/><tag k="name" v="Example Other"/><tag k="brand:wikidata" v="Q99999999"/></node>
+  <node id="13" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.99"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Thirteen"/></node>
+  <node id="14" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.99"><tag k="tourism" v="hotel"/><tag k="name" v="Fixture Hotel Fourteen"/></node>
+  <node id="15" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.99"><tag k="tourism" v="motel"/><tag k="name" v="Fixture Motel Fifteen"/></node>
+  <node id="16" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.99"><tag k="highway" v="rest_area"/></node>
+  <node id="17" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.99"><tag k="tourism" v="information"/><tag k="information" v="office"/><tag k="name" v="Fixture Welcome Center"/></node>
+  <node id="18" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.99"><tag k="tourism" v="information"/><tag k="information" v="visitor_centre"/><tag k="name" v="Fixture Park Visitor Center"/><tag k="operator" v="Example National Park Service Unit"/></node>
+  <node id="19" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.99"><tag k="tourism" v="information"/><tag k="information" v="visitor_centre"/><tag k="name" v="Fixture Town Kiosk"/><tag k="operator" v="Example Town"/></node>
+  <node id="20" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.98"><tag k="tourism" v="information"/><tag k="information" v="board"/><tag k="name" v="Fixture Board"/></node>
+  <node id="21" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.98"><tag k="amenity" v="cafe"/><tag k="internet_access" v="wlan"/></node>
+  <node id="22" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.98"><tag k="disused:amenity" v="cafe"/><tag k="name" v="Fixture Gone Cafe"/><tag k="internet_access" v="wlan"/></node>
+  <node id="23" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.98"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Twenty-three"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="donation"/></node>
+  <node id="24" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.98"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Twenty-four"/><tag k="internet_access" v="wlan"/></node>
+  <node id="25" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.98"><tag k="shop" v="supermarket"/><tag k="brand:wikidata" v="Q38076"/></node>
+  <node id="26" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.98"><tag k="shop" v="books"/><tag k="brand" v="Example Brand"/><tag k="internet_access" v="wlan"/><tag k="contact:website" v="https://example.org/brand"/></node>
+  <node id="27" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.98"><tag k="tourism" v="information"/><tag k="information" v="visitor_centre"/><tag k="name" v="Fixture Federal Visitor Center"/><tag k="operator:wikidata" v="Q308439"/></node>
+  <node id="28" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.98"><tag k="tourism" v="hotel"/><tag k="name" v="Fixture Hotel Twenty-eight"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="customers"/></node>
+  <node id="29" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.98"/>
+  <node id="30" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.97"><tag k="shop" v="department_store"/><tag k="name" v="Example Mart"/><tag k="brand:wikidata" v="Q483551"/><tag k="fee" v="no"/></node>
+  <node id="31" version="1" timestamp="2026-10-01T00:00:00Z" lat="40.0" lon="-100.0"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe Far"/><tag k="internet_access" v="wlan"/><tag k="internet_access:fee" v="no"/></node>
+  <node id="32" version="1" timestamp="2026-10-01T00:00:00Z" lat="40.0004" lon="-100.0004"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Far"/></node>
+  <node id="101" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-97.0"/>
+  <node id="102" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-96.998"/>
+  <node id="103" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.002" lon="-96.998"/>
+  <node id="104" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.002" lon="-97.0"/>
+  <node id="105" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.1"/>
+  <node id="106" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.099"/>
+  <node id="107" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.098"/>
+  <node id="108" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.2" lon="-97.2"/>
+  <node id="109" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.2" lon="-97.198"/>
+  <node id="110" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.202" lon="-97.198"/>
+  <node id="111" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.202" lon="-97.2"/>
+  <way id="201" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="104"/><nd ref="101"/><tag k="amenity" v="library"/><tag k="name" v="Fixture Library Building"/></way>
+  <way id="202" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="105"/><nd ref="106"/><nd ref="107"/><tag k="highway" v="rest_area"/><tag k="name" v="Fixture Rest Area"/></way>
+  <way id="203" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="108"/><nd ref="109"/><nd ref="110"/><nd ref="111"/><nd ref="108"/></way>
+  <relation id="301" version="1" timestamp="2026-10-01T00:00:00Z"><member type="way" ref="203" role="outer"/><tag k="type" v="multipolygon"/><tag k="tourism" v="hotel"/><tag k="name" v="Fixture Hotel Complex"/></relation>
+</osm>
