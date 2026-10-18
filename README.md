@@ -87,6 +87,7 @@ the APK:
 | `routing-main.tar`, `routing-<regions>.tar` | Directions in pieces: main roads everywhere, and each region's local streets; `routing-packs.json` says which regions each piece serves. The app fetches and combines these itself (Settings > Updates); they can't be loaded by hand. |
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 | `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
+| `wifi-us.sqlite` | Free Wi-Fi spots in every state the app covers, from OpenStreetMap: places tagged with Wi-Fi, chains and kinds of place that usually have it (built by `make -C pipeline wifi-us`; shipped with every release from the one that merges it; the app reads it from the release that adds the Free Wi-Fi layer, B32b, so nothing in the app uses it before then) |
 
 Load each one the same way:
 

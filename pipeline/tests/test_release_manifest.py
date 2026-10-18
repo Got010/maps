@@ -67,6 +67,28 @@ class ReleaseManifestTest(unittest.TestCase):
         self.assertNotIn("regions", packs["basemap-ct.pmtiles"])
         self.assertNotIn("regions", packs["transit-nyc.sqlite"])
 
+    def test_the_wifi_pack_is_listed_in_v2_only_and_without_regions(self):
+        regions = os.path.join(HERE, "..", "regions.json")
+        names = ["southbound-1.2.3.apk", "basemap-nyc.pmtiles", "routing-nys.tar", "routing-main.tar",
+                 "search-nys.sqlite", "search-nyc.sqlite", "transit-nyc.sqlite", "wifi-us.sqlite", "wifi-us.sqlite.sha256"]
+        with tempfile.TemporaryDirectory() as d:
+            self.files(d, names)
+            with open(os.path.join(d, "routing-packs.json"), "w") as f:
+                json.dump({"routing-main.tar": []}, f)
+            v2 = release_manifest.manifest(d, "1.2.3", v2=True, regions_json=regions)
+            # southbound.json lists only what release.yml's PACKS names: older apps never see the Wi-Fi pack.
+            v1 = release_manifest.manifest(d, "1.2.3", only={"basemap-nyc.pmtiles", "routing-nys.tar", "search-nys.sqlite"})
+        wifi = [p for p in v2["packs"] if p["kind"] == "wifi"]
+        self.assertEqual(1, len(wifi))
+        self.assertEqual("us", wifi[0]["region"])
+        self.assertEqual("wifi-us.sqlite", wifi[0]["file"])
+        self.assertNotIn("regions", wifi[0])
+        self.assertEqual(1, wifi[0]["size"])
+        self.assertEqual(64, len(wifi[0]["sha256"]))
+        self.assertEqual([], [p for p in v1["packs"] if p["kind"] == "wifi"])
+        # The checksum file next to the pack is no pack.
+        self.assertEqual(1, len([p for p in v2["packs"] if p["file"].startswith("wifi-")]))
+
     def test_v2_refuses_a_release_without_routing_packs(self):
         regions = os.path.join(HERE, "..", "regions.json")
         with tempfile.TemporaryDirectory() as d:
