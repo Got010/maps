@@ -185,6 +185,7 @@ import app.southbound.feature.navigation.rememberDrivingLandscape
 import app.southbound.feature.navigation.rememberDrivingPanelWidth
 import app.southbound.feature.search.PlaceCard
 import app.southbound.feature.search.WifiDetails
+import app.southbound.feature.search.WifiMarkInfo
 import app.southbound.feature.search.SearchPanel
 import app.southbound.feature.search.ShortcutSlot
 import app.southbound.feature.transit.StationBoard
@@ -530,6 +531,8 @@ internal fun ExploreMap(
     var viewport by remember { mutableStateOf<MapViewport?>(null) }
     var wifiOverlay by remember { mutableStateOf(WifiOverlay.NONE) }
     var shownWifi by remember { mutableStateOf<WifiSpot?>(null) }
+    // The user's own marks on Wi-Fi spots, from the same sealed store as the saved places.
+    val wifiMarks = remember(userData.wifiMarks) { userData.wifiMarks.associate { it.osmRef to WifiMarkInfo(it.worked, it.markedAt) } }
     // The pack installed or removed while the app runs (a download, Settings, an import).
     var wifiChanges by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -1622,6 +1625,7 @@ internal fun ExploreMap(
                     index = searchIndex,
                     wifi = wifiPack,
                     onPickWifi = ::showWifiSpot,
+                    wifiMarks = wifiMarks,
                     near = near,
                     // Around the user while the map follows them; once it is moved (a pan, a place or a route shown),
                     // around where it is. Before the first fix, around the map too.
@@ -1690,7 +1694,22 @@ internal fun ExploreMap(
                         } else {
                             {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    wifiSpot?.let { WifiDetails(it, wifiPack?.extractDate) }
+                                    wifiSpot?.let { spot ->
+                                        WifiDetails(
+                                            spot, wifiPack?.extractDate, wifiMarks[spot.osmRef],
+                                            onMark = { worked ->
+                                                scope.launch(Dispatchers.IO) {
+                                                    attempt {
+                                                        if (worked == null) {
+                                                            services.userData.clearWifiMark(spot.osmRef)
+                                                        } else {
+                                                            services.userData.markWifi(spot.osmRef, worked)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                     here?.let { WeatherNowRow(it, Modifier.padding(end = 12.dp)) }
                                     if (forecastDays.isNotEmpty()) ForecastStrip(forecastDays, Modifier.padding(end = 12.dp))
                                     if (noneNear) {

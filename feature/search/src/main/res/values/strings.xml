@@ -50,6 +50,14 @@
     <string name="wifi_filter_chain">Chain</string>
     <string name="wifi_filter_likely">Likely</string>
     <string name="wifi_open_now">Open now</string>
+    <string name="wifi_hide_didnt_work">Hide didn\'t-work</string>
+    <string name="wifi_none_hidden">Every spot here is marked didn\'t work. Turn off Hide didn\'t-work to see them.</string>
+    <string name="wifi_mark_worked">Wi-Fi worked</string>
+    <string name="wifi_mark_failed">Didn\'t work</string>
+    <string name="wifi_mark_worked_on">Worked for you on %1$s</string>
+    <string name="wifi_mark_failed_on">Didn\'t work for you on %1$s</string>
+    <string name="wifi_mark_worked_row">Worked for you</string>
+    <string name="wifi_mark_failed_row">Didn\'t work for you</string>
     <string name="wifi_none">No Wi-Fi spots within 30 miles in the Wi-Fi data.</string>
     <string name="wifi_none_open_now">None known to be open now. Turn off Open now to see them all.</string>
     <string name="wifi_failed">The Wi-Fi data couldn\'t be read.</string>
