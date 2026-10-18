@@ -1,0 +1,80 @@
+# Test build of the Free Wi-Fi pack (owner, October 2026: "Free Wi-Fi" layer; pipeline/wifi/). Builds
+# wifi-us.sqlite from the Geofabrik extracts of every state in pipeline/regions.json (about 4.6 GB downloaded, each
+# filtered and deleted as it goes, FREE_SOURCES=1), prints the size, the sha256, the rows per tier and category and
+# each chain's QID with the commonest names behind it, and checks the pack opens with its marks and tables.
+# Publishes nothing and uploads nothing: read the job log. It runs on a pull request that changes the Wi-Fi
+# pipeline, or from the Actions tab (Wi-Fi pack test build > Run workflow). Unlike states.yml it also runs in a
+# private repository: one job on a standard runner, roughly 30 to 60 billed minutes.
+name: Wi-Fi pack test build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'pipeline/wifi/**'
+      - 'pipeline/lib/common.sh'
+      - 'pipeline/Makefile'
+      - 'pipeline/regions.json'
+      - '.github/pipeline-requirements.txt'
+      - '.github/workflows/wifi.yml'
+
+permissions: {}
+
+concurrency:
+  group: wifi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wifi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      FREE_SOURCES: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The extracts (about 4.6 GB), the filtered files and Docker's images side by side need room.
+      - name: Free disk space
+        run: |
+          echo "cores $(nproc)"; free -g; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell /usr/lib/jvm
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          df -h /
+
+      - name: Build wifi-us.sqlite
+        run: |
+          start=$SECONDS
+          make -C pipeline wifi-us
+          echo "wifi-us.sqlite built in $(( (SECONDS - start) / 60 )) min"
+          df -h /
+
+      - name: Size, checksum and counts
+        run: |
+          ls -lh pipeline/data/out/wifi-us.sqlite
+          sha256sum pipeline/data/out/wifi-us.sqlite
+          {
+            echo '### wifi-us.sqlite'
+            echo '```'
+            ls -lh pipeline/data/out/wifi-us.sqlite | awk '{print $5, $9}'
+            sed -n '/== Wi-Fi pack summary ==/,$p' pipeline/data/tmp/wifi-us.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 - pipeline/data/out/wifi-us.sqlite <<'PY'
+          import sqlite3, sys
+          db = sqlite3.connect(sys.argv[1])
+          one = lambda sql: db.execute(sql).fetchone()[0]
+          print("application_id", hex(one("PRAGMA application_id")), "user_version", one("PRAGMA user_version"))
+          print("meta", dict(db.execute("SELECT key, value FROM meta")))
+          spots = one("SELECT count(*) FROM spot")
+          tiers = dict(db.execute("SELECT tier, count(*) FROM spot GROUP BY tier"))
+          print("spots", spots, "tiers", tiers, "clusters", one("SELECT count(*) FROM cluster"))
+          # The bundled SQLite here has the R-tree module; the pack must carry it.
+          print("rtree rows", one("SELECT count(*) FROM wifi_rtree"))
+          assert one("PRAGMA application_id") == 0x53425731 and one("PRAGMA user_version") == 1
+          assert spots > 20000, "far fewer spots than the covered states hold: has a filter or a tag changed?"
+          assert set(tiers) == {1, 2, 3, 4}, f"a tier is empty: {tiers}"
+          PY
