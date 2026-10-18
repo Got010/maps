@@ -141,6 +141,28 @@ class PackStoreTest {
     }
 
     @Test
+    fun wifiPackIsRecognisedByItsApplicationId() {
+        val store = store()
+        val wifi = store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), "wifi-us.sqlite")
+        assertEquals(ImportedPack(PackKind.WIFI, "us", store.packsDir.resolve("wifi-us.sqlite")), wifi)
+        assertEquals(PackKind.WIFI, PackKind.detect(wifi.file))
+        assertEquals(PackStatus.Installed(wifi.file), store.status(PackKind.WIFI, "us"))
+        assertEquals("us", PackKind.regionFromName(PackKind.WIFI, "wifi-us (1).sqlite"))
+        assertEquals(0x53425731, PackKind.WIFI_APPLICATION_ID)
+        // Not mistaken for search or transit, which are SQLite too, and the other way round.
+        assertEquals(PackKind.SEARCH, PackKind.detect(store.importPack(sqlite(PackKind.SEARCH_APPLICATION_ID).inputStream(), "search-nyc.sqlite").file))
+        assertEquals(setOf(PackKind.WIFI, PackKind.SEARCH), store.installed().map { it.kind }.toSet())
+        // Deleting it takes its checksum too and leaves the other packs.
+        store.delete(PackKind.WIFI, "us")
+        assertTrue(store.status(PackKind.WIFI, "us") is PackStatus.Missing)
+        assertEquals(setOf(PackKind.SEARCH), store.installed().map { it.kind }.toSet())
+        // A file named like the pack that isn't one is Invalid, never silently removed.
+        store.packsDir.resolve("wifi-us.sqlite").writeBytes("junk".toByteArray())
+        assertTrue(store.status(PackKind.WIFI, "us") is PackStatus.Invalid)
+        assertTrue(store.packsDir.resolve("wifi-us.sqlite").exists())
+    }
+
+    @Test
     fun voicePackIsRecognisedByZipMagic() {
         val store = store()
         val voice = store.importPack(zip().inputStream(), "voice-norman (1).zip")
