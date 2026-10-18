@@ -38,6 +38,7 @@ include(
     ":core:transit",
     ":core:traffic",
     ":core:weather",
+    ":core:wifi",
     ":core:packs",
     ":core:updates",
     ":core:userdata",
