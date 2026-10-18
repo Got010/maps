@@ -611,7 +611,7 @@ internal fun ExploreMap(
             val delays = slow.map { it.delaySeconds }
             val shorterIndex = ShorterRoute.indexIn(ranked, shorter)
             preview = RoutePreviewState.Ready(
-                // The shorter way says which road makes it so ("via Old Temple Hill Road"), not the one it shares.
+                // The shorter way says which road makes it so ("via Elm Street"), not the one it shares.
                 summaries = ranked.mapIndexed { i, route ->
                     if (i == shorterIndex) RouteSummary.apartFrom(route, ranked[if (i == 0) 1 else 0]) else RouteSummary.of(route)
                 },

@@ -130,13 +130,13 @@
     <string name="updates_check_now">Check now</string>
     <string name="updates_checking">Checking the latest release…</string>
     <string name="updates_downloading">Downloading %1$s: %2$d of %3$d MB</string>
-    <string name="updates_awaiting">Version %1$s is ready. Confirm the install when Android asks.</string>
+    <string name="updates_awaiting">Version %1$s is ready. Confirm the install when Android asks, or tap the update notification. Check now asks again.</string>
     <string name="updates_up_to_date">Everything is up to date.</string>
     <string name="updates_installed">Installed: %1$s</string>
     <string name="updates_packs">Download map data</string>
     <string name="updates_packs_note">The map, search and directions for the regions below (main roads come for every state), and NYC transit data, from Southbound\'s GitHub releases, checked daily. Only the files that changed are downloaded, and each is checked against its published SHA-256.</string>
     <string name="updates_app">Install app updates</string>
-    <string name="updates_app_note">New versions of Southbound from the same releases, checked to be signed with the same key. Android asks you to confirm the first one; after that Southbound updates itself.</string>
+    <string name="updates_app_note">New versions of Southbound from the same releases, checked to be signed with the same key. Android asks you to confirm every one before it installs.</string>
     <string name="updates_allow_install">Allow Southbound to install updates</string>
     <string name="updates_mobile">Use mobile data</string>
     <string name="updates_mobile_note">Off: downloads wait for Wi-Fi. Check now always downloads straight away.</string>

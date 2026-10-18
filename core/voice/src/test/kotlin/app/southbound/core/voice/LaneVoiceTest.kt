@@ -15,10 +15,10 @@ class LaneVoiceTest {
     fun theClosestEarlyPromptCarriesTheLanes() {
         // Valhalla's usual step: progress at the start, an alert, the "now" prompt.
         val step = listOf(
-            Prompt("Continue on I 87 for 3 miles.", 4800.0),
-            Prompt("In 1 mile, Take exit 14 on the right toward Albany.", 1609.0),
-            Prompt("In a half mile, Take exit 14 on the right toward Albany.", 805.0),
-            Prompt("Take exit 14 on the right toward Albany.", 60.0),
+            Prompt("Continue on I 90 for 3 miles.", 4800.0),
+            Prompt("In 1 mile, Take exit 5 on the right toward Lakeview.", 1609.0),
+            Prompt("In a half mile, Take exit 5 on the right toward Lakeview.", 805.0),
+            Prompt("Take exit 5 on the right toward Lakeview.", 60.0),
         )
         assertEquals(2, LanePrompt.indexFor(step))
         assertEquals(
@@ -47,8 +47,8 @@ class LaneVoiceTest {
             InstructionText.withLanes("In 500 feet, Turn left onto Elm Street.", "use the left two lanes"),
         )
         assertEquals(
-            "In a half mile, Take exit 14 on the right, use the far right lane.",
-            InstructionText.withLanes("In a half mile, Take exit 14 on the right", "Use the far right lane."),
+            "In a half mile, Take exit 5 on the right, use the far right lane.",
+            InstructionText.withLanes("In a half mile, Take exit 5 on the right", "Use the far right lane."),
         )
         // Valhalla's own "Then" sentence is about the next turn: the advice goes before it.
         assertEquals(
@@ -80,12 +80,12 @@ class LaneVoiceTest {
         )
         // Street names off: names go (with "on the right", as before), the lanes stay.
         assertEquals(
-            Speak("In a half mile, Take exit 14, use the far right lane."),
+            Speak("In a half mile, Take exit 5, use the far right lane."),
             GuidancePolicy.decide(
                 defaults.copy(streetNames = false),
                 GuidanceMode.DRIVING,
                 UtteranceKind.INSTRUCTION,
-                "In a half mile, Take exit 14 on the right toward Albany.",
+                "In a half mile, Take exit 5 on the right toward Lakeview.",
                 triggerDistanceMeters = 805.0,
                 lanes = "use the far right lane",
             ),
@@ -117,12 +117,12 @@ class LaneVoiceTest {
         // Off an exit and onto a four-lane road, then a left at the light 250 m on: the left turn is said with the
         // ramp's prompt, and its own early prompt (which carried the lanes) is skipped. Its lanes go with it.
         assertEquals(
-            Speak("Turn right onto NY 9, then turn left onto Elm Street, use the far left lane."),
+            Speak("Turn right onto Main Street, then turn left onto Elm Street, use the far left lane."),
             GuidancePolicy.decide(
                 defaults,
                 GuidanceMode.DRIVING,
                 UtteranceKind.INSTRUCTION,
-                "Turn right onto NY 9.",
+                "Turn right onto Main Street.",
                 triggerDistanceMeters = 60.0,
                 followUp = "Turn left onto Elm Street.",
                 followUpLanes = "use the far left lane",
@@ -130,12 +130,12 @@ class LaneVoiceTest {
         )
         // Both turns with lanes: each keeps its own.
         assertEquals(
-            Speak("In 500 feet, Turn right onto NY 9, use the right lane, then turn left onto Elm Street, use the far left lane."),
+            Speak("In 500 feet, Turn right onto Main Street, use the right lane, then turn left onto Elm Street, use the far left lane."),
             GuidancePolicy.decide(
                 defaults,
                 GuidanceMode.DRIVING,
                 UtteranceKind.INSTRUCTION,
-                "In 500 feet, Turn right onto NY 9.",
+                "In 500 feet, Turn right onto Main Street.",
                 triggerDistanceMeters = 152.0,
                 followUp = "Turn left onto Elm Street.",
                 lanes = "use the right lane",
@@ -147,7 +147,7 @@ class LaneVoiceTest {
     @Test
     fun theEarlyExitPromptNamesTheNumberAndTheLanes() {
         assertEquals(
-            Speak("In 2 miles, Take exit 14 on the right, use the far right lane."),
+            Speak("In 2 miles, Take exit 5 on the right, use the far right lane."),
             GuidancePolicy.decide(
                 defaults,
                 GuidanceMode.DRIVING,
@@ -155,7 +155,7 @@ class LaneVoiceTest {
                 "In 2 miles, Take the exit on the right.",
                 triggerDistanceMeters = 3200.0,
                 lanes = "use the far right lane",
-                exitNumber = "14",
+                exitNumber = "5",
             ),
         )
     }

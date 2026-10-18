@@ -1,6 +1,7 @@
 package app.southbound.core.packs
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -164,6 +165,100 @@ class PackStoreTest {
                 fail("expected UnrecognizedPackException")
             } catch (expected: UnrecognizedPackException) {
             }
+        }
+        assertEquals(emptyList<String>(), store.packsDir.list()!!.toList())
+    }
+
+    // A pack shared in from another app: staged, shown to the person, and installed only on their yes.
+    @Test
+    fun aStagedPackChangesNothingUntilItIsInstalled() {
+        val store = store()
+        val old = store.importPack(tar().inputStream(), "routing-nys.tar")
+        val oldBytes = old.file.readBytes()
+        val newer = tar() + ByteArray(512) { 7 }
+        val staged = store.stagePack(newer.inputStream(), "routing-nys (1).tar")
+        assertEquals(PackKind.ROUTING, staged.kind)
+        assertEquals("nys", staged.region)
+        assertEquals(newer.size.toLong(), staged.sizeBytes)
+        assertEquals(64, staged.sha256.length)
+        // Still the old pack until the yes.
+        assertTrue(oldBytes.contentEquals(old.file.readBytes()))
+        assertEquals(listOf(old), store.installed())
+
+        val installed = store.installStaged(staged)
+        assertEquals(old, installed)
+        assertTrue(newer.contentEquals(installed.file.readBytes()))
+        assertEquals(listOf("routing-nys.tar", "routing-nys.tar.sha256"), store.packsDir.list()!!.sorted())
+        assertEquals(staged.sha256, store.installedSha256(PackKind.ROUTING, "nys"))
+    }
+
+    @Test
+    fun aDiscardedPackLeavesTheInstalledOneAndNoCopy() {
+        val store = store()
+        val old = store.importPack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        val staged = store.stagePack((validPack + ByteArray(64)).inputStream(), "basemap-nyc.pmtiles")
+        store.discardStaged(staged)
+        assertTrue(validPack.contentEquals(old.file.readBytes()))
+        assertEquals(listOf("basemap-nyc.pmtiles", "basemap-nyc.pmtiles.sha256"), store.packsDir.list()!!.sorted())
+        // Saying yes after the copy went installs nothing: an error, never an empty or half pack.
+        try {
+            store.installStaged(staged)
+            fail("expected IOException")
+        } catch (expected: java.io.IOException) {
+        }
+        assertTrue(validPack.contentEquals(old.file.readBytes()))
+    }
+
+    @Test
+    fun aStagedCopyThatChangedIsNotInstalled() {
+        val store = store()
+        val old = store.importPack(tar().inputStream(), "routing-nys.tar")
+        val staged = store.stagePack((tar() + ByteArray(512)).inputStream(), "routing-nys.tar")
+        // Whatever happened to the copy while the question was open, it is checked again before it goes in.
+        staged.file.writeBytes("<html>".toByteArray())
+        try {
+            store.installStaged(staged)
+            fail("expected UnrecognizedPackException")
+        } catch (expected: UnrecognizedPackException) {
+        }
+        assertTrue(tar().contentEquals(old.file.readBytes()))
+        assertFalse(staged.file.exists())
+    }
+
+    @Test
+    fun aNewerShareKeepsOneStillWaitingUntilItIsADayOld() {
+        val store = store()
+        val first = store.stagePack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        store.stagePack(tar().inputStream(), "routing-nys.tar")
+        assertTrue("a copy waiting for an answer was swept", first.file.exists())
+        first.file.setLastModified(System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L)
+        store.stagePack(tar().inputStream(), "routing-nys.tar")
+        assertFalse(first.file.exists())
+    }
+
+    @Test
+    fun theStartSweepRemovesEveryStagedCopyAndNothingElse() {
+        val store = store()
+        val installed = store.importPack(validPack.inputStream(), "basemap-nyc.pmtiles")
+        val a = store.stagePack(tar().inputStream(), "routing-nys.tar")
+        val b = store.stagePack(validPack.inputStream(), "basemap-li.pmtiles")
+        store.downloadDir.mkdirs()
+        val download = store.downloadDir.resolve("routing-main.tar.part").apply { writeBytes(tar()) }
+        assertEquals(0, store.sweepStaged())
+        assertFalse(a.file.exists())
+        assertFalse(b.file.exists())
+        assertTrue(installed.file.exists())
+        assertTrue(download.exists())
+        assertEquals(listOf("basemap-nyc.pmtiles", "basemap-nyc.pmtiles.sha256", "download"), store.packsDir.list()!!.sorted())
+    }
+
+    @Test
+    fun stagingAFileThatIsNoPackLeavesNothingBehind() {
+        val store = store()
+        try {
+            store.stagePack("<html>".toByteArray().inputStream(), "routing-nys.tar")
+            fail("expected UnrecognizedPackException")
+        } catch (expected: UnrecognizedPackException) {
         }
         assertEquals(emptyList<String>(), store.packsDir.list()!!.toList())
     }

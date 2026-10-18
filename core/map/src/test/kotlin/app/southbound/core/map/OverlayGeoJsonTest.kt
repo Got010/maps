@@ -98,14 +98,14 @@ class OverlayGeoJsonTest {
         )
         val incidents = OverlayGeoJson.incidents(
             listOf(
-                IncidentPin("a\"b", MapPoint(41.45, -74.05), "CLOSURE", closure = true),
+                IncidentPin("a\"b", MapPoint(43.55, -73.60), "CLOSURE", closure = true),
                 IncidentPin("c", MapPoint(40.8, -73.97), "ROADWORK", closure = false),
             ),
         )
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
                 """{"type":"Feature","properties":{"id":"c","kind":"ROADWORK","closure":false},"geometry":{"type":"Point","coordinates":[-73.970000,40.800000]}},""" +
-                """{"type":"Feature","properties":{"id":"a\"b","kind":"CLOSURE","closure":true},"geometry":{"type":"Point","coordinates":[-74.050000,41.450000]}}]}""",
+                """{"type":"Feature","properties":{"id":"a\"b","kind":"CLOSURE","closure":true},"geometry":{"type":"Point","coordinates":[-73.600000,43.550000]}}]}""",
             incidents,
         )
     }
@@ -146,14 +146,14 @@ class OverlayGeoJsonTest {
     fun trafficCamerasCarryIdKindAndOfflineWithLiveOnesOnTop() {
         val json = OverlayGeoJson.trafficCameras(
             listOf(
-                TrafficCameraPin("NYSDOT_4616", MapPoint(41.4518, -74.0547)),
+                TrafficCameraPin("NYSDOT_9022", MapPoint(43.53, -73.62)),
                 TrafficCameraPin("1204", MapPoint(40.7835, -73.9431), offline = true),
             ),
         )
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
                 """{"type":"Feature","properties":{"id":"1204","kind":"camera","offline":true},"geometry":{"type":"Point","coordinates":[-73.943100,40.783500]}},""" +
-                """{"type":"Feature","properties":{"id":"NYSDOT_4616","kind":"camera","offline":false},"geometry":{"type":"Point","coordinates":[-74.054700,41.451800]}}]}""",
+                """{"type":"Feature","properties":{"id":"NYSDOT_9022","kind":"camera","offline":false},"geometry":{"type":"Point","coordinates":[-73.620000,43.530000]}}]}""",
             json,
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.trafficCameras(emptyList()))
@@ -161,10 +161,10 @@ class OverlayGeoJsonTest {
 
     @Test
     fun messageSignsCarryTheirIdAndKind() {
-        val json = OverlayGeoJson.messageSigns(listOf(MessageSignPin("VMS \"87\"", MapPoint(41.4, -74.07))))
+        val json = OverlayGeoJson.messageSigns(listOf(MessageSignPin("VMS \"87\"", MapPoint(43.5, -73.64))))
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
-                """{"type":"Feature","properties":{"id":"VMS \"87\"","kind":"sign"},"geometry":{"type":"Point","coordinates":[-74.070000,41.400000]}}]}""",
+                """{"type":"Feature","properties":{"id":"VMS \"87\"","kind":"sign"},"geometry":{"type":"Point","coordinates":[-73.640000,43.500000]}}]}""",
             json,
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.messageSigns(emptyList()))

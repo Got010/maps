@@ -297,6 +297,24 @@ class Ibi511Test {
     }
 
     @Test
+    fun `a gzipped answer that unzips past the cap is refused, not read whole`() {
+        fun gzip(bytes: ByteArray) = ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
+        val atCap = ByteArray(4096) { 'a'.code.toByte() }
+        assertEquals(4096, Ibi511.text(gzip(atCap), maxUnzipped = 4096).length)
+        // One byte over: an IOException, so the feed keeps its last data and says it failed.
+        val over = runCatching { Ibi511.text(gzip(ByteArray(4097) { 'a'.code.toByte() }), maxUnzipped = 4096) }.exceptionOrNull()
+        assertTrue(over is IOException)
+        // A bomb: 64 MB of zeros is about 64 KB gzipped, and stops at the gate's 32 MB cap.
+        val bomb = ByteArrayOutputStream().also { out ->
+            GZIPOutputStream(out).use { z -> val chunk = ByteArray(1 shl 20); repeat(64) { z.write(chunk) } }
+        }.toByteArray()
+        assertTrue(bomb.size < 1 shl 20)
+        assertTrue(runCatching { Ibi511.text(bomb) }.exceptionOrNull() is IOException)
+        // A damaged gzip is an error too, never an empty answer.
+        assertTrue(runCatching { Ibi511.text(gzip(atCap).copyOf(30)) }.exceptionOrNull() is IOException)
+    }
+
+    @Test
     fun `an error page is an error, not an empty layer`() {
         for (bad in listOf("<html>Pennsylvania Error | 511PA</html>", "{}", "[]")) {
             try {
