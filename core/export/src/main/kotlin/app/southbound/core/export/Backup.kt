@@ -30,6 +30,9 @@ interface BackupStores {
     /** Which network features are on now, so an import can say which ones it turns on. */
     fun networkToggles(): Map<NetworkFeature, Boolean>
 
+    /** Whether the free Wi-Fi pack is wanted now (Settings > Maps), so an import can say when it turns it on. */
+    fun wifiWanted(): Boolean
+
     /** Everything an export carries. Throws if a part can't be read; never returns a part as empty to hide that. */
     suspend fun read(): BackupData
 
@@ -50,19 +53,24 @@ class ReadBackFailedException : IOException("The file written did not read back 
 /** What an import came to. */
 sealed interface ImportOutcome {
     /** Applied: the stores now hold the bundle. */
-    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ImportOutcome
+    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ImportOutcome
 
     /**
      * The bundle verified and was kept to apply, but applying stopped ([reason]). It is finished at the next
      * start, or with [BackupService.resume]; nothing is lost.
      */
-    data class Pending(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val reason: String) : ImportOutcome
+    data class Pending(
+        val counts: BackupCounts,
+        val turnedOn: List<NetworkFeature>,
+        val reason: String,
+        val wifiTurnedOn: Boolean,
+    ) : ImportOutcome
 }
 
 /** What [BackupService.resume] found. */
 sealed interface ResumeOutcome {
     data object NothingPending : ResumeOutcome
-    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>) : ResumeOutcome
+    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ResumeOutcome
 
     /** [unreadable]: the kept import itself can't be opened (so it can only be discarded). */
     data class Failed(val reason: String, val unreadable: Boolean) : ResumeOutcome
@@ -137,6 +145,7 @@ class BackupService(
             val data = SouthboundBundle.decode(entries)
             val counts = data.counts()
             val turnedOn = turnedOn(data)
+            val wifiTurnedOn = wifiTurnedOn(data)
             // The places as they are before the import, kept with it: a resume at start goes ahead only while the
             // places are these or the import's own ([resume]).
             val before = placesPrint { stores.read().userData }
@@ -145,11 +154,11 @@ class BackupService(
             try {
                 stores.apply(data)
                 journal.clear()
-                ImportOutcome.Done(counts, turnedOn)
+                ImportOutcome.Done(counts, turnedOn, wifiTurnedOn)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ImportOutcome.Pending(counts, turnedOn, reasonOf(e))
+                ImportOutcome.Pending(counts, turnedOn, reasonOf(e), wifiTurnedOn)
             }
         } finally {
             SouthboundBundle.wipe(entries)
@@ -181,9 +190,10 @@ class BackupService(
                 }
             }
             val turnedOn = turnedOn(data)
+            val wifiTurnedOn = wifiTurnedOn(data)
             stores.apply(data)
             journal.clear()
-            ResumeOutcome.Applied(data.counts(), turnedOn)
+            ResumeOutcome.Applied(data.counts(), turnedOn, wifiTurnedOn)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -201,6 +211,9 @@ class BackupService(
         val now = stores.networkToggles()
         return NetworkFeature.entries.filter { data.settings.network[it] == true && now[it] != true }
     }
+
+    /** Whether the bundle switches the free Wi-Fi pack from off to on. */
+    private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi && !stores.wifiWanted()
 
     /** A digest of [places] as an export would write them, or null when they can't be read. */
     private suspend fun placesPrint(places: suspend () -> UserData): String? = try {
