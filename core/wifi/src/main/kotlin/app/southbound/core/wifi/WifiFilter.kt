@@ -18,7 +18,9 @@ enum class WifiKind {
     ;
 
     companion object {
-        private val FOOD = setOf("cafe", "fast_food", "restaurant", "food_court", "coffee_shop")
+        private val FOOD = setOf(
+            "cafe", "fast_food", "restaurant", "food_court", "coffee_shop", "pub", "bar", "bakery", "ice_cream", "biergarten",
+        )
 
         /** The shop values the chains and the commonest tagged Wi-Fi shops carry; a shop not listed here is [OTHER]. */
         private val SHOP = setOf(
@@ -26,7 +28,7 @@ enum class WifiKind {
             "mall", "variety_store", "general", "hardware", "clothes", "shoes", "books", "stationery", "furniture",
             "gift", "chemist", "wholesale", "car", "bicycle", "sports", "toys", "copyshop",
         )
-        private val HOTEL = setOf("hotel", "motel")
+        private val HOTEL = setOf("hotel", "motel", "hostel", "guest_house", "bed_and_breakfast", "apartment")
         private val REST = setOf("rest_area", "welcome_center", "visitor_centre", "information")
 
         /** The kind of a spot of this [category] (compared in lower case; `*_restaurant` is food too). */
