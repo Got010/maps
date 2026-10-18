@@ -46,8 +46,8 @@
     <string name="explore_dropped_pin">Dropped pin</string>
     <string name="explore_rerouting_spoken">Rerouting.</string>
     <string name="explore_start_from">Directions start from %1$s</string>
-    <string name="explore_wifi_show">Free Wi-Fi, long press to choose types</string>
-    <string name="explore_wifi_hide">Hide free Wi-Fi, long press to choose types</string>
+    <string name="explore_wifi_show">Free Wi-Fi</string>
+    <string name="explore_wifi_hide">Hide free Wi-Fi</string>
     <string name="explore_wifi_choose">Choose Wi-Fi types</string>
     <string name="explore_wifi_filtered">Some types are hidden</string>
     <!-- The Free Wi-Fi chooser, opened by a long press on the map button. -->
@@ -68,7 +68,7 @@
     <string name="explore_wifi_kind_rest">Rest areas and visitor centers</string>
     <string name="explore_wifi_kind_fuel">Truck stops and fuel</string>
     <string name="explore_wifi_kind_other">Other</string>
-    <string name="explore_wifi_nothing">Nothing is ticked, so nothing will show.</string>
+    <string name="explore_wifi_nothing">With these choices nothing will show.</string>
     <string name="explore_wifi_reset">Reset</string>
     <string name="explore_wifi_done">Done</string>
     <string name="explore_traffic_show">Show live traffic</string>

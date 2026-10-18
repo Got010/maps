@@ -120,10 +120,14 @@ data class WifiPin(val id: Long, val point: MapPoint, val tier: Int, val fee: St
  */
 data class WifiClusterPin(val id: String, val point: MapPoint, val count: Int, val tierMin: Int)
 
-/** The free Wi-Fi layer: single spots from zoom 10, grid cells below it. */
+/**
+ * The free Wi-Fi layer: single spots from zoom 10, grid cells below it. [partial] is true when the cells were worked
+ * out from a read that hit the pack query's limit, so a count may be short (nothing shows it yet).
+ */
 data class WifiOverlay(
     val pins: List<WifiPin> = emptyList(),
     val clusters: List<WifiClusterPin> = emptyList(),
+    val partial: Boolean = false,
 ) {
     companion object {
         val NONE = WifiOverlay()

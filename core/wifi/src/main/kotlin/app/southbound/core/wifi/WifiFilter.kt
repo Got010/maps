@@ -72,6 +72,10 @@ data class WifiFilter(
     fun matches(spot: WifiSpot): Boolean =
         spot.tier in tiers && (!customersOnly || spot.freeForCustomers) && keepsKind(spot)
 
+    /** [points] cut by the kind only (the circles' reads carry no more of a spot). */
+    fun applyKindsToPoints(points: List<WifiPoint>): List<WifiPoint> =
+        if (kinds == null) points else points.filter { WifiKind.of(it.category) in kinds }
+
     /** [spots] cut by the kind only; the pack's query has done the tiers and the fee. */
     fun applyKinds(spots: List<WifiSpot>): List<WifiSpot> = if (kinds == null) spots else spots.filter(::keepsKind)
 
@@ -109,40 +113,53 @@ data class WifiFilter(
     }
 }
 
+/** What the circles under a filter need of a spot: where it is, how sure, and its category (for the kind). */
+data class WifiPoint(val id: Long, val lat: Double, val lon: Double, val tier: WifiTier, val category: String)
+
+/** The cells for a view under a filter; [partial] when the read hit its limit, so the cells may be missing spots. */
+data class WifiClusterView(val clusters: List<WifiCluster>, val partial: Boolean)
+
 /** Grid cells worked out on the phone, for the map's low zooms when a filter hides some of the pack's spots. */
 object WifiClusters {
     /**
      * The cells of [zoom] that [spots] fall in, by the same tile maths as the pack's `cluster` table
-     * ([WifiTiles.tileOf]): per cell the count, the mean position (six decimals) and the best tier. Ordered by column, then row, so
-     * the same spots always give the same list. No spots, no cells.
+     * ([WifiTiles.tileOf]): per cell the count, the mean position (six decimals) and the best tier. Ordered by column,
+     * then row, so the same spots always give the same list. No spots, no cells.
      */
-    fun fromSpots(spots: List<WifiSpot>, zoom: Int): List<WifiCluster> {
-        if (spots.isEmpty()) return emptyList()
+    fun fromSpots(spots: List<WifiSpot>, zoom: Int): List<WifiCluster> =
+        fromPoints(spots.map { WifiPoint(it.id, it.lat, it.lon, it.tier, it.category) }, zoom)
+
+    /** [fromSpots] for the lean rows the circles are read as. */
+    fun fromPoints(points: List<WifiPoint>, zoom: Int): List<WifiCluster> {
+        if (points.isEmpty()) return emptyList()
         val cells = HashMap<Long, Cell>()
-        for (spot in spots) {
-            val tile = WifiTiles.tileOf(spot.lat, spot.lon, zoom)
+        for (point in points) {
+            val tile = WifiTiles.tileOf(point.lat, point.lon, zoom)
             val cell = cells.getOrPut(tile.x.toLong() shl 32 or tile.y.toLong()) { Cell(tile.x, tile.y) }
             cell.count++
-            cell.latSum += spot.lat
-            cell.lonSum += spot.lon
-            if (spot.tier.code < cell.best.code) cell.best = spot.tier
+            cell.latSum += point.lat
+            cell.lonSum += point.lon
+            if (point.tier.code < cell.best.code) cell.best = point.tier
         }
         return cells.values.sortedWith(compareBy({ it.x }, { it.y })).map {
             WifiCluster(zoom, it.x, it.y, it.count, round6(it.latSum / it.count), round6(it.lonSum / it.count), it.best)
         }
     }
 
-    /** To six decimals, as the pack's cells are, so the same spots in any order give the same position. */
     /**
-     * The cells of [zoom] for what the map shows: [spots] read for [WifiTiles.cellsBox] of [box] make the cells, and
-     * a cell outside the tiles [box] touches (a spot a hair over an edge) is dropped, so the circles are the ones
-     * the pack's own cells would draw, but only of the spots that pass the filter.
+     * The cells of [zoom] for what the map shows: [points] read (by the tiers and the fee of [filter]) for
+     * [WifiTiles.cellsBox] of [box], cut by the filter's kinds, make the cells, and a cell outside the tiles [box]
+     * touches (a spot a hair over an edge) is dropped, so the circles are the ones the pack's own cells would draw,
+     * but only of the spots that pass the filter. A read of [limit] points or more was cut by the pack's limit: it is
+     * still drawn, and the result says [WifiClusterView.partial].
      */
-    fun inView(spots: List<WifiSpot>, box: NearbyBox, zoom: Int): List<WifiCluster> {
+    fun inView(points: List<WifiPoint>, filter: WifiFilter, box: NearbyBox, zoom: Int, limit: Int = WifiPack.SCAN_LIMIT): WifiClusterView {
         val (xs, ys) = WifiTiles.range(box, zoom)
-        return fromSpots(spots, zoom).filter { it.x in xs && it.y in ys }
+        val cells = fromPoints(filter.applyKindsToPoints(points), zoom).filter { it.x in xs && it.y in ys }
+        return WifiClusterView(cells, partial = points.size >= limit)
     }
 
+    /** To six decimals, as the pack's cells are, so the same spots in any order give the same position. */
     private fun round6(degrees: Double): Double = Math.round(degrees * 1_000_000.0) / 1_000_000.0
 
     private class Cell(val x: Int, val y: Int) {
