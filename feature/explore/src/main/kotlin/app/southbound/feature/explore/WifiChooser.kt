@@ -31,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -52,14 +53,24 @@ import app.southbound.core.wifi.WifiTier
 internal val WifiFilterSaver: Saver<WifiFilter, String> = Saver(save = { it.encode() }, restore = { WifiFilter.decode(it) })
 
 /**
+ * Whether the choices can be applied: they show something. Done is enabled only then, and closing the sheet any other
+ * way (swipe down, a tap outside, Back) applies the draft exactly when this holds; otherwise it discards.
+ */
+internal val WifiFilter.canApply: Boolean
+    get() = !showsNothing
+
+/**
  * "Show on the map": what the Free Wi-Fi layer draws. The choices are a draft: Done applies them (and turns the layer
- * on), Reset ticks everything again, and closing the sheet any other way leaves the map as it was.
+ * on), Reset ticks everything again, and closing the sheet any other way applies them too (as Done does) when they show
+ * something; when nothing is ticked, closing it leaves the map as it was.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun WifiChooserSheet(current: WifiFilter, onDone: (WifiFilter) -> Unit, onDismiss: () -> Unit) {
     var draft by rememberSaveable(stateSaver = WifiFilterSaver) { mutableStateOf(current) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    // The one way out: Done and every dismissal go through here, so they cannot drift apart.
+    val finish by rememberUpdatedState { if (draft.canApply) onDone(draft) else onDismiss() }
+    ModalBottomSheet(onDismissRequest = { finish() }) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -133,7 +144,7 @@ internal fun WifiChooserSheet(current: WifiFilter, onDone: (WifiFilter) -> Unit,
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { draft = WifiFilter.DEFAULT }) { Text(stringResource(R.string.explore_wifi_reset)) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onDone(draft) }, enabled = !draft.showsNothing) { Text(stringResource(R.string.explore_wifi_done)) }
+                Button(onClick = { finish() }, enabled = draft.canApply) { Text(stringResource(R.string.explore_wifi_done)) }
             }
         }
     }
