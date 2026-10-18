@@ -85,6 +85,58 @@ data class WeatherOverlay(
     }
 }
 
+/**
+ * A free Wi-Fi spot from the Wi-Fi pack, drawn from zoom 10. [id] is the pack's spot id and comes back from a tap;
+ * [tier] is the pack's tier (1 tagged free, 2 tagged with the fee not stated, 3 chain policy, 4 likely) and picks
+ * the badge's colour; [fee] is the pack's fee word, "customers" drawing a ring round the badge.
+ */
+data class WifiPin(val id: Long, val point: MapPoint, val tier: Int, val fee: String) {
+    /** The map image for this badge: one per tier, and per tier a ringed one for free-for-customers. */
+    val imageName: String
+        get() = imageName(tier, fee == FEE_CUSTOMERS)
+
+    companion object {
+        const val FEE_CUSTOMERS = "customers"
+        private const val IMAGE_PREFIX = "southbound-wifi-t"
+
+        /** The tiers the pack has; a number outside them is not drawn. */
+        val TIERS = 1..4
+
+        fun imageName(tier: Int, ringed: Boolean): String = IMAGE_PREFIX + tier + if (ringed) "-c" else ""
+    }
+}
+
+/**
+ * A cell of the Wi-Fi pack's grid, drawn below zoom 10 as a circle with [count] spots in it, coloured by the best
+ * tier among them ([tierMin]). [id] names the cell; a tap zooms in on [point].
+ */
+data class WifiClusterPin(val id: String, val point: MapPoint, val count: Int, val tierMin: Int)
+
+/** The free Wi-Fi layer: single spots from zoom 10, grid cells below it. */
+data class WifiOverlay(
+    val pins: List<WifiPin> = emptyList(),
+    val clusters: List<WifiClusterPin> = emptyList(),
+) {
+    companion object {
+        val NONE = WifiOverlay()
+    }
+}
+
+/** What a tap on the Wi-Fi layer found. */
+sealed interface WifiTap {
+    /** A spot, by the pack's id. */
+    data class Spot(val id: Long) : WifiTap
+
+    /** A grid cell, at the middle of its spots. */
+    data class Cluster(val point: MapPoint) : WifiTap
+}
+
+/**
+ * Where the map is looking each time the camera comes to rest: the bounds of what is visible (south, north, west,
+ * east in degrees; the box round it when the map is turned) and the zoom. The Wi-Fi layer asks the pack for these.
+ */
+data class MapViewport(val south: Double, val north: Double, val west: Double, val east: Double, val zoom: Double)
+
 /** The live traffic layer: speeds under the routes, incidents over them. */
 data class TrafficOverlay(
     val speeds: List<SpeedLine> = emptyList(),
@@ -117,6 +169,8 @@ data class MapOverlays(
     val messageSigns: List<MessageSignPin> = emptyList(),
     /** Radar and weather alert areas, under the routes. */
     val weather: WeatherOverlay = WeatherOverlay.NONE,
+    /** Free Wi-Fi spots and grid cells from the Wi-Fi pack, over the routes and under the pins. */
+    val wifi: WifiOverlay = WifiOverlay.NONE,
 )
 
 /**
@@ -227,6 +281,28 @@ internal object OverlayGeoJson {
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )
+
+    fun wifiPins(pins: List<WifiPin>): String = featureCollection(
+        // The best tiers last, so a tagged spot draws over a "likely" one under it.
+        pins.filter { it.point.isFinite && it.tier in WifiPin.TIERS }.sortedByDescending { it.tier }.map { pin ->
+            """{"type":"Feature","properties":{"id":${pin.id},"tier":${pin.tier},"icon":${quote(pin.imageName)}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun wifiClusters(pins: List<WifiClusterPin>): String = featureCollection(
+        pins.filter { it.point.isFinite && it.count > 0 && it.tierMin in WifiPin.TIERS }.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"count":${pin.count},"tier":${pin.tierMin},"color":"${WifiColors.hex(pin.tierMin)}","label":${quote(clusterLabel(pin.count))}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    /** "7", "999", "1.2k", "34k": a count that fits a small circle. */
+    fun clusterLabel(count: Int): String = when {
+        count < 1_000 -> count.toString()
+        count < 10_000 -> String.format(Locale.ROOT, "%.1fk", count / 1_000.0).replace(".0k", "k")
+        else -> "${count / 1_000}k"
+    }
 
     private val SEVERITY_ORDER = listOf("EXTREME", "SEVERE", "MODERATE", "MINOR", "UNKNOWN")
 
