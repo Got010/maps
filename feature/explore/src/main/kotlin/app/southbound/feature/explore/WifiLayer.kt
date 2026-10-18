@@ -6,8 +6,10 @@ import app.southbound.core.map.WifiClusterPin
 import app.southbound.core.map.WifiOverlay
 import app.southbound.core.map.WifiPin
 import app.southbound.core.search.NearbyBox
+import app.southbound.core.wifi.WifiClusters
+import app.southbound.core.wifi.WifiFilter
 import app.southbound.core.wifi.WifiPack
-import app.southbound.core.wifi.WifiTier
+import app.southbound.core.wifi.WifiTiles
 
 /** The free Wi-Fi layer's data for what the map shows. Everything reads the pack on the phone; nothing is fetched. */
 internal object WifiLayer {
@@ -15,17 +17,37 @@ internal object WifiLayer {
     /** Spots drawn at most in one view; the better tiers come first when a dense city has more. */
     const val SPOT_LIMIT = 2000
 
-    /** The pack's grid cells below the zoom where single spots start, those spots from it. Blocking: call off the main thread. */
-    fun overlay(pack: WifiPack, view: MapViewport): WifiOverlay {
+    /**
+     * The pack's grid cells below the zoom where single spots start, those spots from it, cut by [filter]. Blocking:
+     * call off the main thread.
+     *
+     * With the default filter this is as it always was: the pack's own `cluster` rows below zoom 10 and the best
+     * [SPOT_LIMIT] spots from it. Under any other filter the tiers and the customers fee go into the pack's query, the
+     * kinds are applied here to what it returns, and the circles are worked out from the spots (the pack's cells only
+     * carry totals).
+     */
+    fun overlay(pack: WifiPack, view: MapViewport, filter: WifiFilter = WifiFilter.DEFAULT): WifiOverlay {
+        if (filter.showsNothing) return WifiOverlay.NONE
         val box = NearbyBox(view.south, view.north, view.west, view.east)
         return if (view.zoom >= WifiPin.MIN_ZOOM) {
-            WifiOverlay(pins = pack.inBox(box, WifiTier.entries.toSet(), SPOT_LIMIT).map {
-                WifiPin(it.id, MapPoint(it.lat, it.lon), it.tier.code, it.fee.code)
-            })
+            // A kind is cut after the query, so it reads the whole view and keeps the best SPOT_LIMIT of what is left.
+            val spots = if (filter.kinds == null) {
+                pack.inBox(box, filter.tiers, SPOT_LIMIT, filter.customersOnly)
+            } else {
+                filter.applyKinds(pack.inBox(box, filter.tiers, WifiPack.SCAN_LIMIT, filter.customersOnly)).take(SPOT_LIMIT)
+            }
+            WifiOverlay(pins = spots.map { WifiPin(it.id, MapPoint(it.lat, it.lon), it.tier.code, it.fee.code) })
         } else {
             // A pack without cells draws nothing below the zoom of single spots.
             val zoom = pack.clusterZoomFor(view.zoom) ?: return WifiOverlay.NONE
-            WifiOverlay(clusters = pack.clusters(zoom, box).map {
+            val cells = if (filter.isDefault) {
+                pack.clusters(zoom, box)
+            } else {
+                // The cells' whole tiles are read, so a cell cut by the screen's edge still counts all its spots.
+                val spots = pack.inBox(WifiTiles.cellsBox(box, zoom), filter.tiers, WifiPack.SCAN_LIMIT, filter.customersOnly)
+                WifiClusters.inView(filter.applyKinds(spots), box, zoom)
+            }
+            WifiOverlay(clusters = cells.map {
                 WifiClusterPin("${it.zoom}/${it.x}/${it.y}", MapPoint(it.lat, it.lon), it.count, it.tierMin.code)
             })
         }

@@ -43,11 +43,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Traffic
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
 import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
-import androidx.compose.material.icons.outlined.Wifi as WifiOutlined
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -144,6 +142,7 @@ import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchRanking
+import app.southbound.core.wifi.WifiFilter
 import app.southbound.core.wifi.WifiPack
 import app.southbound.core.wifi.WifiSpot
 import app.southbound.core.traffic.ClosureAvoidance
@@ -528,6 +527,9 @@ internal fun ExploreMap(
     // All of it reads the Wi-Fi pack on the phone.
     var wifiPack by remember { mutableStateOf<WifiPack?>(null) }
     var wifiVisible by rememberSaveable { mutableStateOf(false) }
+    // What the long-press chooser leaves on the map. View state like wifiVisible: kept through a rotation, never stored.
+    var wifiFilter by rememberSaveable(stateSaver = WifiFilterSaver) { mutableStateOf(WifiFilter.DEFAULT) }
+    var wifiChooser by rememberSaveable { mutableStateOf(false) }
     var viewport by remember { mutableStateOf<MapViewport?>(null) }
     var wifiOverlay by remember { mutableStateOf(WifiOverlay.NONE) }
     var shownWifi by remember { mutableStateOf<WifiSpot?>(null) }
@@ -543,7 +545,7 @@ internal fun ExploreMap(
         wifiPack = withContext(Dispatchers.IO) { attempt { services.openWifi() } }
     }
     // Grid cells below zoom 10, the spots in view from it, asked for each time the camera comes to rest.
-    LaunchedEffect(wifiPack, wifiVisible, viewport) {
+    LaunchedEffect(wifiPack, wifiVisible, viewport, wifiFilter) {
         val pack = wifiPack
         val view = viewport
         if (pack == null || !wifiVisible || view == null) {
@@ -551,7 +553,7 @@ internal fun ExploreMap(
             return@LaunchedEffect
         }
         delay(WIFI_QUERY_DEBOUNCE_MS)
-        wifiOverlay = withContext(Dispatchers.IO) { attempt { WifiLayer.overlay(pack, view) } } ?: WifiOverlay.NONE
+        wifiOverlay = withContext(Dispatchers.IO) { attempt { WifiLayer.overlay(pack, view, wifiFilter) } } ?: WifiOverlay.NONE
     }
     fun showWifiSpot(spot: WifiSpot) {
         shownWifi = spot
@@ -1550,9 +1552,21 @@ internal fun ExploreMap(
                         horizontalAlignment = Alignment.End,
                     ) {
                         if (weatherOn) WeatherButton(weatherVisible, { weatherVisible = !weatherVisible })
-                        if (wifiPack != null) WifiButton(wifiVisible, { wifiVisible = !wifiVisible })
+                        if (wifiPack != null) WifiButton(wifiVisible, !wifiFilter.isDefault, { wifiVisible = !wifiVisible }, { wifiChooser = true })
                         if (trafficOn) TrafficButton(trafficVisible, { trafficVisible = !trafficVisible })
                         if (location != null) RecenterButton(following, { following = true }, Modifier)
+                    }
+                    if (wifiChooser && wifiPack != null) {
+                        WifiChooserSheet(
+                            current = wifiFilter,
+                            // Done also turns the layer on: choosing what to see is asking to see it.
+                            onDone = { chosen ->
+                                wifiFilter = chosen
+                                wifiVisible = true
+                                wifiChooser = false
+                            },
+                            onDismiss = { wifiChooser = false },
+                        )
                     }
                     if (!following && location != null) {
                         RecenterPill(
@@ -2057,21 +2071,6 @@ private fun PausedTripBar(destination: String, onEnd: () -> Unit, onResume: () -
                 Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.explore_trip_resume))
             }
         }
-    }
-}
-
-@Composable
-private fun WifiButton(shown: Boolean, onClick: () -> Unit) {
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = Modifier.safeDrawingPadding().padding(start = 16.dp, end = 16.dp, top = 16.dp),
-        containerColor = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (shown) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Icon(
-            if (shown) Icons.Filled.Wifi else Icons.Outlined.WifiOutlined,
-            contentDescription = stringResource(if (shown) R.string.explore_wifi_hide else R.string.explore_wifi_show),
-        )
     }
 }
 

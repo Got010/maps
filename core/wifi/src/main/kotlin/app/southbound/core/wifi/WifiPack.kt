@@ -160,6 +160,9 @@ class WifiPack private constructor(private val connection: SQLiteConnection) : A
     }
 
     companion object {
+        /** The most spots one box read returns: the map under a filter reads the whole view to cut it and to count its circles. */
+        const val SCAN_LIMIT = WifiQueries.MAX_SCAN_ROWS
+
         /**
          * Opens [file] read-only. Throws if it isn't a Wi-Fi pack; the file is never changed or deleted here (a pack
          * that can't be opened stays on the phone, and Settings says so).

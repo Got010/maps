@@ -1,5 +1,6 @@
 package app.southbound.core.wifi
 
+import app.southbound.core.search.NearbyBox
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,5 +67,29 @@ class WifiClustersTest {
     fun `the order does not depend on the order of the spots`() {
         val spots = (0 until 30).map { i -> spot(i.toLong(), 30.0 + i * 0.4, -100.0 + i * 0.5, WifiTier.entries[i % 4]) }
         assertEquals(WifiClusters.fromSpots(spots, 6), WifiClusters.fromSpots(spots.reversed(), 6))
+    }
+
+    @Test
+    fun `in view only the cells of the tiles the box touches are kept`() {
+        val box = NearbyBox(south = 39.4, north = 39.6, west = -95.6, east = -95.4)
+        val inside = spot(1, 39.5, -95.5)
+        val far = spot(2, 45.0, -100.0)
+        val cells = WifiClusters.inView(listOf(inside, far), box, 9)
+        assertEquals(1, cells.size)
+        assertEquals(WifiTiles.tileOf(39.5, -95.5, 9).x, cells.single().x)
+        assertTrue(WifiClusters.inView(emptyList(), box, 9).isEmpty())
+    }
+
+    @Test
+    fun `cells read for the cells box have the whole count of an edge cell`() {
+        // The view's edge cuts a cell; the spots on both sides of the edge are in that one cell.
+        val zoom = 9
+        val tile = WifiTiles.tileOf(39.5, -95.5, zoom)
+        val west = spot(1, 39.5, -95.5)
+        val view = NearbyBox(south = 39.4, north = 39.6, west = -95.5001, east = -95.4)
+        val cellBox = WifiTiles.cellsBox(view, zoom)
+        val spots = listOf(west, spot(2, 39.5, cellBox.west + 0.0005), spot(3, 39.5, cellBox.west + 0.0007))
+        assertTrue(spots.all { cellBox.contains(it.lat, it.lon) })
+        assertEquals(3, WifiClusters.inView(spots, view, zoom).filter { it.x == tile.x }.sumOf { it.count })
     }
 }
