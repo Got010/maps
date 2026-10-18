@@ -72,6 +72,13 @@ data class WifiSpot(
     val openingHours: String?,
     val website: String?,
 ) {
+    /**
+     * Free for customers as OpenStreetMap tags it: fee "customers" on a tier 1 spot. A chain's customers-only policy
+     * (tier 3, from the owner's own list) is not a tag and is not this.
+     */
+    val freeForCustomers: Boolean
+        get() = fee == WifiFee.CUSTOMERS && tier == WifiTier.TAGGED_FREE
+
     /** "n123", "w456" or "r789": the OSM object, as [Place.osmRef] and saved places keep it. */
     val osmRef: String
         get() = osmType + osmId

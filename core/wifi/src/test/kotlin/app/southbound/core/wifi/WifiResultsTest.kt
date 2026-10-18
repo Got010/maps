@@ -158,6 +158,16 @@ class WifiResultsTest {
     }
 
     @Test
+    fun `free for customers is an OSM-tagged fee only, never a chain's policy`() {
+        val customers = spot(1, 0.0).copy(fee = WifiFee.CUSTOMERS)
+        assertTrue(customers.freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.CHAIN).freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.TAGGED_UNSTATED).freeForCustomers)
+        assertFalse(customers.copy(tier = WifiTier.LIKELY).freeForCustomers)
+        assertFalse(customers.copy(fee = WifiFee.NO).freeForCustomers)
+    }
+
+    @Test
     fun `a spot without a name takes its category for one`() {
         assertEquals("Fast food", spot(1, 0.0, category = "fast_food", name = null).toPlace().name)
         assertEquals("Library", spot(1, 0.0, category = "library", name = "  ").toPlace().name)

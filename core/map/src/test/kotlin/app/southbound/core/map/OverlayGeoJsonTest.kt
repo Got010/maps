@@ -242,14 +242,17 @@ class OverlayGeoJsonTest {
                 WifiPin(11, MapPoint(39.5, -95.5), tier = 1, fee = "no"),
                 WifiPin(12, MapPoint(39.51, -95.51), tier = 4, fee = "unknown"),
                 WifiPin(13, MapPoint(39.52, -95.52), tier = 3, fee = "customers"),
+                WifiPin(14, MapPoint(39.53, -95.53), tier = 1, fee = "customers"),
             ),
         )
-        // Weakest first, so a tagged spot draws over a "likely" one; a spot free for customers has the ringed badge.
+        // Weakest first, so a tagged spot draws over a "likely" one; a tagged spot free for customers has the ringed
+        // badge, a chain's customers-only spot does not.
         assertEquals(
             """{"type":"FeatureCollection","features":[""" +
                 """{"type":"Feature","properties":{"id":12,"tier":4,"icon":"southbound-wifi-t4"},"geometry":{"type":"Point","coordinates":[-95.510000,39.510000]}},""" +
-                """{"type":"Feature","properties":{"id":13,"tier":3,"icon":"southbound-wifi-t3-c"},"geometry":{"type":"Point","coordinates":[-95.520000,39.520000]}},""" +
-                """{"type":"Feature","properties":{"id":11,"tier":1,"icon":"southbound-wifi-t1"},"geometry":{"type":"Point","coordinates":[-95.500000,39.500000]}}]}""",
+                """{"type":"Feature","properties":{"id":13,"tier":3,"icon":"southbound-wifi-t3"},"geometry":{"type":"Point","coordinates":[-95.520000,39.520000]}},""" +
+                """{"type":"Feature","properties":{"id":11,"tier":1,"icon":"southbound-wifi-t1"},"geometry":{"type":"Point","coordinates":[-95.500000,39.500000]}},""" +
+                """{"type":"Feature","properties":{"id":14,"tier":1,"icon":"southbound-wifi-t1-c"},"geometry":{"type":"Point","coordinates":[-95.530000,39.530000]}}]}""",
             json,
         )
         assertEquals("""{"type":"FeatureCollection","features":[]}""", OverlayGeoJson.wifiPins(emptyList()))
@@ -274,7 +277,10 @@ class OverlayGeoJsonTest {
     fun wifiBadgeNamesAreOnePerTierAndLook() {
         val names = WifiPin.TIERS.flatMap { tier -> listOf(false, true).map { WifiPin.imageName(tier, it) } }
         assertEquals(8, names.toSet().size)
-        assertEquals("southbound-wifi-t2-c", WifiPin(1, MapPoint(0.0, 0.0), 2, "customers").imageName)
+        assertEquals("southbound-wifi-t1-c", WifiPin(1, MapPoint(0.0, 0.0), 1, "customers").imageName)
+        // Only an OSM-tagged (tier 1) customers fee is ringed.
+        assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "customers").imageName)
+        assertEquals("southbound-wifi-t3", WifiPin(1, MapPoint(0.0, 0.0), 3, "customers").imageName)
         assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "no").imageName)
         assertEquals("southbound-wifi-t2", WifiPin(1, MapPoint(0.0, 0.0), 2, "unknown").imageName)
     }
