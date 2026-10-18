@@ -19,7 +19,7 @@ class WifiFilterTest {
 
     @Test
     fun `categories map to their kinds`() {
-        for (c in listOf("cafe", "fast_food", "restaurant", "food_court", "coffee_shop", "Cafe", "pizza_restaurant", "thai_restaurant")) {
+        for (c in listOf("cafe", "fast_food", "restaurant", "food_court", "coffee_shop", "pub", "bar", "bakery", "ice_cream", "biergarten", "Cafe", "pizza_restaurant", "thai_restaurant")) {
             assertEquals(c, WifiKind.CAFES_FOOD, WifiKind.of(c))
         }
         for (c in listOf("supermarket", "department_store", "electronics", "doityourself", "mobile_phone", "computer", "convenience", "mall")) {
@@ -28,6 +28,9 @@ class WifiFilterTest {
         assertEquals(WifiKind.LIBRARIES, WifiKind.of("library"))
         assertEquals(WifiKind.HOTELS, WifiKind.of("hotel"))
         assertEquals(WifiKind.HOTELS, WifiKind.of("motel"))
+        for (c in listOf("hostel", "guest_house", "bed_and_breakfast", "apartment")) {
+            assertEquals(c, WifiKind.HOTELS, WifiKind.of(c))
+        }
         for (c in listOf("rest_area", "welcome_center", "visitor_centre", "information")) {
             assertEquals(c, WifiKind.REST_AREAS, WifiKind.of(c))
         }
@@ -36,7 +39,7 @@ class WifiFilterTest {
 
     @Test
     fun `everything else is other`() {
-        for (c in listOf("station", "aerodrome", "park", "pub", "museum", "building", "", "restaurants", "restaurant_row")) {
+        for (c in listOf("station", "aerodrome", "park", "museum", "building", "", "restaurants", "restaurant_row")) {
             assertEquals(c, WifiKind.OTHER, WifiKind.of(c))
         }
     }
