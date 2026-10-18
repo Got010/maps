@@ -120,6 +120,10 @@ class WifiResultsTest {
         assertEquals(WifiTier.CHAIN, WifiTier.of(3))
         assertNull(WifiTier.of(0))
         assertNull(WifiTier.of(5))
+        // A cluster cell with a code from a newer pack is kept, as the least confident tier.
+        assertEquals(WifiTier.LIKELY, WifiTier.ofClusterMin(9))
+        assertEquals(WifiTier.LIKELY, WifiTier.ofClusterMin(0))
+        assertEquals(WifiTier.TAGGED_FREE, WifiTier.ofClusterMin(1))
     }
 
     @Test
