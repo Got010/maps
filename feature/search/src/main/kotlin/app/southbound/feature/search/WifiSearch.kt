@@ -84,18 +84,29 @@ private fun WifiTierFilter.label(): Int = when (this) {
     WifiTierFilter.LIKELY -> R.string.wifi_filter_likely
 }
 
-/** A filled badge in the tier's colour (the map's), white text. */
+/** A filled badge in the tier's colour (the map's), white text; [color] and [textColor] override both. */
 @Composable
-internal fun WifiBadge(text: String, tier: WifiTier, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = MaterialTheme.shapes.small, color = Color(WifiColors.argb(tier.code))) {
+internal fun WifiBadge(
+    text: String,
+    tier: WifiTier,
+    modifier: Modifier = Modifier,
+    color: Color = Color(WifiColors.argb(tier.code)),
+    textColor: Color = Color.White,
+) {
+    Surface(modifier, shape = MaterialTheme.shapes.small, color = color) {
         Text(
             text,
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White,
+            color = textColor,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }
+
+/** "Free for customers" in the same gold as the map's ring, dark text for contrast. */
+@Composable
+private fun CustomersBadge(tier: WifiTier) =
+    WifiBadge(stringResource(R.string.wifi_fee_customers), tier, color = Color(WifiColors.customersArgb), textColor = Color(0xFF212121))
 
 /**
  * The sheet's Wi-Fi rows, for [PlaceCard]'s `extra` slot: how sure the pack is, free for customers when it says so,
@@ -118,7 +129,7 @@ fun WifiDetails(
         if (mark == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 WifiBadge(stringResource(spot.fullLabel()), spot.tier)
-                if (spot.freeForCustomers) WifiBadge(stringResource(R.string.wifi_fee_customers), spot.tier)
+                if (spot.freeForCustomers) CustomersBadge(spot.tier)
             }
         }
         WifiMarkButtons(mark, onMark)
