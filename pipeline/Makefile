@@ -4,6 +4,7 @@
 # Regions are listed in regions.json. Any pack builds as <kind>-<region>:
 #   make -C pipeline tiles-western routing-nys search-nys transit-nyc
 # Voice packs build as voice-<voice> (see lib/voices.sh): make -C pipeline voice-norman
+# The Free Wi-Fi pack is one file for every covered state: make -C pipeline wifi-us (see wifi/README.md)
 
 REGIONS := nyc li hudson capital western njn njs ct pae paw md ohn ohs in iln ils mis miu wi mn ia mo nd sd ne ks vae vaw wv ky nys
 BASEMAP_REGIONS := nyc li hudson capital western njn
@@ -15,16 +16,18 @@ STATE_REGIONS := njs ct pae paw md $(MIDWEST_REGIONS) $(SOUTH_REGIONS)
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
+# The Free Wi-Fi pack (wifi/build.sh): one file for every covered state, shipped by release.yml (its STATE_PACKS).
+WIFI_PACKS := wifi-us
 STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS) \
-	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split
+	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split $(WIFI_PACKS)
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
-.PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) push-nyc styles glyphs test clean
+.PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) $(WIFI_PACKS) push-nyc styles glyphs test clean
 
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys; search-nys also cut into search-<region> for those six), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
+## state: what a release ships: the Free Wi-Fi pack (wifi-us), six regional basemaps, routing and search for New York and northern New Jersey (nys; search-nys also cut into search-<region> for those six), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
 state: $(STATE_PACKS)
 
 ## states: the other states' regions' basemaps and search packs (OSM only), and the split routing packs
@@ -59,6 +62,10 @@ $(addprefix transit-,$(REGIONS)): transit-%:
 $(VOICE_PACKS): voice-%:
 	voices/build.sh $*
 
+## wifi-us: the Free Wi-Fi pack for every state in regions.json (wifi-<region> runs wifi/build.sh <region>)
+$(WIFI_PACKS): wifi-%:
+	wifi/build.sh $*
+
 ## test: unit tests for the pipeline's own code (needs Python 3 and pyosmium; duckdb, if installed, also tests the Overture fetch query)
 test:
 	python3 -m unittest discover -s search/tests
@@ -66,6 +73,7 @@ test:
 	python3 -m unittest discover -s tests
 	python3 -m unittest discover -s weather/tests
 	python3 -m unittest discover -s routing/tests
+	python3 -m unittest discover -s wifi/tests
 
 ## push-nyc: copy basemap-nyc.pmtiles to a USB-connected phone
 push-nyc:
