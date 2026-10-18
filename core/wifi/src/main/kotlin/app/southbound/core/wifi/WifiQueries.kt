@@ -39,16 +39,35 @@ internal object WifiQueries {
      * when nothing can match.
      */
     fun inBox(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, rtree: Boolean, customersOnly: Boolean = false): Query? {
+        val where = boxWhere(box, tiers, limit, rtree, customersOnly) ?: return null
+        return Query(
+            "SELECT $SPOT_COLUMNS FROM ${where.from} WHERE ${where.conditions} ORDER BY s.tier, s.id LIMIT ${limit.coerceAtMost(MAX_SCAN_ROWS)}",
+            where.args,
+        )
+    }
+
+    /** What the circles under a filter need of a spot; [POINT_COLUMNS] in this order. */
+    const val POINT_COLUMNS = "s.id, s.lat, s.lon, s.tier, s.category"
+
+    /**
+     * The same spots as [inBox] but only [POINT_COLUMNS], in no particular order and with no sort: the map under a
+     * filter reads a whole view (up to [MAX_SCAN_ROWS]) to count its circles, and does not need the names, hours or
+     * websites. Null when nothing can match.
+     */
+    fun points(box: NearbyBox, tiers: Set<WifiTier>, rtree: Boolean, customersOnly: Boolean = false): Query? {
+        val where = boxWhere(box, tiers, MAX_SCAN_ROWS, rtree, customersOnly) ?: return null
+        return Query("SELECT $POINT_COLUMNS FROM ${where.from} WHERE ${where.conditions} LIMIT $MAX_SCAN_ROWS", where.args)
+    }
+
+    private class BoxWhere(val from: String, val conditions: String, val args: List<Any>)
+
+    private fun boxWhere(box: NearbyBox, tiers: Set<WifiTier>, limit: Int, rtree: Boolean, customersOnly: Boolean): BoxWhere? {
         if (tiers.isEmpty() || limit <= 0) return null
         if (customersOnly && WifiTier.TAGGED_FREE !in tiers) return null
         val (from, where, args) = boxClauses(box, rtree)
         // A chain's customers-only policy (tier 3, fee "customers" too) is not an OSM tag and is never this.
         val tierAndFee = if (customersOnly) "s.tier = ${WifiTier.TAGGED_FREE.code} AND s.fee = '${WifiFee.CUSTOMERS.code}'" else tierCondition(tiers)
-        val conditions = listOfNotNull(where, tierAndFee)
-        return Query(
-            "SELECT $SPOT_COLUMNS FROM $from WHERE ${conditions.joinToString(" AND ")} ORDER BY s.tier, s.id LIMIT ${limit.coerceAtMost(MAX_SCAN_ROWS)}",
-            args,
-        )
+        return BoxWhere(from, listOfNotNull(where, tierAndFee).joinToString(" AND "), args)
     }
 
     /**

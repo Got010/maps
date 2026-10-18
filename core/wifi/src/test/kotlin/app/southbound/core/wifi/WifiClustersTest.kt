@@ -2,6 +2,7 @@ package app.southbound.core.wifi
 
 import app.southbound.core.search.NearbyBox
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,10 +75,47 @@ class WifiClustersTest {
         val box = NearbyBox(south = 39.4, north = 39.6, west = -95.6, east = -95.4)
         val inside = spot(1, 39.5, -95.5)
         val far = spot(2, 45.0, -100.0)
-        val cells = WifiClusters.inView(listOf(inside, far), box, 9)
+        val cells = WifiClusters.inView(listOf(inside, far).map(::point), WifiFilter.DEFAULT, box, 9).clusters
         assertEquals(1, cells.size)
         assertEquals(WifiTiles.tileOf(39.5, -95.5, 9).x, cells.single().x)
-        assertTrue(WifiClusters.inView(emptyList(), box, 9).isEmpty())
+        assertTrue(WifiClusters.inView(emptyList(), WifiFilter.DEFAULT, box, 9).clusters.isEmpty())
+    }
+
+    private fun point(s: WifiSpot, category: String = s.category) = WifiPoint(s.id, s.lat, s.lon, s.tier, category)
+
+    @Test
+    fun `fromPoints gives the cells fromSpots does`() {
+        val spots = (0 until 20).map { i -> spot(i.toLong(), 35.0 + i * 0.3, -90.0 - i * 0.2, WifiTier.entries[i % 4]) }
+        assertEquals(WifiClusters.fromSpots(spots, 6), WifiClusters.fromPoints(spots.map(::point), 6))
+    }
+
+    @Test
+    fun `the kinds cut the points before they are counted`() {
+        val box = NearbyBox(south = 39.0, north = 40.0, west = -96.0, east = -95.0)
+        val points = listOf(
+            WifiPoint(1, 39.5, -95.5, WifiTier.CHAIN, "cafe"),
+            WifiPoint(2, 39.5, -95.5, WifiTier.TAGGED_FREE, "library"),
+            WifiPoint(3, 39.5, -95.5, WifiTier.LIKELY, "pub"),
+        )
+        val food = WifiFilter(kinds = setOf(WifiKind.CAFES_FOOD))
+        val cell = WifiClusters.inView(points, food, box, 8).clusters.single()
+        assertEquals(2, cell.count)
+        assertEquals(WifiTier.CHAIN, cell.tierMin)
+        assertTrue(WifiClusters.inView(points, WifiFilter(kinds = setOf(WifiKind.FUEL)), box, 8).clusters.isEmpty())
+    }
+
+    @Test
+    fun `a read that hit its limit is drawn but marked partial, judged before the kinds cut it`() {
+        val box = NearbyBox(south = 39.0, north = 40.0, west = -96.0, east = -95.0)
+        val points = (1..5).map { WifiPoint(it.toLong(), 39.5, -95.5, WifiTier.CHAIN, if (it == 1) "cafe" else "library") }
+        val onlyFood = WifiFilter(kinds = setOf(WifiKind.CAFES_FOOD))
+        val cut = WifiClusters.inView(points, onlyFood, box, 8, limit = 5)
+        assertTrue(cut.partial)
+        assertEquals(1, cut.clusters.single().count)
+        assertFalse(WifiClusters.inView(points, onlyFood, box, 8, limit = 6).partial)
+        assertFalse(WifiClusters.inView(emptyList(), onlyFood, box, 8, limit = 6).partial)
+        // The pack's own limit is the default.
+        assertFalse(WifiClusters.inView(points, onlyFood, box, 8).partial)
     }
 
     @Test
@@ -90,6 +128,6 @@ class WifiClustersTest {
         val cellBox = WifiTiles.cellsBox(view, zoom)
         val spots = listOf(west, spot(2, 39.5, cellBox.west + 0.0005), spot(3, 39.5, cellBox.west + 0.0007))
         assertTrue(spots.all { cellBox.contains(it.lat, it.lon) })
-        assertEquals(3, WifiClusters.inView(spots, view, zoom).filter { it.x == tile.x }.sumOf { it.count })
+        assertEquals(3, WifiClusters.inView(spots.map(::point), WifiFilter.DEFAULT, view, zoom).clusters.filter { it.x == tile.x }.sumOf { it.count })
     }
 }
