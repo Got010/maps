@@ -24,6 +24,12 @@ enum class WifiTier(val code: Int, val confirmed: Boolean) {
     companion object {
         /** The tier with this pack code, or null for a number this app doesn't know (a newer pack's). */
         fun of(code: Int): WifiTier? = entries.firstOrNull { it.code == code }
+
+        /**
+         * The best tier of a cluster cell: a code this app doesn't know (a newer pack's) is read as the least
+         * confident tier, so the cell is still drawn, never as if it were confirmed.
+         */
+        fun ofClusterMin(code: Int): WifiTier = of(code) ?: LIKELY
     }
 }
 

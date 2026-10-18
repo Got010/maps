@@ -314,5 +314,7 @@
     <string name="wifi_pack_size_unknown">size unknown</string>
     <string name="wifi_pack_installed">Installed, %1$d MB.</string>
     <string name="wifi_pack_pending">Downloads in the next update.</string>
+    <string name="wifi_pack_pending_off">Turn on Download map data, or import the file.</string>
+    <string name="wifi_pack_list_name">Free Wi-Fi (all covered states)</string>
     <string name="wifi_pack_invalid">The Wi-Fi file on this phone isn\'t a readable Wi-Fi pack. The next update replaces it.</string>
 </resources>
