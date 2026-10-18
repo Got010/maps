@@ -1,0 +1,7 @@
+{
+  "chains": [
+    {"name": "Example Coffee", "wikidata": ["Q37158"], "fee": "customers", "categories": ["cafe"]},
+    {"name": "Example Burgers", "wikidata": ["Q38076"], "categories": ["fast_food"]},
+    {"name": "Example Mart", "wikidata": ["Q483551", "Q7963529"], "fee": "customers", "categories": ["supermarket", "department_store"], "note": "two brands, one chain"}
+  ]
+}

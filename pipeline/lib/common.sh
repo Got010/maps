@@ -80,18 +80,31 @@ if value is not None:
 PY
 }
 
-# Downloads a Geofabrik extract by source name (new-york, pennsylvania, ...) into
-# sources/<name>-latest.osm.pbf and verifies it against its .md5. Sets
+# True when $1 is a Geofabrik extract fetch_source knows: a US state, DC or Puerto Rico, by Geofabrik's name.
+is_known_source() {
+  case "$1" in
+    alabama | alaska | arizona | arkansas | california | colorado | connecticut | delaware | district-of-columbia | \
+      florida | georgia | hawaii | idaho | illinois | indiana | iowa | kansas | kentucky | louisiana | maine | maryland | \
+      massachusetts | michigan | minnesota | mississippi | missouri | montana | nebraska | nevada | new-hampshire | \
+      new-jersey | new-mexico | new-york | north-carolina | north-dakota | ohio | oklahoma | oregon | pennsylvania | \
+      puerto-rico | rhode-island | south-carolina | south-dakota | tennessee | texas | utah | vermont | virginia | \
+      washington | west-virginia | wisconsin | wyoming)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Downloads a Geofabrik extract by source name (any US state, DC or Puerto Rico: new-york, pennsylvania, ...)
+# into sources/<name>-latest.osm.pbf and verifies it against its .md5. Sets
 # SOURCE_FILE.
 fetch_source() {
   local name="$1" url
-  case "$name" in
-    new-york | new-jersey | connecticut | pennsylvania | maryland | delaware | district-of-columbia | \
-      ohio | indiana | illinois | michigan | wisconsin | minnesota | iowa | missouri | north-dakota | south-dakota | nebraska | kansas | \
-      virginia | west-virginia | kentucky)
-      url="$GEOFABRIK_URL/$name-latest.osm.pbf" ;;
-    *) echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2; exit 2 ;;
-  esac
+  if is_known_source "$name"; then
+    url="$GEOFABRIK_URL/$name-latest.osm.pbf"
+  else
+    echo "Unknown source '$name'. Known: the Geofabrik names of the states in pipeline/regions.json (new-york, ohio, north-dakota, ...)." >&2
+    exit 2
+  fi
   SOURCE_FILE="$DATA_DIR/sources/$name-latest.osm.pbf"
   echo "==> Fetching $url"
   # -z only re-downloads when Geofabrik has a newer extract.
@@ -125,6 +138,20 @@ if region is None:
     sys.exit(2)
 for source, clip in region.get("sources", {"new-york": "self"}).items():
     print(source, name if clip == "self" else (clip or "-"))
+PY
+}
+
+# Every distinct Geofabrik extract any region in regions.json is built from (its "sources" maps, the "all"
+# region's included), one name per line, sorted. The Wi-Fi pack covers exactly these, so a state added to the
+# maps brings its Wi-Fi spots with it.
+all_sources() {
+  python3 - "$REGIONS_JSON" <<'PY'
+import json, sys
+regions = json.load(open(sys.argv[1]))["regions"]
+names = set()
+for region in regions.values():
+    names.update(region.get("sources", {"new-york": "self"}))
+print("\n".join(sorted(names)))
 PY
 }
 

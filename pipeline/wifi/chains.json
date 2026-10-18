@@ -1,0 +1,21 @@
+{
+  "chains": [
+    {"name": "Starbucks", "wikidata": ["Q37158"], "fee": "customers", "categories": ["cafe"]},
+    {"name": "Panera Bread", "wikidata": ["Q7130852"], "fee": "customers", "categories": ["fast_food", "cafe"]},
+    {"name": "McDonald's", "wikidata": ["Q38076"], "fee": "customers", "categories": ["fast_food"]},
+    {"name": "Dunkin'", "wikidata": ["Q847743"], "fee": "customers", "categories": ["fast_food", "cafe"]},
+    {"name": "Chick-fil-A", "wikidata": ["Q491516"], "fee": "customers", "categories": ["fast_food"]},
+    {"name": "Taco Bell", "wikidata": ["Q752941"], "fee": "customers", "categories": ["fast_food"]},
+    {"name": "Target", "wikidata": ["Q1046951"], "fee": "customers", "categories": ["department_store", "supermarket"]},
+    {"name": "Walmart", "wikidata": ["Q483551"], "fee": "customers", "categories": ["supermarket", "department_store"]},
+    {"name": "Best Buy", "wikidata": ["Q533415"], "fee": "customers", "categories": ["electronics"]},
+    {"name": "Apple Store", "wikidata": ["Q421253"], "fee": "customers", "categories": ["electronics", "mobile_phone", "computer"]},
+    {"name": "The Home Depot", "wikidata": ["Q864407"], "fee": "customers", "categories": ["doityourself"]},
+    {"name": "Lowe's", "wikidata": ["Q1373493"], "fee": "customers", "categories": ["doityourself"]},
+    {"name": "Pilot", "wikidata": ["Q64128179"], "fee": "customers", "categories": ["fuel"], "note": "Pilot Flying J and Pilot Travel Centers: OpenStreetMap tags both as Pilot"},
+    {"name": "Flying J", "wikidata": ["Q64130592"], "fee": "customers", "categories": ["fuel"]},
+    {"name": "Love's Travel Stops", "wikidata": ["Q1872496"], "fee": "customers", "categories": ["fuel"]},
+    {"name": "TravelCenters of America", "wikidata": ["Q7835892"], "fee": "customers", "categories": ["fuel"], "note": "OpenStreetMap's brand is TA"},
+    {"name": "Petro Stopping Centers", "wikidata": ["Q64051305"], "fee": "customers", "categories": ["fuel"], "note": "OpenStreetMap's brand is Petro"}
+  ]
+}
