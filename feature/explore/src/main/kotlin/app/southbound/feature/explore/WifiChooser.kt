@@ -133,7 +133,7 @@ internal fun WifiChooserSheet(current: WifiFilter, onDone: (WifiFilter) -> Unit,
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { draft = WifiFilter.DEFAULT }) { Text(stringResource(R.string.explore_wifi_reset)) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onDone(draft) }) { Text(stringResource(R.string.explore_wifi_done)) }
+                Button(onClick = { onDone(draft) }, enabled = !draft.showsNothing) { Text(stringResource(R.string.explore_wifi_done)) }
             }
         }
     }
