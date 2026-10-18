@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * - landmarks for turns ("Turn right after the next light"), from the
  *   pack's landmark table, fetched once per route and reroute;
- * - a quick second turn chained onto the first ("Take exit 14S, then turn
+ * - a quick second turn chained onto the first ("Take exit 5A, then turn
  *   left"), the second then not announced again in full ([TurnTiming]);
  * - lane advice ("..., use the right two lanes") on one early prompt per
  *   turn, from Valhalla's lanes in the route ([StepLanes], [LaneWording]);
@@ -498,5 +498,5 @@ class GuidanceSupport(
     }
 }
 
-/** "Take exit 14S on the right." -> "14S". */
+/** "Take exit 5A on the right." -> "5A". */
 private val EXIT_NUMBER = Regex("""\bexit\s+(\d+[A-Za-z]?)\b""", RegexOption.IGNORE_CASE)

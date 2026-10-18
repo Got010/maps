@@ -12,9 +12,9 @@ class TurnTimingTest {
     // A step the way Valhalla's prompts come through Ferrostar: what the road
     // does at the step's start, an early warning, and the prompt at the turn.
     private val exitStep = listOf(
-        Prompt("Continue on I 87 North for 2 miles.", 3_200.0),
-        Prompt("In a quarter mile, Take exit 14S on the right.", 400.0),
-        Prompt("Take exit 14S on the right.", 25.0),
+        Prompt("Continue on I 90 West for 2 miles.", 3_200.0),
+        Prompt("In a quarter mile, Take exit 5A on the right.", 400.0),
+        Prompt("Take exit 5A on the right.", 25.0),
     )
 
     @Test
@@ -43,14 +43,14 @@ class TurnTimingTest {
     @Test
     fun progressPromptsAreNotManeuvers() {
         assertTrue(TurnTiming.isProgress("Continue for 2 miles."))
-        assertTrue(TurnTiming.isProgress("Continue on I 87 North for 1.5 miles."))
+        assertTrue(TurnTiming.isProgress("Continue on I 90 West for 1.5 miles."))
         assertTrue(TurnTiming.isProgress("Continue for a half mile."))
         assertTrue(TurnTiming.isProgress("Drive north on Main Street."))
         assertTrue(TurnTiming.isProgress("Head southwest on Broadway for 500 feet."))
         assertFalse(TurnTiming.isProgress("Continue straight onto Main Street."))
         assertFalse(TurnTiming.isProgress("Turn left onto Elm Street."))
-        assertFalse(TurnTiming.isProgress("Take exit 14S on the right."))
-        assertFalse(TurnTiming.isProgress("Keep left to take I 87 North toward Albany."))
+        assertFalse(TurnTiming.isProgress("Take exit 5A on the right."))
+        assertFalse(TurnTiming.isProgress("Keep left to take I 90 West toward Lakeview."))
     }
 
     @Test

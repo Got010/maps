@@ -6,9 +6,12 @@ import android.provider.OpenableColumns
 import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -20,11 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
 import app.southbound.core.packs.Regions
+import app.southbound.core.packs.ShownName
 import app.southbound.core.packs.StagedPack
 import app.southbound.core.packs.UnrecognizedPackException
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +61,9 @@ suspend fun importPackFrom(context: Context, packStore: PackStore, uri: Uri): Im
 
 /**
  * A pack another app shared in, copied into private storage and recognised but not installed: what the
- * confirmation names. [source] is the app that holds the file (the content provider's app), else its address.
+ * confirmation names. [fileName] is the name the sending side gives the file and [source] the label of the app that
+ * holds it (the content provider's app), else its address; both are chosen by other apps, so both are cleaned to one
+ * short line ([ShownName]) and shown as their claims, never as proof.
  */
 class SharedPackOffer(val staged: StagedPack, val fileName: String?, val source: String?)
 
@@ -70,7 +77,7 @@ suspend fun stageSharedPack(context: Context, packStore: PackStore, uri: Uri): R
             val name = context.displayName(uri)
             val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Couldn't open the file")
             val staged = input.use { packStore.stagePack(it, name) }
-            SharedPackOffer(staged, name, context.sourceOf(uri))
+            SharedPackOffer(staged, ShownName.clean(name), ShownName.clean(context.sourceOf(uri)))
         }
     }
 
@@ -94,8 +101,8 @@ suspend fun discardSharedPack(packStore: PackStore, offer: SharedPackOffer) {
 
 /**
  * The app that holds the shared file: the label of the app whose content provider serves [uri] (Android lets an
- * app see the app that granted it a file), else the provider's address. Read from the file's address, not from
- * anything the sending app says about itself.
+ * app see the app that granted it a file), else the provider's address. That app picks its own label, so any app
+ * can call itself "Downloads": the dialog says so.
  */
 @Suppress("DEPRECATION") // resolveContentProvider(String, ComponentInfoFlags) needs API 33; minSdk is 31.
 private fun Context.sourceOf(uri: Uri): String? {
@@ -169,8 +176,10 @@ fun ImportBanner(state: ImportState, onDismiss: () -> Unit, modifier: Modifier =
 }
 
 /**
- * Asks before a pack shared in from another app replaces anything: what it is, how big, the file and the app it
- * came from, and that no release vouches for it. Dismissing it is a no.
+ * Asks before a pack shared in from another app replaces anything. The warning comes first, in Southbound's own
+ * words, so nothing the sending app chose can push it out of view; then what the pack is and how big, then the file
+ * name and the app as those apps give them (cleaned to one short line each), and the body scrolls. Dismissing it is
+ * a no.
  */
 @Composable
 fun SharedPackDialog(offer: SharedPackOffer, onInstall: () -> Unit, onDecline: () -> Unit) {
@@ -178,21 +187,19 @@ fun SharedPackDialog(offer: SharedPackOffer, onInstall: () -> Unit, onDecline: (
     val staged = offer.staged
     val unknown = stringResource(R.string.explore_shared_unknown)
     val what = stringResource(staged.kind.sharedLabel())
-    val region = if (staged.kind == PackKind.VOICE) staged.region else Regions.nameOf(staged.region)
+    val region = ShownName.clean(if (staged.kind == PackKind.VOICE) staged.region else Regions.nameOf(staged.region)) ?: unknown
     AlertDialog(
         onDismissRequest = onDecline,
         title = { Text(stringResource(R.string.explore_shared_title)) },
         text = {
-            Text(
-                stringResource(
-                    R.string.explore_shared_body,
-                    what,
-                    region,
-                    Formatter.formatShortFileSize(context, staged.sizeBytes),
-                    offer.fileName ?: unknown,
-                    offer.source ?: unknown,
-                ),
-            )
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.explore_shared_warning), fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.explore_shared_what, what, region, Formatter.formatShortFileSize(context, staged.sizeBytes)))
+                Text(
+                    stringResource(R.string.explore_shared_claims, offer.fileName ?: unknown, offer.source ?: unknown),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         },
         confirmButton = { TextButton(onClick = onInstall) { Text(stringResource(R.string.explore_shared_install)) } },
         dismissButton = { TextButton(onClick = onDecline) { Text(stringResource(R.string.explore_shared_decline)) } },

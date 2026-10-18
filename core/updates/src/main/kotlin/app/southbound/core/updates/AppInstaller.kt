@@ -68,8 +68,13 @@ class InstallResultReceiver : BroadcastReceiver() {
                 UpdateStatus.requestConfirm(confirm)
                 UpdateNotifications.confirmInstall(context, confirm)
             }
-            PackageInstaller.STATUS_SUCCESS -> UpdateStatus.set(UpdateState.Idle)
+            PackageInstaller.STATUS_SUCCESS -> {
+                UpdateScheduler.clearPendingInstall(context)
+                UpdateStatus.set(UpdateState.Idle)
+            }
             else -> {
+                // Dismissed or refused: the next round offers it again.
+                UpdateScheduler.clearPendingInstall(context)
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 val text = if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
                     "The update was cancelled. Southbound will offer it again next time."

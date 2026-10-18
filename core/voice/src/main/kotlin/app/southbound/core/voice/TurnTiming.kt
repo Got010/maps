@@ -13,7 +13,7 @@ import kotlin.math.max
  * highway speed a "now" prompt with a 20-30 m trigger fires about a second
  * before the turn, and is heard during it. This object:
  *
- * - chains a quick second maneuver onto the first ("Take exit 14S, then turn
+ * - chains a quick second maneuver onto the first ("Take exit 5A, then turn
  *   left") when the two are close in distance or time ([chains]);
  * - says the "now" prompt earlier at speed ([speakNowEarly]);
  * - drops a prompt whose maneuver is already under the car ([tooLate]).
@@ -69,7 +69,7 @@ object TurnTiming {
 
     /**
      * True for a prompt about the road the user is on rather than the
-     * maneuver ahead: "Continue for 2 miles.", "Continue on I 87 for 1 mile.",
+     * maneuver ahead: "Continue for 2 miles.", "Continue on I 90 for 1 mile.",
      * "Drive north on Main Street." Nothing is chained onto these, and they
      * are never used as the follow-up.
      */

@@ -142,20 +142,19 @@ fun ExploreScreen(
         sharedOffer?.let { offer ->
             SharedPackDialog(
                 offer = offer,
+                // Answered: the share is handled at once, so a screen torn down mid-install never asks again.
                 onInstall = {
                     sharedOffer = null
+                    onSharedPackHandled()
                     importState = ImportState.Importing
-                    scope.launch {
-                        onImportFinished(installSharedPack(packStore, offer))
-                        onSharedPackHandled()
-                    }
+                    scope.launch { onImportFinished(installSharedPack(packStore, offer)) }
                 },
                 onDecline = {
                     sharedOffer = null
+                    onSharedPackHandled()
                     scope.launch {
                         discardSharedPack(packStore, offer)
                         importState = ImportState.Declined
-                        onSharedPackHandled()
                     }
                 },
             )

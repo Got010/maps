@@ -130,7 +130,7 @@
     <string name="updates_check_now">Check now</string>
     <string name="updates_checking">Checking the latest release…</string>
     <string name="updates_downloading">Downloading %1$s: %2$d of %3$d MB</string>
-    <string name="updates_awaiting">Version %1$s is ready. Confirm the install when Android asks.</string>
+    <string name="updates_awaiting">Version %1$s is ready. Confirm the install when Android asks, or tap the update notification. Check now asks again.</string>
     <string name="updates_up_to_date">Everything is up to date.</string>
     <string name="updates_installed">Installed: %1$s</string>
     <string name="updates_packs">Download map data</string>

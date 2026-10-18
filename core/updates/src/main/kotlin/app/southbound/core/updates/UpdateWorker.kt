@@ -14,7 +14,8 @@ import androidx.work.WorkerParameters
 class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val result = Updater(applicationContext).run(beforeDownload = { plan ->
+        val asked = inputData.getBoolean(UpdateScheduler.KEY_ASKED, false)
+        val result = Updater(applicationContext).run(asked = asked, beforeDownload = { plan ->
             runCatching { setForeground(foregroundInfo(0, plan.bytes)) }
         })
         return when {
