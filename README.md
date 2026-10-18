@@ -15,7 +15,7 @@ on the phone, speed limits while navigating and 3D buildings. Live transit
 times, each state's 511 incidents, cameras and signs (with routes steering
 around closures), weather and NYC DOT traffic speeds are opt-in extras.
 A free Wi-Fi layer (spots tagged free in OpenStreetMap, chains and places that usually have it, each labelled
-by how sure we are) is an opt-in pack in Settings > Maps, with a map button and a Wi-Fi chip in search. Two buttons
+by how sure we are) is an opt-in pack in Settings > Maps, with a row in the map's Map options list and a Wi-Fi chip in search. Two buttons
 on a spot's sheet, "Wi-Fi worked" and "Didn't work", keep your own mark on this phone (it replaces our label for you,
 and a spot that didn't work sorts last); the marks are part of the export and never leave the phone otherwise.
 
@@ -180,8 +180,10 @@ looks for a route that saves 5 minutes or more and offers it in a banner.
 Rotate with two fingers, tilt by dragging two fingers up or down, and zoom
 with one finger by double-tapping and holding, then sliding. The compass
 appears when the map isn't facing north; tap it to turn back. Panning,
-rotating or tilting away from your position shows a Re-center pill; while
-navigating the map re-centers by itself after 10 seconds without a touch.
+rotating or tilting away from your position puts Re-center at the top of the Map options list
+(the layers button at the bottom right, which also holds Traffic, Weather and Free Wi-Fi; a long press
+on the Free Wi-Fi row chooses its types); while navigating the map shows a Re-center pill and
+re-centers by itself after 10 seconds without a touch.
 Highway exits show a green sign, and the arrival card says which side of the
 street the destination is on and whether parking is listed nearby.
 
