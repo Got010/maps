@@ -24,6 +24,7 @@ import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.UnrecognizedPackException
 import app.southbound.core.packs.UpdatePlan
 import app.southbound.core.packs.VoiceSelection
+import app.southbound.core.packs.WifiSelection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -57,6 +58,7 @@ class Updater(context: Context) {
     private val tiles = TileFolder(app.filesDir)
     private val regions = RegionSelection.get(app)
     private val voices = VoiceSelection.get(app)
+    private val wifi = WifiSelection.get(app)
     private val gate = NetworkGate(PreferenceNetworkToggles.get(app))
     private val secrets = SecretStore(app)
     private val client = GitHubReleases(gate, { secrets.get(ApiKey.GITHUB_RELEASES) })
@@ -107,6 +109,8 @@ class Updater(context: Context) {
                 includeApp = appOn,
                 // A voice pack only for the voice picked in Settings > Voice.
                 voices = voices.voices.value,
+                // The free Wi-Fi pack only while Settings > Maps has it on.
+                wifi = wifi.wanted.value,
             )
             // v2 routing packs go into the tile folder together; see the class comment. A v2 release always lists some
             // (routing-main.tar at least): none means a packaging slip, and switching to an empty generation would
@@ -252,7 +256,8 @@ class Updater(context: Context) {
 
     /**
      * After a southbound-v2.json round: search packs no picked region uses go (the user unticked their regions, or
-     * search-nyc gave way to search-nys), and so does the one-graph routing-nys.tar once routing reads tiles.
+     * search-nyc gave way to search-nys), and so does the one-graph routing-nys.tar once routing reads tiles. The
+     * free Wi-Fi pack goes while the user has it off (a pack they import turns it on, see ExploreScreen).
      */
     private fun dropUnwanted(manifest: ReleaseManifest, picked: Set<String>) {
         val searches = UpdatePlan.wanted(manifest, picked).filter { it.kind == PackKind.SEARCH }.map { it.region }.toSet()
@@ -260,6 +265,7 @@ class Updater(context: Context) {
             val unwanted = when (pack.kind) {
                 PackKind.SEARCH -> pack.region !in searches
                 PackKind.ROUTING -> tiles.current() != null
+                PackKind.WIFI -> !wifi.wanted.value
                 else -> false
             }
             if (unwanted) {

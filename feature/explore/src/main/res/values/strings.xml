@@ -31,10 +31,12 @@
     <string name="explore_shared_kind_search">Search data</string>
     <string name="explore_shared_kind_transit">Transit data</string>
     <string name="explore_shared_kind_voice">Voice</string>
+    <string name="explore_shared_kind_wifi">Free Wi-Fi data</string>
     <string name="explore_imported_basemap">Map installed.</string>
     <string name="explore_imported_routing">Directions data installed.</string>
     <string name="explore_imported_search">Search data installed.</string>
     <string name="explore_imported_transit">Transit data installed.</string>
+    <string name="explore_imported_wifi">Free Wi-Fi data installed. The Free Wi-Fi button is on the map.</string>
     <string name="explore_imported_voice">Voice installed. Pick it in Settings &gt; Voice.</string>
     <string name="explore_pack_share_hint">Or, in your browser\'s downloads, share the file to Southbound.</string>
     <string name="explore_pack_adb">Or copy a basemap here with adb, then tap Check again:</string>
@@ -44,6 +46,8 @@
     <string name="explore_dropped_pin">Dropped pin</string>
     <string name="explore_rerouting_spoken">Rerouting.</string>
     <string name="explore_start_from">Directions start from %1$s</string>
+    <string name="explore_wifi_show">Free Wi-Fi</string>
+    <string name="explore_wifi_hide">Hide free Wi-Fi</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_weather_show">Show weather radar and alerts</string>
     <!-- Current weather at the nearest station (an airport's report). -->

@@ -27,6 +27,12 @@ enum class PackKind(val prefix: String, val extension: String) {
      * `voice-norman.zip`; fetched only for the voice the user picks.
      */
     VOICE("voice", "zip"),
+
+    /**
+     * SQLite database of free Wi-Fi spots from OpenStreetMap (`wifi-us.sqlite`, the "region" is always "us"),
+     * opt-in: fetched only when the user turns on Free Wi-Fi in Settings > Maps ([WifiSelection]).
+     */
+    WIFI("wifi", "sqlite"),
     ;
 
     fun fileName(region: String): String = "$prefix-$region.$extension"
@@ -37,11 +43,15 @@ enum class PackKind(val prefix: String, val extension: String) {
     companion object {
         /**
          * SQLite packs set `PRAGMA application_id` so the app can tell them
-         * apart without opening them: "SBS1" for search, "SBT1" for transit.
-         * The pipeline writes the same numbers.
+         * apart without opening them: "SBS1" for search, "SBT1" for transit,
+         * "SBW1" for the free Wi-Fi spots. The pipeline writes the same numbers.
          */
         const val SEARCH_APPLICATION_ID = 0x53425331
         const val TRANSIT_APPLICATION_ID = 0x53425431
+        const val WIFI_APPLICATION_ID = 0x53425731
+
+        /** The Wi-Fi pack has exactly one region, whatever an imported file is called. */
+        const val WIFI_REGION = "us"
 
         private val PMTILES_MAGIC = "PMTiles".toByteArray(Charsets.US_ASCII)
         private const val PMTILES_VERSION: Byte = 3
@@ -75,6 +85,7 @@ enum class PackKind(val prefix: String, val extension: String) {
                     when (header.readIntBigEndian(SQLITE_APPLICATION_ID_OFFSET)) {
                         SEARCH_APPLICATION_ID -> SEARCH
                         TRANSIT_APPLICATION_ID -> TRANSIT
+                        WIFI_APPLICATION_ID -> WIFI
                         else -> null
                     }
 

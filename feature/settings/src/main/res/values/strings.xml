@@ -306,4 +306,15 @@
     <string name="updates_packs_count">%1$d files, %2$d MB</string>
     <string name="updates_token_set">Saved</string>
     <string name="updates_token_unset">Not set (optional)</string>
+    <!-- Settings > Maps > Free Wi-Fi pack. %1$s in the note is "12 MB" or "size unknown". -->
+    <string name="wifi_pack_card">Free Wi-Fi</string>
+    <string name="wifi_pack_title">Free Wi-Fi pack</string>
+    <string name="wifi_pack_note">Free Wi-Fi spots in every covered state, from OpenStreetMap. %1$s</string>
+    <string name="wifi_pack_size">%1$d MB</string>
+    <string name="wifi_pack_size_unknown">size unknown</string>
+    <string name="wifi_pack_installed">Installed, %1$d MB.</string>
+    <string name="wifi_pack_pending">Downloads in the next update.</string>
+    <string name="wifi_pack_pending_off">Turn on Download map data, or import the file.</string>
+    <string name="wifi_pack_list_name">Free Wi-Fi (all covered states)</string>
+    <string name="wifi_pack_invalid">The Wi-Fi file on this phone isn\'t a readable Wi-Fi pack. The next update replaces it.</string>
 </resources>
