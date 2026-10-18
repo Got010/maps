@@ -46,11 +46,21 @@
     <string name="explore_dropped_pin">Dropped pin</string>
     <string name="explore_rerouting_spoken">Rerouting.</string>
     <string name="explore_start_from">Directions start from %1$s</string>
-    <string name="explore_wifi_show">Free Wi-Fi</string>
+    <string name="explore_wifi_show">Show free Wi-Fi</string>
     <string name="explore_wifi_hide">Hide free Wi-Fi</string>
     <string name="explore_wifi_choose">Choose Wi-Fi types</string>
+    <string name="explore_options">Map options</string>
+    <string name="explore_options_expanded">Expanded</string>
+    <string name="explore_options_collapsed">Collapsed</string>
+    <string name="explore_options_layer_on">a layer is showing</string>
+    <string name="explore_options_my_location">My location</string>
+    <string name="explore_options_traffic">Traffic</string>
+    <string name="explore_options_weather">Weather</string>
+    <string name="explore_options_wifi">Free Wi-Fi</string>
+    <string name="explore_options_on">On</string>
+    <string name="explore_options_off">Off</string>
     <string name="explore_wifi_filtered">Some types are hidden</string>
-    <!-- The Free Wi-Fi chooser, opened by a long press on the map button. -->
+    <!-- The Free Wi-Fi chooser, opened by a long press on the Free Wi-Fi row of the Map options list. -->
     <string name="explore_wifi_chooser_title">Show on the map</string>
     <string name="explore_wifi_confidence">How sure</string>
     <string name="explore_wifi_tier_free">Tagged free</string>
