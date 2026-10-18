@@ -31,8 +31,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The Wi-Fi pack's region: it is one national file, `wifi-us.sqlite`. */
-private const val WIFI_REGION = "us"
+private const val WIFI_REGION = PackKind.WIFI_REGION
 
 /** Whole megabytes for the row, never "0 MB" for a pack that has some bytes. */
 internal fun megabytes(bytes: Long): Long = ((bytes + (1L shl 19)) shr 20).coerceAtLeast(1)
@@ -76,8 +75,8 @@ internal fun WifiPackRow(packStore: PackStore) {
                         } else {
                             // Off: the file goes and the map screen is told, even if Settings is left at once.
                             scope.launch(NonCancellable) {
-                                withContext(Dispatchers.IO) { packStore.delete(PackKind.WIFI, WIFI_REGION) }
-                                PackEvents.emitRemoved(PackKind.WIFI, WIFI_REGION)
+                                withContext(Dispatchers.IO) { packStore.deleteAll(PackKind.WIFI) }
+                                PackEvents.emitRemoved(PackKind.WIFI, PackKind.WIFI_REGION)
                                 status = withContext(Dispatchers.IO) { packStore.status(PackKind.WIFI, WIFI_REGION) }
                             }
                         }
