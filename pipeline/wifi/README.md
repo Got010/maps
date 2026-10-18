@@ -2,7 +2,8 @@
 
 Built by `make -C pipeline wifi-us` (`wifi/build.sh us`): Geofabrik's extract of every state named in
 `regions.json`, filtered with osmium, classified by `build_wifi.py`. Heavy work runs in GitHub Actions
-(`.github/workflows/wifi.yml` is the pull request check); nothing here runs on the phone.
+(`release.yml` builds and ships it with the other packs; `wifi.yml` is the pull request check); nothing here runs on
+the phone.
 
 ## Tiers (the app's confidence labels)
 
@@ -15,7 +16,7 @@ Built by `make -C pipeline wifi-us` (`wifi/build.sh us`): Geofabrik's extract of
 
 A spot takes the lowest tier it matches. `internet_access:fee=yes`, `internet_access=no`, `internet_access=terminal`,
 `access=private`, `access=no` and `disused:`/`abandoned:`/`was:`/`demolished:`/`removed:`/`razed:`/`destroyed:`
-tagging without a live feature exclude an object from every tier.
+tagging without a live feature (only a prefixed feature key counts: `was:operator` on a live station does not), `shop=vacant` and `disused=yes` exclude an object from every tier.
 
 Names: `name`, else `brand`. A chain spot with neither is called by the chain's `name` in `chains.json`; any other
 spot with neither keeps a NULL name (the app shows a fallback from the category). The build log counts them per
@@ -64,7 +65,7 @@ names are the chain's.
 
 `WIFI_MAX_MB` (default 60) fails the build if the pack is bigger; `FREE_SOURCES=1` deletes each extract once it
 is filtered (at most one is on disk). `WIFI_SOURCES="district-of-columbia"` builds from those Geofabrik names only,
-for a quick test pack (data.yml's smoke build does this); such a pack must not be shipped. The build fails when
+for a quick test pack (data.yml's smoke build does this); such a pack must not be shipped (release.yml sets it blank; a blank value is the same as unset). The build fails when
 the finished pack has no `wifi_rtree` table, unless `WIFI_ALLOW_NO_RTREE=1`. Reruns reuse the filtered files
 while the extract, `chains.json` and `build.sh` are unchanged. osmium runs in one container for the whole build.
 
