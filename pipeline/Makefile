@@ -16,11 +16,10 @@ STATE_REGIONS := njs ct pae paw md $(MIDWEST_REGIONS) $(SOUTH_REGIONS)
 # Downloadable voices; amy is bundled in the APK instead.
 VOICES := norman
 VOICE_PACKS := $(addprefix voice-,$(VOICES))
-STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS) \
-	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split
-# The Free Wi-Fi pack (wifi/build.sh): one file for every covered state. Not in `state` or ALL_PACKS
-# until release.yml builds it (the app's pull request adds it to STATE_PACKS there).
+# The Free Wi-Fi pack (wifi/build.sh): one file for every covered state, shipped by release.yml (its STATE_PACKS).
 WIFI_PACKS := wifi-us
+STATE_PACKS := $(addprefix tiles-,$(BASEMAP_REGIONS)) routing-nys search-nys transit-nyc $(VOICE_PACKS) \
+	$(addprefix tiles-,$(STATE_REGIONS)) $(addprefix search-,$(STATE_REGIONS)) routing-split $(WIFI_PACKS)
 ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGIONS))) $(VOICE_PACKS)
 
 .PHONY: nyc state states midwest south routing-split routing-check release $(ALL_PACKS) $(WIFI_PACKS) push-nyc styles glyphs test clean
@@ -28,7 +27,7 @@ ALL_PACKS := $(foreach k,tiles routing search transit,$(addprefix $(k)-,$(REGION
 ## nyc: every NYC-only pack: basemap, routing, search and transit (quick, for tests)
 nyc: tiles-nyc routing-nyc search-nyc transit-nyc
 
-## state: what a release ships: six regional basemaps, routing and search for New York and northern New Jersey (nys; search-nys also cut into search-<region> for those six), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
+## state: what a release ships: the Free Wi-Fi pack (wifi-us), six regional basemaps, routing and search for New York and northern New Jersey (nys; search-nys also cut into search-<region> for those six), NYC transit, voice packs, and the other states' regions' basemaps, search packs and the split routing packs
 state: $(STATE_PACKS)
 
 ## states: the other states' regions' basemaps and search packs (OSM only), and the split routing packs
