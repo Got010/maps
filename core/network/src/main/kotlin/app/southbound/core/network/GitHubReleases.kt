@@ -149,7 +149,7 @@ class GitHubReleases(
     }
 
     companion object {
-        const val OWNER = "StrongHorse44"
+        const val OWNER = "Got010"
         const val REPO = "maps"
         const val API_HOST = "api.github.com"
         private const val MAX_REDIRECTS = 5
