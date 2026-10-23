@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import java.io.FileNotFoundException
 
 /**
@@ -16,14 +17,21 @@ internal object LegShare {
 
     /**
      * The share sheet with [text] as plain text (`EXTRA_TEXT` only: no stream, no URI). Its Copy carries the mileage
-     * line to Lumen's Share Summary.
+     * line to Lumen's Share Summary. Answers false when the sheet could not open (no app to take it, or a text too big
+     * for an intent), so the caller says so instead of crashing; nothing was sent then.
      */
-    fun shareText(context: Context, text: String, title: String) {
+    fun shareText(context: Context, text: String, title: String): Boolean {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
         }
-        context.startActivity(Intent.createChooser(send, title))
+        return try {
+            context.startActivity(Intent.createChooser(send, title))
+            true
+        } catch (e: RuntimeException) {
+            // ActivityNotFoundException, or TransactionTooLargeException wrapped in a RuntimeException.
+            false
+        }
     }
 
     /** How writing the CSV file went. */
@@ -43,6 +51,19 @@ internal object LegShare {
         } catch (e: Exception) {
             removed(resolver, uri)
         }
+    }
+
+    /**
+     * The document `CreateDocument` made, deleted when nothing was written to it (Settings > Backup's `discardIfEmpty`):
+     * true when it is gone. A document that isn't empty, or whose size can't be read, is left alone.
+     */
+    fun discardIfEmpty(resolver: ContentResolver, uri: Uri): Boolean {
+        val size = runCatching {
+            resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+            }
+        }.getOrNull()
+        return size == 0L && runCatching { DocumentsContract.deleteDocument(resolver, uri) }.getOrDefault(false)
     }
 
     private fun removed(resolver: ContentResolver, uri: Uri): Written =

@@ -15,18 +15,24 @@ no trail, no coordinates, no time beyond the day, sealed with the saved places, 
   a day), miles (the selected route option's distance, prefilled; a change marks the leg "edited"), mode, From and To.
   From and To are never filled from the map or a pack: you type them or tap a chip. The chips are labels already in the
   log, newest first, at most 8; for From the trip's previous To comes first; for To, **What I searched: <text>** appears
-  only when the destination is the place you just picked from a typed search (see Privacy). Autocorrect is off. Save
-  writes the leg and the preview's row then reads "Logged to <trip> · 212.4 mi" with Edit. A field out of bounds keeps
-  the sheet open with a sentence that says which.
+  only when the destination is the place you just picked from a typed search (see Privacy). Autocorrect is off. The
+  trip (40 characters) and From and To (80) stop at their caps as you type, with a counter from three quarters of the
+  way, so what is saved is what is on screen, never cut. Retyping the planned miles another way ("212.40") is not a
+  change. Save writes the leg and the preview's row then reads "Logged to <trip> · 212.4 mi" with Edit. A field out of
+  bounds keeps the sheet open with a sentence that says which.
 - **Map options > Trip log** (the last row; not during guidance). The trips, newest first, each with its total miles and
   kilometres, the number of legs and the day range; under a trip its legs by day (date, mode, miles, "edited", From to
   To), each with Edit and Delete. Per trip: Share CSV, Share mileage line, Save CSV file, Rename (into an existing name,
   the two trips become one) and Delete. Deletes ask first. The list scrolls, in landscape too. An empty log says how to
   log a leg.
 - **Share CSV / Share mileage line** open Android's share sheet with the text only (no file, no link). Its Copy puts the
-  mileage line on the clipboard for Lumen's Share Summary.
+  mileage line on the clipboard for Lumen's Share Summary. Share CSV is offered only while the trip's CSV is at most
+  64 KiB (about a thousand typical legs); a longer trip says "Too long to share as text" and points to Save CSV file. If
+  the share sheet can't open, the log says so and nothing is sent.
 - **Save CSV file** asks where to save `southbound-legs-<yyyyMMdd>.csv` with the system file picker, writes the file
-  there, reads it back, and removes it if anything went wrong.
+  there, reads it back, and removes it if anything went wrong. While the picker is up only the trip's name is kept, in
+  saved state, so the file is written even if Android stopped Southbound meanwhile: the rows are rebuilt from the log
+  when the picker answers. If the trip is no longer in the log then, the empty file is removed and the log says so.
 
 ## The record
 
@@ -64,8 +70,9 @@ phone is kept.
 
 What is kept is a day, a distance and your own labels for each leg you chose to log; never where the phone went. The
 labels are yours. **What I searched** is the one chip that carries text from elsewhere in the app: the query you typed in
-Search, held in memory only (never in saved state) from the pick until the route preview closes, and offered only for
-the place it found. Search text usually names the place, so once saved in a leg it is a place name in your log, sealed
+Search, held in memory only from the pick until the route preview closes or guidance starts, and offered only for the
+place it found. Southbound's copy for the chip is never in saved state; Search's own field keeps what you typed in the
+screen's saved state while Search shows it, as it did before the trip log. Search text usually names the place, so once saved in a leg it is a place name in your log, sealed
 like a saved place's name, leaving the phone only in a CSV you share or your encrypted export, and never more precise
 than what you typed. The sheet says this once, under the chip.
 

@@ -422,7 +422,8 @@ internal fun ExploreMap(
     // The "What I searched" text offered to the open leg sheet, if any.
     var legSearched by remember { mutableStateOf<String?>(null) }
     // What was typed in Search for the place picked from it: memory only (never saved state, never written unless the
-    // user puts it in a leg's To and saves), gone when the route preview closes or the map goes back to browsing.
+    // user puts it in a leg's To and saves), gone when the route preview closes, guidance starts or the map goes back to
+    // browsing.
     var searchedFor by remember { mutableStateOf<Pair<Place, String>?>(null) }
     // The leg logged from the preview on screen, so its row reads "Logged to ..." (a new route starts with none).
     var loggedLegId by remember { mutableStateOf<Long?>(null) }
@@ -447,12 +448,13 @@ internal fun ExploreMap(
     var currentState by remember { mutableStateOf<String?>(null) }
     var stateCards by remember { mutableStateOf<StateCards?>(null) }
     val inTripNow by rememberUpdatedState(inTrip)
-    // Nothing of the trip log stays open into guidance.
+    // Nothing of the trip log stays open into guidance, and the searched text goes with the preview.
     LaunchedEffect(inTrip) {
         if (inTrip) {
             tripLogOpen = false
             legDraft = null
             legSearched = null
+            searchedFor = null
         }
     }
     LaunchedEffect(panel) { if (panel == Panel.Browse) searchedFor = null }

@@ -85,7 +85,7 @@ data class Leg(
 
         private val SPACES = Regex("\\s+")
 
-        private fun breaksLine(c: Char): Boolean = c.isISOControl() || c == ' ' || c == ' ' || c == '\u0085'
+        private fun breaksLine(c: Char): Boolean = c.isISOControl() || c == '\u2028' || c == '\u2029' || c == '\u0085'
 
         private fun wellFormed(s: String): Boolean {
             var i = 0

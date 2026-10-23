@@ -14,8 +14,11 @@ import java.time.format.DateTimeParseException
  * Android, so the rules are tested on the JVM; the sheet keeps it with `remember` only (never saved state: To may hold
  * the typed search text, which must not outlive the screen unless the leg is saved).
  *
- * The miles field starts as the planned distance printed to one decimal ([plannedMiles]); while it still reads that,
- * the leg keeps the exact planned metres, and a change sets `edited`.
+ * The miles field starts as the planned distance printed to one decimal ([plannedMiles]); while it still reads that
+ * distance to the tenth of a mile ("212.4", " 212.40 "), the leg keeps the exact planned metres, and a change sets `edited`.
+ *
+ * The trip and label fields stop at their caps as they are typed ([capped]), so Save never cuts what is on screen: a
+ * cleaned field over its cap is refused by [problem], never shortened.
  */
 internal data class LegDraft(
     /** The leg being changed from the log, or null for a new one from the route preview. */
@@ -29,15 +32,23 @@ internal data class LegDraft(
     val plannedMeters: Long,
     val plannedMiles: String,
 ) {
-    /** Whole metres: the planned ones while the miles read as they started, else the typed miles; null when not a number. */
-    fun meters(): Long? = if (miles.trim() == plannedMiles) plannedMeters else parseMiles(miles)
+    /**
+     * Whole metres: the planned ones while the typed miles are the planned distance to the tenth of a mile, else the
+     * typed miles; null when not a number.
+     */
+    fun meters(): Long? {
+        val typed = parseMiles(miles) ?: return null
+        val unchanged = plannedMeters > 0 && Distance.tenthsMiles(typed) == Distance.tenthsMiles(plannedMeters)
+        return if (unchanged) plannedMeters else typed
+    }
 
     /** The distance is not the one the sheet started with (a new leg is then saved as edited). */
     val distanceChanged: Boolean get() = meters() != plannedMeters
 
-    val cleanTrip: String get() = Leg.clean(trip, Leg.MAX_TRIP)
-    val cleanFrom: String get() = Leg.clean(from, Leg.MAX_LABEL)
-    val cleanTo: String get() = Leg.clean(to, Leg.MAX_LABEL)
+    // Cleaned (one line, single spaces, trimmed) but never cut: past the cap, [problem] says so.
+    val cleanTrip: String get() = Leg.clean(trip, Int.MAX_VALUE)
+    val cleanFrom: String get() = Leg.clean(from, Int.MAX_VALUE)
+    val cleanTo: String get() = Leg.clean(to, Int.MAX_VALUE)
     val cleanDay: String get() = day.trim()
 
     /** Why Save can't keep this yet, as the sentence to show, or null. The store checks [Leg.problem] again. */
@@ -50,6 +61,20 @@ internal data class LegDraft(
         const val MILES_PROBLEM = "Miles must be a number, such as 212.4."
 
         private val MILES = Regex("[0-9]{1,7}(\\.[0-9]*)?|\\.[0-9]+")
+
+        /**
+         * What a trip or label field keeps of [typed]: at most [max] characters (never through a surrogate pair), so the
+         * field stops at its cap and a longer paste keeps its start. Cleaning only shortens, so what is kept fits.
+         */
+        fun capped(typed: String, max: Int): String {
+            if (typed.length <= max) return typed
+            var end = max
+            if (typed[end - 1].isHighSurrogate()) end--
+            return typed.substring(0, end)
+        }
+
+        /** The field shows "n / max" from three quarters of its cap (30 of 40, 60 of 80). */
+        fun nearCap(text: String, max: Int): Boolean = text.length >= max - max / 4
 
         /** A new leg for the route option chosen in the preview: its distance, its mode, today, the last trip used. */
         fun forRoute(distanceMeters: Double, mode: LegMode, today: LocalDate, log: LegLog): LegDraft {

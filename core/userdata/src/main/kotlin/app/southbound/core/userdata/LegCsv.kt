@@ -15,6 +15,12 @@ object LegCsv {
     /** Lumen's typed mileage line is cut at 60 characters, so the line is never longer. */
     const val MAX_LINE = 60
 
+    /**
+     * The most CSV that Share CSV sends as text, in UTF-8 bytes: far under the binder's limit for an intent (about 1 MB
+     * shared by everything in flight), about a thousand typical legs. A longer trip is saved with Save CSV file instead.
+     */
+    const val MAX_SHARE_BYTES = 64 * 1024
+
     private const val CRLF = "\r\n"
 
     /**
@@ -66,6 +72,9 @@ object LegCsv {
         val range = if (trip.firstDay == trip.lastDay) ", ${trip.firstDay}" else ", ${trip.firstDay} to ${trip.lastDay}"
         return listOf(miles + km + count + range, miles + count + range).firstOrNull { it.length <= MAX_LINE } ?: (miles + count)
     }
+
+    /** Whether [csv] is small enough to share as text ([MAX_SHARE_BYTES]). */
+    fun fitsTextShare(csv: String): Boolean = csv.toByteArray(Charsets.UTF_8).size <= MAX_SHARE_BYTES
 
     /** The name Save CSV file offers: `southbound-legs-20261024.csv`, from the day it is saved. */
     fun fileName(today: LocalDate): String = "southbound-legs-${today.format(DateTimeFormatter.BASIC_ISO_DATE)}.csv"

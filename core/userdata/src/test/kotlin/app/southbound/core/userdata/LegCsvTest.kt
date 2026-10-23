@@ -90,7 +90,24 @@ class LegCsvTest {
         // A size where only the kilometres have to go.
         val mid = LegLog.totals("t", most.take(1_000))
         assertEquals("6213700.0 mi, 1000 legs, 2026-01-01 to 2026-12-31", LegCsv.mileageLine(mid))
-        assertEquals("62137.0 mi (100000.0 km), 10 legs, 2026-01-01 to 2026-12-31".length, 59)
+        // Ten capped legs: the longest line that keeps the kilometres (59 characters).
+        val ten = LegCsv.mileageLine(LegLog.totals("t", most.take(10)))
+        assertEquals("62137.0 mi (100000.0 km), 10 legs, 2026-01-01 to 2026-12-31", ten)
+        assertEquals(59, ten.length)
+    }
+
+    @Test
+    fun `a CSV is offered as text only up to 64 KiB`() {
+        assertEquals(64 * 1024, LegCsv.MAX_SHARE_BYTES)
+        assertTrue(LegCsv.fitsTextShare(LegCsv.csv(listOf(leg(3, "2026-10-24", 1_000)))))
+        assertTrue(LegCsv.fitsTextShare("x".repeat(LegCsv.MAX_SHARE_BYTES)))
+        assertFalse(LegCsv.fitsTextShare("x".repeat(LegCsv.MAX_SHARE_BYTES + 1)))
+        // Counted in UTF-8 bytes, not characters.
+        assertFalse(LegCsv.fitsTextShare("\u00e9".repeat(LegCsv.MAX_SHARE_BYTES / 2 + 1)))
+        // A full log of long labels is far past it; a few hundred plain legs are not.
+        val long = "L".repeat(Leg.MAX_LABEL)
+        assertFalse(LegCsv.fitsTextShare(LegCsv.csv((1..LegLog.MAX_LEGS).map { leg(it.toLong() + 2, "2026-10-24", 1_000, from = long, to = long) })))
+        assertTrue(LegCsv.fitsTextShare(LegCsv.csv((1..300).map { leg(it.toLong() + 2, "2026-10-24", 341_825) })))
     }
 
     @Test

@@ -28,6 +28,7 @@
     <string name="leg_searched_note">What you searched usually names the place. Saved, it is a place name in your log, sealed like a saved place\'s name, and leaves the phone only in a CSV you share or your encrypted export.</string>
     <string name="leg_save">Save</string>
     <string name="leg_cancel">Cancel</string>
+    <string name="leg_counter">%1$d / %2$d</string>
     <string name="leg_unreadable">Your saved places could not be read, so nothing new can be saved. Choose Keep trying or Start fresh in the Saved places notice first.</string>
     <string name="leg_save_failed">The leg could not be saved. Nothing was changed. Try again.</string>
 
@@ -47,6 +48,8 @@
     <string name="trip_log_share_csv">Share CSV</string>
     <string name="trip_log_share_line">Share mileage line</string>
     <string name="trip_log_save_csv">Save CSV file</string>
+    <string name="trip_log_share_csv_too_long">Too long to share as text. Use Save CSV file for this trip\'s rows.</string>
+    <string name="trip_log_share_failed">The share sheet could not open, so nothing was sent. Save CSV file writes the same rows to a file.</string>
     <string name="trip_log_rename">Rename</string>
     <string name="trip_log_delete">Delete</string>
     <string name="trip_log_edit_leg">Edit this leg</string>
@@ -59,6 +62,8 @@
     <string name="trip_log_share_title">Share the trip log</string>
     <string name="trip_log_saved_file">CSV file saved.</string>
     <string name="trip_log_save_file_failed">The CSV file could not be written, and it was removed. Nothing else changed.</string>
+    <string name="trip_log_save_file_gone">That trip is no longer in the log, so nothing was saved and the empty CSV file was removed.</string>
+    <string name="trip_log_save_file_gone_left">That trip is no longer in the log, so nothing was written to the CSV file. Delete it in your files app.</string>
     <string name="trip_log_save_file_not_removed">The CSV file could not be written. Delete the half-written file in your files app.</string>
     <string name="trip_log_close">Close</string>
 </resources>

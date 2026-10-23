@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,9 +70,12 @@ private sealed interface LogAsk {
  * file, Rename and Delete. Deletes ask first. Never opened during guidance (the caller closes it when a trip starts).
  *
  * A modal bottom sheet, its own window over the map. The list is a LazyColumn, so it scrolls in landscape too. Which
- * trips are open, the pending CSV and the dialogs are `remember` only; the log itself is [log], read from the sealed
- * places file. Sharing is text through the share sheet ([LegShare.shareText]); a CSV file is written only to the
- * document the system file picker returns, read back, and removed if that fails.
+ * trips are open and the dialogs are `remember` only; the log itself is [log], read from the sealed places file.
+ * Sharing is text through the share sheet ([LegShare.shareText]), offered for a CSV only up to [LegCsv.MAX_SHARE_BYTES]
+ * (past that the trip points to Save CSV file). A CSV file is written only to the document the system file picker
+ * returns, read back, and removed if that fails. While the picker is up only the trip's name is kept (`rememberSaveable`,
+ * so it outlives Southbound's process); the rows are rebuilt from the log when the picker answers, and if the trip is no
+ * longer in the log the picker's empty document is removed and the sheet says so.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -89,23 +93,35 @@ internal fun TripLogSheet(
     var open by remember { mutableStateOf<Set<String>?>(null) }
     var ask by remember { mutableStateOf<LogAsk?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    // The CSV waiting for the file picker's answer: memory only.
-    var pendingCsv by remember { mutableStateOf<String?>(null) }
+    // The trip whose CSV waits for the file picker's answer: its name only, kept across a process death while the
+    // picker is up; the rows are rebuilt from the log when the answer comes.
+    var pendingTrip by rememberSaveable { mutableStateOf<String?>(null) }
 
     val savedText = stringResource(R.string.trip_log_saved_file)
     val removedText = stringResource(R.string.trip_log_save_file_failed)
     val leftText = stringResource(R.string.trip_log_save_file_not_removed)
+    val goneText = stringResource(R.string.trip_log_save_file_gone)
+    val goneLeftText = stringResource(R.string.trip_log_save_file_gone_left)
     val shareTitle = stringResource(R.string.trip_log_share_title)
+    val shareFailedText = stringResource(R.string.trip_log_share_failed)
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        val csv = pendingCsv
-        pendingCsv = null
-        if (uri != null && csv != null) {
+        val trip = pendingTrip
+        pendingTrip = null
+        if (uri != null) {
+            // The rows as the log holds them now (the log is read from the sealed file when the screen starts, so this
+            // holds after a process death too).
+            val legs = trip?.let { log.trip(it)?.legs }
             scope.launch {
-                val written = withContext(Dispatchers.IO) { LegShare.writeCsv(context.contentResolver, uri, csv) }
-                message = when (written) {
-                    LegShare.Written.DONE -> savedText
-                    LegShare.Written.FAILED_REMOVED -> removedText
-                    LegShare.Written.FAILED_LEFT -> leftText
+                message = if (legs == null) {
+                    // The trip is not in the log any more: nothing to write, and the picker's empty file goes.
+                    if (withContext(Dispatchers.IO) { LegShare.discardIfEmpty(context.contentResolver, uri) }) goneText else goneLeftText
+                } else {
+                    val csv = LegCsv.csv(legs)
+                    when (withContext(Dispatchers.IO) { LegShare.writeCsv(context.contentResolver, uri, csv) }) {
+                        LegShare.Written.DONE -> savedText
+                        LegShare.Written.FAILED_REMOVED -> removedText
+                        LegShare.Written.FAILED_LEFT -> leftText
+                    }
                 }
             }
         }
@@ -136,6 +152,8 @@ internal fun TripLogSheet(
             for (trip in trips) {
                 val isOpen = trip.trip in shownOpen
                 item(key = "trip:${trip.trip}") {
+                    // Share CSV is offered only while the text fits an intent comfortably.
+                    val csvFits = remember(trip.legs) { LegCsv.fitsTextShare(LegCsv.csv(trip.legs)) }
                     // One column per item: a lazy item's children would otherwise be laid over each other.
                     Column {
                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -145,20 +163,33 @@ internal fun TripLogSheet(
                             onToggle = { open = if (isOpen) shownOpen - trip.trip else shownOpen + trip.trip },
                         )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { LegShare.shareText(context, LegCsv.csv(trip.legs), shareTitle) }) {
-                                Text(stringResource(R.string.trip_log_share_csv))
+                            if (csvFits) {
+                                TextButton(onClick = {
+                                    if (!LegShare.shareText(context, LegCsv.csv(trip.legs), shareTitle)) message = shareFailedText
+                                }) {
+                                    Text(stringResource(R.string.trip_log_share_csv))
+                                }
                             }
-                            TextButton(onClick = { LegShare.shareText(context, LegCsv.mileageLine(trip), shareTitle) }) {
+                            TextButton(onClick = {
+                                if (!LegShare.shareText(context, LegCsv.mileageLine(trip), shareTitle)) message = shareFailedText
+                            }) {
                                 Text(stringResource(R.string.trip_log_share_line))
                             }
                             TextButton(onClick = {
-                                pendingCsv = LegCsv.csv(trip.legs)
+                                pendingTrip = trip.trip
                                 saveFile.launch(LegCsv.fileName(LocalDate.now()))
                             }) { Text(stringResource(R.string.trip_log_save_csv)) }
                             TextButton(onClick = { ask = LogAsk.Rename(trip.trip) }) { Text(stringResource(R.string.trip_log_rename)) }
                             TextButton(onClick = { ask = LogAsk.DeleteTrip(trip) }) {
                                 Text(stringResource(R.string.trip_log_delete), color = MaterialTheme.colorScheme.error)
                             }
+                        }
+                        if (!csvFits) {
+                            Text(
+                                stringResource(R.string.trip_log_share_csv_too_long),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -277,16 +308,18 @@ private fun ConfirmDialog(title: String, body: String, onConfirm: () -> Unit, on
 @Composable
 private fun RenameDialog(current: String, onRename: (String) -> Unit, onDismiss: () -> Unit) {
     var name by remember(current) { mutableStateOf(current) }
-    val cleaned = Leg.clean(name, Leg.MAX_TRIP)
+    // The field stops at the cap, so the name saved is the one on screen, never cut.
+    val cleaned = Leg.clean(name, Int.MAX_VALUE)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.trip_log_rename_title)) },
         text = {
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = { name = LegDraft.capped(it, Leg.MAX_TRIP) },
                 label = { Text(stringResource(R.string.leg_trip)) },
                 singleLine = true,
+                supportingText = capCounter(name, Leg.MAX_TRIP),
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, capitalization = KeyboardCapitalization.Sentences),
             )
         },

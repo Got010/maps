@@ -45,6 +45,13 @@ class LegDraftTest {
         assertTrue(typed.distanceChanged)
         assertEquals(346_009L, d.copy(miles = "215.0").meters())
         assertEquals(1_950_605L, d.copy(miles = "1,212.05").meters())
+        // The same tenth of a mile typed another way is not a change: the planned metres stay and nothing is edited.
+        for (same in listOf("212.40", "0212.4", "212.4000", " 212.4")) {
+            assertEquals(same, 341_825L, d.copy(miles = same).meters())
+            assertFalse(same, d.copy(miles = same).distanceChanged)
+        }
+        assertTrue(d.copy(miles = "212.5").distanceChanged)
+        assertTrue(d.copy(miles = "212.3").distanceChanged)
         assertEquals(805L, d.copy(miles = ".5").meters())
         for (bad in listOf("", "abc", "12.3.4", "-5", "1e3", "12 mi")) assertNull(bad, d.copy(miles = bad).meters())
         assertEquals(LegDraft.MILES_PROBLEM, d.copy(miles = "abc", trip = "t", from = "a", to = "b").problem())
@@ -62,11 +69,38 @@ class LegDraftTest {
         assertTrue(d.copy(day = "2026-02-30").problem()!!.startsWith("The date"))
         assertTrue(d.copy(miles = "0").problem()!!.startsWith("The distance"))
         assertTrue(d.copy(miles = "7000").problem()!!.startsWith("The distance"))
-        // A long label is cut to the cap rather than refused.
-        assertNull(d.copy(to = "x".repeat(200)).problem())
-        assertEquals(Leg.MAX_LABEL, d.copy(to = "x".repeat(200)).cleanTo.length)
+        // A label at its cap is kept whole; past it, refused and never cut.
+        assertNull(d.copy(to = "x".repeat(Leg.MAX_LABEL)).problem())
+        assertEquals(Leg.MAX_LABEL, d.copy(to = "x".repeat(Leg.MAX_LABEL)).cleanTo.length)
+        assertEquals(Leg.MAX_LABEL + 1, d.copy(to = "x".repeat(Leg.MAX_LABEL + 1)).cleanTo.length)
+        assertTrue(d.copy(to = "x".repeat(Leg.MAX_LABEL + 1)).problem()!!.startsWith("To"))
+        assertTrue(d.copy(from = "x".repeat(Leg.MAX_LABEL + 1)).problem()!!.startsWith("From"))
+        assertTrue(d.copy(trip = "t".repeat(Leg.MAX_TRIP + 1)).problem()!!.startsWith("The trip name"))
         // A route of nothing can't be logged until a distance is typed.
         assertTrue(LegDraft.forRoute(0.0, LegMode.DRIVE, today, log).copy(trip = "t", from = "a", to = "b").problem()!!.startsWith("The distance"))
+    }
+
+    @Test
+    fun theFieldsStopAtTheirCapsSoSaveNeverCuts() {
+        assertEquals("Fall trip", LegDraft.capped("Fall trip", Leg.MAX_TRIP))
+        assertEquals("t".repeat(Leg.MAX_TRIP), LegDraft.capped("t".repeat(Leg.MAX_TRIP + 5), Leg.MAX_TRIP))
+        // A paste keeps its start, and never ends on half a surrogate pair.
+        assertEquals("x".repeat(Leg.MAX_TRIP - 1), LegDraft.capped("x".repeat(Leg.MAX_TRIP - 1) + "\uD83D\uDE97", Leg.MAX_TRIP))
+        // Whatever a field keeps, Save keeps all of it: cleaning only shortens.
+        val d = LegDraft.forRoute(1_000.0, LegMode.DRIVE, today, log)
+        for (typed in listOf("  a  b  ".repeat(20), "x".repeat(500), "Motel\nA\t".repeat(30))) {
+            val trip = LegDraft.capped(typed, Leg.MAX_TRIP)
+            val label = LegDraft.capped(typed, Leg.MAX_LABEL)
+            val kept = d.copy(trip = trip, from = label, to = label)
+            assertNull(typed, kept.problem())
+            assertEquals(Leg.clean(trip, Leg.MAX_TRIP), kept.cleanTrip)
+            assertEquals(Leg.clean(label, Leg.MAX_LABEL), kept.cleanTo)
+        }
+        // The counter shows from three quarters of the cap.
+        assertFalse(LegDraft.nearCap("t".repeat(29), Leg.MAX_TRIP))
+        assertTrue(LegDraft.nearCap("t".repeat(30), Leg.MAX_TRIP))
+        assertFalse(LegDraft.nearCap("x".repeat(59), Leg.MAX_LABEL))
+        assertTrue(LegDraft.nearCap("x".repeat(60), Leg.MAX_LABEL))
     }
 
     @Test

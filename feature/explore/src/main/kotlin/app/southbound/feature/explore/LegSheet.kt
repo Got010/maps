@@ -82,7 +82,8 @@ internal fun LogLegRow(logged: Leg?, onLog: () -> Unit, onEdit: (Leg) -> Unit) {
  * one preselected), date, miles (the chosen option's, prefilled; a change marks the leg edited), mode, From and To. The
  * labels are never filled from the map or a pack: the user types them or taps a chip, the log's own labels or, for To,
  * [searched] ("What I searched: ..."), offered only when this route's destination is the place just picked from a
- * typed search. Autocorrect is off on every field.
+ * typed search. Autocorrect is off on every field. The trip and label fields stop at their caps, with a counter near
+ * them, so Save never cuts what is on screen.
  *
  * A modal bottom sheet (its own window, over the map and anything on it). The draft lives in `remember` only: the
  * activity handles rotation itself, so it survives one, and nothing typed here is saved state. [onSave] writes on IO and
@@ -124,9 +125,10 @@ internal fun LegSheet(
 
             OutlinedTextField(
                 value = draft.trip,
-                onValueChange = { draft = draft.copy(trip = it) },
+                onValueChange = { draft = draft.copy(trip = LegDraft.capped(it, Leg.MAX_TRIP)) },
                 label = { Text(stringResource(R.string.leg_trip)) },
                 singleLine = true,
+                supportingText = capCounter(draft.trip, Leg.MAX_TRIP),
                 keyboardOptions = noLearning,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -171,9 +173,10 @@ internal fun LegSheet(
 
             OutlinedTextField(
                 value = draft.from,
-                onValueChange = { draft = draft.copy(from = it) },
+                onValueChange = { draft = draft.copy(from = LegDraft.capped(it, Leg.MAX_LABEL)) },
                 label = { Text(stringResource(R.string.leg_from)) },
                 singleLine = true,
+                supportingText = capCounter(draft.from, Leg.MAX_LABEL),
                 keyboardOptions = noLearning,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -181,9 +184,10 @@ internal fun LegSheet(
 
             OutlinedTextField(
                 value = draft.to,
-                onValueChange = { draft = draft.copy(to = it) },
+                onValueChange = { draft = draft.copy(to = LegDraft.capped(it, Leg.MAX_LABEL)) },
                 label = { Text(stringResource(R.string.leg_to)) },
                 singleLine = true,
+                supportingText = capCounter(draft.to, Leg.MAX_LABEL),
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -234,6 +238,17 @@ internal fun LegSheet(
         }
     }
 }
+
+/**
+ * Under a trip or label field from three quarters of its cap: "34 / 40". The field stops at the cap ([LegDraft.capped]),
+ * so what Save keeps is what is on screen.
+ */
+internal fun capCounter(text: String, max: Int): (@Composable () -> Unit)? =
+    if (LegDraft.nearCap(text, max)) {
+        { Text(stringResource(R.string.leg_counter, text.length, max)) }
+    } else {
+        null
+    }
 
 /** A row of chips that scrolls sideways; a tap puts the chip's text in its field. */
 @Composable
