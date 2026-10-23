@@ -72,6 +72,7 @@ object Samples {
         searchAtBottom = true,
         wifi = false,
         stateLineCards = true,
+        road = false,
     )
 
     /** Every setting away from its default, with values that are floats in the real stores. */
@@ -96,14 +97,29 @@ object Samples {
         searchAtBottom = false,
         wifi = true,
         stateLineCards = false,
+        road = true,
     )
 
     fun data() = BackupData(userData(), keys(), settings())
 
-    /** The entries as the schema 9 writer wrote them for [data]: today's text without the schema 10 `state_line_cards`. */
-    fun schema9(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
+    /** The entries as the schema 10 writer wrote them for [data]: today's text without schema 11's Road switch. */
+    fun schema10(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
         val out = linkedMapOf<String, ByteArray>()
         for ((name, bytes) in SouthboundBundle.encode(data, version)) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":11", "\"schema\":10")
+                .replace("\"settings\":78", "\"settings\":77")
+                .replace(",\"road\":${data.settings.road}", "")
+            out[name] = t.toByteArray()
+        }
+        for ((name, bytes) in out) check(!contains(bytes, "\"road\"")) { "$name still mentions the Road switch" }
+        return out
+    }
+
+    /** The entries as the schema 9 writer wrote them for [data]: schema 10's text without the schema 10 `state_line_cards`. */
+    fun schema9(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
+        val out = linkedMapOf<String, ByteArray>()
+        for ((name, bytes) in schema10(version, data)) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":10", "\"schema\":9")
                 .replace("\"settings\":77", "\"settings\":76")
@@ -208,13 +224,16 @@ class FakeStores(dir: File, clock: () -> Long = { 1_000L }) : BackupStores {
         if (failApply) throw IOException("disk full")
         keys = data.apiKeys
         if (failSettings) throw IOException("commit failed")
-        // As AndroidBackupStores: a bundle without the Wi-Fi value (before schema 9) leaves the phone's switch alone.
-        settings = data.settings.let { if (it.wifi == null) it.copy(wifi = settings.wifi) else it }
+        // As AndroidBackupStores: a bundle without the Wi-Fi value (before schema 9) or the Road value (before schema 11)
+        // leaves the phone's switch alone.
+        settings = data.settings.let { it.copy(wifi = it.wifi ?: settings.wifi, road = it.road ?: settings.road) }
     }
 
     override fun networkToggles(): Map<NetworkFeature, Boolean> = settings.network
 
     override fun wifiWanted(): Boolean = settings.wifi == true
+
+    override fun roadWanted(): Boolean = settings.road == true
 
     /** Everything the stores hold, compared by value. */
     fun snapshot(): List<Any> = listOf(places.data.value, keys, settings)

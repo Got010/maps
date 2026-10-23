@@ -7,6 +7,7 @@ import app.southbound.core.network.SecretStore
 import app.southbound.core.network.SecretUnreadableException
 import app.southbound.core.packs.RegionSelection
 import app.southbound.core.packs.Regions
+import app.southbound.core.packs.RoadSelection
 import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.packs.WifiSelection
 import app.southbound.core.routing.DrivingPrefs
@@ -34,6 +35,7 @@ class AndroidBackupStores(
     private val regions: RegionSelection,
     private val voiceSelection: VoiceSelection,
     private val wifi: WifiSelection,
+    private val road: RoadSelection,
 ) : BackupStores {
 
     override fun blocker(): String? =
@@ -64,6 +66,7 @@ class AndroidBackupStores(
             allowMobileData = UpdateScheduler.allowMobileData(context),
             searchAtBottom = driving.searchAtBottom.value,
             wifi = wifi.wanted.value,
+            road = road.wanted.value,
             stateLineCards = driving.stateLineCards.value,
         )
         // readAll throws if a saved key can't be decrypted, rather than leaving it out of the export.
@@ -73,6 +76,8 @@ class AndroidBackupStores(
     override fun networkToggles(): Map<NetworkFeature, Boolean> = NetworkFeature.entries.associateWith { network.isEnabled(it) }
 
     override fun wifiWanted(): Boolean = wifi.wanted.value
+
+    override fun roadWanted(): Boolean = road.wanted.value
 
     /**
      * Every write here is durable when it returns (a synchronous commit, a fsynced file replace, or DataStore's
@@ -95,6 +100,9 @@ class AndroidBackupStores(
         // The Settings > Maps switch for the free Wi-Fi pack; the updater downloads or drops the pack to match. A
         // bundle before schema 9 has no value: the phone's switch is left as it is (writing "off" would delete the pack).
         s.wifi?.let { wifi.replace(it) }
+        // The Settings > Maps switch for the Road pack, the same way: a bundle before schema 11 has no value, and "off"
+        // written here would delete a pack the person has.
+        s.road?.let { road.replace(it) }
         UpdateScheduler.replaceAllowMobileData(context, s.allowMobileData)
     }
 

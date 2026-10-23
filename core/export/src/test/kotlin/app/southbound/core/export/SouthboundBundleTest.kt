@@ -69,8 +69,8 @@ class SouthboundBundleTest {
         val entries = SouthboundBundle.encode(Samples.data(), "0.1.14")
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
-            """{"app":"southbound","schema":10,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":77,"wifi_marks":2}""",
+            """{"app":"southbound","schema":11,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":78,"wifi_marks":2}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -97,7 +97,7 @@ class SouthboundBundleTest {
     }
 
     @Test
-    fun `marks and the Wi-Fi switch round trip through the bundle`() {
+    fun `marks and the Wi-Fi and Road switches round trip through the bundle`() {
         val data = Samples.data()
         assertEquals(2, data.userData.wifiMarks.size)
         assertEquals(true, data.settings.wifi)
@@ -107,12 +107,13 @@ class SouthboundBundleTest {
                 """"wifiMarks":[{"osmRef":"${Samples.WIFI_WORKED}","worked":true,"markedAt":600},{"osmRef":"${Samples.WIFI_FAILED}","worked":false,"markedAt":700}]""",
             ),
         )
-        assertTrue(text(entries, "settings.json").contains(""""packs":{"regions":["li","njn","nyc"],"wifi":true}"""))
+        assertTrue(text(entries, "settings.json").contains(""""packs":{"regions":["li","njn","nyc"],"wifi":true,"road":true}"""))
         // Through the file and the reader, the way an import goes.
         val back = SouthboundBundle.decode(read(file(entries)))
         assertEquals(data.userData.wifiMarks, back.userData.wifiMarks)
         assertEquals(data.userData, back.userData)
         assertEquals(true, back.settings.wifi)
+        assertEquals(true, back.settings.road)
         assertEquals(2, back.counts().wifiMarks)
         // None and off round trip too: the field is always written, as an empty list.
         val none = SouthboundBundle.encode(Samples.emptyData(), "x")
@@ -137,7 +138,7 @@ class SouthboundBundleTest {
         val bytes = file(entries)
         val header = SouthboundBundle.readHeader(ByteArrayInputStream(bytes))
         assertEquals("southbound", header.appId)
-        assertEquals(10L, header.schemaVersion)
+        assertEquals(11L, header.schemaVersion)
         assertEquals(1_791_028_800_000L, header.createdMs)
         assertFalse(header.verified)
         assertEquals(entries.mapValues { it.value.toList() }, read(bytes).mapValues { it.value.toList() })
@@ -185,6 +186,49 @@ class SouthboundBundleTest {
     private fun schema8(version: String) = Samples.schema8(version)
 
     @Test
+    fun `a schema 10 file still imports, with no value for the Road switch`() {
+        val ten = Samples.schema10("0.1.80")
+        // Exactly what the schema 10 writer produced: the full-size row of the previous version, state-line cards and Wi-Fi switch in.
+        assertEquals(
+            """{"app":"southbound","schema":10,"app_version":"0.1.80","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":77,"wifi_marks":2}""",
+            text(ten, "manifest.json"),
+        )
+        assertTrue(text(ten, "settings.json").contains("\"packs\":{\"regions\":[\"li\",\"njn\",\"nyc\"],\"wifi\":true}"))
+        val bytes = raw(*ten.map { it.key to it.value }.toTypedArray(), schema = 10)
+        assertEquals(10L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
+        val data = SouthboundBundle.decode(read(bytes))
+        // The Wi-Fi value, the state-line cards and the marks it did carry are kept; the Road switch is unset, never read as off.
+        assertEquals(Samples.data().settings.copy(road = null), data.settings)
+        assertEquals(true, data.settings.wifi)
+        assertEquals(null, data.settings.road)
+        assertEquals(Samples.data().userData, data.userData)
+        assertEquals(2, data.counts().wifiMarks)
+        assertEquals(77, SettingsEntry.count(data.settings, 10))
+        assertEquals(78, SettingsEntry.count(Samples.settings()))
+        // An export read back through the file reads exactly, the Road switch included.
+        assertEquals(Samples.data().settings, SouthboundBundle.decode(read(file())).settings)
+    }
+
+    @Test
+    fun `schema 10 is read with its own fields exactly`() {
+        val eleven = SouthboundBundle.encode(Samples.data(), "x")
+        // Today's settings or manifest, alone in an otherwise schema 10 bundle, are refused.
+        fun with(entry: String) = Samples.schema10("x").also { it[entry] = eleven.getValue(entry) }
+        refuses(with("settings.json"))
+        refuses(with("manifest.json"))
+        // The reverse: a schema 11 bundle must have the Road switch, and counts it.
+        refuses(mutated("settings.json", ",\"road\":true", ""))
+        refuses(mutated("manifest.json", "\"settings\":78", "\"settings\":77"))
+        refuses(mutated("settings.json", ",\"road\":true", ",\"road\":1"))
+        refuses(mutated("settings.json", ",\"road\":true", ",\"road\":true,\"roadx\":true"))
+        // A schema 10 header over a schema 11 body, and the other way round.
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { read(raw(*eleven.map { it.key to it.value }.toTypedArray(), schema = 10)) })
+        val ten = Samples.schema10("x")
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { read(raw(*ten.map { it.key to it.value }.toTypedArray(), schema = 11)) })
+    }
+
+    @Test
     fun `a schema 9 file still imports, with the state-line cards on`() {
         val nine = Samples.schema9("0.1.70")
         // Exactly what the schema 9 writer produced for the manifest and the driving group.
@@ -197,7 +241,7 @@ class SouthboundBundleTest {
         val bytes = raw(*nine.map { it.key to it.value }.toTypedArray(), schema = 9)
         assertEquals(9L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        assertEquals(Samples.data().settings.copy(stateLineCards = true), data.settings)
+        assertEquals(Samples.data().settings.copy(stateLineCards = true, road = null), data.settings)
         assertEquals(Samples.data().userData, data.userData)
         // The reverse: the state-line cards alone in an otherwise schema 9 bundle, or missing from a schema 10 one, are refused.
         val ten = SouthboundBundle.encode(Samples.data(), "x")
@@ -219,24 +263,24 @@ class SouthboundBundleTest {
         val bytes = raw(*eight.map { it.key to it.value }.toTypedArray(), schema = 8)
         assertEquals(8L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        assertEquals(Samples.data().settings.copy(wifi = null, stateLineCards = true), data.settings)
+        assertEquals(Samples.data().settings.copy(wifi = null, road = null, stateLineCards = true), data.settings)
         assertEquals(NO_MARKS, data.userData)
         assertEquals(0, data.counts().wifiMarks)
         assertEquals(Samples.data().apiKeys, data.apiKeys)
-        // The settings count a schema 8 manifest holds is one fewer than today's.
-        assertEquals(77, SettingsEntry.count(Samples.settings()))
+        // The settings count a schema 8 manifest holds is three fewer than today's.
+        assertEquals(78, SettingsEntry.count(Samples.settings()))
         assertEquals(75, SettingsEntry.count(data.settings, 8))
     }
 
     @Test
     fun `schema 8 is read with its own fields exactly`() {
         val nine = SouthboundBundle.encode(Samples.data(), "x")
-        // Each schema 9 addition, alone in an otherwise schema 8 bundle, is refused.
+        // Each of today's entries, alone in an otherwise schema 8 bundle, is refused.
         fun with(entry: String, text: String = String(nine.getValue(entry), Charsets.UTF_8)) =
             schema8("x").also { it[entry] = text.toByteArray() }
         refuses(with("places.json"))
         refuses(with("settings.json"))
-        refuses(with("manifest.json", text(nine, "manifest.json").replace("\"schema\":10", "\"schema\":8")))
+        refuses(with("manifest.json", text(nine, "manifest.json").replace("\"schema\":11", "\"schema\":8")))
         // The reverse: a schema 9 bundle must have all three.
         refuses(mutated("places.json", ",\"wifiMarks\":[", ",\"wifiMarksX\":["))
         refuses(mutated("settings.json", ",\"wifi\":true", ""))
@@ -269,7 +313,7 @@ class SouthboundBundleTest {
         val bytes = raw(*one.map { it.key to it.value }.toTypedArray(), schema = 1)
         assertEquals(1L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         assertEquals(
             expected.copy(searchAtBottom = true, stateLineCards = true, route = expected.route.copy(avoidDotCameras = false), network = expected.network + newerOff(NetworkFeature.WEATHER)),
             data.settings,
@@ -293,7 +337,7 @@ class SouthboundBundleTest {
         }
         val bytes = raw(*two.map { it.key to it.value }.toTypedArray(), schema = 2)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         assertEquals(expected.copy(searchAtBottom = true, stateLineCards = true, network = expected.network + newerOff(NetworkFeature.WEATHER)), data.settings)
     }
 
@@ -313,7 +357,7 @@ class SouthboundBundleTest {
         val bytes = raw(*three.map { it.key to it.value }.toTypedArray(), schema = 3)
         assertEquals(3L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         assertEquals(expected.copy(searchAtBottom = true, stateLineCards = true, network = expected.network + newerOff()), data.settings)
         assertEquals(NO_MARKS, data.userData)
     }
@@ -334,7 +378,7 @@ class SouthboundBundleTest {
         val bytes = raw(*four.map { it.key to it.value }.toTypedArray(), schema = 4)
         assertEquals(4L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         val newest = (listOf(NetworkFeature.TRAFFIC_CHART_MD, NetworkFeature.TRAFFIC_DELDOT, NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST,
             NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
             NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO) + SINCE_8)
@@ -359,7 +403,7 @@ class SouthboundBundleTest {
         val bytes = raw(*five.map { it.key to it.value }.toTypedArray(), schema = 5)
         assertEquals(5L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         val newest = (listOf(NetworkFeature.TRAFFIC_511WI, NetworkFeature.TRAFFIC_TRAVEL_MIDWEST, NetworkFeature.TRAFFIC_NDDOT, NetworkFeature.TRAFFIC_SD511,
             NetworkFeature.TRAFFIC_511IN, NetworkFeature.TRAFFIC_511MN, NetworkFeature.TRAFFIC_511IA, NetworkFeature.TRAFFIC_511NE, NetworkFeature.TRAFFIC_KANDRIVE, NetworkFeature.TRAFFIC_MIDRIVE, NetworkFeature.TRAFFIC_OHGO) + SINCE_8)
             .associateWith { false }
@@ -383,7 +427,7 @@ class SouthboundBundleTest {
         val bytes = raw(*six.map { it.key to it.value }.toTypedArray(), schema = 6)
         assertEquals(6L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null)
+        val expected = Samples.data().settings.copy(wifi = null, road = null)
         assertEquals(expected.copy(searchAtBottom = true, stateLineCards = true, network = expected.network + SINCE_8.associateWith { false }), data.settings)
         assertEquals(NO_MARKS, data.userData)
     }
@@ -403,7 +447,7 @@ class SouthboundBundleTest {
         val bytes = raw(*seven.map { it.key to it.value }.toTypedArray(), schema = 7)
         assertEquals(7L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
-        val expected = Samples.data().settings.copy(wifi = null, stateLineCards = true)
+        val expected = Samples.data().settings.copy(wifi = null, road = null, stateLineCards = true)
         assertTrue(expected.network.getValue(NetworkFeature.TRAFFIC_511VA))
         assertEquals(expected.copy(network = expected.network + SINCE_8.associateWith { false }), data.settings)
         assertEquals(NO_MARKS, data.userData)
@@ -437,7 +481,7 @@ class SouthboundBundleTest {
 
     @Test
     fun `a newer schema is refused from the header alone`() {
-        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 11)
+        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 12)
         assertEquals(FwxError.SCHEMA_TOO_NEW, code { SouthboundBundle.readHeader(ByteArrayInputStream(bytes)) })
     }
 
@@ -497,21 +541,21 @@ class SouthboundBundleTest {
     fun `manifest must match the contents`() {
         refuses(mutated("manifest.json", "\"saved_places\":3", "\"saved_places\":4"))
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
-        refuses(mutated("manifest.json", "\"settings\":77", "\"settings\":61"))
+        refuses(mutated("manifest.json", "\"settings\":78", "\"settings\":61"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":11"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":12"))
         // Older settings have no state-line cards, Wi-Fi switch, Virginia, West Virginia or Kentucky toggle, search_at_bottom, avoid_dot_cameras, weather, 511PA, CTroads, CHART, DelDOT, 511WI or Travel Midwest toggle, so these settings don't fit an older manifest.
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":9"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":8"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":7"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":6"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":5"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":4"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":3"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":2"))
-        refuses(mutated("manifest.json", "\"schema\":10", "\"schema\":1"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":9"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":8"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":7"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":6"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":5"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":4"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":3"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":2"))
+        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
-        refuses(mutated("manifest.json", ",\"settings\":77", ""))
+        refuses(mutated("manifest.json", ",\"settings\":78", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
     }
 
@@ -745,7 +789,7 @@ class SouthboundBundleTest {
 
     /** If one of these fails, the bundle's contents changed: update docs/EXPORT.md and bump the schema (with a migration). */
     @Test
-    fun `schema 10 pins what the stores hold`() {
+    fun `schema 11 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
         assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA", "OHGO"), ApiKey.entries.map { it.name })
@@ -764,16 +808,16 @@ class SouthboundBundleTest {
         assertEquals(12, fields(RoutePrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.WalkPrefs::class.java))
         assertEquals(3, fields(app.southbound.core.routing.BikePrefs::class.java))
-        assertEquals(77, SettingsEntry.count(Samples.settings()))
-        // AppSettings: one field per group or setting the bundle carries (schema 7 added searchAtBottom, schema 9 wifi, schema 10 stateLineCards).
-        assertEquals(10, fields(AppSettings::class.java))
+        assertEquals(78, SettingsEntry.count(Samples.settings()))
+        // AppSettings: one field per group or setting the bundle carries (schema 7 added searchAtBottom, schema 9 wifi, schema 10 stateLineCards, schema 11 road).
+        assertEquals(11, fields(AppSettings::class.java))
         // UserData: lists, saved, recents, lastId, home, work, and from schema 9 wifiMarks; a WifiMark is osmRef, worked, markedAt.
         assertEquals(7, fields(UserData::class.java))
         assertEquals(3, fields(app.southbound.core.userdata.WifiMark::class.java))
         // BackupCounts: one count per manifest field after app_version (schema 9 added wifi_marks).
         assertEquals(8, fields(BackupCounts::class.java))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
-        assertEquals(1L..10L, SouthboundBundle.SCHEMA_RANGE)
+        assertEquals(1L..11L, SouthboundBundle.SCHEMA_RANGE)
     }
 
     @Test

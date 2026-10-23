@@ -33,6 +33,9 @@ interface BackupStores {
     /** Whether the free Wi-Fi pack is wanted now (Settings > Maps), so an import can say when it turns it on. */
     fun wifiWanted(): Boolean
 
+    /** Whether the Road pack is wanted now (Settings > Maps), so an import can say when it turns it on. */
+    fun roadWanted(): Boolean
+
     /** Everything an export carries. Throws if a part can't be read; never returns a part as empty to hide that. */
     suspend fun read(): BackupData
 
@@ -53,7 +56,12 @@ class ReadBackFailedException : IOException("The file written did not read back 
 /** What an import came to. */
 sealed interface ImportOutcome {
     /** Applied: the stores now hold the bundle. */
-    data class Done(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ImportOutcome
+    data class Done(
+        val counts: BackupCounts,
+        val turnedOn: List<NetworkFeature>,
+        val wifiTurnedOn: Boolean,
+        val roadTurnedOn: Boolean,
+    ) : ImportOutcome
 
     /**
      * The bundle verified and was kept to apply, but applying stopped ([reason]). It is finished at the next
@@ -64,13 +72,19 @@ sealed interface ImportOutcome {
         val turnedOn: List<NetworkFeature>,
         val reason: String,
         val wifiTurnedOn: Boolean,
+        val roadTurnedOn: Boolean,
     ) : ImportOutcome
 }
 
 /** What [BackupService.resume] found. */
 sealed interface ResumeOutcome {
     data object NothingPending : ResumeOutcome
-    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ResumeOutcome
+    data class Applied(
+        val counts: BackupCounts,
+        val turnedOn: List<NetworkFeature>,
+        val wifiTurnedOn: Boolean,
+        val roadTurnedOn: Boolean,
+    ) : ResumeOutcome
 
     /** [unreadable]: the kept import itself can't be opened (so it can only be discarded). */
     data class Failed(val reason: String, val unreadable: Boolean) : ResumeOutcome
@@ -146,6 +160,7 @@ class BackupService(
             val counts = data.counts()
             val turnedOn = turnedOn(data)
             val wifiTurnedOn = wifiTurnedOn(data)
+            val roadTurnedOn = roadTurnedOn(data)
             // The places as they are before the import, kept with it: a resume at start goes ahead only while the
             // places are these or the import's own ([resume]).
             val before = placesPrints { stores.read().userData }?.first()
@@ -154,11 +169,11 @@ class BackupService(
             try {
                 stores.apply(data)
                 journal.clear()
-                ImportOutcome.Done(counts, turnedOn, wifiTurnedOn)
+                ImportOutcome.Done(counts, turnedOn, wifiTurnedOn, roadTurnedOn)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ImportOutcome.Pending(counts, turnedOn, reasonOf(e), wifiTurnedOn)
+                ImportOutcome.Pending(counts, turnedOn, reasonOf(e), wifiTurnedOn, roadTurnedOn)
             }
         } finally {
             SouthboundBundle.wipe(entries)
@@ -194,9 +209,10 @@ class BackupService(
             }
             val turnedOn = turnedOn(data)
             val wifiTurnedOn = wifiTurnedOn(data)
+            val roadTurnedOn = roadTurnedOn(data)
             stores.apply(data)
             journal.clear()
-            ResumeOutcome.Applied(data.counts(), turnedOn, wifiTurnedOn)
+            ResumeOutcome.Applied(data.counts(), turnedOn, wifiTurnedOn, roadTurnedOn)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -217,6 +233,9 @@ class BackupService(
 
     /** Whether the bundle switches the free Wi-Fi pack from off to on (a bundle before schema 9 leaves it alone). */
     private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi == true && !stores.wifiWanted()
+
+    /** Whether the bundle switches the Road pack from off to on (a bundle before schema 10 leaves it alone). */
+    private fun roadTurnedOn(data: BackupData): Boolean = data.settings.road == true && !stores.roadWanted()
 
     /**
      * Digests of [places] as an export would write them, the current form first, or null when they can't be read. With

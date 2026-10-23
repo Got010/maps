@@ -112,7 +112,7 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                             val outcome = withContext(Dispatchers.IO) { service.resume() }
                             pending = service.hasPending()
                             step = when (outcome) {
-                                is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts), networkSentence(resources, outcome.turnedOn, outcome.wifiTurnedOn, done = true)), applied = true)
+                                is ResumeOutcome.Applied -> Step.Message(resources.getString(R.string.backup_finished, summary(resources, outcome.counts), networkSentence(resources, outcome.turnedOn, outcome.wifiTurnedOn, outcome.roadTurnedOn, done = true)), applied = true)
                                 is ResumeOutcome.Failed -> Step.Message(resources.getString(R.string.backup_finish_failed, outcome.reason))
                                 ResumeOutcome.NothingPending -> Step.Idle
                             }
@@ -203,7 +203,7 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                             resources.getString(
                                 R.string.backup_imported,
                                 summary(resources, result.counts),
-                                networkSentence(resources, result.turnedOn, result.wifiTurnedOn, done = true),
+                                networkSentence(resources, result.turnedOn, result.wifiTurnedOn, result.roadTurnedOn, done = true),
                             ),
                             applied = true,
                         )
@@ -211,7 +211,7 @@ internal fun BackupSection(service: BackupService, onImported: () -> Unit) {
                             resources.getString(
                                 R.string.backup_import_pending,
                                 result.reason,
-                                networkSentence(resources, result.turnedOn, result.wifiTurnedOn, done = false),
+                                networkSentence(resources, result.turnedOn, result.wifiTurnedOn, result.roadTurnedOn, done = false),
                             ),
                             applied = false,
                         )
@@ -339,17 +339,20 @@ private fun CoroutineScope.launchWiping(passphrase: CharArray, block: suspend ()
 
 /**
  * Which network features an import switched on (or will, when [done] is false), by name; "none" when it changed no toggle
- * to on. When it also switches the free Wi-Fi pack on (Settings > Maps), that is said too: the pack downloads.
+ * to on. When it also switches the free Wi-Fi pack or the Road pack on (Settings > Maps), that is said too: the pack
+ * downloads.
  */
 private fun networkSentence(
     resources: android.content.res.Resources,
     turnedOn: List<NetworkFeature>,
     wifiTurnedOn: Boolean,
+    roadTurnedOn: Boolean,
     done: Boolean,
 ): String {
-    val network = networkFeaturesSentence(resources, turnedOn, done)
-    if (!wifiTurnedOn) return network
-    return network + " " + resources.getString(if (done) R.string.backup_wifi_on else R.string.backup_wifi_will_on)
+    var sentence = networkFeaturesSentence(resources, turnedOn, done)
+    if (wifiTurnedOn) sentence += " " + resources.getString(if (done) R.string.backup_wifi_on else R.string.backup_wifi_will_on)
+    if (roadTurnedOn) sentence += " " + resources.getString(if (done) R.string.backup_road_on else R.string.backup_road_will_on)
+    return sentence
 }
 
 private fun networkFeaturesSentence(resources: android.content.res.Resources, turnedOn: List<NetworkFeature>, done: Boolean): String =
