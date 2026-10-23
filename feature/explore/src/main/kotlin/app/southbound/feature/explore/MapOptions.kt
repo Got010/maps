@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.Wifi
@@ -68,9 +69,10 @@ import app.southbound.core.map.WifiColors
 
 /**
  * The map's one floating button, "Map options", and the list it opens above itself (speed-dial style): Re-center,
- * Traffic, Weather and Free Wi-Fi, each shown under the condition the separate button it replaced had. Re-center acts
- * and closes the list; a layer's row toggles it and keeps the list open so several can be set. A long press on the
- * Free Wi-Fi row opens the types chooser through [onChooseWifi]. New controls for the map join this list.
+ * Traffic, Weather and Free Wi-Fi, each shown under the condition the separate button it replaced had, and "This
+ * state" (the card for the state the phone is in) with state-line cards on. Re-center and "This state" act and close
+ * the list; a layer's row toggles it and keeps the list open so several can be set. A long press on the Free Wi-Fi row
+ * opens the types chooser through [onChooseWifi]. New controls for the map join this list.
  *
  * Open or closed is view state ([rememberSaveable]): kept through a rotation, gone with the screen. A tap outside
  * the list (a scrim that has no accessibility node, so it never traps TalkBack) or the back gesture closes it.
@@ -84,6 +86,7 @@ internal fun BoxScope.MapOptions(
     onToggleWeather: () -> Unit,
     onToggleWifi: () -> Unit,
     onChooseWifi: () -> Unit,
+    onThisState: () -> Unit,
     bottomInset: Dp,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
@@ -167,6 +170,10 @@ internal fun BoxScope.MapOptions(
                                 onChooseWifi()
                             },
                         )
+                        MapOption.THIS_STATE -> ThisStateRow {
+                            onThisState()
+                            open = false
+                        }
                     }
                 }
             }
@@ -227,6 +234,21 @@ private fun RecenterRow(panned: Boolean, onClick: () -> Unit) {
         stateText = null,
         onClick = onClick,
         actionLabel = stringResource(R.string.explore_my_location),
+        role = Role.Button,
+    )
+}
+
+/** "This state": opens the card for the state the phone is in. Acts, and the caller closes the list. */
+@Composable
+private fun ThisStateRow(onClick: () -> Unit) {
+    OptionRow(
+        label = stringResource(R.string.explore_options_this_state),
+        highlighted = false,
+        icon = { Icon(Icons.Filled.Flag, contentDescription = null) },
+        trailing = null,
+        stateText = null,
+        onClick = onClick,
+        actionLabel = stringResource(R.string.explore_options_this_state_action),
         role = Role.Button,
     )
 }

@@ -43,6 +43,7 @@ include(
     ":core:updates",
     ":core:userdata",
     ":core:export",
+    ":core:states",
 )
 
 include(

@@ -28,10 +28,16 @@ class SettingsEntryTest {
     /** The packs setting schema 9 added, as [Samples.settings] writes it (last in the packs group). */
     private val NEWER_9 = ""","wifi":true"""
 
-    /** What schema 8 wrote for [s]: today's text without schema 9's switch. */
-    private fun upTo8(s: AppSettings): String = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_9, "")
+    /** The driving setting schema 10 added, as [Samples.settings] writes it (last in the driving group). */
+    private val NEWER_10 = ""","state_line_cards":false"""
 
-    /** What schema 7 wrote for [s]: today's text without schema 8's toggles and schema 9's switch. */
+    /** What schema 9 wrote for [s]: today's text without schema 10's state-line cards. */
+    private fun upTo9(s: AppSettings): String = String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_10, "")
+
+    /** What schema 8 wrote for [s]: schema 9's text without its switch. */
+    private fun upTo8(s: AppSettings): String = upTo9(s).replace(NEWER_9, "")
+
+    /** What schema 7 wrote for [s]: schema 8's text without its toggles. */
     private fun upTo7(s: AppSettings): String = upTo8(s).replace(NEWER_8, "")
 
     /** What schemas 1 to 6 wrote for [s]: schema 7's text without its field. */
@@ -79,7 +85,7 @@ class SettingsEntryTest {
 
     @Test
     fun `the value count is the manifest's`() {
-        assertEquals(76, SettingsEntry.count(Samples.defaultSettings()))
+        assertEquals(77, SettingsEntry.count(Samples.defaultSettings()))
     }
 
     @Test
@@ -91,7 +97,7 @@ class SettingsEntryTest {
             .replace(""","WEATHER":true""" + NEWER, "")
         assertTrue("avoid_dot_cameras" !in one)
         val back = SettingsEntry.decode(one.toByteArray(), schema = 1)
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, route = s.route.copy(avoidDotCameras = false), network = s.network + off(NetworkFeature.WEATHER)), back)
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, route = s.route.copy(avoidDotCameras = false), network = s.network + off(NetworkFeature.WEATHER)), back)
         // Schema 2 requires the field, and schema 1 refuses it.
         for ((text, schema) in listOf(one to 2L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 1L)) {
             try {
@@ -110,7 +116,7 @@ class SettingsEntryTest {
         // What schema 2 wrote: the network group without the weather, 511PA and CTroads toggles.
         val two = upTo6(s).replace(""","WEATHER":true""" + NEWER, "")
         assertTrue("WEATHER" !in two)
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, network = s.network + off(NetworkFeature.WEATHER)), SettingsEntry.decode(two.toByteArray(), schema = 2))
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, network = s.network + off(NetworkFeature.WEATHER)), SettingsEntry.decode(two.toByteArray(), schema = 2))
         assertEquals(55, SettingsEntry.count(s, 2))
         assertEquals(54, SettingsEntry.count(s, 1))
         // Schema 3 requires it, and schema 2 refuses it.
@@ -131,7 +137,7 @@ class SettingsEntryTest {
         // What schema 3 wrote: the network group without the four newer toggles.
         val three = upTo6(s).replace(NEWER, "")
         assertTrue("TRAFFIC_511PA" !in three && "TRAFFIC_CTROADS" !in three && "TRAFFIC_DELDOT" !in three)
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, network = s.network + off()), SettingsEntry.decode(three.toByteArray(), schema = 3))
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, network = s.network + off()), SettingsEntry.decode(three.toByteArray(), schema = 3))
         assertEquals(56, SettingsEntry.count(s, 3))
         // Schema 4 requires them, and schema 3 refuses them.
         for ((text, schema) in listOf(three to 4L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 3L)) {
@@ -152,7 +158,7 @@ class SettingsEntryTest {
         val four = upTo6(s).replace(NEWER_5, "")
         assertTrue("TRAFFIC_511PA" in four && "TRAFFIC_CHART_MD" !in four && "TRAFFIC_DELDOT" !in four && "TRAFFIC_511WI" !in four)
         val newest = SINCE_4.drop(2).associateWith { false }
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, network = s.network + newest), SettingsEntry.decode(four.toByteArray(), schema = 4))
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, network = s.network + newest), SettingsEntry.decode(four.toByteArray(), schema = 4))
         assertEquals(58, SettingsEntry.count(s, 4))
         // Schema 5 requires them, and schema 4 refuses them.
         for ((text, schema) in listOf(four to 5L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 4L)) {
@@ -172,7 +178,7 @@ class SettingsEntryTest {
         val five = upTo6(s).replace(NEWER_6, "")
         assertTrue("TRAFFIC_DELDOT" in five && "TRAFFIC_511WI" !in five && "TRAFFIC_TRAVEL_MIDWEST" !in five && "TRAFFIC_SD511" !in five && "TRAFFIC_KANDRIVE" !in five && "TRAFFIC_MIDRIVE" !in five && "TRAFFIC_OHGO" !in five)
         val newest = SINCE_4.drop(4).associateWith { false }
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, network = s.network + newest), SettingsEntry.decode(five.toByteArray(), schema = 5))
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, network = s.network + newest), SettingsEntry.decode(five.toByteArray(), schema = 5))
         assertEquals(60, SettingsEntry.count(s, 5))
         for ((text, schema) in listOf(five to 6L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 5L)) {
             try {
@@ -191,7 +197,7 @@ class SettingsEntryTest {
         // What schema 6 wrote: the driving group with night_by_sunset alone.
         val six = upTo6(s)
         assertTrue("search_at_bottom" !in six && "TRAFFIC_OHGO" in six && "night_by_sunset" in six)
-        assertEquals(s.copy(wifi = null, searchAtBottom = true, network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(six.toByteArray(), schema = 6))
+        assertEquals(s.copy(wifi = null, searchAtBottom = true, stateLineCards = true, network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(six.toByteArray(), schema = 6))
         assertEquals(71, SettingsEntry.count(s, 6))
         assertEquals(72, SettingsEntry.count(s, 7))
         // Schema 7 requires it, and schema 6 refuses it.
@@ -212,7 +218,7 @@ class SettingsEntryTest {
         // What schema 7 wrote: the network group without the three toggles schema 8 added.
         val seven = upTo7(s)
         assertTrue("TRAFFIC_511VA" !in seven && "TRAFFIC_WV511" !in seven && "TRAFFIC_KYTC" !in seven && "TRAFFIC_OHGO" in seven && "search_at_bottom" in seven)
-        assertEquals(s.copy(wifi = null, network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(seven.toByteArray(), schema = 7))
+        assertEquals(s.copy(wifi = null, stateLineCards = true, network = s.network + SINCE_8.associateWith { false }), SettingsEntry.decode(seven.toByteArray(), schema = 7))
         assertEquals(72, SettingsEntry.count(s, 7))
         assertEquals(75, SettingsEntry.count(s, 8))
         // Schema 8 requires them, and schema 7 refuses them.
@@ -233,7 +239,7 @@ class SettingsEntryTest {
         // What schema 8 wrote: the packs group with the regions alone.
         val eight = upTo8(s)
         assertTrue("\"wifi\"" !in eight && "TRAFFIC_KYTC" in eight && "\"packs\":{\"regions\":[\"li\",\"njn\",\"nyc\"]}" in eight)
-        assertEquals(s.copy(wifi = null), SettingsEntry.decode(eight.toByteArray(), schema = 8))
+        assertEquals(s.copy(wifi = null, stateLineCards = true), SettingsEntry.decode(eight.toByteArray(), schema = 8))
         assertEquals(75, SettingsEntry.count(s, 8))
         assertEquals(76, SettingsEntry.count(s, 9))
         // Schema 9 requires the switch, and schema 8 refuses it; the value must be a boolean.
@@ -246,7 +252,7 @@ class SettingsEntryTest {
             }
         }
         try {
-            SettingsEntry.decode(String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_9, ",\"wifi\":\"yes\"").toByteArray(), 9L)
+            SettingsEntry.decode(upTo9(s).replace(NEWER_9, ",\"wifi\":\"yes\"").toByteArray(), 9L)
             fail("accepted a non-boolean switch")
         } catch (e: FwxException) {
             assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
@@ -261,6 +267,41 @@ class SettingsEntryTest {
         // Today's text round trips with the switch on and off.
         for (on in listOf(true, false)) {
             assertEquals(s.copy(wifi = on), SettingsEntry.decode(SettingsEntry.encode(s.copy(wifi = on))))
+        }
+    }
+
+    @Test
+    fun `a schema 9 bundle has no state-line cards and reads with them on`() {
+        val s = Samples.settings()
+        assertEquals(false, s.stateLineCards)
+        // What schema 9 wrote: the driving group without state_line_cards.
+        val nine = upTo9(s)
+        assertTrue("state_line_cards" !in nine && "\"wifi\":true" in nine && "search_at_bottom" in nine)
+        assertEquals(s.copy(stateLineCards = true), SettingsEntry.decode(nine.toByteArray(), schema = 9))
+        assertEquals(76, SettingsEntry.count(s, 9))
+        assertEquals(77, SettingsEntry.count(s, 10))
+        // Schema 10 requires it, and schema 9 refuses it; the value must be a boolean.
+        for ((text, schema) in listOf(nine to 10L, String(SettingsEntry.encode(s), Charsets.UTF_8) to 9L)) {
+            try {
+                SettingsEntry.decode(text.toByteArray(), schema)
+                fail("accepted schema $schema")
+            } catch (e: FwxException) {
+                assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+            }
+        }
+        try {
+            SettingsEntry.decode(String(SettingsEntry.encode(s), Charsets.UTF_8).replace(NEWER_10, ",\"state_line_cards\":\"no\"").toByteArray())
+            fail("accepted a non-boolean setting")
+        } catch (e: FwxException) {
+            assertEquals(FwxError.MALFORMED_PAYLOAD, e.code)
+        }
+    }
+
+    @Test
+    fun `the state-line cards round trip on and off`() {
+        for (on in listOf(true, false)) {
+            val s = Samples.settings().copy(stateLineCards = on)
+            assertEquals(on, SettingsEntry.decode(SettingsEntry.encode(s)).stateLineCards)
         }
     }
 

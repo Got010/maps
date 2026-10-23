@@ -1,4 +1,4 @@
-# Export format (bundle schema 9)
+# Export format (bundle schema 10)
 
 Settings > Backup > Export writes one file with everything Southbound keeps for you; Import reads it back. The file
 is an FWX v1 container (the fieldwork program's `specs/export-container.md`): a plaintext header, then AES-256-GCM
@@ -20,10 +20,10 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 | Entry | Holds |
 |---|---|
-| `manifest.json` | `{"app":"southbound","schema":9,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n,"wifi_marks":n}`. Always first. `wifi_marks` (schema 9) counts the Wi-Fi marks; a schema 1 to 8 manifest has no such field. The importer checks every count against what the other entries hold. |
+| `manifest.json` | `{"app":"southbound","schema":10,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n,"wifi_marks":n}`. Always first. `wifi_marks` (schema 9) counts the Wi-Fi marks; a schema 1 to 8 manifest has no such field. `settings` counts the values of `settings.json` (77 in schema 10). The importer checks every count against what the other entries hold. |
 | `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`, and from schema 9 `wifiMarks` (a list of `osmRef`, `worked`, `markedAt`: the user's "Wi-Fi worked" / "Didn't work" marks on free Wi-Fi spots, one per OSM reference, always present, an empty list when there are none; a schema 1 to 8 file has no such field). A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
 | `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`, `OHGO` (schema 6). The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
-| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 27 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`, and schemas 6 and 7 had 24, without `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`, `search_at_bottom`; schemas 1 to 6 had `night_by_sunset` alone), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own; `wifi`, schema 9: the Settings > Maps switch for the free Wi-Fi pack; a schema 1 to 8 bundle has no such field and an import leaves the phone's switch as it is), `updates` (`allow_mobile_data`). |
+| `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 27 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`, and schemas 6 and 7 had 24, without `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`, `search_at_bottom`, and from schema 10 `state_line_cards`: Settings > Driving > State-line cards; schemas 7 to 9 had the first two, schemas 1 to 6 `night_by_sunset` alone), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own; `wifi`, schema 9: the Settings > Maps switch for the free Wi-Fi pack; a schema 1 to 8 bundle has no such field and an import leaves the phone's switch as it is), `updates` (`allow_mobile_data`). |
 
 ## Import rules
 
@@ -79,7 +79,7 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 A new entry, a new `ApiKey` or `NetworkFeature`, a new setting, or any change to an entry's fields bumps the schema;
 the importer then declares the range it supports and needs a tested migration for every older schema.
-`SouthboundBundleTest`'s "schema 9 pins what the stores hold" fails when one of those changes without the schema.
+`SouthboundBundleTest`'s "schema 10 pins what the stores hold" fails when one of those changes without the schema.
 
 ### Schema history
 
@@ -112,8 +112,12 @@ the importer then declares the range it supports and needs a tested migration fo
   switch for the Wi-Fi pack). A schema 1 to 8 bundle is read with its own fields exactly (no `wifiMarks`, no `wifi`, no
   `wifi_marks`; a schema 9 field in an older bundle is refused) and imports with no marks and leaves the Free Wi-Fi
   switch as it is on the phone (a schema 9 bundle restores the switch exactly, on or off); the import replaces the marks
-  like everything else. Exports are written as schema 9. The marks also live in the saved
+  like everything else. The marks also live in the saved
   places file (`UserDataCodec`, still `"version":1`: a file without `wifiMarks` opens with none).
+- **10** (October 2026): `settings.json`'s `driving` group gained `state_line_cards` (Settings > Driving > State-line
+  cards, `docs/STATE_CARDS.md`). A schema 1 to 9 bundle is read with its own fields exactly (a schema 10 field in an older
+  bundle is refused) and imports with the cards on, the app's default. The cards themselves are static data in the app
+  and are not exported. Exports are written as schema 10.
 
 ## Checking an export from Termux
 

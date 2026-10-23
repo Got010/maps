@@ -15,7 +15,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 9 (schemas 1 to 8 are
+ * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 10 (schemas 1 to 9 are
  * still read). The entries, in
  * this order and all required: [MANIFEST], [PLACES], [API_KEYS], [SETTINGS]. docs/EXPORT.md lists what each holds.
  * The bundle is sealed with the passphrase alone, so it opens on a phone that has none of this phone's Keystore keys.
@@ -33,10 +33,11 @@ import java.util.TimeZone
  * Schema 8 added `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`; an older bundle imports with them off.
  * Schema 9 (the free Wi-Fi layer) added `places.json`'s `wifiMarks`, `settings.json`'s `packs.wifi` and the manifest's
  * `wifi_marks` count; an older bundle imports with no marks and leaves the Wi-Fi switch as it is on the phone.
+ * Schema 10 (state-line cards) added the driving setting `state_line_cards`; an older bundle imports with the cards on.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 9L
+    const val SCHEMA = 10L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */

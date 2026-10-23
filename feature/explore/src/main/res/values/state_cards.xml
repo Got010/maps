@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- State-line cards (core/states): a sheet of what the road rules say in a state. -->
+    <string name="explore_state_welcome">Welcome to %1$s</string>
+    <string name="explore_state_changes">What changes from %1$s</string>
+    <string name="explore_state_nothing_changed">Nothing on this card differs from %1$s.</string>
+    <string name="explore_state_entering">Entering %1$s</string>
+    <string name="explore_state_banner_line">%1$s: %2$s</string>
+    <string name="explore_state_banner_tap">Tap for the card</string>
+    <string name="explore_state_all_fields">All fields</string>
+    <string name="explore_state_only_changes">Only what changes</string>
+    <string name="explore_state_verify">verify</string>
+    <string name="explore_state_as_of">As of %1$s</string>
+    <string name="explore_state_footer">From public sources; check before relying on it.</string>
+    <string name="explore_state_close">Close</string>
+    <string name="explore_options_this_state">This state</string>
+    <string name="explore_options_this_state_action">Show the card for this state</string>
+</resources>

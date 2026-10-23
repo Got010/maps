@@ -30,7 +30,8 @@ import app.southbound.core.voice.VoiceSettings
  * `TRAFFIC_OHGO`; an older bundle reads with each off; schema 7 the driving group's `search_at_bottom`, which an older
  * bundle reads as on, the app's default; schema 8 the network group's `TRAFFIC_511VA`, `TRAFFIC_WV511` and
  * `TRAFFIC_KYTC`, which an older bundle reads as off; schema 9 the packs group's `wifi`, the Settings > Maps switch for
- * the free Wi-Fi pack, which an older bundle does not have: it reads as unset and an import leaves the switch as it is); an enum is its constant's name; a number
+ * the free Wi-Fi pack, which an older bundle does not have: it reads as unset and an import leaves the switch as it is; schema 10 the
+ * driving group's `state_line_cards`, Settings > Driving > State-line cards, which an older bundle reads as on, the app's default); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
@@ -72,7 +73,10 @@ internal object SettingsEntry {
     private val DRIVING_KEYS_1 = setOf("night_by_sunset")
 
     /** Schema 7: the search bar at the bottom. */
-    private val DRIVING_KEYS = DRIVING_KEYS_1 + "search_at_bottom"
+    private val DRIVING_KEYS_7 = DRIVING_KEYS_1 + "search_at_bottom"
+
+    /** Schema 10: the state-line cards. */
+    private val DRIVING_KEYS = DRIVING_KEYS_7 + "state_line_cards"
     private val FUEL_KEYS = setOf("mpg", "price_per_gallon", "price_source", "region")
     private val VOICE_KEYS = setOf(
         "mode", "driving", "cycling", "walking", "transit", "engine", "street_names", "detail", "traffic_alerts",
@@ -102,10 +106,11 @@ internal object SettingsEntry {
      * schemas 1 to 3 neither `TRAFFIC_511PA` nor `TRAFFIC_CTROADS`, schemas 1 to 4 neither `TRAFFIC_CHART_MD` nor
      * `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven (`TRAFFIC_511WI` to `TRAFFIC_OHGO`), schemas 1 to 6
      * no `search_at_bottom`, schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
-     * schemas 1 to 8 no `wifi`.
+     * schemas 1 to 8 no `wifi`, schemas 1 to 9 no `state_line_cards`.
      */
     fun count(s: AppSettings, schema: Long): Int =
         count(s) - (if (schema < 2) 1 else 0) - (if (schema < 7) 1 else 0) - (if (schema < 9) 1 else 0) -
+            (if (schema < 10) 1 else 0) -
             NetworkFeature.entries.count { !inSchema(it, schema) }
 
     private fun tree(s: AppSettings): Map<String, Any?> = linkedMapOf(
@@ -128,7 +133,11 @@ internal object SettingsEntry {
             "bike_avoid_hills" to s.route.bike.avoidHills,
             "bike_avoid_busy_roads" to s.route.bike.avoidBusyRoads,
         ),
-        "driving" to linkedMapOf<String, Any?>("night_by_sunset" to s.nightBySunset, "search_at_bottom" to s.searchAtBottom),
+        "driving" to linkedMapOf<String, Any?>(
+            "night_by_sunset" to s.nightBySunset,
+            "search_at_bottom" to s.searchAtBottom,
+            "state_line_cards" to s.stateLineCards,
+        ),
         "fuel" to linkedMapOf<String, Any?>(
             "mpg" to s.fuel.mpg,
             "price_per_gallon" to s.fuel.pricePerGallon,
@@ -166,11 +175,12 @@ internal object SettingsEntry {
     )
 
     /**
-     * Reads settings written with bundle [schema] (1 to 9; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
+     * Reads settings written with bundle [schema] (1 to 10; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
      * `WEATHER` toggle, schemas 1 to 3 no `TRAFFIC_511PA` or `TRAFFIC_CTROADS`, schemas 1 to 4 no
      * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
      * `TRAFFIC_OHGO`) and schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
-     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as null: unset, so an import leaves the switch alone).
+     * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as null: unset, so an import leaves the switch alone;
+     * schemas 1 to 9 have no `state_line_cards`, read as on).
      */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
@@ -202,10 +212,12 @@ internal object SettingsEntry {
             ),
         )
 
-        val d = root.obj("driving", if (schema >= 7) DRIVING_KEYS else DRIVING_KEYS_1)
+        val d = root.obj("driving", if (schema >= 10) DRIVING_KEYS else if (schema >= 7) DRIVING_KEYS_7 else DRIVING_KEYS_1)
         val night = d.bool("night_by_sunset")
         // Before schema 7 the bar was always at the top; the app now starts with it at the bottom, so that's the default.
         val searchAtBottom = schema < 7 || d.bool("search_at_bottom")
+        // Before schema 10 there were no state-line cards; the app starts with them on, so that's the default.
+        val stateLineCards = schema < 10 || d.bool("state_line_cards")
 
         val f = root.obj("fuel", FUEL_KEYS)
         val fuel = FuelChoices(
@@ -255,7 +267,7 @@ internal object SettingsEntry {
 
         val allowMobile = root.obj("updates", setOf("allow_mobile_data")).bool("allow_mobile_data")
 
-        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom, wifi).also { check(it) }
+        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom, wifi, stateLineCards).also { check(it) }
     }
 
     /** Range checks for settings that did not come from [decode] (an export of what the stores hold). */

@@ -55,7 +55,7 @@ internal object SettingsIndex {
         R.string.voice_other_audio, R.string.voice_output,
     ) + on(
         SettingsTab.DRIVING, R.string.settings_driving,
-        R.string.driving_night, R.string.driving_search_bottom,
+        R.string.driving_night, R.string.driving_search_bottom, R.string.driving_state_cards,
     ) + on(
         SettingsTab.DRIVING, R.string.driving_fuel_heading,
         R.string.driving_mpg, R.string.driving_gas_price, R.string.driving_price_source,

@@ -159,6 +159,16 @@ many plate readers and speed cameras it passes ("3 plate readers · 1 speed
 camera"). Both come from the search pack on the phone, so nothing about the
 trip is sent. A route that still passes a reader says so.
 
+**State-line cards.** A route (any travel mode) that crosses a state line lists it under the option ("Crosses into Ohio in 29
+mi"); tap it for that state's card, which opens on what changes from the state you come from: time zone, handheld-phone
+law, speed limits, tolls, the state police short code, move-over, radar detectors, open container, cannabis, sales tax,
+the rest-area overnight rule and daylight time. When you cross a line with the map open, the same card appears by
+itself (while guiding, a small "Entering <state>" banner that opens the card on a tap), and with voice guidance on it
+speaks one line. Map options > This state opens the card for where you are. The
+cards are written into the app (from public sources, each field dated, a "verify" tag where the compiler could not
+confirm it): nothing is looked up, no pack is needed, and nothing about where you have been is stored. Settings >
+Driving > State-line cards turns it off. Details: [docs/STATE_CARDS.md](docs/STATE_CARDS.md).
+
 ## Live traffic
 
 Settings > Live data has a toggle for 511NY incidents and closures (needs a

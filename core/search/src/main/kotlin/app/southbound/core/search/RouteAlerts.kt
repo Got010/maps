@@ -1,5 +1,10 @@
 package app.southbound.core.search
 
+import app.southbound.core.states.Crossing
+import app.southbound.core.states.Crossings
+import app.southbound.core.states.StateOutlines
+import app.southbound.core.states.StatePoint
+
 /** Things on the route worth a spoken warning, from the search pack's landmarks. */
 enum class AlertKind(val category: String) {
     SPEED_CAMERA(Landmark.SPEED_CAMERA),
@@ -165,6 +170,13 @@ object RouteAlerts {
             tolls = tolls.size,
         )
     }
+
+    /**
+     * The state lines [route] crosses, in driving order, for the route sheet's "Crosses into Ohio in 40 km" (core/states
+     * says when a change of state counts). Computed from the route alone: no pack, no network, nothing kept.
+     */
+    fun crossings(route: RouteLine, outlines: StateOutlines): List<Crossing> =
+        Crossings.crossingsAlong(route.points.map { StatePoint(it.lat, it.lon) }, outlines)
 
     /**
      * The alerts on [route], in driving order: one for each time the route passes within [MAX_OFFSET_M] of an
