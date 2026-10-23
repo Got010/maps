@@ -65,9 +65,13 @@ jobs:
           # The bundled SQLite here has the R-tree module; the pack must carry it.
           print("rtree rows", one("SELECT count(*) FROM road_rtree"))
           assert one("PRAGMA application_id") == 0x53425231 and one("PRAGMA user_version") == 1
-          # A floor per category, conservative: far below what the covered states hold, so only a changed filter
-          # or tag rule can break one. The categories not named here only have to be present.
-          floors = {"camp": 3000, "rest": 1000, "fuel": 30000, "pharmacy": 10000, "hospital": 2000, "grocery": 10000}
+          # A floor per category, roughly half of what the first full build held (2026-10-23): camp 12749, rv 2137,
+          # rest 2292, dump 699, water 10109, toilet 31073, shower 1923, fuel 46709, truck 2167, laundry 4668,
+          # library 9502, pharmacy 9300, hospital 3155, clinic 10005, grocery 16602, park 4945. Far below the
+          # measured counts, so only a changed filter or tag rule can break one.
+          floors = {"camp": 6000, "rv": 1000, "rest": 1000, "dump": 300, "water": 5000, "toilet": 15000,
+                    "shower": 900, "fuel": 20000, "truck": 1000, "laundry": 2000, "library": 4000, "pharmacy": 4000,
+                    "hospital": 1500, "clinic": 5000, "grocery": 8000, "park": 2000}
           categories = ["camp", "rv", "rest", "dump", "water", "toilet", "shower", "fuel", "truck", "laundry",
                         "library", "pharmacy", "hospital", "clinic", "grocery", "park"]
           assert set(counts) <= set(categories), f"unknown categories: {set(counts) - set(categories)}"

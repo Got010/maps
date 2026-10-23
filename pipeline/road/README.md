@@ -34,8 +34,9 @@ relation at the mean of its first outer ring's corners. An object that fits two 
   string...). A field the object does not have, or has empty, has no key: **absent means unknown, never false**.
   `diesel` is the one field that is not a tag: `true`, or no key (`fuel:diesel=no` leaves no key; `hgv=no` stays
   as `"hgv": "no"`, since OpenStreetMap says it).
-- Addresses, phone numbers, websites, e-mail and every other tag are dropped. Nothing is dropped for being private
-  or closed (`access=private` stays): the pack holds what OpenStreetMap says is there.
+- Addresses, phone numbers, websites, e-mail and every other tag are dropped. An object tagged `access=private` or
+  `access=no` is left out of every category (the Wi-Fi pack does the same); any other `access` value stays, and so
+  does a place tagged as closed.
 - A **truck stop** (`truck`) is a fuel station or a services area (`highway=services`) with `hgv=yes`, or whose
   `brand` is one of `chains.json`'s names (whole, ignoring case and apostrophe style) or whose `brand:wikidata` is
   one of its QIDs. A truck stop is also `fuel` (or `rest`).
@@ -70,9 +71,18 @@ relation at the mean of its first outer ring's corners. An object that fits two 
   the R-tree table `road_rtree(id, minlat, maxlat, minlon, maxlon)` (same ids as `spot`; absent only if the build's
   SQLite has no R-tree, which the build warns about and then refuses unless `ROAD_ALLOW_NO_RTREE=1`).
 
+## Measured
+
+First full build (`road.yml`, 2026-10-23, every covered state, about 8 minutes): 33.2 MB, 168,035 spots (R-tree rows
+equal) and 74,853 cluster rows for zooms 3 to 11. Spots per category: camp 12,749, rv 2,137, rest 2,292, dump 699,
+water 10,109, toilet 31,073, shower 1,923, fuel 46,709, truck 2,167, laundry 4,668, library 9,502, pharmacy 9,300,
+hospital 3,155, clinic 10,005, grocery 16,602, park 4,945. That build kept `access=private` and `access=no` objects;
+the exclusion above came after it, so the next build's counts are a little lower. `road.yml`'s floors are about half
+of these counts.
+
 ## Settings
 
-`ROAD_MAX_MB` (default 200) fails the build if the pack is bigger; `FREE_SOURCES=1` deletes each extract once it is
+`ROAD_MAX_MB` (default 64; the first full build measured 33 MB) fails the build if the pack is bigger; `FREE_SOURCES=1` deletes each extract once it is
 filtered (at most one is on disk). `ROAD_SOURCES="district-of-columbia"` builds from those Geofabrik names only, for
 a quick test pack (data.yml's smoke build does this); such a pack must not be shipped (release.yml sets it blank; a
 blank value is the same as unset). Reruns reuse the filtered files while the extract and `build.sh` are unchanged.

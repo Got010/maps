@@ -27,7 +27,7 @@
 # `docker exec` per step), stopped when the script ends.
 #
 # Optional settings (environment variables):
-#   ROAD_MAX_MB    fail if the pack is bigger (default 200)
+#   ROAD_MAX_MB    fail if the pack is bigger (default 64)
 #   FREE_SOURCES   1: delete each extract once it is filtered (release.yml and road.yml set it), so at most
 #                  one extract is on disk at a time
 #   ROAD_SOURCES   space-separated Geofabrik names (district-of-columbia): build from these extracts only, not
@@ -44,7 +44,7 @@ REGION="${1:?usage: build.sh us}"
 # shellcheck source=pipeline/lib/common.sh
 source "$(dirname "$0")/../lib/common.sh"
 PYTHON_IMAGE="${PYTHON_IMAGE:-python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d}"
-ROAD_MAX_MB="${ROAD_MAX_MB:-200}"
+ROAD_MAX_MB="${ROAD_MAX_MB:-64}"
 [[ "$ROAD_MAX_MB" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ROAD_MAX_MB must be a number of megabytes, not '$ROAD_MAX_MB'." >&2; exit 2; }
 # pyosmium and what it needs, locked by hash in the file ci.yml installs for the unit tests (see search/build.sh).
 PIP_LOCK="$(cd "$PIPELINE_DIR/.." && pwd)/.github/pipeline-requirements.txt"

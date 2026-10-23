@@ -92,9 +92,16 @@ class CategoryTest(unittest.TestCase):
     def test_values_match_whatever_the_case(self):
         self.assertEqual(["toilet"], categories(amenity=" Toilets "))
 
-    def test_nothing_is_dropped_for_being_private(self):
-        # The table has no access rule: the pack holds what OpenStreetMap says is there.
-        self.assertEqual(["toilet"], categories(amenity="toilets", access="private"))
+    def test_private_and_no_access_are_left_out_of_every_category(self):
+        for access in ("private", "no", " Private ", "NO"):
+            for tags in ({"amenity": "toilets"}, {"tourism": "camp_site"}, {"amenity": "fuel", "hgv": "yes"},
+                         {"highway": "services", "hgv": "yes"}, {"boundary": "national_park"},
+                         {"amenity": "doctors", "healthcare": "clinic"}):
+                self.assertEqual([], categories(access=access, **tags), (access, tags))
+
+    def test_other_access_values_stay(self):
+        for access in ("yes", "customers", "permit", "permissive", "destination", ""):
+            self.assertEqual(["toilet"], categories(amenity="toilets", access=access), access)
 
 
 class TruckTest(unittest.TestCase):
@@ -512,7 +519,7 @@ class FixtureTest(unittest.TestCase):
         return row[0], row[1], row[2], row[3], json.loads(row[4])
 
     def test_counts(self):
-        self.assertEqual({"camp": 4, "rv": 1, "rest": 4, "dump": 1, "water": 1, "toilet": 2, "shower": 1, "fuel": 6,
+        self.assertEqual({"camp": 5, "rv": 1, "rest": 4, "dump": 1, "water": 1, "toilet": 2, "shower": 1, "fuel": 6,
                           "truck": 5, "laundry": 1, "library": 1, "pharmacy": 1, "hospital": 2, "clinic": 2,
                           "grocery": 1, "park": 8}, self.counts)
         self.assertEqual(set(build_road.CATEGORIES), set(self.counts))
@@ -576,10 +583,22 @@ class FixtureTest(unittest.TestCase):
         self.assertEqual({"operator": "Fixture State Parks Division", "fee": "yes"}, self.spot("park", "Fixture State Park B")[4])
 
     def test_what_is_left_out(self):
-        for name in ("Fixture Hotel", "Fixture Cafe", "Fixture Single Doctor", "Pilot Snacks"):
+        for name in ("Fixture Hotel", "Fixture Cafe", "Fixture Single Doctor", "Pilot Snacks", "Fixture Private Toilet",
+                     "Fixture Closed Camp", "Fixture Private Truck Stop"):
             self.assertEqual(0, self.db.execute("SELECT count(*) FROM spot WHERE name = ?", (name,)).fetchone()[0], name)
         # Untagged corner nodes and member ways are no spots.
-        self.assertEqual(41, self.db.execute("SELECT count(*) FROM spot").fetchone()[0])
+        self.assertEqual(42, self.db.execute("SELECT count(*) FROM spot").fetchone()[0])
+
+    def test_access_private_and_no_are_left_out_but_other_access_stays(self):
+        def has(name, category):
+            return self.db.execute("SELECT count(*) FROM spot WHERE category = ? AND name = ?",
+                                   (category, name)).fetchone()[0] == 1
+
+        self.assertTrue(has("Fixture Permit Camp", "camp"))
+        self.assertFalse(has("Fixture Closed Camp", "camp"))
+        self.assertFalse(has("Fixture Private Toilet", "toilet"))
+        # One private truck stop is neither a fuel station nor a truck stop.
+        self.assertFalse(has("Fixture Private Truck Stop", "fuel") or has("Fixture Private Truck Stop", "truck"))
 
     def test_a_closed_way_sits_at_the_mean_of_its_corners(self):
         lat, lon, *_ = self.spot("camp", "Fixture Camp Area")

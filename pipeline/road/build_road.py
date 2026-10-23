@@ -23,7 +23,8 @@ Every spot is a point: a node as it is, a way at its middle node (a closed way a
 relation at the mean of its first outer ring's corners. Only the name and the brand are kept as columns, and a
 few fields per category as the JSON object `extra` (the table in README.md); addresses, phone numbers,
 websites and every other tag are dropped. A field that is absent is unknown, never false: `extra` has no key for
-it. Nothing is dropped for being private or closed: the pack holds what OpenStreetMap says is there.
+it. An object tagged access=private or access=no is left out of every category (the Wi-Fi pack does the same);
+any other access value (customers, permit, yes...) stays, and so does a place tagged as closed or disused.
 
 chains.json (edited by hand; the build fails loudly when it is malformed) lists the truck stop brands:
 
@@ -239,7 +240,9 @@ def is_state_park(tags):
 
 
 def categories_of(tags, chains):
-    """The categories an object belongs to, in CATEGORIES' order, each once."""
+    """The categories an object belongs to, in CATEGORIES' order, each once. None when it is private or off limits."""
+    if value(tags, "access") in ("private", "no"):
+        return []
     amenity, highway, tourism = value(tags, "amenity"), value(tags, "highway"), value(tags, "tourism")
     shop, boundary, leisure = value(tags, "shop"), value(tags, "boundary"), value(tags, "leisure")
     found = set()
