@@ -50,6 +50,8 @@ data class UserData(
     val work: PlaceRef? = null,
     // Free Wi-Fi: one mark per spot, the newest wins. A document written before this field loads with none.
     val wifiMarks: List<WifiMark> = emptyList(),
+    // The trip log (W13): legs the user logged from the route preview. A document written before this field loads with none.
+    val legs: List<Leg> = emptyList(),
 ) {
     fun shortcut(kind: Shortcut): PlaceRef? = if (kind == Shortcut.HOME) home else work
 
@@ -111,6 +113,50 @@ data class UserData(
 
     /** Removes the mark on [osmRef], if any. */
     fun clearWifiMark(osmRef: String): UserData = copy(wifiMarks = wifiMarks.filterNot { it.osmRef == osmRef })
+
+    /** The trip log as the screens read it. */
+    fun legLog(): LegLog = LegLog(legs)
+
+    /**
+     * Logs a leg under the next id. Throws [LegRefusedException] with the sentence to show when a field is out of
+     * bounds ([Leg.problem]) or the log already holds [LegLog.MAX_LEGS] legs; nothing changes then.
+     */
+    fun addLeg(trip: String, on: String, meters: Long, mode: LegMode, from: String, to: String, edited: Boolean): UserData {
+        if (legs.size >= LegLog.MAX_LEGS) {
+            throw LegRefusedException("The trip log holds 5,000 legs at most. Delete a trip you have claimed to log more.")
+        }
+        val id = lastId + 1
+        val leg = Leg(id, trip, on, meters, mode, from, to, edited)
+        leg.problem()?.let { throw LegRefusedException(it) }
+        return copy(legs = legs + leg, lastId = id)
+    }
+
+    /**
+     * Changes the leg [id] in place, keeping its id. It reads "edited" once its distance differs from the one it had
+     * (and stays so); a change of date, trip, labels or mode alone doesn't make it so. Throws [LegRefusedException] for a
+     * field out of bounds or a leg that is gone.
+     */
+    fun editLeg(id: Long, trip: String, on: String, meters: Long, mode: LegMode, from: String, to: String): UserData {
+        val old = legs.firstOrNull { it.id == id } ?: throw LegRefusedException("That leg is no longer in the log.")
+        val leg = Leg(id, trip, on, meters, mode, from, to, old.edited || meters != old.meters)
+        leg.problem()?.let { throw LegRefusedException(it) }
+        return copy(legs = legs.map { if (it.id == id) leg else it })
+    }
+
+    /** Removes the leg [id], if it is there. Its id is not handed out again. */
+    fun deleteLeg(id: Long): UserData = copy(legs = legs.filterNot { it.id == id })
+
+    /**
+     * Gives every leg of [trip] the name [to] (into an existing trip's name, the two become one trip). Throws
+     * [LegRefusedException] when [to] is not a trip name the log can keep.
+     */
+    fun renameTrip(trip: String, to: String): UserData {
+        if (!Leg.oneLine(to, Leg.MAX_TRIP)) throw LegRefusedException("The trip name must be 1 to ${Leg.MAX_TRIP} characters on one line.")
+        return copy(legs = legs.map { if (it.trip == trip) it.copy(trip = to) else it })
+    }
+
+    /** Removes every leg of [trip]. */
+    fun deleteTrip(trip: String): UserData = copy(legs = legs.filterNot { it.trip == trip })
 
     companion object {
         const val FAVORITES_ID = 1L
