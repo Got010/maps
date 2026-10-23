@@ -419,11 +419,15 @@ internal fun ExploreMap(
     // times or places is kept, and the card is a view of static data keyed by a state code worked out on the fly.
     val stateCardsOn by drivingPrefs.stateLineCards.collectAsState()
     var stateCardRequest by rememberSaveable { mutableStateOf<String?>(null) }
+    // During guidance a live crossing shows a small banner instead of the sheet; a tap on it opens the sheet.
+    var stateBanner by remember { mutableStateOf<StateCardRequest?>(null) }
     var currentState by remember { mutableStateOf<String?>(null) }
     var stateCards by remember { mutableStateOf<StateCards?>(null) }
     val inTripNow by rememberUpdatedState(inTrip)
+    LaunchedEffect(inTrip) { if (!inTrip) stateBanner = null }
     LaunchedEffect(stateCardsOn) {
         currentState = null
+        stateBanner = null
         if (!stateCardsOn) {
             stateCardRequest = null
             return@LaunchedEffect
@@ -434,15 +438,20 @@ internal fun ExploreMap(
         val live = LiveState(outlines)
         snapshotFlow { location }.collect { fix ->
             if (fix == null) return@collect
-            val entered = withContext(Dispatchers.Default) { live.onFix(fix.latitude, fix.longitude) }
+            // A fix without accuracy, or worse than 100 m, is not used; a crossing counts only 500 m inside the new state.
+            val accuracy = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null
+            val entered = withContext(Dispatchers.Default) { live.onFix(fix.latitude, fix.longitude, accuracy) }
             currentState = live.current
             if (entered == null) return@collect
             val into = cards[entered.to] ?: return@collect
-            stateCardRequest = StateCardRequest(entered.to, entered.from).encode()
-            // Guidance says it too, through the usual voice settings (muted or off: nothing spoken).
             val from = cards[entered.from]
-            if (inTripNow && from != null) {
-                services.voice.announce(UtteranceKind.HAZARD_ALERT, StateCards.spoken(into, StateCards.diff(from, into)))
+            if (inTripNow) {
+                // Guidance: a small banner over the map, not the full-height sheet, so the maneuvers and the trip
+                // controls stay in reach; the line is spoken too, through the usual voice settings (muted or off: nothing spoken).
+                stateBanner = StateCardRequest(entered.to, entered.from)
+                if (from != null) services.voice.announce(UtteranceKind.HAZARD_ALERT, StateCards.spoken(into, StateCards.diff(from, into)))
+            } else {
+                stateCardRequest = StateCardRequest(entered.to, entered.from).encode()
             }
         }
     }
@@ -1333,6 +1342,23 @@ internal fun ExploreMap(
     Box(Modifier.fillMaxSize()) {
         val shownCards = stateCards
         val cardRequest = StateCardRequest.decode(stateCardRequest)
+        val banner = stateBanner
+        if (stateCardsOn && inTrip && shownCards != null && banner != null && cardRequest == null) {
+            val bannerCard = shownCards[banner.code]
+            val bannerFrom = shownCards[banner.from]
+            if (bannerCard != null && bannerFrom != null) {
+                StateCardBanner(
+                    card = bannerCard,
+                    changed = StateCards.diff(bannerFrom, bannerCard),
+                    onOpen = {
+                        stateBanner = null
+                        stateCardRequest = banner.encode()
+                    },
+                    onDismiss = { stateBanner = null },
+                    modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp),
+                )
+            }
+        }
         if (stateCardsOn && shownCards != null && cardRequest != null) {
             shownCards[cardRequest.code]?.let { card ->
                 val from = shownCards[cardRequest.from]

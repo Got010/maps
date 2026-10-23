@@ -105,4 +105,40 @@ class LiveStateTest {
         assertNull(s.onFix(lat, colorado(2000.0)))
         assertEquals("CO", s.current)
     }
+
+    @Test
+    fun `fixes with poor or no accuracy are skipped`() {
+        val s = live
+        s.onFix(lat, kansas, 8.0)
+        // Two bad fixes well over the line, far apart: no crossing and no candidate.
+        assertNull(s.onFix(lat, colorado(3000.0), 250.0))
+        assertNull(s.onFix(lat, colorado(9000.0), 250.0))
+        assertNull(s.onFix(lat, colorado(9000.0), null))
+        assertEquals("KS", s.current)
+        // A bad fix is not half of a crossing: one good fix after two bad ones is still the first fix over.
+        assertNull(s.onFix(lat, colorado(1000.0), 20.0))
+        assertEquals("KS", s.current)
+        assertEquals(LiveState.Entered("KS", "CO"), s.onFix(lat, colorado(1700.0), 100.0))
+    }
+
+    @Test
+    fun `a bad first fix does not set the state`() {
+        val s = live
+        assertNull(s.onFix(lat, kansas, 500.0))
+        assertNull(s.current)
+        assertNull(s.onFix(lat, kansas, 30.0))
+        assertEquals("KS", s.current)
+    }
+
+    @Test
+    fun `the confirming fix must be 500 m inside the new state`() {
+        // 1.5 km from the first fix over but only 300 m inside along the line: it runs along the border.
+        val along = LiveState(TestData.outlines)
+        along.onFix(lat, kansas)
+        assertNull(along.onFix(lat, colorado(50.0)))
+        assertNull(along.onFix(lat + 0.015, colorado(300.0)))
+        assertEquals("KS", along.current)
+        // A later fix 600 m in confirms it.
+        assertEquals(LiveState.Entered("KS", "CO"), along.onFix(lat + 0.02, colorado(600.0)))
+    }
 }

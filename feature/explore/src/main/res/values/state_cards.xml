@@ -4,6 +4,9 @@
     <string name="explore_state_welcome">Welcome to %1$s</string>
     <string name="explore_state_changes">What changes from %1$s</string>
     <string name="explore_state_nothing_changed">Nothing on this card differs from %1$s.</string>
+    <string name="explore_state_entering">Entering %1$s</string>
+    <string name="explore_state_banner_line">%1$s: %2$s</string>
+    <string name="explore_state_banner_tap">Tap for the card</string>
     <string name="explore_state_all_fields">All fields</string>
     <string name="explore_state_only_changes">Only what changes</string>
     <string name="explore_state_verify">verify</string>

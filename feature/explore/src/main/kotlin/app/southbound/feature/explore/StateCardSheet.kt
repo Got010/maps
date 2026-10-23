@@ -3,6 +3,8 @@ package app.southbound.feature.explore
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -16,16 +18,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import app.southbound.core.states.Field
 import app.southbound.core.states.StateCard
+import app.southbound.core.states.StateCards
 import app.southbound.core.states.StateNames
 
 /**
@@ -119,6 +125,42 @@ private fun FieldRow(field: Field, highlighted: Boolean) {
                 stringResource(R.string.explore_state_as_of, field.asOf),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** How long the guidance banner stays before it goes by itself. */
+internal const val STATE_BANNER_MS = 12_000L
+
+/**
+ * During guidance the card does not take the screen: this small banner over the map says "Entering Ohio" and the two most
+ * important fields that changed, goes by itself after [STATE_BANNER_MS], and a tap on it opens the card as the sheet.
+ * Non-modal: no scrim, the maneuver banner and the trip controls stay in reach. Nothing is kept.
+ */
+@Composable
+internal fun StateCardBanner(card: StateCard, changed: List<Field>, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val latestDismiss by rememberUpdatedState(onDismiss)
+    LaunchedEffect(card.code) {
+        delay(STATE_BANNER_MS)
+        latestDismiss()
+    }
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shadowElevation = 6.dp,
+        modifier = modifier.widthIn(max = 420.dp).fillMaxWidth().clickable(onClick = onOpen),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(stringResource(R.string.explore_state_entering, card.name), style = MaterialTheme.typography.titleMedium)
+            for (field in StateCards.headline(changed)) {
+                val brief = StateCards.brief(field) ?: continue
+                Text(stringResource(R.string.explore_state_banner_line, field.label, brief), style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                stringResource(R.string.explore_state_banner_tap),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         }
     }
