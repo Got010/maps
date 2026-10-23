@@ -1,3 +1,5 @@
+> This file describes `state-cards.sourced.json`, the sourced copy kept in this repo; the rest of the note is the program's README verbatim (it also names files not kept here).
+
 # state-cards: data for the offline road-trip feature
 
 Compiled 2026-10-23. Two data files plus this note.

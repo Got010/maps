@@ -425,6 +425,8 @@ internal fun ExploreMap(
     var stateCards by remember { mutableStateOf<StateCards?>(null) }
     val inTripNow by rememberUpdatedState(inTrip)
     LaunchedEffect(inTrip) { if (!inTrip) stateBanner = null }
+    // The sheet and the banner never stack: opening the sheet drops a banner that is waiting, so it cannot come back later.
+    LaunchedEffect(stateCardRequest) { if (stateCardRequest != null) stateBanner = null }
     LaunchedEffect(stateCardsOn) {
         currentState = null
         stateBanner = null
@@ -448,7 +450,7 @@ internal fun ExploreMap(
             if (inTripNow) {
                 // Guidance: a small banner over the map, not the full-height sheet, so the maneuvers and the trip
                 // controls stay in reach; the line is spoken too, through the usual voice settings (muted or off: nothing spoken).
-                stateBanner = StateCardRequest(entered.to, entered.from)
+                if (stateCardRequest == null) stateBanner = StateCardRequest(entered.to, entered.from)
                 if (from != null) services.voice.announce(UtteranceKind.HAZARD_ALERT, StateCards.spoken(into, StateCards.diff(from, into)))
             } else {
                 stateCardRequest = StateCardRequest(entered.to, entered.from).encode()
@@ -1343,22 +1345,6 @@ internal fun ExploreMap(
         val shownCards = stateCards
         val cardRequest = StateCardRequest.decode(stateCardRequest)
         val banner = stateBanner
-        if (stateCardsOn && inTrip && shownCards != null && banner != null && cardRequest == null) {
-            val bannerCard = shownCards[banner.code]
-            val bannerFrom = shownCards[banner.from]
-            if (bannerCard != null && bannerFrom != null) {
-                StateCardBanner(
-                    card = bannerCard,
-                    changed = StateCards.diff(bannerFrom, bannerCard),
-                    onOpen = {
-                        stateBanner = null
-                        stateCardRequest = banner.encode()
-                    },
-                    onDismiss = { stateBanner = null },
-                    modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(horizontal = 16.dp),
-                )
-            }
-        }
         if (stateCardsOn && shownCards != null && cardRequest != null) {
             shownCards[cardRequest.code]?.let { card ->
                 val from = shownCards[cardRequest.from]
@@ -1566,6 +1552,28 @@ internal fun ExploreMap(
                         Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 150.dp)
                     },
                 )
+            }
+            // Drawn last, over the map and the trip overlay, so it is seen and takes the tap; in driving landscape it is
+            // centred on the map area, right of the trip column.
+            if (stateCardsOn && inTrip && shownCards != null && banner != null && cardRequest == null) {
+                val bannerCard = shownCards[banner.code]
+                val bannerFrom = shownCards[banner.from]
+                if (bannerCard != null && bannerFrom != null) {
+                    StateCardBanner(
+                        card = bannerCard,
+                        changed = StateCards.diff(bannerFrom, bannerCard),
+                        onOpen = {
+                            stateBanner = null
+                            stateCardRequest = banner.encode()
+                        },
+                        onDismiss = { stateBanner = null },
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(start = if (drivingLandscape) drivingPanelWidth else 0.dp)
+                            .safeDrawingPadding()
+                            .padding(horizontal = 16.dp),
+                    )
+                }
             }
         } else {
             when (val current = panel) {
