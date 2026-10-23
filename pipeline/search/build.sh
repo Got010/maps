@@ -21,7 +21,8 @@
 # Optional settings (environment variables; in GitHub Actions, repository
 # variables of the same names, see release.yml):
 #   ADDRESS_POINTS_URL  NYS Address Points to add to OSM's addresses: a .zip
-#                       holding a file geodatabase or shapefile (as published at
+#                       holding a file geodatabase (the October 2026 zip nests it one folder
+#                       down) or shapefile (as published at
 #                       https://gis.ny.gov/streets-addresses), a .csv/.geojson,
 #                       or the NYS GIS Resource Hub's download link for the
 #                       dataset (data.gis.ny.gov/api/download/v1/items/<id>/csv,
@@ -117,6 +118,35 @@ download_address_points() {
   done
 }
 
+# Prints the path, relative to directory $1, of the dataset ogr2ogr should read from an unpacked address points
+# download ($2 names it in the message): a file geodatabase, a shapefile or a GeoPackage, in that order. The geodatabase
+# is the .gdb directory that directly holds .gdbtable files, the one with a00000001.gdbtable first, found up to one
+# wrapper level down: the October 2026 zip nests it (X.gdb/X.gdb/a00000001.gdbtable, the outer folder holds only the
+# inner one), and the outer folder cannot be opened. Prints nothing and returns 1 when there is none.
+address_points_input() {
+  local dir="$1" label="${2:-the download}" table gdb first="" found="" any
+  while IFS= read -r table; do
+    gdb="$(dirname "$table")"
+    [[ "$gdb" == *.gdb ]] || continue
+    if [[ "$(basename "$table")" == a00000001.gdbtable ]]; then found="$gdb"; break; fi
+    [[ -n "$first" ]] || first="$gdb"
+  done < <(cd "$dir" && find . -maxdepth 6 -type f -name '*.gdbtable' | LC_ALL=C sort)
+  found="${found:-$first}"
+  if [[ -z "$found" ]]; then
+    found="$(cd "$dir" && find . -maxdepth 3 \( -name '*.shp' -o -name '*.gpkg' \) | LC_ALL=C sort | head -1)"
+  fi
+  if [[ -z "$found" ]]; then
+    any="$(cd "$dir" && find . -maxdepth 5 -type d -name '*.gdb' | LC_ALL=C sort | head -1)"
+    if [[ -n "$any" ]]; then
+      echo "The geodatabase ${any#./} in $label holds no .gdbtable files" >&2
+    else
+      echo "No .gdb, .shp or .gpkg in $label" >&2
+    fi
+    return 1
+  fi
+  echo "$found"
+}
+
 fetch_address_points() {
   local url="$1" file csv input
   file="$DATA_DIR/sources/$(address_points_filename "$url")"
@@ -142,11 +172,7 @@ fetch_address_points() {
     else
       cp "$file" "$DATA_DIR/tmp/address-points/"
     fi
-    input="$(cd "$DATA_DIR/tmp/address-points" && find . -maxdepth 3 \( -name '*.gdb' -o -name '*.shp' -o -name '*.gpkg' \) | head -1)"
-    if [[ -z "$input" ]]; then
-      echo "No .gdb, .shp or .gpkg in $file" >&2
-      exit 1
-    fi
+    input="$(address_points_input "$DATA_DIR/tmp/address-points" "$file")" || exit 1
     echo "==> Converting ${input#./} to CSV, cut to $BOUNDS"
     # shellcheck disable=SC2086  # BOUNDS splits into four numbers, the layer may be empty
     docker run --rm -v "$DATA_DIR:/data" "$GDAL_IMAGE" \
