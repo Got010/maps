@@ -162,8 +162,9 @@ class BackupService(
             val wifiTurnedOn = wifiTurnedOn(data)
             val roadTurnedOn = roadTurnedOn(data)
             // The places as they are before the import, kept with it: a resume at start goes ahead only while the
-            // places are these or the import's own ([resume]).
-            val before = placesPrints { stores.read().userData }?.first()
+            // places are these or the import's own ([resume]). A bundle before schema 12 keeps the phone's legs
+            // whatever they are by then, so its mark leaves the trip log out.
+            val before = placesMark(data) { stores.read().userData }
             // The commit point. If this throws, nothing has changed.
             journal.write(entries, before)
             try {
@@ -199,10 +200,20 @@ class BackupService(
             // The same refusal as a fresh import: never overwrite what can't be read.
             stores.ensureReadable()
             if (automatic) {
-                // Either form of each print: an import kept by an earlier version holds the print of places encoded
-                // without the marks field, which this version writes (as an empty list) for the same places.
-                val now = placesPrints { stores.read().userData }
-                val allowed = setOfNotNull(journal.mark()) + placesPrints { data.userData }.orEmpty()
+                // Every form of each print: an import kept by an earlier version holds the print of places encoded
+                // without the fields this version writes as empty lists (the marks, the legs); a bundle before
+                // schema 12 marked the places without the trip log. The import's own places are what applying it
+                // writes over these places (for an older bundle, with the phone's legs kept), so a stop after the
+                // places landed still matches when a leg was logged since.
+                val current = try {
+                    stores.read().userData
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                val now = current?.let { placesPrints(it)?.plus(digestOf(PlacesEntry.encodeWithoutLegs(it))) }
+                val allowed = setOfNotNull(journal.mark()) + current?.let { placesPrints(data.placesFor(it)) }.orEmpty()
                 if (now == null || now.none { it in allowed }) {
                     return@withLock ResumeOutcome.Failed(CHANGED_REASON, unreadable = false)
                 }
@@ -238,23 +249,34 @@ class BackupService(
     private fun roadTurnedOn(data: BackupData): Boolean = data.settings.road == true && !stores.roadWanted()
 
     /**
-     * Digests of [places] as an export would write them, the current form first, or null when they can't be read. With
-     * no Wi-Fi marks a second digest is of the form before schema 9 (no `wifiMarks` field), which an import kept by an
-     * earlier version recorded.
+     * The mark an import keeps of the places it found, or null when they can't be read: the digest of their current
+     * form, or, for a bundle before schema 12 (which keeps the phone's legs), of the form without the trip log.
      */
-    private suspend fun placesPrints(places: suspend () -> UserData): List<String>? = try {
-        val data = places()
-        val bytes = PlacesEntry.encode(data)
-        val forms = mutableListOf(bytes)
-        PlacesEntry.encodeBeforeSchema9(data)?.let { forms += it }
-        forms.map { form -> digest(form).also { form.fill(0) } }
+    private suspend fun placesMark(data: BackupData, places: suspend () -> UserData): String? = try {
+        val found = places()
+        if (data.legsFromBundle) placesPrints(found)?.first() else digestOf(PlacesEntry.encodeWithoutLegs(found))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         null
     }
 
-    private fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    /**
+     * Digests of [data] as an export would write them, the current form first, or null when they don't pass the
+     * export's check. With no legs the forms earlier versions wrote follow ([PlacesEntry.olderForms]: no `legs` field,
+     * and with no marks no `wifiMarks` field either), which an import kept by an earlier version recorded.
+     */
+    private fun placesPrints(data: UserData): List<String>? = try {
+        (listOf(PlacesEntry.encode(data)) + PlacesEntry.olderForms(data)).map(::digestOf)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    /** The SHA-256 of [bytes] in hex; the bytes are zeroed after. */
+    private fun digestOf(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }.also { bytes.fill(0) }
 
     /** A short reason that holds no contents: the exception's own message, or its kind. */
     private fun reasonOf(e: Throwable): String = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
