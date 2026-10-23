@@ -39,6 +39,7 @@ include(
     ":core:traffic",
     ":core:weather",
     ":core:wifi",
+    ":core:road",
     ":core:packs",
     ":core:updates",
     ":core:userdata",
