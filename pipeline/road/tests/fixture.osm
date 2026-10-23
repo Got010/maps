@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="synthetic">
+  <node id="1" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-98.0"><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Camp One"/><tag k="fee" v="yes"/><tag k="drinking_water" v="yes"/><tag k="toilets" v="yes"/><tag k="shower" v="no"/><tag k="reservation" v="recommended"/><tag k="opening_hours" v="Mar-Nov"/><tag k="operator" v="Fixture County"/><tag k="tents" v="yes"/><tag k="caravans" v="no"/><tag k="addr:street" v="1 Fixture Rd"/><tag k="phone" v="+1 555 0100"/><tag k="website" v="https://example.org/camp"/><tag k="sanitary_dump_station" v="yes"/></node>
+  <node id="2" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-98.0"><tag k="tourism" v="caravan_site"/><tag k="name" v="Fixture RV Park"/><tag k="sanitary_dump_station" v="yes"/><tag k="fee" v="yes"/><tag k="caravans" v="yes"/><tag k="brand" v="Example RV"/></node>
+  <node id="3" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-98.0"><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Camp Bare"/></node>
+  <node id="4" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-98.0"><tag k="highway" v="rest_area"/><tag k="name" v="Fixture Rest Area"/><tag k="toilets" v="yes"/><tag k="drinking_water" v="yes"/><tag k="opening_hours" v="24/7"/><tag k="operator" v="Fixture DOT"/></node>
+  <node id="5" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-98.0"><tag k="amenity" v="sanitary_dump_station"/><tag k="name" v="Fixture Dump"/><tag k="fee" v="no"/><tag k="opening_hours" v="24/7"/><tag k="phone" v="+1 555 0101"/></node>
+  <node id="6" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-98.0"><tag k="amenity" v="drinking_water"/><tag k="fee" v="no"/><tag k="seasonal" v="yes"/></node>
+  <node id="7" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-98.0"><tag k="amenity" v="toilets"/><tag k="fee" v="no"/><tag k="opening_hours" v="dawn-dusk"/><tag k="wheelchair" v="yes"/></node>
+  <node id="8" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-98.0"><tag k="amenity" v="shower"/><tag k="name" v="Fixture Shower"/><tag k="fee" v="yes"/><tag k="opening_hours" v="06:00-22:00"/></node>
+  <node id="9" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-98.0"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Gas Diesel"/><tag k="brand" v="Example Fuel"/><tag k="fuel:diesel" v="yes"/><tag k="opening_hours" v="24/7"/></node>
+  <node id="10" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-98.0"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Gas Plain"/><tag k="fuel:diesel" v="no"/><tag k="hgv" v="no"/></node>
+  <node id="11" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.99"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Truck Fuel"/><tag k="fuel:diesel" v="yes"/><tag k="hgv" v="yes"/><tag k="opening_hours" v="24/7"/><tag k="shower" v="yes"/></node>
+  <node id="12" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.99"><tag k="amenity" v="fuel"/><tag k="name" v="Pilot Travel Center"/><tag k="brand" v="Pilot"/><tag k="brand:wikidata" v="Q64128179"/><tag k="fuel:diesel" v="yes"/></node>
+  <node id="13" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.99"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Loves"/><tag k="brand" v="Love’s"/><tag k="shower" v="yes"/></node>
+  <node id="14" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.99"><tag k="shop" v="convenience"/><tag k="name" v="Pilot Snacks"/><tag k="brand" v="Pilot"/><tag k="brand:wikidata" v="Q64128179"/></node>
+  <node id="15" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.99"><tag k="shop" v="laundry"/><tag k="name" v="Fixture Laundromat"/><tag k="opening_hours" v="Mo-Su 06:00-22:00"/><tag k="website" v="https://example.org/wash"/></node>
+  <node id="16" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.99"><tag k="amenity" v="library"/><tag k="name" v="Fixture Library"/><tag k="opening_hours" v="Mo-Fr 09:00-17:00"/><tag k="internet_access" v="wlan"/></node>
+  <node id="17" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.99"><tag k="amenity" v="pharmacy"/><tag k="name" v="Fixture Pharmacy"/><tag k="brand" v="Example Drug"/><tag k="opening_hours" v="Mo-Su 08:00-22:00"/><tag k="dispensing" v="yes"/></node>
+  <node id="18" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.99"><tag k="amenity" v="hospital"/><tag k="name" v="Fixture Hospital"/><tag k="emergency" v="yes"/><tag k="operator" v="Fixture Health"/></node>
+  <node id="19" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.99"><tag k="amenity" v="hospital"/><tag k="name" v="Fixture Day Hospital"/></node>
+  <node id="20" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.99"><tag k="amenity" v="clinic"/><tag k="name" v="Fixture Clinic"/><tag k="opening_hours" v="Mo-Fr 08:00-16:00"/></node>
+  <node id="21" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.98"><tag k="amenity" v="doctors"/><tag k="healthcare" v="clinic"/><tag k="name" v="Fixture Doctors Clinic"/></node>
+  <node id="22" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.98"><tag k="amenity" v="doctors"/><tag k="name" v="Fixture Single Doctor"/></node>
+  <node id="23" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.98"><tag k="shop" v="supermarket"/><tag k="name" v="Fixture Market"/><tag k="brand" v="Example Mart"/><tag k="opening_hours" v="Mo-Su 07:00-23:00"/></node>
+  <node id="24" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.98"><tag k="leisure" v="park"/><tag k="name" v="Fixture City Park"/><tag k="operator" v="City of Fixtureville"/></node>
+  <node id="25" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.98"><tag k="leisure" v="park"/><tag k="name" v="Fixture State Park A"/><tag k="park:type" v="state_park"/></node>
+  <node id="26" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.98"><tag k="leisure" v="park"/><tag k="name" v="Fixture State Park B"/><tag k="operator" v="Fixture State Parks Division"/><tag k="fee" v="yes"/></node>
+  <node id="27" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.98"><tag k="leisure" v="park"/><tag k="name" v="Fixture Pocket Park"/></node>
+  <node id="28" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.98"><tag k="boundary" v="protected_area"/><tag k="protect_class" v="2"/><tag k="name" v="Fixture Preserve Two"/><tag k="operator" v="Fixture Agency"/></node>
+  <node id="29" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.98"><tag k="boundary" v="protected_area"/><tag k="protect_class" v="6"/><tag k="name" v="Fixture Preserve Six"/></node>
+  <node id="30" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.98"><tag k="boundary" v="protected_area"/><tag k="protect_class" v="7"/><tag k="name" v="Fixture Preserve Seven"/></node>
+  <node id="31" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.97"><tag k="boundary" v="protected_area"/><tag k="protect_class" v="1;4"/><tag k="name" v="Fixture Preserve Mixed"/></node>
+  <node id="32" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.97"><tag k="boundary" v="protected_area"/><tag k="protect_class" v="1b"/><tag k="name" v="Fixture Preserve Wilderness"/></node>
+  <node id="33" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.97"><tag k="boundary" v="protected_area"/><tag k="name" v="Fixture Preserve No Class"/></node>
+  <node id="34" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.97"><tag k="boundary" v="national_park"/><tag k="name" v="Fixture National Park Node"/><tag k="operator" v="Example Park Service"/></node>
+  <node id="35" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.54" lon="-97.97"><tag k="highway" v="services"/><tag k="name" v="Fixture Service Plaza"/></node>
+  <node id="36" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.55" lon="-97.97"><tag k="highway" v="services"/><tag k="name" v="Fixture Truck Plaza"/><tag k="hgv" v="yes"/><tag k="opening_hours" v="24/7"/></node>
+  <node id="37" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.56" lon="-97.97"><tag k="tourism" v="hotel"/><tag k="name" v="Fixture Hotel"/></node>
+  <node id="38" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.57" lon="-97.97"><tag k="amenity" v="toilets"/></node>
+  <node id="39" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.58" lon="-97.97"><tag k="amenity" v="cafe"/><tag k="name" v="Fixture Cafe"/></node>
+  <node id="40" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.59" lon="-97.97"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Name Only Brand"/><tag k="brand" v="Pilot Flying J"/></node>
+  <node id="41" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.96"><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Camp Blank Fields"/><tag k="fee" v=" "/><tag k="tents" v=""/></node>
+  <node id="42" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.5" lon="-97.95"><tag k="amenity" v="toilets"/><tag k="name" v="Fixture Private Toilet"/><tag k="access" v="private"/></node>
+  <node id="43" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.51" lon="-97.95"><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Closed Camp"/><tag k="access" v="no"/></node>
+  <node id="44" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.52" lon="-97.95"><tag k="amenity" v="fuel"/><tag k="name" v="Fixture Private Truck Stop"/><tag k="hgv" v="yes"/><tag k="fuel:diesel" v="yes"/><tag k="access" v="Private"/></node>
+  <node id="45" version="1" timestamp="2026-10-01T00:00:00Z" lat="38.53" lon="-97.95"><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Permit Camp"/><tag k="access" v="permit"/></node>
+  <node id="101" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-97.0"/>
+  <node id="102" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.0" lon="-96.998"/>
+  <node id="103" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.002" lon="-96.998"/>
+  <node id="104" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.002" lon="-97.0"/>
+  <node id="105" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.1"/>
+  <node id="106" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.099"/>
+  <node id="107" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.1" lon="-97.098"/>
+  <node id="108" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.2" lon="-97.2"/>
+  <node id="109" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.2" lon="-97.198"/>
+  <node id="110" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.202" lon="-97.198"/>
+  <node id="111" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.202" lon="-97.2"/>
+  <node id="112" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.3" lon="-97.3"/>
+  <node id="113" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.3" lon="-97.298"/>
+  <node id="114" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.302" lon="-97.298"/>
+  <node id="115" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.302" lon="-97.3"/>
+  <node id="116" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.4" lon="-97.4"/>
+  <node id="117" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.4" lon="-97.398"/>
+  <node id="118" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.402" lon="-97.398"/>
+  <node id="119" version="1" timestamp="2026-10-01T00:00:00Z" lat="39.402" lon="-97.4"/>
+  <way id="201" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="104"/><nd ref="101"/><tag k="tourism" v="camp_site"/><tag k="name" v="Fixture Camp Area"/></way>
+  <way id="202" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="105"/><nd ref="106"/><nd ref="107"/><tag k="highway" v="rest_area"/><tag k="name" v="Fixture Rest Way"/></way>
+  <way id="203" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="108"/><nd ref="109"/><nd ref="110"/><nd ref="111"/><nd ref="108"/></way>
+  <way id="204" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="112"/><nd ref="113"/><nd ref="114"/><nd ref="115"/><nd ref="112"/></way>
+  <way id="205" version="1" timestamp="2026-10-01T00:00:00Z"><nd ref="116"/><nd ref="117"/><nd ref="118"/><nd ref="119"/><nd ref="116"/></way>
+  <relation id="301" version="1" timestamp="2026-10-01T00:00:00Z"><member type="way" ref="203" role="outer"/><tag k="type" v="boundary"/><tag k="boundary" v="national_park"/><tag k="name" v="Fixture National Park"/><tag k="operator" v="Example Park Service"/></relation>
+  <relation id="302" version="1" timestamp="2026-10-01T00:00:00Z"><member type="way" ref="204" role="outer"/><tag k="type" v="boundary"/><tag k="boundary" v="protected_area"/><tag k="protect_class" v="3"/><tag k="name" v="Fixture Monument"/></relation>
+  <relation id="303" version="1" timestamp="2026-10-01T00:00:00Z"><member type="way" ref="205" role="outer"/><tag k="type" v="boundary"/><tag k="boundary" v="protected_area"/><tag k="protect_class" v="9"/><tag k="name" v="Fixture Forest Reserve"/></relation>
+</osm>

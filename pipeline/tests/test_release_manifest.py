@@ -89,6 +89,30 @@ class ReleaseManifestTest(unittest.TestCase):
         # The checksum file next to the pack is no pack.
         self.assertEqual(1, len([p for p in v2["packs"] if p["file"].startswith("wifi-")]))
 
+    def test_the_road_pack_is_listed_in_v2_only_and_without_regions(self):
+        regions = os.path.join(HERE, "..", "regions.json")
+        names = ["southbound-1.2.3.apk", "basemap-nyc.pmtiles", "routing-nys.tar", "routing-main.tar",
+                 "search-nys.sqlite", "search-nyc.sqlite", "transit-nyc.sqlite", "wifi-us.sqlite", "road-us.sqlite",
+                 "road-us.sqlite.sha256"]
+        with tempfile.TemporaryDirectory() as d:
+            self.files(d, names)
+            with open(os.path.join(d, "routing-packs.json"), "w") as f:
+                json.dump({"routing-main.tar": []}, f)
+            v2 = release_manifest.manifest(d, "1.2.3", v2=True, regions_json=regions)
+            # southbound.json lists only what release.yml's PACKS names: older apps never see the Road pack.
+            v1 = release_manifest.manifest(d, "1.2.3", only={"basemap-nyc.pmtiles", "routing-nys.tar", "search-nys.sqlite"})
+        road = [p for p in v2["packs"] if p["kind"] == "road"]
+        self.assertEqual(1, len(road))
+        self.assertEqual("us", road[0]["region"])
+        self.assertEqual("road-us.sqlite", road[0]["file"])
+        self.assertNotIn("regions", road[0])
+        self.assertEqual(1, road[0]["size"])
+        self.assertEqual(64, len(road[0]["sha256"]))
+        self.assertEqual([], [p for p in v1["packs"] if p["kind"] == "road"])
+        # The checksum file next to the pack is no pack, and the Wi-Fi pack is still listed beside it.
+        self.assertEqual(1, len([p for p in v2["packs"] if p["file"].startswith("road-")]))
+        self.assertEqual(1, len([p for p in v2["packs"] if p["kind"] == "wifi"]))
+
     def test_v2_refuses_a_release_without_routing_packs(self):
         regions = os.path.join(HERE, "..", "regions.json")
         with tempfile.TemporaryDirectory() as d:

@@ -92,6 +92,7 @@ the APK:
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 | `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 | `wifi-us.sqlite` | Free Wi-Fi spots in every state the app covers, from OpenStreetMap: places tagged with Wi-Fi, chains and kinds of place that usually have it (built by `make -C pipeline wifi-us`; shipped with every release from the one that merges it; the app reads it from the release that adds the Free Wi-Fi layer, B32b, so nothing in the app uses it before then) |
+| `road-us.sqlite` | Campsites, RV sites, rest areas, dump stations, water, toilets, showers, fuel and truck stops, laundromats, libraries, pharmacies, hospitals, clinics, supermarkets and parks in every state the app covers, from OpenStreetMap (built by `make -C pipeline road-us`; shipped with every release from the one that merges it; nothing in the app uses it yet) |
 
 Load each one the same way:
 
