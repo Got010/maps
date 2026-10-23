@@ -120,6 +120,7 @@ internal fun UpdatesSection(network: PreferenceNetworkToggles, secrets: SecretSt
         SettingsCard(R.string.regions_title) { RegionPicker(packStore, colors = rowColors()) }
     }
     SettingsCard(R.string.wifi_pack_card) { WifiPackRow(packStore, packDownloadsOn = toggles.getValue(NetworkFeature.PACK_DOWNLOADS)) }
+    SettingsCard(R.string.road_pack_card) { RoadPackRow(packStore, packDownloadsOn = toggles.getValue(NetworkFeature.PACK_DOWNLOADS)) }
     SettingsGroup(
         title = R.string.updates_packs_installed,
         summary = stringResource(R.string.updates_packs_count, packs.size, packs.sumOf { it.sizeMb }.toInt()),
@@ -133,8 +134,12 @@ private data class PackLine(val name: String, val sizeMb: Long, val modified: Lo
 
 private fun installedPacks(context: Context, store: PackStore, tiles: TileFolder): List<PackLine> =
     store.installed().map {
-        // The Wi-Fi pack is one national file: its name says what it is, not "wifi-us.sqlite (us)".
-        val name = if (it.kind == PackKind.WIFI) context.getString(R.string.wifi_pack_list_name) else "${it.file.name} (${Regions.nameOf(it.region)})"
+        // The Wi-Fi and Road packs are one national file each: the name says what it is, not "wifi-us.sqlite (us)".
+        val name = when (it.kind) {
+            PackKind.WIFI -> context.getString(R.string.wifi_pack_list_name)
+            PackKind.ROAD -> context.getString(R.string.road_pack_list_name)
+            else -> "${it.file.name} (${Regions.nameOf(it.region)})"
+        }
         PackLine(name, it.file.length() shr 20, it.file.lastModified())
     } +
         // Directions from southbound-v2.json's packs live unpacked in one folder: one line for all of them.

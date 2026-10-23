@@ -81,6 +81,20 @@
     <string name="explore_wifi_nothing">With these choices nothing will show.</string>
     <string name="explore_wifi_reset">Reset</string>
     <string name="explore_wifi_done">Done</string>
+    <!-- Road pack: the Map options row, its chooser, an import. -->
+    <string name="explore_options_road">Road</string>
+    <string name="explore_road_show">Show road places</string>
+    <string name="explore_road_hide">Hide road places</string>
+    <string name="explore_road_choose">Choose road places</string>
+    <string name="explore_road_filtered">Some kinds are hidden or added</string>
+    <string name="explore_road_chooser_title">Show on the map</string>
+    <string name="explore_road_kinds">Kind of place</string>
+    <string name="explore_road_nothing">With these choices nothing will show.</string>
+    <string name="explore_road_all">All</string>
+    <string name="explore_road_reset">Reset</string>
+    <string name="explore_road_done">Done</string>
+    <string name="explore_shared_kind_road">Road data</string>
+    <string name="explore_imported_road">Road data installed. The Road row is in the map options.</string>
     <string name="explore_traffic_show">Show live traffic</string>
     <string name="explore_weather_show">Show weather radar and alerts</string>
     <!-- Current weather at the nearest station (an airport's report). -->

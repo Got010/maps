@@ -79,4 +79,35 @@
     <string name="wifi_data_from">Data from %1$s (OpenStreetMap)</string>
     <string name="wifi_data_from_unknown">Data from OpenStreetMap</string>
     <string name="wifi_captive_note">Captive portals may ask for an email or a tap on a terms page</string>
+
+    <!-- Road pack: the chip, the list under it, along my route and the sheet. Every fact is the pack's; none is a promise. -->
+    <string name="road_chip">Road</string>
+    <string name="road_near_me">Near me</string>
+    <string name="road_along_route">Along my route</string>
+    <string name="road_none">Nothing of these kinds within 30 miles in the Road data. Try more kinds.</string>
+    <string name="road_none_along">Nothing of these kinds beside the route in the Road data. Try more kinds.</string>
+    <string name="road_failed">The Road data couldn\'t be read.</string>
+    <string name="road_no_place">Turn on location, or move the map to where you want to look.</string>
+    <string name="road_no_kinds">Pick at least one kind above.</string>
+    <string name="road_chip_diesel">diesel</string>
+    <string name="road_chip_fee">fee</string>
+    <string name="road_chip_toilets">toilets</string>
+    <string name="road_chip_water">water</string>
+    <string name="road_chip_showers">showers</string>
+    <string name="road_chip_overnight">overnight</string>
+    <string name="road_ahead">%1$s ahead</string>
+    <string name="road_off_route">%1$s off the route</string>
+    <string name="road_also">Also: %1$s</string>
+    <string name="road_operator">Operator: %1$s</string>
+    <string name="road_fact">%1$s: %2$s</string>
+    <string name="road_fact_fee">Fee</string>
+    <string name="road_fact_toilets">Toilets</string>
+    <string name="road_fact_water">Drinking water</string>
+    <string name="road_fact_showers">Showers</string>
+    <string name="road_fact_overnight">Overnight</string>
+    <string name="road_fact_diesel">Diesel</string>
+    <string name="road_yes">yes</string>
+    <string name="road_no">no</string>
+    <string name="road_data_from">Data from %1$s (OpenStreetMap)</string>
+    <string name="road_data_from_unknown">Data from OpenStreetMap</string>
 </resources>

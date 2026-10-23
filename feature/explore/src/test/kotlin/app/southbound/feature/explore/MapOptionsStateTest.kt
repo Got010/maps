@@ -78,6 +78,29 @@ class MapOptionsStateTest {
     }
 
     @Test
+    fun theRoadRowComesLastAndNeedsTheInstalledPack() {
+        assertEquals(listOf(MapOption.ROAD), nothing.copy(roadAvailable = true).rows)
+        assertEquals(
+            listOf(MapOption.RECENTER, MapOption.TRAFFIC, MapOption.WEATHER, MapOption.WIFI, MapOption.ROAD),
+            everything.copy(roadAvailable = true).rows,
+        )
+        // Without the pack there is no row, whatever was left set.
+        assertEquals(everything.rows, everything.copy(roadVisible = true, roadFiltered = true).rows)
+    }
+
+    @Test
+    fun theRoadLayerCountsAsALayerButNeverColoursTheDotGold() {
+        val road = everything.copy(roadAvailable = true)
+        assertEquals(MapOptionsDot.NONE, road.dot)
+        assertEquals(MapOptionsDot.LAYER, road.copy(roadVisible = true).dot)
+        assertEquals(MapOptionsDot.LAYER, road.copy(roadVisible = true, roadFiltered = true).dot)
+        assertTrue(road.copy(roadFiltered = true).roadRowFiltered)
+        assertFalse(everything.copy(roadFiltered = true).roadRowFiltered)
+        // A visible layer whose row is missing (the pack was removed) does not count.
+        assertEquals(MapOptionsDot.NONE, everything.copy(roadVisible = true).dot)
+    }
+
+    @Test
     fun aLayerWhoseRowIsMissingDoesNotCount() {
         // The Live-data toggle was turned off while the layer's flag was still set: the row and the layer are gone.
         val off = nothing.copy(hasLocation = true, trafficVisible = true, weatherVisible = true, wifiVisible = true, wifiFiltered = true)

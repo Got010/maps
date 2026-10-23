@@ -1,7 +1,7 @@
 package app.southbound.feature.explore
 
 /** One row of the Map options list. The enum's order is the list's order, top to bottom. */
-internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI, THIS_STATE }
+internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI, ROAD, THIS_STATE }
 
 /** The colour of the small dot on the Map options button. */
 internal enum class MapOptionsDot {
@@ -18,7 +18,7 @@ internal enum class MapOptionsDot {
 /**
  * What the Map options button and its list show, decided from the screen's own state and nothing else. A row is shown
  * under the condition the floating button it replaced had: a fix for Re-center, the Live-data toggle for Traffic and
- * Weather, the installed pack for Free Wi-Fi.
+ * Weather, the installed pack for Free Wi-Fi and for Road.
  */
 internal data class MapOptionsState(
     val hasLocation: Boolean,
@@ -34,6 +34,10 @@ internal data class MapOptionsState(
     val wifiFiltered: Boolean,
     /** State-line cards are on and the state the fix is in is known: the "This state" row opens its card. */
     val stateAvailable: Boolean = false,
+    val roadAvailable: Boolean = false,
+    val roadVisible: Boolean = false,
+    /** A Road kinds choice other than the default is set. */
+    val roadFiltered: Boolean = false,
 ) {
     /** The rows to show, top to bottom. */
     val rows: List<MapOption> = buildList {
@@ -41,6 +45,7 @@ internal data class MapOptionsState(
         if (trafficAvailable) add(MapOption.TRAFFIC)
         if (weatherAvailable) add(MapOption.WEATHER)
         if (wifiAvailable) add(MapOption.WIFI)
+        if (roadAvailable) add(MapOption.ROAD)
         if (stateAvailable) add(MapOption.THIS_STATE)
     }
 
@@ -49,10 +54,13 @@ internal data class MapOptionsState(
 
     /** A layer the user can see on the map right now; a layer whose row is missing does not count. */
     val anyLayerVisible: Boolean
-        get() = (trafficAvailable && trafficVisible) || (weatherAvailable && weatherVisible) || (wifiAvailable && wifiVisible)
+        get() = (trafficAvailable && trafficVisible) || (weatherAvailable && weatherVisible) || (wifiAvailable && wifiVisible) || (roadAvailable && roadVisible)
 
     /** The Wi-Fi row's filter dot: only with the pack installed. The button's dot is gold only while the layer shows too. */
     val wifiRowFiltered: Boolean get() = wifiAvailable && wifiFiltered
+
+    /** The Road row's filter dot: only with the pack installed. It does not colour the button's dot (that stays the primary colour). */
+    val roadRowFiltered: Boolean get() = roadAvailable && roadFiltered
 
     val dot: MapOptionsDot
         get() = when {

@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.southbound.core.packs.ImportedPack
 import app.southbound.core.packs.PackEvents
 import app.southbound.core.packs.PackKind
+import app.southbound.core.packs.RoadSelection
 import app.southbound.core.packs.WifiSelection
 import app.southbound.core.packs.PackStore
 import app.southbound.feature.settings.RegionPicker
@@ -76,6 +77,8 @@ fun ExploreScreen(
             if (result.pack.kind == PackKind.BASEMAP) basemapGeneration++
             // A Wi-Fi pack brought in by hand is wanted: the updater would otherwise drop it as unasked for.
             if (result.pack.kind == PackKind.WIFI) WifiSelection.get(context).choose(true)
+            // The same for a Road pack: the updater would drop it as unasked for, since the switch is off.
+            if (result.pack.kind == PackKind.ROAD) RoadSelection.get(context).choose(true)
         }
         basemaps = packStore.installedBasemaps()
     }
