@@ -1,0 +1,80 @@
+# Test build of the Road pack (owner, October 2026: offline campsites, rest areas, water, fuel and care for a long
+# drive; pipeline/road/). Builds road-us.sqlite from the Geofabrik extracts of every state in pipeline/regions.json
+# (about 4.6 GB downloaded, each filtered and deleted as it goes: FREE_SOURCES=1 keeps at most one extract on disk, so
+# no disk clean-up is needed), prints the size, the sha256, the rows per category and the truck stop chains with the
+# names behind them, and checks the pack opens with its marks and tables and holds a floor of spots per category.
+# Publishes nothing and uploads nothing: read the job log. It runs on a pull request that changes pipeline/road
+# (or this file), or from the Actions tab (Road pack test build > Run workflow). Other pipeline changes get the
+# short smoke in data.yml (Washington, DC only). Like wifi.yml it also runs in a private repository: one job on a
+# standard runner, roughly 30 to 60 billed minutes, so push the finished branch once rather than every commit.
+name: Road pack test build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'pipeline/road/**'
+      - '.github/workflows/road.yml'
+
+permissions: {}
+
+concurrency:
+  group: road-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  road:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      FREE_SOURCES: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build road-us.sqlite
+        run: |
+          start=$SECONDS
+          make -C pipeline road-us
+          echo "road-us.sqlite built in $(( (SECONDS - start) / 60 )) min"
+          df -h /
+
+      - name: Size, checksum and counts
+        run: |
+          ls -lh pipeline/data/out/road-us.sqlite
+          sha256sum pipeline/data/out/road-us.sqlite
+          {
+            echo '### road-us.sqlite'
+            echo '```'
+            ls -lh pipeline/data/out/road-us.sqlite | awk '{print $5, $9}'
+            sed -n '/== Road pack summary ==/,$p' pipeline/data/tmp/road-us.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 - pipeline/data/out/road-us.sqlite <<'PY'
+          import sqlite3, sys
+          db = sqlite3.connect(sys.argv[1])
+          one = lambda sql: db.execute(sql).fetchone()[0]
+          print("application_id", hex(one("PRAGMA application_id")), "user_version", one("PRAGMA user_version"))
+          print("meta", dict(db.execute("SELECT key, value FROM meta")))
+          spots = one("SELECT count(*) FROM spot")
+          counts = dict(db.execute("SELECT category, count(*) FROM spot GROUP BY category"))
+          print("spots", spots, "categories", counts, "clusters", one("SELECT count(*) FROM cluster"))
+          # The bundled SQLite here has the R-tree module; the pack must carry it.
+          print("rtree rows", one("SELECT count(*) FROM road_rtree"))
+          assert one("PRAGMA application_id") == 0x53425231 and one("PRAGMA user_version") == 1
+          # A floor per category, conservative: far below what the covered states hold, so only a changed filter
+          # or tag rule can break one. The categories not named here only have to be present.
+          floors = {"camp": 3000, "rest": 1000, "fuel": 30000, "pharmacy": 10000, "hospital": 2000, "grocery": 10000}
+          categories = ["camp", "rv", "rest", "dump", "water", "toilet", "shower", "fuel", "truck", "laundry",
+                        "library", "pharmacy", "hospital", "clinic", "grocery", "park"]
+          assert set(counts) <= set(categories), f"unknown categories: {set(counts) - set(categories)}"
+          for category in categories:
+              floor = floors.get(category, 0)
+              assert counts.get(category, 0) > floor, f"{category}: {counts.get(category, 0)} spots, floor {floor}"
+          zooms = db.execute("SELECT min(zoom), max(zoom) FROM cluster").fetchone()
+          print("cluster zooms", zooms)
+          assert zooms == (3, 11), f"cluster zooms {zooms}"
+          PY

@@ -3,6 +3,7 @@
 # NYC only, since it finishes in under an hour; the statewide packs build the
 # same scripts with other regions in release.yml after the PR is merged. The Free Wi-Fi pack gets a smoke
 # build here from Washington, DC alone (a few minutes), on every pipeline change but pipeline/wifi, which wifi.yml builds in full.
+# The Road pack gets the same smoke, on every pipeline change but pipeline/road, which road.yml builds in full.
 name: Map data
 
 on:
@@ -69,6 +70,29 @@ jobs:
           spots = one("SELECT count(*) FROM spot")
           print("spots", spots, "tiers", dict(db.execute("SELECT tier, count(*) FROM spot GROUP BY tier")))
           assert spots > 0, "no spots from the DC extract"
+          PY
+
+      # The Road pipeline end to end on the smallest extract, as the Wi-Fi smoke above: DC alone, a few minutes, a
+      # test pack that is not published (the full country build is road.yml's). DC has no campsites worth counting,
+      # so the check names the categories a city always has.
+      - name: Build road-us.sqlite (DC only, smoke)
+        env:
+          ROAD_SOURCES: district-of-columbia
+          FREE_SOURCES: 1
+          ROAD_MAX_MB: 10
+        run: |
+          make -C pipeline road-us
+          ls -lh pipeline/data/out/road-us.sqlite
+          sed -n '/== Road pack summary ==/,$p' pipeline/data/tmp/road-us.log
+          python3 - pipeline/data/out/road-us.sqlite <<'PY'
+          import sqlite3, sys
+          db = sqlite3.connect(sys.argv[1])
+          one = lambda sql: db.execute(sql).fetchone()[0]
+          assert one("PRAGMA application_id") == 0x53425231 and one("PRAGMA user_version") == 1
+          counts = dict(db.execute("SELECT category, count(*) FROM spot GROUP BY category"))
+          print("spots", one("SELECT count(*) FROM spot"), "categories", counts)
+          for category in ("toilet", "pharmacy", "grocery"):
+              assert counts.get(category, 0) > 0, f"no {category} spots from the DC extract"
           PY
 
       - name: Checksum

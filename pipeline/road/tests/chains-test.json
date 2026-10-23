@@ -1,0 +1,7 @@
+{
+  "chains": [
+    {"name": "Example Truck Stop", "brands": ["Example Truck", "Example Truck Stop"], "wikidata": ["Q111"]},
+    {"name": "Example Plaza", "wikidata": ["Q222"]},
+    {"name": "Example Diner Stop", "brands": ["Diner Stop"], "note": "a name only"}
+  ]
+}

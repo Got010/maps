@@ -1,0 +1,9 @@
+{
+  "chains": [
+    {"name": "Pilot", "brands": ["Pilot", "Pilot Flying J", "Pilot Travel Center", "Pilot Travel Centers"], "wikidata": ["Q64128179"], "note": "Pilot Flying J and Pilot Travel Centers: OpenStreetMap tags both as Pilot; QIDs are the Wi-Fi pack's"},
+    {"name": "Flying J", "brands": ["Flying J", "Flying J Travel Center"], "wikidata": ["Q64130592"]},
+    {"name": "Love's Travel Stops", "brands": ["Love's", "Love's Travel Stop", "Love's Travel Stops"], "wikidata": ["Q1872496"]},
+    {"name": "TravelCenters of America", "brands": ["TA", "TravelCenters of America", "TA Travel Center"], "wikidata": ["Q7835892"], "note": "OpenStreetMap's brand is TA"},
+    {"name": "Petro Stopping Centers", "brands": ["Petro", "Petro Stopping Center", "Petro Stopping Centers"], "wikidata": ["Q64051305"], "note": "OpenStreetMap's brand is Petro"}
+  ]
+}
