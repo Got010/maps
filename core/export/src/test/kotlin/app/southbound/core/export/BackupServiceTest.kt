@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 76, wifiMarks = 2), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 77, wifiMarks = 2), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -339,7 +339,7 @@ class BackupServiceTest {
             assertFalse(outcome.wifiTurnedOn)
             assertEquals(0, outcome.counts.wifiMarks)
             // The rest of its settings did land.
-            assertEquals(Samples.settings().copy(wifi = phoneHasItOn), b.stores.settings)
+            assertEquals(Samples.settings().copy(wifi = phoneHasItOn, stateLineCards = true), b.stores.settings)
         }
         // A schema 9 bundle sets it exactly: on over off, off over on, and no turn-on is claimed for off.
         for ((bundleWifi, phoneWifi) in listOf(true to false, false to true, true to true, false to false)) {
@@ -351,6 +351,23 @@ class BackupServiceTest {
             val outcome = import(b, file) as ImportOutcome.Done
             assertEquals(bundleWifi, b.stores.settings.wifi)
             assertEquals(bundleWifi && !phoneWifi, outcome.wifiTurnedOn)
+        }
+    }
+
+    @Test
+    fun `a bundle before schema 10 turns the state-line cards on, schema 10 restores them exactly`() {
+        val nine = Samples.fwxFile(Samples.schema9("0.1.70"), schema = 9)
+        val old = device("old")
+        old.stores.settings = Samples.defaultSettings().copy(stateLineCards = false)
+        import(old, nine) as ImportOutcome.Done
+        assertTrue(old.stores.settings.stateLineCards)
+        for (on in listOf(true, false)) {
+            val a = filled("a-$on")
+            a.stores.settings = Samples.settings().copy(stateLineCards = on)
+            val b = device("b-$on")
+            b.stores.settings = Samples.defaultSettings().copy(stateLineCards = !on)
+            import(b, export(a)) as ImportOutcome.Done
+            assertEquals(on, b.stores.settings.stateLineCards)
         }
     }
 

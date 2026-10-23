@@ -35,6 +35,8 @@ data class AppSettings(
      * writes a real value, never null.
      */
     val wifi: Boolean?,
+    /** Settings > Driving > State-line cards (schema 10; an older bundle imports with them on). */
+    val stateLineCards: Boolean,
 )
 
 /**

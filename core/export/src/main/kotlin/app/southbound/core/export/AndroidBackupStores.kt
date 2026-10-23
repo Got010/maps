@@ -64,6 +64,7 @@ class AndroidBackupStores(
             allowMobileData = UpdateScheduler.allowMobileData(context),
             searchAtBottom = driving.searchAtBottom.value,
             wifi = wifi.wanted.value,
+            stateLineCards = driving.stateLineCards.value,
         )
         // readAll throws if a saved key can't be decrypted, rather than leaving it out of the export.
         return BackupData(userData.data.value, secrets.readAll(), settings)
@@ -85,7 +86,7 @@ class AndroidBackupStores(
         val s = data.settings
         network.replaceAll(s.network)
         route.replace(s.route)
-        driving.replace(nightBySunset = s.nightBySunset, searchAtBottom = s.searchAtBottom)
+        driving.replace(nightBySunset = s.nightBySunset, searchAtBottom = s.searchAtBottom, stateLineCards = s.stateLineCards)
         fuel.setChoices(s.fuel.mpg, s.fuel.pricePerGallon, s.fuel.source, s.fuel.region)
         voice.update { s.voice }
         // The updater downloads a voice pack only for the voice in this list; Settings keeps it in step when open.

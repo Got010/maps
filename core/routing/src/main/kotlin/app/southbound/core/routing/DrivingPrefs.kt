@@ -32,20 +32,36 @@ class DrivingPrefs private constructor(context: Context) {
         _searchAtBottom.value = on
     }
 
-    /** Both settings at once, with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
-    fun replace(nightBySunset: Boolean, searchAtBottom: Boolean) {
+    private val _stateLineCards = MutableStateFlow(prefs.getBoolean(KEY_STATE_LINE_CARDS, true))
+
+    /**
+     * State-line cards (core/states): a card of what changes when the route, or the phone, crosses into another state.
+     * On by default; off hides the route sheet's "Crosses into" lines and the card that opens on a crossing.
+     */
+    val stateLineCards: StateFlow<Boolean> = _stateLineCards.asStateFlow()
+
+    fun setStateLineCards(on: Boolean) {
+        prefs.edit().putBoolean(KEY_STATE_LINE_CARDS, on).apply()
+        _stateLineCards.value = on
+    }
+
+    /** All the settings at once, with a synchronous commit (an import). Throws [java.io.IOException] if the write fails. */
+    fun replace(nightBySunset: Boolean, searchAtBottom: Boolean, stateLineCards: Boolean) {
         val saved = prefs.edit()
             .putBoolean(KEY_NIGHT, nightBySunset)
             .putBoolean(KEY_SEARCH_AT_BOTTOM, searchAtBottom)
+            .putBoolean(KEY_STATE_LINE_CARDS, stateLineCards)
             .commit()
         if (!saved) throw java.io.IOException("Couldn't save the driving options")
         _nightBySunset.value = nightBySunset
         _searchAtBottom.value = searchAtBottom
+        _stateLineCards.value = stateLineCards
     }
 
     companion object {
         private const val KEY_NIGHT = "night_by_sunset"
         private const val KEY_SEARCH_AT_BOTTOM = "search_at_bottom"
+        private const val KEY_STATE_LINE_CARDS = "state_line_cards"
 
         @Volatile
         private var instance: DrivingPrefs? = null

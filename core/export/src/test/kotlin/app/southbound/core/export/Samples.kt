@@ -71,6 +71,7 @@ object Samples {
         allowMobileData = false,
         searchAtBottom = true,
         wifi = false,
+        stateLineCards = true,
     )
 
     /** Every setting away from its default, with values that are floats in the real stores. */
@@ -94,14 +95,29 @@ object Samples {
         allowMobileData = true,
         searchAtBottom = false,
         wifi = true,
+        stateLineCards = false,
     )
 
     fun data() = BackupData(userData(), keys(), settings())
 
-    /** The entries as the schema 8 writer wrote them for [data]: today's text without the three schema 9 additions. */
-    fun schema8(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
+    /** The entries as the schema 9 writer wrote them for [data]: today's text without the schema 10 `state_line_cards`. */
+    fun schema9(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
         val out = linkedMapOf<String, ByteArray>()
         for ((name, bytes) in SouthboundBundle.encode(data, version)) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":10", "\"schema\":9")
+                .replace("\"settings\":77", "\"settings\":76")
+                .replace(",\"state_line_cards\":${data.settings.stateLineCards}", "")
+            out[name] = t.toByteArray()
+        }
+        for ((name, bytes) in out) check(!contains(bytes, "state_line_cards")) { "$name still mentions the state-line cards" }
+        return out
+    }
+
+    /** The entries as the schema 8 writer wrote them for [data]: schema 9's text without its three additions. */
+    fun schema8(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
+        val out = linkedMapOf<String, ByteArray>()
+        for ((name, bytes) in schema9(version, data)) {
             val marks = data.userData.wifiMarks.joinToString(",") { """{"osmRef":"${it.osmRef}","worked":${it.worked},"markedAt":${it.markedAt}}""" }
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":9", "\"schema\":8")
