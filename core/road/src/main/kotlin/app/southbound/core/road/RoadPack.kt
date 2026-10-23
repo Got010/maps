@@ -87,7 +87,8 @@ class RoadPack private constructor(private val connection: SQLiteConnection) : A
      * The spots of [categories] within [corridorKm] of the route [polyline] (the route's points in order), in the
      * order the driver meets them, at most [limit]; only those at least [aheadMeters] along the route, when the driver
      * is part-way along it (the default, 0, lists from the start). Each place once. The route is not sent anywhere:
-     * the pack is read in boxes round its pieces and the distances are worked out here ([RoadAlong]).
+     * the pack is read in boxes round its pieces and the distances are worked out here ([RoadAlong]). [isActive] is
+     * asked between pieces so a cancelled caller stops the reading.
      */
     fun alongRoute(
         polyline: List<LatLon>,
@@ -95,11 +96,12 @@ class RoadPack private constructor(private val connection: SQLiteConnection) : A
         categories: Set<RoadCategory>,
         limit: Int,
         aheadMeters: Double = 0.0,
+        isActive: () -> Boolean = { true },
     ): List<RoadAlongResult> {
         if (categories.isEmpty()) return emptyList()
-        return RoadAlong.search(RoadAlong.Route(polyline), corridorKm * 1000, aheadMeters, limit) { box ->
+        return RoadAlong.search(RoadAlong.Route(polyline), corridorKm * 1000, aheadMeters, limit, fetch = { box ->
             read({ rtree -> RoadQueries.inBox(box, categories, RoadAlong.CHUNK_ROWS, rtree) }) { it.readSpot() }
-        }
+        }, isActive = isActive)
     }
 
     /**

@@ -234,7 +234,7 @@ class BackupService(
     /** Whether the bundle switches the free Wi-Fi pack from off to on (a bundle before schema 9 leaves it alone). */
     private fun wifiTurnedOn(data: BackupData): Boolean = data.settings.wifi == true && !stores.wifiWanted()
 
-    /** Whether the bundle switches the Road pack from off to on (a bundle before schema 10 leaves it alone). */
+    /** Whether the bundle switches the Road pack from off to on (a bundle before schema 11 leaves it alone). */
     private fun roadTurnedOn(data: BackupData): Boolean = data.settings.road == true && !stores.roadWanted()
 
     /**

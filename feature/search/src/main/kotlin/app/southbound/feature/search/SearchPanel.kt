@@ -91,6 +91,7 @@ import app.southbound.core.wifi.WifiTierFilter
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -251,7 +252,7 @@ fun SearchPanel(
         wifiResults = outcome.getOrDefault(emptyList())
     }
     // The Road list: the nearest spots from the same place the category chips look, or the spots beside the route being
-    // planned. Again when the kinds change.
+    // planned. Again when the kinds change; a search still running when they do is stopped between route pieces.
     LaunchedEffect(roadMode, roadFilterLine, road, near != null, area, roadAlongNow, routeLine) {
         val center = area ?: near
         val line = routeLine
@@ -261,7 +262,7 @@ fun SearchPanel(
         if (!roadMode || road == null || roadFilter.showsNothing) return@LaunchedEffect
         if (roadAlongNow && line != null) {
             val outcome = withContext(Dispatchers.IO) {
-                runCatching { road.alongRoute(line, ROAD_CORRIDOR_KM, roadFilter.categories, ROAD_ALONG_LIMIT) }
+                runCatching { road.alongRoute(line, ROAD_CORRIDOR_KM, roadFilter.categories, ROAD_ALONG_LIMIT, isActive = { this@withContext.isActive }) }
             }
             roadFailed = outcome.isFailure
             roadAlongResults = outcome.getOrDefault(emptyList())

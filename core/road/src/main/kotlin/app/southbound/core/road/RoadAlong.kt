@@ -22,8 +22,17 @@ object RoadAlong {
     /** About how much route one pack read covers. Long enough to be few reads, short enough that the box is not the whole country. */
     const val CHUNK_METERS = 15_000.0
 
-    /** The most spots one piece's read asks for; a corridor round a city that holds more keeps the rarer kinds. */
+    /**
+     * The most spots one read asks for. A read that returns exactly this many was cut (the pack answers in category
+     * order, not distance), so the piece's box is split in two and each half read ([readPiece]).
+     */
     const val CHUNK_ROWS = 3_000
+
+    /** A box whose longer side is under this many metres is not split again; its capped rows are kept. */
+    const val MIN_SPLIT_METERS = 2_000.0
+
+    /** The most reads one piece may take when splitting; past it the capped rows of what is left are kept. */
+    const val MAX_READS_PER_PIECE = 64
 
     private const val METERS_PER_DEGREE = 111_195.0
 
@@ -117,6 +126,9 @@ object RoadAlong {
      * once is made of them here ([RoadPlaces.distinct]). A spot the route passes twice is listed at its first pass in
      * the corridor. [RoadAlongResult.aheadMeters] is the distance from [aheadMeters] on.
      *
+     * [isActive] is asked before each piece; once it says no, the search stops and returns what it has, which the
+     * caller (cancelled) must not show.
+     *
      * Pieces are read in route order and the search stops as soon as [limit] spots lie before the end of the piece
      * just read: nothing further along the route can come before them.
      */
@@ -126,11 +138,14 @@ object RoadAlong {
         aheadMeters: Double,
         limit: Int,
         fetch: (NearbyBox) -> List<RoadSpot>,
+        isActive: () -> Boolean = { true },
     ): List<RoadAlongResult> {
         if (limit <= 0 || corridorMeters <= 0.0) return emptyList()
         val found = HashMap<Long, Pair<RoadSpot, Located>>()
         for (chunk in route.chunks(corridorMeters, aheadMeters)) {
-            for (spot in fetch(chunk.box)) {
+            // Between pieces, a caller that has been cancelled stops the reading; what is returned then is partial and is dropped.
+            if (!isActive()) break
+            for (spot in readPiece(chunk.box, fetch)) {
                 val at = route.locate(spot.lat, spot.lon, chunk) ?: continue
                 if (at.offset > corridorMeters) continue
                 val known = found[spot.id]
@@ -154,6 +169,33 @@ object RoadAlong {
             }
             .sortedWith(compareBy({ it.alongMeters }, { it.offsetMeters }, { it.spot.id }))
             .take(limit)
+    }
+
+    /**
+     * The spots [fetch] finds in [box]. A read that comes back with [CHUNK_ROWS] rows was cut, and the pack cuts by
+     * category, so a dense box could lose fuel or truck stops while keeping water: the box is split across its longer
+     * side and each half read, and so on down to [MIN_SPLIT_METERS] or [MAX_READS_PER_PIECE] reads, where the capped
+     * rows are kept. A spot on the line between the halves may come twice; the caller keeps each id once.
+     */
+    internal fun readPiece(box: NearbyBox, fetch: (NearbyBox) -> List<RoadSpot>): List<RoadSpot> {
+        var reads = 0
+        fun read(b: NearbyBox): List<RoadSpot> {
+            reads++
+            val rows = fetch(b)
+            if (rows.size < CHUNK_ROWS || reads >= MAX_READS_PER_PIECE) return rows
+            val midLat = (b.south + b.north) / 2
+            val heightMeters = (b.north - b.south) * METERS_PER_DEGREE
+            val widthMeters = (b.east - b.west) * METERS_PER_DEGREE * cos(Math.toRadians(midLat))
+            if (maxOf(heightMeters, widthMeters) < MIN_SPLIT_METERS) return rows
+            val (first, second) = if (heightMeters >= widthMeters) {
+                NearbyBox(b.south, midLat, b.west, b.east) to NearbyBox(midLat, b.north, b.west, b.east)
+            } else {
+                val midLon = (b.west + b.east) / 2
+                NearbyBox(b.south, b.north, b.west, midLon) to NearbyBox(b.south, b.north, midLon, b.east)
+            }
+            return read(first) + read(second)
+        }
+        return read(box)
     }
 
     /**

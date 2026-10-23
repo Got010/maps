@@ -106,8 +106,9 @@ internal object RoadQueries {
 
     /**
      * The FROM and WHERE for a box. With the R-tree, its index finds the candidates: the boxes that overlap the query
-     * box (the overlap form, not containment: SQLite rounds a stored 32-bit float box outwards by up to about 1.5e-5
-     * degrees, which containment would lose at the box's edges), the query box widened by [RTREE_TOLERANCE] besides.
+     * box (the overlap form, not containment: SQLite rounds a stored 32-bit float box outwards by up to one float step,
+     * about 7.6e-6 degrees at US longitudes, which containment would lose at the box's edges), the query box widened by
+     * [RTREE_TOLERANCE] besides.
      * The exact comparisons follow on the spot's own doubles. CROSS JOIN makes SQLite scan the R-tree first and look
      * the spots up by id, as the Wi-Fi pack's queries do (measured there: 139 ms against 380 ms on a 300,000-row
      * pack). Without the R-tree, the (lat, lon) index does it.
@@ -126,7 +127,7 @@ internal object RoadQueries {
         }
     }
 
-    /** Degrees the R-tree's box is widened by: its 32-bit floats are off by about 1e-6 at US longitudes. */
+    /** Degrees the R-tree's box is widened by: one 32-bit float step is about 7.6e-6 degrees at US longitudes, so 1e-5 covers it. */
     const val RTREE_TOLERANCE = 1e-5
 
     /** No more than this many rows from one nearest query, whatever the caller asks. */

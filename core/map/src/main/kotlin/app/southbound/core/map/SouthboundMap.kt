@@ -333,39 +333,9 @@ fun SouthboundMap(
         onDispose { loadedMap.removeOnMapClickListener(listener) }
     }
 
-    // Wi-Fi taps: after the plate readers' and the 511 cameras' listeners, which draw over the Wi-Fi layer, and before
-    // the incident one, whose weather areas cover everything. Of several under the finger, the nearest wins.
-    val currentOnWifiTap by rememberUpdatedState(onWifiTap)
-    DisposableEffect(map) {
-        val loadedMap = map ?: return@DisposableEffect onDispose { }
-        val listener = MapLibreMap.OnMapClickListener { latLng ->
-            val handler = currentOnWifiTap ?: return@OnMapClickListener false
-            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
-            val layers = listOf(OverlayLayers.WIFI, OverlayLayers.WIFI_CLUSTERS).filter { loadedStyle.getLayer(it) != null }
-            if (layers.isEmpty()) return@OnMapClickListener false
-            val screen = loadedMap.projection.toScreenLocation(latLng)
-            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
-            val hit = loadedMap.queryRenderedFeatures(box, *layers.toTypedArray())
-                .mapNotNull { feature -> (feature.geometry() as? org.maplibre.geojson.Point)?.let { feature to it } }
-                .minByOrNull { (_, point) ->
-                    val at = loadedMap.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
-                    (at.x - screen.x) * (at.x - screen.x) + (at.y - screen.y) * (at.y - screen.y)
-                } ?: return@OnMapClickListener false
-            val (feature, point) = hit
-            if (feature.hasProperty("count")) {
-                handler(WifiTap.Cluster(MapPoint(point.latitude(), point.longitude())))
-            } else {
-                val id = feature.getNumberProperty("id")?.toLong() ?: return@OnMapClickListener false
-                handler(WifiTap.Spot(id))
-            }
-            true
-        }
-        loadedMap.addOnMapClickListener(listener)
-        onDispose { loadedMap.removeOnMapClickListener(listener) }
-    }
-
-    // Road taps, the same way as the Wi-Fi ones: after the cameras' listeners, before the incident one. Of several under
-    // the finger, the nearest wins.
+    // Road taps: after the plate readers' and the 511 cameras' listeners, before the Wi-Fi one and the incident one. The
+    // Road badges draw over the Wi-Fi pins, and rest areas, truck stops and libraries are in both packs at one point, so a
+    // tap on a visible Road badge must reach the Road sheet first. Of several under the finger, the nearest wins.
     val currentOnRoadTap by rememberUpdatedState(onRoadTap)
     DisposableEffect(map) {
         val loadedMap = map ?: return@DisposableEffect onDispose { }
@@ -388,6 +358,37 @@ fun SouthboundMap(
             } else {
                 val id = feature.getNumberProperty("id")?.toLong() ?: return@OnMapClickListener false
                 handler(RoadTap.Spot(id))
+            }
+            true
+        }
+        loadedMap.addOnMapClickListener(listener)
+        onDispose { loadedMap.removeOnMapClickListener(listener) }
+    }
+
+    // Wi-Fi taps: after the plate readers', the 511 cameras' and the Road listeners, which draw over the Wi-Fi layer, and
+    // before the incident one, whose weather areas cover everything. Of several under the finger, the nearest wins.
+    val currentOnWifiTap by rememberUpdatedState(onWifiTap)
+    DisposableEffect(map) {
+        val loadedMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnMapClickListener { latLng ->
+            val handler = currentOnWifiTap ?: return@OnMapClickListener false
+            val loadedStyle = loadedMap.style ?: return@OnMapClickListener false
+            val layers = listOf(OverlayLayers.WIFI, OverlayLayers.WIFI_CLUSTERS).filter { loadedStyle.getLayer(it) != null }
+            if (layers.isEmpty()) return@OnMapClickListener false
+            val screen = loadedMap.projection.toScreenLocation(latLng)
+            val box = android.graphics.RectF(screen.x - TAP_SLOP_PX, screen.y - TAP_SLOP_PX, screen.x + TAP_SLOP_PX, screen.y + TAP_SLOP_PX)
+            val hit = loadedMap.queryRenderedFeatures(box, *layers.toTypedArray())
+                .mapNotNull { feature -> (feature.geometry() as? org.maplibre.geojson.Point)?.let { feature to it } }
+                .minByOrNull { (_, point) ->
+                    val at = loadedMap.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
+                    (at.x - screen.x) * (at.x - screen.x) + (at.y - screen.y) * (at.y - screen.y)
+                } ?: return@OnMapClickListener false
+            val (feature, point) = hit
+            if (feature.hasProperty("count")) {
+                handler(WifiTap.Cluster(MapPoint(point.latitude(), point.longitude())))
+            } else {
+                val id = feature.getNumberProperty("id")?.toLong() ?: return@OnMapClickListener false
+                handler(WifiTap.Spot(id))
             }
             true
         }

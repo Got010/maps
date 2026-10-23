@@ -155,6 +155,55 @@ class RoadAlongTest {
         assertTrue("${few.reads} reads of ${every.reads}", few.reads <= 3)
     }
 
+    /** A pack that answers like the real one: in the table's category order, cut at [RoadAlong.CHUNK_ROWS]. */
+    private class CappingPack(val spots: List<RoadSpot>) {
+        var reads = 0
+        var capped = 0
+        fun inBox(box: NearbyBox): List<RoadSpot> {
+            reads++
+            val rows = spots.filter { box.contains(it.lat, it.lon) }.sortedBy { it.category.ordinal }
+            if (rows.size >= RoadAlong.CHUNK_ROWS) capped++
+            return rows.take(RoadAlong.CHUNK_ROWS)
+        }
+    }
+
+    @Test
+    fun `a capped read is split so a truck stop on the line is still found among thousands of water points`() {
+        // 3,100 water points in a knot off the route's start (outside the corridor), and a truck stop on the line.
+        val knot = (0 until 3_100).map { i -> spot(lat0 + 4.9 / 111.195 + i * 1e-7, lon0 - 0.05 + i * 1e-7, RoadCategory.WATER) }
+        val truck = spot(lat0 + 0.0005, lon0 + 0.1, RoadCategory.TRUCK, "Mile 12")
+        val pack = CappingPack(knot + truck)
+        val got = RoadAlong.search(east, 5_000.0, 0.0, 10, pack::inBox)
+        assertTrue("capped ${pack.capped} of ${pack.reads}", pack.capped >= 1 && pack.reads > 1)
+        assertEquals(listOf(truck.id), got.map { it.spot.id })
+        // Without the split the first read keeps only the water.
+        assertFalse(truck in CappingPack(knot + truck).inBox(east.chunks(5_000.0).first().box))
+    }
+
+    @Test
+    fun `a box too small to split keeps its capped rows and the reads stay bounded`() {
+        val knot = (0 until 3_100).map { i -> spot(lat0 + 0.0001 + i * 1e-8, lon0 + 0.01 + i * 1e-8, RoadCategory.WATER) }
+        val pack = CappingPack(knot)
+        val got = RoadAlong.search(east, 5_000.0, 0.0, 10, pack::inBox)
+        assertEquals(10, got.size)
+        assertTrue("${pack.reads} reads", pack.reads <= east.chunks(5_000.0).size * RoadAlong.MAX_READS_PER_PIECE)
+    }
+
+    @Test
+    fun `a search that is no longer wanted stops between pieces`() {
+        val pack = FakePack((1..50).map { beside(it * 0.1, 0.1) })
+        var asked = 0
+        RoadAlong.search(east, 5_000.0, 0.0, 100_000, pack::inBox, isActive = { ++asked <= 2 })
+        assertEquals(2, pack.reads)
+    }
+
+    @Test
+    fun `a read under the cap is not split`() {
+        val pack = FakePack((1..50).map { beside(it * 0.1, 0.1) })
+        search(east, pack, limit = 100_000)
+        assertEquals(east.chunks(5_000.0).size, pack.reads)
+    }
+
     @Test
     fun `a place filed twice is one result, the truck stop with both rows' facts`() {
         val pumps = spot(lat0 + 0.002, lon0 + 1.0, RoadCategory.FUEL, "Mile 100", "Pilot", RoadExtra(diesel = true))
