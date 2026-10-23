@@ -1,7 +1,7 @@
 package app.southbound.feature.explore
 
 /** One row of the Map options list. The enum's order is the list's order, top to bottom. */
-internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI }
+internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI, THIS_STATE }
 
 /** The colour of the small dot on the Map options button. */
 internal enum class MapOptionsDot {
@@ -32,6 +32,8 @@ internal data class MapOptionsState(
     val wifiVisible: Boolean,
     /** A Wi-Fi type filter other than the default is set. */
     val wifiFiltered: Boolean,
+    /** State-line cards are on and the state the fix is in is known: the "This state" row opens its card. */
+    val stateAvailable: Boolean = false,
 ) {
     /** The rows to show, top to bottom. */
     val rows: List<MapOption> = buildList {
@@ -39,6 +41,7 @@ internal data class MapOptionsState(
         if (trafficAvailable) add(MapOption.TRAFFIC)
         if (weatherAvailable) add(MapOption.WEATHER)
         if (wifiAvailable) add(MapOption.WIFI)
+        if (stateAvailable) add(MapOption.THIS_STATE)
     }
 
     /** True when the Re-center row says "Re-center" (the map is away from the puck) rather than "My location". */

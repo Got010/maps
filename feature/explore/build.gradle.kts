@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:packs"))
     implementation(project(":core:routing"))
     implementation(project(":core:search"))
+    implementation(project(":core:states"))
     implementation(project(":core:transit"))
     implementation(project(":core:traffic"))
     implementation(project(":core:weather"))

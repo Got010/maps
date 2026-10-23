@@ -56,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -136,6 +137,10 @@ import app.southbound.core.search.PlaceSearch
 import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchRanking
+import app.southbound.core.states.Crossing
+import app.southbound.core.states.LiveState
+import app.southbound.core.states.StateCards
+import app.southbound.core.states.StateData
 import app.southbound.core.wifi.WifiFilter
 import app.southbound.core.wifi.WifiPack
 import app.southbound.core.wifi.WifiSpot
@@ -409,6 +414,44 @@ internal fun ExploreMap(
     val nightBySunset by drivingPrefs.nightBySunset.collectAsState()
     // Settings > Driving: the search bar, chips and banners at the bottom, within the thumb's reach (docs/bottom-search.md).
     val searchAtBottom by drivingPrefs.searchAtBottom.collectAsState()
+    // State-line cards (core/states; Settings > Driving): what changes when the route or the phone crosses a state line.
+    // The state the phone is in is held here, in memory, for as long as this screen lives: nothing about crossings,
+    // times or places is kept, and the card is a view of static data keyed by a state code worked out on the fly.
+    val stateCardsOn by drivingPrefs.stateLineCards.collectAsState()
+    var stateCardRequest by rememberSaveable { mutableStateOf<String?>(null) }
+    var currentState by remember { mutableStateOf<String?>(null) }
+    var stateCards by remember { mutableStateOf<StateCards?>(null) }
+    val inTripNow by rememberUpdatedState(inTrip)
+    LaunchedEffect(stateCardsOn) {
+        currentState = null
+        if (!stateCardsOn) {
+            stateCardRequest = null
+            return@LaunchedEffect
+        }
+        // Read and parsed once, off the main thread; kept after that.
+        val (outlines, cards) = withContext(Dispatchers.Default) { attempt { StateData.outlines() to StateData.cards() } } ?: return@LaunchedEffect
+        stateCards = cards
+        val live = LiveState(outlines)
+        snapshotFlow { location }.collect { fix ->
+            if (fix == null) return@collect
+            val entered = withContext(Dispatchers.Default) { live.onFix(fix.latitude, fix.longitude) }
+            currentState = live.current
+            if (entered == null) return@collect
+            val into = cards[entered.to] ?: return@collect
+            stateCardRequest = StateCardRequest(entered.to, entered.from).encode()
+            // Guidance says it too, through the usual voice settings (muted or off: nothing spoken).
+            val from = cards[entered.from]
+            if (inTripNow && from != null) {
+                services.voice.announce(UtteranceKind.HAZARD_ALERT, StateCards.spoken(into, StateCards.diff(from, into)))
+            }
+        }
+    }
+    // The state lines each route option crosses, for the route sheet. Worked out from the routes alone, off the main thread.
+    val routeCrossings by produceState(emptyList<List<Crossing>>(), routes, stateCardsOn) {
+        value = emptyList()
+        if (!stateCardsOn || routes.isEmpty()) return@produceState
+        value = withContext(Dispatchers.Default) { attempt { StateLines.crossings(routes, StateData.outlines()) } }.orEmpty()
+    }
     // Fuel economy and gas price for the cost on route cards; changing them never recomputes routes.
     val fuel by services.fuelPrefs.settings.collectAsState()
     var clockMs by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -1288,6 +1331,19 @@ internal fun ExploreMap(
         if ((preview is RoutePreviewState.Ready && missingRegions.isEmpty()) || (place != null && place != wait.place)) services.tripWait = null
     }
     Box(Modifier.fillMaxSize()) {
+        val shownCards = stateCards
+        val cardRequest = StateCardRequest.decode(stateCardRequest)
+        if (stateCardsOn && shownCards != null && cardRequest != null) {
+            shownCards[cardRequest.code]?.let { card ->
+                val from = shownCards[cardRequest.from]
+                StateCardSheet(
+                    card = card,
+                    changed = from?.let { StateCards.diff(it, card) },
+                    fromCode = cardRequest.from,
+                    onDismiss = { stateCardRequest = null },
+                )
+            }
+        }
         if (showRouteOptions) {
             RouteOptionsSheet(
                 prefs = routePrefs,
@@ -1560,12 +1616,14 @@ internal fun ExploreMap(
                             wifiAvailable = wifiPack != null,
                             wifiVisible = wifiVisible,
                             wifiFiltered = !wifiFilter.isDefault,
+                            stateAvailable = stateCardsOn && stateCards != null && currentState != null,
                         ),
                         onRecenter = { following = true },
                         onToggleTraffic = { trafficVisible = !trafficVisible },
                         onToggleWeather = { weatherVisible = !weatherVisible },
                         onToggleWifi = { wifiVisible = !wifiVisible },
                         onChooseWifi = { wifiChooser = true },
+                        onThisState = { currentState?.let { stateCardRequest = StateCardRequest(it).encode() } },
                         bottomInset = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp,
                     )
                     if (wifiChooser && wifiPack != null) {
@@ -1770,6 +1828,8 @@ internal fun ExploreMap(
                             panel = Panel.PlaceShown(current.place)
                         },
                         startName = startPlace?.name,
+                        crossings = routeCrossings,
+                        onOpenCrossing = { crossing -> stateCardRequest = StateCardRequest(crossing.to, crossing.from).encode() },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .safeDrawingPadding()

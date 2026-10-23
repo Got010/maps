@@ -1,5 +1,6 @@
 package app.southbound.core.search
 
+import app.southbound.core.states.StateOutlines
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -354,5 +355,26 @@ class RouteAlertsTest {
         assertEquals(270.0, west.bearingsNear(Hand.at(-50.0, 3.0), 10.0).single(), 0.5)
         assertTrue(RouteLine(listOf(Hand.at(0.0, 0.0))).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
         assertTrue(RouteLine(emptyList()).bearingsNear(Hand.at(0.0, 0.0), 10.0).isEmpty())
+    }
+}
+
+class RouteCrossingsTest {
+    // Two made-up states side by side along the equator: AA from 0 to 1 degree east, BB from 1 to 2.
+    private val outlines = StateOutlines.parse(
+        """{"features":[
+            {"properties":{"postal":"AA"},"geometry":{"type":"Polygon","coordinates":[[[0,-1],[1,-1],[1,1],[0,1],[0,-1]]]}},
+            {"properties":{"postal":"BB"},"geometry":{"type":"Polygon","coordinates":[[[1,-1],[2,-1],[2,1],[1,1],[1,-1]]]}}
+        ]}""",
+    )
+
+    @Test
+    fun routeOptionsKnowTheLinesTheyCross() {
+        val across = RouteLine((0..20).map { LatLon(0.0, 0.05 + it * 0.09) })
+        val inside = RouteLine((0..5).map { LatLon(0.0, 0.1 + it * 0.1) })
+        val crossings = RouteAlerts.crossings(across, outlines)
+        assertEquals(listOf("AA" to "BB"), crossings.map { it.from to it.to })
+        // About 1 degree of longitude on the equator from the first point at 0.05 degrees east: 105 km.
+        assertEquals(105_000.0, crossings.single().distanceMetersFromStart, 1_500.0)
+        assertTrue(RouteAlerts.crossings(inside, outlines).isEmpty())
     }
 }

@@ -26,6 +26,16 @@ class MapOptionsStateTest {
     }
 
     @Test
+    fun thisStateIsLastAndOnlyWhenTheStateIsKnown() {
+        assertEquals(listOf(MapOption.THIS_STATE), nothing.copy(stateAvailable = true).rows)
+        assertEquals(
+            listOf(MapOption.RECENTER, MapOption.TRAFFIC, MapOption.WEATHER, MapOption.WIFI, MapOption.THIS_STATE),
+            everything.copy(stateAvailable = true).rows,
+        )
+        assertEquals(MapOptionsDot.NONE, nothing.copy(stateAvailable = true).dot)
+    }
+
+    @Test
     fun recenterNeedsAFix() {
         assertEquals(listOf(MapOption.TRAFFIC, MapOption.WEATHER, MapOption.WIFI), everything.copy(hasLocation = false).rows)
     }

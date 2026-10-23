@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Route sheet: one line per state line the route option crosses (core/states). %1$s state, %2$s distance, e.g. "Ohio" and "29 mi". -->
+    <string name="directions_state_crossing">Crosses into %1$s in %2$s</string>
+    <string name="directions_state_open">Open the card for %1$s</string>
+</resources>

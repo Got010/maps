@@ -29,9 +29,11 @@ internal fun DrivingSection(network: PreferenceNetworkToggles? = null, secrets: 
     val prefs = DrivingPrefs.get(context)
     val night by prefs.nightBySunset.collectAsState()
     val searchAtBottom by prefs.searchAtBottom.collectAsState()
+    val stateCards by prefs.stateLineCards.collectAsState()
     SettingsCard(R.string.settings_driving) {
         Toggle(R.string.driving_night, night, R.string.driving_night_note) { prefs.setNightBySunset(it) }
         Toggle(R.string.driving_search_bottom, searchAtBottom, R.string.driving_search_bottom_note) { prefs.setSearchAtBottom(it) }
+        Toggle(R.string.driving_state_cards, stateCards, R.string.driving_state_cards_note) { prefs.setStateLineCards(it) }
     }
     SettingsCard(R.string.driving_fuel_heading) { FuelEstimate(network, secrets) }
 }

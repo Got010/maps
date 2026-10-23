@@ -161,6 +161,8 @@
     <string name="driving_night_note">After sunset at your location the map and navigation screen turn dark, even if the phone is in light theme. Worked out on the phone from your GPS fix.</string>
     <string name="driving_search_bottom">Search bar at the bottom</string>
     <string name="driving_search_bottom_note">Search, Home, Work and the map\'s banners sit at the bottom of the screen, within your thumb\'s reach. Off puts them at the top.</string>
+    <string name="driving_state_cards">State-line cards</string>
+    <string name="driving_state_cards_note">When a route, or you, cross into another state, a card shows what changes there: time zone, handheld-phone law, speed limits, tolls, move-over and more. It comes from the app\'s own data: nothing is looked up online, and nothing about where you have been is kept.</string>
     <string name="driving_mpg">Fuel economy (mpg)</string>
     <string name="driving_gas_price">Gas price ($ per gallon)</string>
     <string name="driving_fuel_note">Used to estimate what each route costs in gas.</string>

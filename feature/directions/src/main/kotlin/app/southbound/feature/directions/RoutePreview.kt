@@ -73,6 +73,7 @@ import app.southbound.core.routing.FuelSettings
 import app.southbound.core.routing.RouteSummary
 import app.southbound.core.routing.TravelMode
 import app.southbound.core.search.RouteExposure
+import app.southbound.core.states.Crossing
 import kotlinx.coroutines.delay
 
 /** Route preview's progress: computing, routes to choose from, or why there are none. */
@@ -129,6 +130,10 @@ fun RoutePreviewSheet(
     beforeStart: (@Composable () -> Unit)? = null,
     /** Regions the trip needs that aren't on the phone ([TripRegionOffer]): above Start, or instead of "No route". */
     regionOffer: (@Composable () -> Unit)? = null,
+    /** The state lines each route option crosses, same order as the options ([StateCrossingLines]); empty hides the lines. */
+    crossings: List<List<Crossing>> = emptyList(),
+    /** A "Crosses into" line was tapped: show that state's card. */
+    onOpenCrossing: (Crossing) -> Unit = {},
 ) {
     var collapsed by rememberSaveable { mutableStateOf(false) }
     // How far the finger has dragged the sheet (down is positive), while it is down.
@@ -283,6 +288,8 @@ fun RoutePreviewSheet(
                                     leastGas = i == thriftiest,
                                     onClick = { onSelect(i) },
                                     exposure = state.exposure.getOrNull(i),
+                                    crossings = crossings.getOrNull(i).orEmpty(),
+                                    onOpenCrossing = onOpenCrossing,
                                 )
                             }
                             if (state.cameraAvoidIncomplete) PlateReaderAvoidNote()
@@ -433,6 +440,9 @@ private fun RouteOption(
     exposure: RouteExposure? = null,
     /** The option added as the shorter way, marked so. */
     shorterWay: Boolean = false,
+    /** The state lines this route crosses, each a tappable line that opens the state's card. */
+    crossings: List<Crossing> = emptyList(),
+    onOpenCrossing: (Crossing) -> Unit = {},
 ) {
     // The route's line colour on the map. Outside a trip the map follows the system theme.
     val lineColor = Color(RouteColors.argb(rank, isSystemInDarkTheme()))
@@ -499,6 +509,7 @@ private fun RouteOption(
                     )
                 }
                 exposure?.let { RouteExposureLine(it) }
+                StateCrossingLines(crossings, onOpenCrossing)
                 if (shorterWay) ShorterWayBadge()
                 if (leastGas) LeastGasBadge(fastest)
             }
