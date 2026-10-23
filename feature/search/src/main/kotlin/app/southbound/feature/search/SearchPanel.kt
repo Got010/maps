@@ -167,6 +167,11 @@ fun SearchPanel(
     routeLine: List<LatLon>? = null,
     /** An "along my route" row was picked: the spot, to become a stop of the route being planned. */
     onPickRoadStop: ((RoadSpot) -> Unit)? = null,
+    /**
+     * A result was picked for text the user typed (not a category chip, a saved place or a recent): that text, trimmed,
+     * just before [onPick]. The trip log's "What I searched" chip; the caller holds it in memory only. Null: not asked.
+     */
+    onSearched: ((query: String, result: SearchResult) -> Unit)? = null,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
@@ -288,6 +293,9 @@ fun SearchPanel(
             onSetShortcut?.invoke(slot, result.place)
             settingSlot = null
         }
+        // Only typed text: a chip's label is the chip's name, and a saved place or recent is picked with the box empty.
+        val typed = query.trim()
+        if (typed.isNotEmpty() && browsing == null && !wifiMode && !roadMode) onSearched?.invoke(typed, result)
         onPick(result)
     }
 

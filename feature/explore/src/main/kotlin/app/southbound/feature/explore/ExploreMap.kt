@@ -129,8 +129,10 @@ import app.southbound.core.updates.ManifestCache
 import app.southbound.core.updates.UpdateScheduler
 import app.southbound.core.updates.UpdateState
 import app.southbound.core.updates.UpdateStatus
+import app.southbound.core.userdata.LegRefusedException
 import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.Shortcut
+import app.southbound.core.userdata.UserDataUnreadableException
 import app.southbound.core.search.AlertKind
 import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
@@ -202,6 +204,7 @@ import com.stadiamaps.ferrostar.core.location.toAndroidLocation
 import com.stadiamaps.ferrostar.core.location.toUserLocation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -216,6 +219,7 @@ import uniffi.ferrostar.TripState
 import uniffi.ferrostar.Waypoint
 import uniffi.ferrostar.WaypointKind
 import kotlin.math.log2
+import java.time.LocalDate
 
 /** What is open over the map, outside of a trip. */
 internal sealed interface Panel {
@@ -411,6 +415,19 @@ internal fun ExploreMap(
     // The route preview that is waiting while the user searches for a stop to add to it.
     var addingStopTo by remember { mutableStateOf<Panel.Directions?>(null) }
 
+    // The trip log (W13, docs/TRIP_LOG.md): legs logged by hand from the route preview for mileage claims. The log is
+    // opened from Map options, never during guidance; the sheets' drafts live here in memory only.
+    var tripLogOpen by rememberSaveable { mutableStateOf(false) }
+    var legDraft by remember { mutableStateOf<LegDraft?>(null) }
+    // The "What I searched" text offered to the open leg sheet, if any.
+    var legSearched by remember { mutableStateOf<String?>(null) }
+    // What was typed in Search for the place picked from it: memory only (never saved state, never written unless the
+    // user puts it in a leg's To and saves), gone when the route preview closes or the map goes back to browsing.
+    var searchedFor by remember { mutableStateOf<Pair<Place, String>?>(null) }
+    // The leg logged from the preview on screen, so its row reads "Logged to ..." (a new route starts with none).
+    var loggedLegId by remember { mutableStateOf<Long?>(null) }
+    val legWrite = rememberLegWrite()
+
     // Pause: the plan the running trip came from, the trip once paused, and a Resume waiting for its new route.
     // Kept by the services, so a map region arriving mid-trip (which rebuilds this screen) keeps Pause and the paused trip.
     var tripPlan by services.tripMemory::plan
@@ -430,6 +447,15 @@ internal fun ExploreMap(
     var currentState by remember { mutableStateOf<String?>(null) }
     var stateCards by remember { mutableStateOf<StateCards?>(null) }
     val inTripNow by rememberUpdatedState(inTrip)
+    // Nothing of the trip log stays open into guidance.
+    LaunchedEffect(inTrip) {
+        if (inTrip) {
+            tripLogOpen = false
+            legDraft = null
+            legSearched = null
+        }
+    }
+    LaunchedEffect(panel) { if (panel == Panel.Browse) searchedFor = null }
     LaunchedEffect(inTrip) { if (!inTrip) stateBanner = null }
     // The sheet and the banner never stack: opening the sheet drops a banner that is waiting, so it cannot come back later.
     LaunchedEffect(stateCardRequest) { if (stateCardRequest != null) stateBanner = null }
@@ -663,6 +689,8 @@ internal fun ExploreMap(
     // the first GPS fix arrives after "no location".
     val directions = panel as? Panel.Directions
     val hasFix = location != null || startPlace != null
+    // A new destination, mode or set of stops is a new route to log.
+    LaunchedEffect(directions) { loggedLegId = null }
     LaunchedEffect(directions, hasFix, navigator, startPlace, routePrefs) {
         val target = directions?.takeIf { !it.transit } ?: return@LaunchedEffect
         routes = emptyList()
@@ -1199,6 +1227,7 @@ internal fun ExploreMap(
             is Panel.Directions -> {
                 // As the preview's close button: a later map arriving doesn't reopen it.
                 services.tripWait = null
+                searchedFor = null
                 Panel.PlaceShown(current.place)
             }
             else -> Panel.Browse
@@ -1719,6 +1748,8 @@ internal fun ExploreMap(
                             roadAvailable = roadPack != null,
                             roadVisible = roadVisible,
                             roadFiltered = !roadFilter.isDefault,
+                            // Map options shows only while browsing, never in guidance; the log follows it.
+                            tripLogAvailable = !inTrip,
                         ),
                         onRecenter = { following = true },
                         onToggleTraffic = { trafficVisible = !trafficVisible },
@@ -1729,6 +1760,7 @@ internal fun ExploreMap(
                         onToggleRoad = { roadVisible = !roadVisible },
                         onChooseRoad = { roadChooser = true },
                         bottomInset = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp,
+                        onTripLog = { tripLogOpen = true },
                     )
                     if (wifiChooser && wifiPack != null) {
                         WifiChooserSheet(
@@ -1820,6 +1852,13 @@ internal fun ExploreMap(
                     // around where it is. Before the first fix, around the map too.
                     area = if (following && near != null) null else mapCenter,
                     onPick = { showPlace(it.place) },
+                    // The trip log's "What I searched" chip: the typed text, kept in memory with the place it found.
+                    // Not while picking a stop: that place is not where the route goes.
+                    onSearched = if (addingStopTo == null) {
+                        { query, result -> searchedFor = result.place to query }
+                    } else {
+                        null
+                    },
                     onClose = {
                         // Phase 6: closing the stop search returns to the route being planned.
                         panel = addingStopTo?.also { addingStopTo = null } ?: Panel.Browse
@@ -1949,6 +1988,7 @@ internal fun ExploreMap(
                         onStart = ::startTrip,
                         onClose = {
                             services.tripWait = null
+                            searchedFor = null
                             panel = Panel.PlaceShown(current.place)
                         },
                         startName = startPlace?.name,
@@ -1989,6 +2029,25 @@ internal fun ExploreMap(
                                 }
                             }
                             WeatherOnRouteNote(routeWeather, onOpen = { shownThing = ShownThing.WeatherAlertShown(it.id) })
+                            // The trip log: this route, logged by hand for a mileage claim (the selected option's
+                            // distance). Only this tap logs a leg: Start, reroutes, Pause and Resume never do. A route
+                            // from a start picked on the map can be logged too (a past drive, dated on the sheet).
+                            val loggable = preview as? RoutePreviewState.Ready
+                            val summary = loggable?.summaries?.getOrNull(loggable.selected)
+                            if (summary != null && !inTrip) {
+                                LogLegRow(
+                                    logged = loggedLegId?.let { id -> userData.legs.firstOrNull { it.id == id } },
+                                    onLog = {
+                                        legDraft = LegDraft.forRoute(summary.distanceMeters, LegDraft.legMode(current.mode), LocalDate.now(), userData.legLog())
+                                        // Offered only when this route goes to the place just picked from a typed search.
+                                        legSearched = searchedFor?.takeIf { it.first == current.place }?.second
+                                    },
+                                    onEdit = { leg ->
+                                        legDraft = LegDraft.forLeg(leg)
+                                        legSearched = null
+                                    },
+                                )
+                            }
                         },
                         regionOffer = tripFetch?.let { fetch ->
                             {
@@ -2036,6 +2095,78 @@ internal fun ExploreMap(
                     TrafficCameraCard(live, services.networkGate, onClose = { shownThing = null }, modifier = cardModifier)
                 } else {
                     DotCameraCard(shown.camera.name, trafficOn, onClose = { shownThing = null }, modifier = cardModifier)
+                }
+            }
+        }
+
+        // --- The trip log (W13): modal bottom sheets, each its own window over the map and whatever is on it. ---
+        if (tripLogOpen && !inTrip) {
+            TripLogSheet(
+                log = userData.legLog(),
+                onEditLeg = { leg ->
+                    legDraft = LegDraft.forLeg(leg)
+                    legSearched = null
+                },
+                onDeleteLeg = { leg -> legWrite { services.userData.deleteLeg(leg.id) } },
+                onDeleteTrip = { trip -> legWrite { services.userData.deleteTrip(trip) } },
+                onRenameTrip = { trip, name -> legWrite { services.userData.renameTrip(trip, name) } },
+                onDismiss = { tripLogOpen = false },
+            )
+        }
+        // Composed after the log, so an edit opened from it shows over it.
+        legDraft?.takeIf { !inTrip }?.let { start ->
+            LegSheet(
+                start = start,
+                log = userData.legLog(),
+                searched = legSearched,
+                onSave = { draft ->
+                    var newId: Long? = null
+                    legWrite {
+                        if (draft.legId == null) {
+                            val after = services.userData.addLeg(
+                                draft.cleanTrip, draft.cleanDay, draft.meters() ?: 0, draft.mode, draft.cleanFrom, draft.cleanTo,
+                                edited = draft.distanceChanged,
+                            )
+                            newId = after.legs.last().id
+                        } else {
+                            services.userData.editLeg(draft.legId, draft.cleanTrip, draft.cleanDay, draft.meters() ?: 0, draft.mode, draft.cleanFrom, draft.cleanTo)
+                        }
+                    }.also { refused -> if (refused == null && newId != null) loggedLegId = newId }
+                },
+                onDone = {
+                    legDraft = null
+                    legSearched = null
+                },
+                onDismiss = {
+                    legDraft = null
+                    legSearched = null
+                },
+            )
+        }
+    }
+}
+
+/**
+ * A trip log write, off the main thread and finished even if the sheet that asked goes away meanwhile. Answers null
+ * when it was done, or the sentence that says why not: the store's own for a leg out of bounds or a full log, and
+ * nothing is changed in any case but success.
+ */
+@Composable
+private fun rememberLegWrite(): suspend (() -> Unit) -> String? {
+    val unreadable = stringResource(R.string.leg_unreadable)
+    val failed = stringResource(R.string.leg_save_failed)
+    return remember<suspend (() -> Unit) -> String?>(unreadable, failed) {
+        { block ->
+            withContext(NonCancellable + Dispatchers.IO) {
+                try {
+                    block()
+                    null
+                } catch (e: LegRefusedException) {
+                    e.message ?: failed
+                } catch (e: UserDataUnreadableException) {
+                    unreadable
+                } catch (e: Exception) {
+                    failed
                 }
             }
         }

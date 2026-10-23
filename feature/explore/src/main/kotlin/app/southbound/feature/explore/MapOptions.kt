@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.RvHookup
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.Wifi
@@ -75,7 +76,8 @@ import app.southbound.core.map.WifiColors
  * installed pack), and "This state" (the card for the state the phone is in) with state-line cards on. Re-center and
  * "This state" act and close the list; a layer's row toggles it and keeps the list open so several can be set. A long
  * press on the Free Wi-Fi row opens the types chooser through [onChooseWifi], and one on the Road row the kinds chooser
- * through [onChooseRoad]. New controls for the map join this list.
+ * through [onChooseRoad]. "Trip log", the last row, opens the leg log ([onTripLog]) and closes the list. New controls for
+ * the map join this list.
  *
  * Open or closed is view state ([rememberSaveable]): kept through a rotation, gone with the screen. A tap outside
  * the list (a scrim that has no accessibility node, so it never traps TalkBack) or the back gesture closes it.
@@ -93,6 +95,7 @@ internal fun BoxScope.MapOptions(
     onChooseRoad: () -> Unit,
     onThisState: () -> Unit,
     bottomInset: Dp,
+    onTripLog: () -> Unit = {},
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     // Every row can disappear (the fix is lost, the toggles are off): then there is nothing to open, and the list must
@@ -195,6 +198,11 @@ internal fun BoxScope.MapOptions(
                             onThisState()
                             open = false
                         }
+                        MapOption.TRIP_LOG -> TripLogRow {
+                            // The log is a sheet over everything; the list would only sit behind it.
+                            open = false
+                            onTripLog()
+                        }
                     }
                 }
             }
@@ -270,6 +278,21 @@ private fun ThisStateRow(onClick: () -> Unit) {
         stateText = null,
         onClick = onClick,
         actionLabel = stringResource(R.string.explore_options_this_state_action),
+        role = Role.Button,
+    )
+}
+
+/** "Trip log": opens the legs logged for mileage claims. Acts, and the caller closes the list. */
+@Composable
+private fun TripLogRow(onClick: () -> Unit) {
+    OptionRow(
+        label = stringResource(R.string.explore_options_trip_log),
+        highlighted = false,
+        icon = { Icon(Icons.Filled.Receipt, contentDescription = null) },
+        trailing = null,
+        stateText = null,
+        onClick = onClick,
+        actionLabel = stringResource(R.string.explore_options_trip_log_action),
         role = Role.Button,
     )
 }

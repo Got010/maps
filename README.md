@@ -125,7 +125,7 @@ file to Southbound the same way; it replaces the old one.
 
 ## Back up and restore
 
-Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, Wi-Fi marks, API keys and
+Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, Wi-Fi marks, trip log, API keys and
 preferences (the Wi-Fi and Road pack switches among them) to one file, sealed with a passphrase you choose (at least 12 characters, typed twice, never
 stored). **Import** puts such a file back, on this phone or a new one, replacing what is there. Pick the file with
 the system file picker; Southbound asks for no storage permission. A file from another app, a wrong passphrase or
@@ -175,6 +175,12 @@ cards are written into the app (from public sources, each field dated, a "verify
 confirm it): nothing is looked up, no pack is needed, and nothing about where you have been is stored. Settings >
 Driving > State-line cards turns it off. Details: [docs/STATE_CARDS.md](docs/STATE_CARDS.md).
 
+**Trip log.** For mileage claims: **Log this leg** in the route preview keeps that route's distance under a trip you
+name, with the day and your own From and To labels (never a place from the map, a point or a time of day). Map options >
+**Trip log** lists the trips with their totals, edits and deletes legs, and shares a trip as CSV or as one mileage line
+(`412.3 mi (663.6 km), 5 legs, 2026-10-24 to 2026-10-30`) for Lumen's Share Summary or a claim form. Stored sealed with
+your saved places and carried by Export. Details: [docs/TRIP_LOG.md](docs/TRIP_LOG.md).
+
 ## Live traffic
 
 Settings > Live data has a toggle for 511NY incidents and closures (needs a
@@ -198,7 +204,7 @@ Rotate with two fingers, tilt by dragging two fingers up or down, and zoom
 with one finger by double-tapping and holding, then sliding. The compass
 appears when the map isn't facing north; tap it to turn back. Panning,
 rotating or tilting away from your position puts Re-center at the top of the Map options list
-(the layers button at the bottom right, which also holds Traffic, Weather, Free Wi-Fi and Road; a long press
+(the layers button at the bottom right, which also holds Traffic, Weather, Free Wi-Fi, Road and the Trip log; a long press
 on the Free Wi-Fi or Road row chooses its types); while navigating the map shows a Re-center pill and
 re-centers by itself after 10 seconds without a touch.
 Highway exits show a green sign, and the arrival card says which side of the

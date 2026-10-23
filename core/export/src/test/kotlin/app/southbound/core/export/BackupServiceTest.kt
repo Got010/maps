@@ -568,7 +568,7 @@ class BackupServiceTest {
     }
 
     @Test
-    fun `an import kept by the schema 11 version resumes, with or without the legs field in its mark`() {
+    fun `an import kept by the schema 11 version resumes over the same places`() {
         val entries = Samples.schema11("0.1.90")
         val found = UserData().save(Samples.cafe, UserData.FAVORITES_ID, 7).markWifi("n5", true, 3)
         // That version's mark: the places as it encoded them, with the marks field and without legs.

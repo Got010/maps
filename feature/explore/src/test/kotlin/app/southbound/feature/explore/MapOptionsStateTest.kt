@@ -111,4 +111,18 @@ class MapOptionsStateTest {
         val traffic = off.copy(trafficAvailable = true)
         assertEquals(MapOptionsDot.LAYER, traffic.dot)
     }
+
+    @Test
+    fun tripLogIsTheLastRowAndNeverADot() {
+        assertEquals(listOf(MapOption.TRIP_LOG), nothing.copy(tripLogAvailable = true).rows)
+        assertEquals(
+            listOf(MapOption.RECENTER, MapOption.TRAFFIC, MapOption.WEATHER, MapOption.WIFI, MapOption.ROAD, MapOption.THIS_STATE, MapOption.TRIP_LOG),
+            everything.copy(roadAvailable = true, stateAvailable = true, tripLogAvailable = true).rows,
+        )
+        assertEquals(MapOption.TRIP_LOG, MapOption.entries.last())
+        assertEquals(MapOptionsDot.NONE, nothing.copy(tripLogAvailable = true).dot)
+        assertFalse(nothing.copy(tripLogAvailable = true).anyLayerVisible)
+        // Not offered (guidance): no row.
+        assertFalse(everything.rows.contains(MapOption.TRIP_LOG))
+    }
 }
