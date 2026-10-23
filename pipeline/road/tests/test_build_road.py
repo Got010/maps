@@ -361,6 +361,31 @@ class WriterTest(unittest.TestCase):
             self.skipTest("this SQLite has no R-tree module; the writer warns and goes without")
         self.assertEqual([("toilet",), ("fuel",), ("truck",)], rows)
 
+    def test_the_rtree_holds_one_row_per_spot(self):
+        spots = self.db.execute("SELECT count(*) FROM spot").fetchone()[0]
+        try:
+            rows = self.db.execute("SELECT count(*) FROM road_rtree").fetchone()[0]
+        except sqlite3.OperationalError:
+            self.skipTest("this SQLite has no R-tree module; the writer warns and goes without")
+        self.assertEqual(4, spots)
+        self.assertEqual(spots, rows)
+
+    def test_a_failed_rtree_insert_fails_the_build(self):
+        # Only the CREATE may be forgiven; an insert that fails must not leave an empty or partial road_rtree.
+        try:
+            sqlite3.connect(":memory:").execute("CREATE VIRTUAL TABLE t USING rtree(id, a, b)")
+        except sqlite3.OperationalError:
+            self.skipTest("this SQLite has no R-tree module")
+        original = build_road.RTREE
+        build_road.RTREE = "CREATE VIRTUAL TABLE road_rtree USING rtree(id, minlat, maxlat)"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(sqlite3.OperationalError):
+                    build_road.build(objects(), os.path.join(tmp, "road.sqlite"), CHAINS, SOURCES, max_mb=5,
+                                     built_at="2026-10-18", log=lambda line: None)
+        finally:
+            build_road.RTREE = original
+
     def test_meta(self):
         meta = dict(self.db.execute("SELECT key, value FROM meta"))
         self.assertEqual("2026-10-17", meta["extract_date"])

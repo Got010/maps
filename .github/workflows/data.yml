@@ -3,7 +3,8 @@
 # NYC only, since it finishes in under an hour; the statewide packs build the
 # same scripts with other regions in release.yml after the PR is merged. The Free Wi-Fi pack gets a smoke
 # build here from Washington, DC alone (a few minutes), on every pipeline change but pipeline/wifi, which wifi.yml builds in full.
-# The Road pack gets the same smoke, on every pipeline change but pipeline/road, which road.yml builds in full.
+# The Road pack gets the same smoke, on pull requests that touch this file's path list. pipeline/road is deliberately not
+# in that list (it would add the NYC job to every road change; road.yml builds the pack in full), the same as the Wi-Fi pack.
 name: Map data
 
 on:

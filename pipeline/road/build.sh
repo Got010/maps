@@ -172,17 +172,25 @@ docker run --rm \
     chown $(id -u):$(id -g) /data/out/$OUTPUT
   " 2>&1 | tee "$LOG"
 
-# Every published pack carries the R-tree; build_road.py only warns when this SQLite lacks the module.
-if ! python3 - "$DATA_DIR/out/$OUTPUT" <<'PY'
+# Every published pack carries the R-tree, with one row per spot; build_road.py only warns when this SQLite lacks the
+# module. Exit 1: no table; exit 2: the row counts differ.
+rtree_status=0
+python3 - "$DATA_DIR/out/$OUTPUT" <<'PY' || rtree_status=$?
 import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
-sys.exit(0 if db.execute("SELECT count(*) FROM sqlite_master WHERE name = 'road_rtree'").fetchone()[0] else 1)
+if not db.execute("SELECT count(*) FROM sqlite_master WHERE name = 'road_rtree'").fetchone()[0]:
+    sys.exit(1)
+spots = db.execute("SELECT count(*) FROM spot").fetchone()[0]
+rows = db.execute("SELECT count(*) FROM road_rtree").fetchone()[0]
+if rows != spots:
+    print(f"road_rtree holds {rows} rows for {spots} spots", file=sys.stderr)
+    sys.exit(2)
 PY
-then
+if [[ "$rtree_status" -ne 0 ]]; then
   if [[ "${ROAD_ALLOW_NO_RTREE:-}" == 1 ]]; then
-    echo "::warning::$OUTPUT has no road_rtree table (ROAD_ALLOW_NO_RTREE=1)"
+    echo "::warning::$OUTPUT has no usable road_rtree table (status $rtree_status; ROAD_ALLOW_NO_RTREE=1)"
   else
-    echo "$OUTPUT has no road_rtree table: the Python in the container has no R-tree module. Set ROAD_ALLOW_NO_RTREE=1 to accept that." >&2
+    echo "$OUTPUT has no usable road_rtree table (status $rtree_status: 1 = missing, 2 = row count differs from spot, other = the check failed). The Python in the container may have no R-tree module. Set ROAD_ALLOW_NO_RTREE=1 to accept that." >&2
     rm -f "$DATA_DIR/out/$OUTPUT"
     exit 1
   fi

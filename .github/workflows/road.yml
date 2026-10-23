@@ -6,7 +6,7 @@
 # Publishes nothing and uploads nothing: read the job log. It runs on a pull request that changes pipeline/road
 # (or this file), or from the Actions tab (Road pack test build > Run workflow). Other pipeline changes get the
 # short smoke in data.yml (Washington, DC only). Like wifi.yml it also runs in a private repository: one job on a
-# standard runner, roughly 30 to 60 billed minutes, so push the finished branch once rather than every commit.
+# standard runner, about 8 billed minutes (measured 2026-10-23), so push the finished branch once rather than every commit.
 name: Road pack test build
 
 on:
@@ -63,15 +63,18 @@ jobs:
           counts = dict(db.execute("SELECT category, count(*) FROM spot GROUP BY category"))
           print("spots", spots, "categories", counts, "clusters", one("SELECT count(*) FROM cluster"))
           # The bundled SQLite here has the R-tree module; the pack must carry it.
-          print("rtree rows", one("SELECT count(*) FROM road_rtree"))
+          rtree = one("SELECT count(*) FROM road_rtree")
+          print("rtree rows", rtree)
+          assert rtree == spots, f"road_rtree holds {rtree} rows for {spots} spots"
           assert one("PRAGMA application_id") == 0x53425231 and one("PRAGMA user_version") == 1
           # A floor per category, roughly half of what the first full build held (2026-10-23): camp 12749, rv 2137,
           # rest 2292, dump 699, water 10109, toilet 31073, shower 1923, fuel 46709, truck 2167, laundry 4668,
           # library 9502, pharmacy 9300, hospital 3155, clinic 10005, grocery 16602, park 4945. Far below the
-          # measured counts, so only a changed filter or tag rule can break one.
+          # measured counts, so only a changed filter or tag rule can break one. Fuel, hospital and grocery are
+          # held at the brief's minimums (30000, 2000, 10000), which are already below the measured counts.
           floors = {"camp": 6000, "rv": 1000, "rest": 1000, "dump": 300, "water": 5000, "toilet": 15000,
-                    "shower": 900, "fuel": 20000, "truck": 1000, "laundry": 2000, "library": 4000, "pharmacy": 4000,
-                    "hospital": 1500, "clinic": 5000, "grocery": 8000, "park": 2000}
+                    "shower": 900, "fuel": 30000, "truck": 1000, "laundry": 2000, "library": 4000, "pharmacy": 4000,
+                    "hospital": 2000, "clinic": 5000, "grocery": 10000, "park": 2000}
           categories = ["camp", "rv", "rest", "dump", "water", "toilet", "shower", "fuel", "truck", "laundry",
                         "library", "pharmacy", "hospital", "clinic", "grocery", "park"]
           assert set(counts) <= set(categories), f"unknown categories: {set(counts) - set(categories)}"

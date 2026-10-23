@@ -1,6 +1,6 @@
 """Builds the Road pack (road-us.sqlite) from a filtered, merged OSM extract.
 
-Usage: build_road.py <merged.osm.pbf> <out.sqlite> --chains chains.json --max-mb 200 --sources sources.json
+Usage: build_road.py <merged.osm.pbf> <out.sqlite> --chains chains.json --max-mb 64 --sources sources.json
 
 The input is what road/build.sh prepares: the Geofabrik extracts of every covered state, cut by `osmium
 tags-filter` to the objects that can matter here, merged, one version per object. Every object is classified by
@@ -240,7 +240,7 @@ def is_state_park(tags):
 
 
 def categories_of(tags, chains):
-    """The categories an object belongs to, in CATEGORIES' order, each once. None when it is private or off limits."""
+    """The categories an object belongs to, in CATEGORIES' order, each once. An empty list when it is private or off limits."""
     if value(tags, "access") in ("private", "no"):
         return []
     amenity, highway, tourism = value(tags, "amenity"), value(tags, "highway"), value(tags, "tourism")
@@ -452,11 +452,13 @@ def build(objects, output, chains, sources, max_mb=None, built_at=None, log=None
     rtree = True
     try:
         db.execute(RTREE)
-        db.execute("INSERT INTO road_rtree SELECT id, lat, lat, lon, lon FROM spot")
     except sqlite3.OperationalError as e:
         rtree = False
         print(f"::warning::This SQLite has no R-tree module ({e}); the pack is written without road_rtree",
               file=sys.stderr)
+    if rtree:
+        # Outside the try: a failed insert must fail the build, never leave an empty or partial R-tree.
+        db.execute("INSERT INTO road_rtree SELECT id, lat, lat, lon, lon FROM spot")
     newest = max(dates.values())
     db.executemany(
         "INSERT INTO meta (key, value) VALUES (?, ?)",

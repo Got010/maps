@@ -8,7 +8,9 @@ ships it with the other packs; `road.yml` is the pull request check); nothing he
 ## Categories
 
 Every spot is a point: a node as it is, a way at its middle node (a closed way at the mean of its corners), a
-relation at the mean of its first outer ring's corners. An object that fits two categories is a row in each.
+relation at the mean of its first outer ring's corners. An object that fits two categories is a row in each. Objects without usable geometry (a multipolygon with a missing
+member, an open ring, an empty or site relation, a way with no located nodes) are skipped and not counted; a closed way
+missing one node still yields a point from the nodes that remain.
 
 | `category` | OSM rule | Fields kept in `extra` |
 | --- | --- | --- |
@@ -92,9 +94,10 @@ The osmium filter is wider than the rules above, since it can only name tag valu
 `boundary=protected_area` and `amenity=doctors` objects pass it and `build_road.py` then applies the rest. A test
 (`FilterTest`) keeps the filter and the classifier in step.
 
-CI: `data.yml` builds the DC smoke pack on any pipeline pull request that does not touch `pipeline/road`;
-`road.yml` builds the whole pack when `pipeline/road` changes (or by hand), and asserts the marks, a floor of spots
-per category and the cluster zooms.
+CI: `data.yml` builds the DC smoke pack on pull requests that touch its path list (tiles, routing, search, transit,
+lib, `regions.json`, the Makefile, the pip lock and `data.yml` itself). `pipeline/road` is deliberately not in that list
+(it would add the roughly 90-minute NYC job to every road change), the same as the Wi-Fi pack. `road.yml` builds the whole pack when `pipeline/road` changes (or by hand), and asserts
+the marks, a floor of spots per category, one R-tree row per spot and the cluster zooms.
 
 ## Tests
 
