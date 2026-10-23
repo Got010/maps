@@ -127,6 +127,15 @@ internal object OverlayLayers {
     private const val WIFI_CLUSTER_COUNTS = "southbound-wifi-cluster-counts"
     private val WIFI_MIN_ZOOM = WifiPin.MIN_ZOOM.toFloat()
 
+    /**
+     * Road pack spots: badges drawn in code (RoadIcons, one per category) from [ROAD_MIN_ZOOM]; below it the pack's grid
+     * cells as circles with their counts. Over the Wi-Fi layer, under the pins.
+     */
+    const val ROAD = "southbound-road"
+    const val ROAD_CLUSTERS = "southbound-road-clusters"
+    private const val ROAD_CLUSTER_COUNTS = "southbound-road-cluster-counts"
+    private val ROAD_MIN_ZOOM = RoadPin.MIN_ZOOM.toFloat()
+
     // Alerts from the map data, pinned along the route while navigating.
     private const val ALERT_SPEED_CAMERA = "#1A73E8"
     private const val ALERT_ALPR_CAMERA = "#7B1FA2"
@@ -143,6 +152,8 @@ internal object OverlayLayers {
         style.addSource(GeoJsonSource(WEATHER_AREAS, OverlayGeoJson.weatherAreas(emptyList())))
         style.addSource(GeoJsonSource(WIFI, OverlayGeoJson.wifiPins(emptyList())))
         style.addSource(GeoJsonSource(WIFI_CLUSTERS, OverlayGeoJson.wifiClusters(emptyList())))
+        style.addSource(GeoJsonSource(ROAD, OverlayGeoJson.roadPins(emptyList())))
+        style.addSource(GeoJsonSource(ROAD_CLUSTERS, OverlayGeoJson.roadClusters(emptyList())))
 
         val speedColor = step(
             get("speed"), literal(SPEED_STOPPED),
@@ -229,6 +240,7 @@ internal object OverlayLayers {
             style.addLayer(threads)
         }
         installWifi(style)
+        installRoad(style)
         style.addLayer(
             CircleLayer(PINS, PINS).withProperties(
                 circleRadius(9f),
@@ -340,6 +352,49 @@ internal object OverlayLayers {
         )
     }
 
+    /**
+     * The Road layer: the sixteen badges are drawn once into the style; a spot names its own in its "icon" property.
+     * Cells below [ROAD_MIN_ZOOM] are circles sized by their count, with the count over them. Nothing hides another (a
+     * hidden spot or cell could not be tapped).
+     */
+    private fun installRoad(style: Style) {
+        for (category in RoadColors.KEYS) {
+            style.addImage(RoadPin.imageName(category), RoadIcons.badge(category))
+        }
+        style.addLayer(
+            CircleLayer(ROAD_CLUSTERS, ROAD_CLUSTERS).withProperties(
+                circleRadius(
+                    step(
+                        get("count"), literal(12f),
+                        stop(10, literal(15f)), stop(100, literal(18f)), stop(1000, literal(22f)), stop(10000, literal(26f)),
+                    ),
+                ),
+                circleColor(RoadColors.CLUSTER),
+                circleStrokeColor("#FFFFFF"),
+                circleStrokeWidth(2f),
+            ).also { it.maxZoom = ROAD_MIN_ZOOM },
+        )
+        // The basemap's own glyphs (styles/glyphs), so no font is fetched from anywhere.
+        style.addLayer(
+            SymbolLayer(ROAD_CLUSTER_COUNTS, ROAD_CLUSTERS).withProperties(
+                textField(get("label")),
+                textFont(arrayOf("NotoSans-Medium")),
+                textSize(12f),
+                textColor("#FFFFFF"),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+            ).also { it.maxZoom = ROAD_MIN_ZOOM },
+        )
+        style.addLayer(
+            SymbolLayer(ROAD, ROAD).withProperties(
+                iconImage(get("icon")),
+                iconSize(interpolate(linear(), zoom(), stop(ROAD_MIN_ZOOM, 0.8f), stop(14, 1f), stop(18, 1.15f))),
+                iconAllowOverlap(true),
+                iconIgnorePlacement(true),
+            ).also { it.minZoom = ROAD_MIN_ZOOM },
+        )
+    }
+
     /** 511NY cameras and signs: icons drawn in code, over everything else, so a tap finds them. */
     private fun installTrafficCamerasAndSigns(style: Style) {
         style.addImage(TRAFFIC_CAMERA_ICON, TrafficIcons.camera(TrafficIcons.CAMERA_TEAL))
@@ -379,6 +434,8 @@ internal object OverlayLayers {
         weatherAreasSource.update(style, overlays.weather.areas) { OverlayGeoJson.weatherAreas(it) }
         wifiPinsSource.update(style, overlays.wifi.pins) { OverlayGeoJson.wifiPins(it) }
         wifiClustersSource.update(style, overlays.wifi.clusters) { OverlayGeoJson.wifiClusters(it) }
+        roadPinsSource.update(style, overlays.road.pins) { OverlayGeoJson.roadPins(it) }
+        roadClustersSource.update(style, overlays.road.clusters) { OverlayGeoJson.roadClusters(it) }
         updateBadges(style, overlays.weather.stations)
         weatherStationsSource.update(style, overlays.weather.stations) { OverlayGeoJson.weatherStations(it) }
     }
@@ -387,6 +444,8 @@ internal object OverlayLayers {
     private val weatherStationsSource = ListSource<WeatherStationPin>(WEATHER_STATIONS)
     private val wifiPinsSource = ListSource<WifiPin>(WIFI)
     private val wifiClustersSource = ListSource<WifiClusterPin>(WIFI_CLUSTERS)
+    private val roadPinsSource = ListSource<RoadPin>(ROAD)
+    private val roadClustersSource = ListSource<RoadClusterPin>(ROAD_CLUSTERS)
 
     // The station badge images on the style. Each look is drawn once; a look no longer shown is removed, or a long
     // session would keep a bitmap for every sky, day or night and temperature it has seen. The previous list's looks
