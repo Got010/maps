@@ -221,6 +221,42 @@ class ReleaseManifestTest {
     }
 
     @Test
+    fun `plan fetches the Road pack only when it is wanted, independently of the Wi-Fi pack`() {
+        val one = { kind: String, region: String, ext: String ->
+            """{"kind":"$kind","region":"$region","file":"$kind-$region.$ext","size":5,"sha256":"$sha"}"""
+        }
+        val m = ReleaseManifest.parseV2(
+            doc(
+                packs = "[" + listOf(one("basemap", "nyc", "pmtiles"), one("wifi", "us", "sqlite"), one("road", "us", "sqlite")).joinToString(",") + "]",
+                schema = 2,
+            ),
+        )
+        assertEquals("road-us.sqlite", m.pack(PackKind.ROAD, "us")!!.file.name)
+        assertNull(m.pack(PackKind.ROAD, "us")!!.regions)
+        // Off by default: no phone downloads it unasked, whatever regions are picked or whether Wi-Fi is on.
+        val off = UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 101, includeApp = false, wifi = true)
+        assertEquals(listOf("basemap-nyc.pmtiles", "wifi-us.sqlite"), off.packs.map { it.file.name })
+        assertTrue(UpdatePlan.wanted(m, setOf("nyc")).none { it.kind == PackKind.ROAD })
+        // On: fetched with no region picked at all, since the pack is national, and without the Wi-Fi pack.
+        val on = UpdatePlan.of(m, emptySet(), emptyMap(), installedVersionCode = 101, includeApp = false, road = true)
+        assertEquals(listOf("road-us.sqlite"), on.packs.map { it.file.name })
+        // An installed, current copy isn't fetched again; a changed one is.
+        assertTrue(UpdatePlan.of(m, emptySet(), mapOf((PackKind.ROAD to "us") to sha), installedVersionCode = 101, includeApp = false, road = true).packs.isEmpty())
+        assertEquals(1, UpdatePlan.of(m, emptySet(), mapOf((PackKind.ROAD to "us") to "old"), installedVersionCode = 101, includeApp = false, road = true).packs.size)
+        // Pack downloads off: nothing, even when wanted.
+        assertTrue(UpdatePlan.of(m, emptySet(), emptyMap(), wanted = emptySet(), installedVersionCode = 101, includeApp = false, road = true).packs.isEmpty())
+        // "Get for this trip" sizes don't count the Road pack, which no region brings.
+        assertEquals(5L, UpdatePlan.addedBytes(m, emptySet(), setOf("nyc")))
+    }
+
+    @Test
+    fun `a manifest without the Road pack is fine`() {
+        val m = ReleaseManifest.parse(fixture)
+        assertNull(m.pack(PackKind.ROAD, "us"))
+        assertTrue(UpdatePlan.of(m, setOf("nyc"), emptyMap(), installedVersionCode = 101, includeApp = false, road = true).packs.none { it.kind == PackKind.ROAD })
+    }
+
+    @Test
     fun `a manifest without the Wi-Fi pack is fine`() {
         val m = ReleaseManifest.parse(fixture)
         assertNull(m.pack(PackKind.WIFI, "us"))

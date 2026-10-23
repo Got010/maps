@@ -175,6 +175,50 @@ class PackStoreTest {
     }
 
     @Test
+    fun roadPackIsRecognisedByItsApplicationId() {
+        val store = store()
+        val road = store.importPack(sqlite(PackKind.ROAD_APPLICATION_ID).inputStream(), "road-us.sqlite")
+        assertEquals(ImportedPack(PackKind.ROAD, "us", store.packsDir.resolve("road-us.sqlite")), road)
+        assertEquals(PackKind.ROAD, PackKind.detect(road.file))
+        assertEquals(PackStatus.Installed(road.file), store.status(PackKind.ROAD, "us"))
+        assertEquals("us", PackKind.regionFromName(PackKind.ROAD, "road-us (1).sqlite"))
+        assertEquals(0x53425231, PackKind.ROAD_APPLICATION_ID)
+        // "SBR1" is its own number: not the Wi-Fi, search or transit pack, which are SQLite too.
+        assertEquals("SBR1", String(byteArrayOf(0x53, 0x42, 0x52, 0x31)))
+        val wifi = store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), "wifi-us.sqlite")
+        assertEquals(PackKind.WIFI, PackKind.detect(wifi.file))
+        assertEquals(setOf(PackKind.WIFI, PackKind.ROAD), store.installed().map { it.kind }.toSet())
+        // Deleting it takes its checksum too and leaves the Wi-Fi pack.
+        store.delete(PackKind.ROAD, "us")
+        assertTrue(store.status(PackKind.ROAD, "us") is PackStatus.Missing)
+        assertEquals(setOf(PackKind.WIFI), store.installed().map { it.kind }.toSet())
+        // A file named like the pack that isn't one is Invalid, never silently removed.
+        store.packsDir.resolve("road-us.sqlite").writeBytes("junk".toByteArray())
+        assertTrue(store.status(PackKind.ROAD, "us") is PackStatus.Invalid)
+        assertTrue(store.packsDir.resolve("road-us.sqlite").exists())
+    }
+
+    @Test
+    fun roadPackIsFiledUnderUsWhateverItsFileIsCalled() {
+        val store = store()
+        for (name in listOf(null, "download.bin", "road_us.sqlite", "road-nyc.sqlite", "Road trip.sqlite")) {
+            val pack = store.importPack(sqlite(PackKind.ROAD_APPLICATION_ID).inputStream(), name)
+            assertEquals(ImportedPack(PackKind.ROAD, "us", store.packsDir.resolve("road-us.sqlite")), pack)
+        }
+        assertEquals(listOf("road-us.sqlite", "road-us.sqlite.sha256"), store.packsDir.list()!!.sorted())
+    }
+
+    @Test
+    fun deleteAllForRoadLeavesTheWifiPack() {
+        val store = store()
+        store.importPack(sqlite(PackKind.ROAD_APPLICATION_ID).inputStream(), "road-us.sqlite")
+        store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), "wifi-us.sqlite")
+        store.packsDir.resolve("road-ct.sqlite").writeBytes("junk".toByteArray())
+        store.deleteAll(PackKind.ROAD)
+        assertEquals(listOf("wifi-us.sqlite", "wifi-us.sqlite.sha256"), store.packsDir.list()!!.sorted())
+    }
+
+    @Test
     fun deleteAllTakesEveryPackOfAKindAndLeavesTheRest() {
         val store = store()
         store.importPack(sqlite(PackKind.WIFI_APPLICATION_ID).inputStream(), "wifi-us.sqlite")

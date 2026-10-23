@@ -117,8 +117,8 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
         /**
          * The packs the phone should have: a basemap for each region in
          * [basemapRegions], a voice pack for each voice in [voices] (none
-         * unless the user picked one: they're big), the free Wi-Fi pack only when [wifi] (the user turned it on in
-         * Settings > Maps), a pack that names its regions (southbound-v2.json's routing and search packs) when one of
+         * unless the user picked one: they're big), the free Wi-Fi pack only when [wifi] and the road pack only when [road] (the
+         * user turned each on in Settings > Maps), a pack that names its regions (southbound-v2.json's routing and search packs) when one of
          * them is picked or it names none (routing-main.tar: every phone), and
          * every other pack the release offers (southbound.json's statewide
          * routing and search, NYC transit), restricted to [wanted] kinds.
@@ -129,12 +129,14 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
             wanted: Set<PackKind> = PackKind.entries.toSet(),
             voices: Set<String> = emptySet(),
             wifi: Boolean = false,
+            road: Boolean = false,
         ): List<ReleasePack> =
             manifest.packs.filter { pack ->
                 pack.kind in wanted && when (pack.kind) {
                     PackKind.BASEMAP -> pack.region in basemapRegions
                     PackKind.VOICE -> pack.region in voices
                     PackKind.WIFI -> wifi
+                    PackKind.ROAD -> road
                     else -> pack.regions?.let { it.isEmpty() || it.any { r -> r in basemapRegions } } ?: true
                 }
             }
@@ -163,8 +165,9 @@ data class UpdatePlan(val packs: List<ReleasePack>, val app: ReleaseFile?) {
             includeApp: Boolean,
             voices: Set<String> = emptySet(),
             wifi: Boolean = false,
+            road: Boolean = false,
         ): UpdatePlan = UpdatePlan(
-            packs = wanted(manifest, basemapRegions, wanted, voices, wifi).filter { installed[it.kind to it.region] != it.file.sha256 },
+            packs = wanted(manifest, basemapRegions, wanted, voices, wifi, road).filter { installed[it.kind to it.region] != it.file.sha256 },
             app = manifest.app?.takeIf { includeApp && manifest.versionCode > installedVersionCode },
         )
     }
