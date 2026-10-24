@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":core:traffic"))
     implementation(project(":core:weather"))
     implementation(project(":core:wifi"))
+    implementation(project(":core:road"))
     implementation(project(":core:userdata"))
     implementation(project(":core:network"))
     implementation(project(":core:updates"))

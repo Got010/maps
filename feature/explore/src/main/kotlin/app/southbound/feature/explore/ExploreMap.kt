@@ -94,6 +94,8 @@ import app.southbound.core.map.SpeedLine
 import app.southbound.core.map.TrafficOverlay
 import app.southbound.core.map.WeatherOverlay
 import app.southbound.core.map.MapViewport
+import app.southbound.core.map.RoadOverlay
+import app.southbound.core.map.RoadTap
 import app.southbound.core.map.WifiOverlay
 import app.southbound.core.map.WifiTap
 import app.southbound.core.map.NYC_CENTER
@@ -134,6 +136,9 @@ import app.southbound.core.search.Landmark
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceSearch
+import app.southbound.core.road.RoadFilter
+import app.southbound.core.road.RoadPack
+import app.southbound.core.road.RoadSpot
 import app.southbound.core.search.RouteExposure
 import app.southbound.core.search.RouteLine
 import app.southbound.core.search.SearchRanking
@@ -182,6 +187,7 @@ import app.southbound.feature.navigation.drivingMapBottomCenter
 import app.southbound.feature.navigation.rememberDrivingLandscape
 import app.southbound.feature.navigation.rememberDrivingPanelWidth
 import app.southbound.feature.search.PlaceCard
+import app.southbound.feature.search.RoadDetails
 import app.southbound.feature.search.WifiDetails
 import app.southbound.feature.search.WifiMarkInfo
 import app.southbound.feature.search.SearchPanel
@@ -611,6 +617,45 @@ internal fun ExploreMap(
     }
     fun showWifiSpot(spot: WifiSpot) {
         shownWifi = spot
+        showPlace(spot.toPlace())
+    }
+
+    // Road pack (Settings > Maps): the pack, the layer's row in Map options, what the map shows, and the spot whose sheet
+    // is open. All of it reads the Road pack on the phone.
+    var roadPack by remember { mutableStateOf<RoadPack?>(null) }
+    var roadVisible by rememberSaveable { mutableStateOf(false) }
+    // What the long-press chooser leaves on the map. View state like roadVisible: kept through a rotation, never stored.
+    var roadFilter by rememberSaveable(stateSaver = RoadFilterSaver) { mutableStateOf(RoadFilter.DEFAULT) }
+    var roadChooser by rememberSaveable { mutableStateOf(false) }
+    // The sheet closes for good when the pack goes away, so it cannot open by itself when a pack comes back.
+    var roadPackSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(roadPack) {
+        if (roadPack != null) roadPackSeen = true else if (roadPackSeen) roadChooser = false
+    }
+    var roadOverlay by remember { mutableStateOf(RoadOverlay.NONE) }
+    var shownRoad by remember { mutableStateOf<RoadSpot?>(null) }
+    // The pack installed or removed while the app runs (a download, Settings, an import).
+    var roadChanges by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        launch { PackEvents.installed.collect { if (it.kind == PackKind.ROAD) roadChanges++ } }
+        launch { PackEvents.removed.collect { if (it.first == PackKind.ROAD) roadChanges++ } }
+    }
+    LaunchedEffect(packGeneration, resumes, roadChanges) {
+        roadPack = withContext(Dispatchers.IO) { attempt { services.openRoad() } }
+    }
+    // Grid cells below zoom 10, the spots in view from it, asked for each time the camera comes to rest.
+    LaunchedEffect(roadPack, roadVisible, viewport, roadFilter) {
+        val pack = roadPack
+        val view = viewport
+        if (pack == null || !roadVisible || view == null) {
+            roadOverlay = RoadOverlay.NONE
+            return@LaunchedEffect
+        }
+        delay(WIFI_QUERY_DEBOUNCE_MS)
+        roadOverlay = withContext(Dispatchers.IO) { attempt { RoadLayer.overlay(pack, view, roadFilter) } } ?: RoadOverlay.NONE
+    }
+    fun showRoadSpot(spot: RoadSpot) {
+        shownRoad = spot
         showPlace(spot.toPlace())
     }
 
@@ -1292,6 +1337,10 @@ internal fun ExploreMap(
     // (directions need their local roads); with one, the ones the chosen route crosses without the map.
     val installedRegions = remember(basemaps) { basemaps.map { it.region }.toSet() }
     val selectedRoute = (preview as? RoutePreviewState.Ready)?.let { routes.getOrNull(it.selected) }
+    // The route being planned, for the Road list's "Along my route": offered only while a stop is being added to it.
+    val roadRouteLine = remember(selectedRoute, addingStopTo) {
+        if (addingStopTo == null) null else selectedRoute?.geometry?.map { LatLon(it.lat, it.lng) }?.takeIf { it.size >= 2 }
+    }
     val noRoute = (preview as? RoutePreviewState.Failed)?.reason == RoutePreviewState.Reason.NO_ROUTE
     // Keyed on having a start too: before the first fix there is none, and its region joins when the fix comes.
     val hasOrigin = startPlace != null || location != null
@@ -1380,6 +1429,7 @@ internal fun ExploreMap(
                 messageSigns = if (trafficVisible && trafficOn) messageSignPins else emptyList(),
                 weather = weatherOverlay,
                 wifi = if (wifiVisible && wifiPack != null) wifiOverlay else WifiOverlay.NONE,
+                road = if (roadVisible && roadPack != null) roadOverlay else RoadOverlay.NONE,
             ),
             cameraRequest = cameraRequest,
             navigating = inTrip,
@@ -1434,6 +1484,21 @@ internal fun ExploreMap(
                     is WifiTap.Cluster -> {
                         following = false
                         cameraRequest = CameraRequest.Show(tap.point, WifiLayer.zoomAfterClusterTap(viewport?.zoom))
+                    }
+                }
+            },
+            onRoadTap = { tap ->
+                when (tap) {
+                    is RoadTap.Spot -> {
+                        val pack = roadPack
+                        scope.launch {
+                            val spot = withContext(Dispatchers.IO) { pack?.let { attempt { it.spot(tap.id) } } }
+                            if (spot != null) showRoadSpot(spot)
+                        }
+                    }
+                    is RoadTap.Cluster -> {
+                        following = false
+                        cameraRequest = CameraRequest.Show(tap.point, RoadLayer.zoomAfterClusterTap(viewport?.zoom))
                     }
                 }
             },
@@ -1651,6 +1716,9 @@ internal fun ExploreMap(
                             wifiVisible = wifiVisible,
                             wifiFiltered = !wifiFilter.isDefault,
                             stateAvailable = stateCardsOn && stateCards != null && currentState != null,
+                            roadAvailable = roadPack != null,
+                            roadVisible = roadVisible,
+                            roadFiltered = !roadFilter.isDefault,
                         ),
                         onRecenter = { following = true },
                         onToggleTraffic = { trafficVisible = !trafficVisible },
@@ -1658,6 +1726,8 @@ internal fun ExploreMap(
                         onToggleWifi = { wifiVisible = !wifiVisible },
                         onChooseWifi = { wifiChooser = true },
                         onThisState = { currentState?.let { stateCardRequest = StateCardRequest(it).encode() } },
+                        onToggleRoad = { roadVisible = !roadVisible },
+                        onChooseRoad = { roadChooser = true },
                         bottomInset = if (dockShown && !dockBeside) dockHeight + 8.dp else 0.dp,
                     )
                     if (wifiChooser && wifiPack != null) {
@@ -1670,6 +1740,18 @@ internal fun ExploreMap(
                                 wifiChooser = false
                             },
                             onDismiss = { wifiChooser = false },
+                        )
+                    }
+                    if (roadChooser && roadPack != null) {
+                        RoadChooserSheet(
+                            current = roadFilter,
+                            // Done also turns the layer on: choosing what to see is asking to see it.
+                            onDone = { chosen ->
+                                roadFilter = chosen
+                                roadVisible = true
+                                roadChooser = false
+                            },
+                            onDismiss = { roadChooser = false },
                         )
                     }
                     // Why the traffic layer may look empty: say so instead of showing nothing.
@@ -1728,6 +1810,11 @@ internal fun ExploreMap(
                     wifi = wifiPack,
                     onPickWifi = ::showWifiSpot,
                     wifiMarks = wifiMarks,
+                    road = roadPack,
+                    onPickRoad = ::showRoadSpot,
+                    // Only while a stop is being added to a route that has been worked out: its points, on the phone.
+                    routeLine = roadRouteLine,
+                    onPickRoadStop = addingStopTo?.let { planned -> { spot: RoadSpot -> addStop(planned, spot.toPlace()) } },
                     near = near,
                     // Around the user while the map follows them; once it is moved (a pan, a place or a route shown),
                     // around where it is. Before the first fix, around the map too.
@@ -1791,7 +1878,9 @@ internal fun ExploreMap(
                         val noneNear = weatherOn && here == null && weather.conditions.isNotEmpty()
                         // The Wi-Fi spot this sheet was opened for (not any place that shares nothing with it).
                         val wifiSpot = shownWifi?.takeIf { it.osmRef == current.place.osmRef }
-                        if (wifiSpot == null && here == null && !noneNear && forecastDays.isEmpty() && boards.isEmpty()) {
+                        // The Road spot this sheet was opened for (matched by its pack id and position, as the pack has no OSM reference).
+                        val roadSpot = shownRoad?.takeIf { it.id == current.place.id && it.lat == current.place.lat && it.lon == current.place.lon }
+                        if (wifiSpot == null && roadSpot == null && here == null && !noneNear && forecastDays.isEmpty() && boards.isEmpty()) {
                             null
                         } else {
                             {
@@ -1812,6 +1901,7 @@ internal fun ExploreMap(
                                             },
                                         )
                                     }
+                                    roadSpot?.let { spot -> RoadDetails(spot, roadPack?.extractDate) }
                                     here?.let { WeatherNowRow(it, Modifier.padding(end = 12.dp)) }
                                     if (forecastDays.isNotEmpty()) ForecastStrip(forecastDays, Modifier.padding(end = 12.dp))
                                     if (noneNear) {

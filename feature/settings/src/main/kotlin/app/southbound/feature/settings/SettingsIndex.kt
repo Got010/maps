@@ -79,7 +79,7 @@ internal object SettingsIndex {
         R.string.updates_check_now, R.string.updates_packs, R.string.updates_app, R.string.updates_mobile, R.string.updates_token,
     ) + on(
         SettingsTab.MAPS, null,
-        R.string.regions_title, R.string.wifi_pack_title, R.string.updates_packs_installed, R.string.coverage_title,
+        R.string.regions_title, R.string.wifi_pack_title, R.string.road_pack_title, R.string.updates_packs_installed, R.string.coverage_title,
     ) + on(
         SettingsTab.BACKUP, R.string.backup_title,
         R.string.backup_export, R.string.backup_import,

@@ -14,11 +14,13 @@ import app.southbound.core.packs.PackKind
 import app.southbound.core.packs.PackStore
 import app.southbound.core.packs.Regions
 import app.southbound.core.packs.RegionSelection
+import app.southbound.core.packs.RoadSelection
 import app.southbound.core.packs.TileFolder
 import app.southbound.core.packs.VoiceSelection
 import app.southbound.core.packs.WifiSelection
 import app.southbound.core.routing.DrivingPrefs
 import app.southbound.core.routing.FuelPrefs
+import app.southbound.core.road.RoadPack
 import app.southbound.core.routing.GasPrices
 import app.southbound.core.routing.Navigator
 import app.southbound.core.routing.OfflineRouter
@@ -115,6 +117,7 @@ class ExploreServices private constructor(context: Context) {
             AndroidBackupStores(
                 appContext, userData, secrets, networkToggles, RouteOptionsStore.get(appContext), DrivingPrefs.get(appContext),
                 fuelPrefs, voiceStore, RegionSelection.get(appContext), VoiceSelection.get(appContext), WifiSelection.get(appContext),
+                RoadSelection.get(appContext),
             ),
             ImportJournal.at(appContext.noBackupFilesDir, KeystoreSealer()),
             appVersion = version ?: "unknown",
@@ -150,6 +153,7 @@ class ExploreServices private constructor(context: Context) {
     private var transit: Opened<TransitPack>? = null
     private var routing: Opened<Pair<OfflineRouter, Navigator>>? = null
     private var wifi: Opened<WifiPack>? = null
+    private var road: Opened<RoadPack>? = null
 
     /**
      * Search over every installed search pack (New York's, and one per region in the other states), reopened when
@@ -246,6 +250,26 @@ class ExploreServices private constructor(context: Context) {
         wifi?.value?.close()
         wifi = null
         return runCatching { WifiPack.open(file) }.getOrNull()?.also { wifi = Opened(file, it) }
+    }
+
+    /**
+     * The Road pack, reopened when the file is replaced and closed when it is removed. Null without one, or when the
+     * file isn't a readable Road pack (it stays on the phone either way).
+     */
+    @Synchronized
+    fun openRoad(): RoadPack? {
+        // Region "us" first; any other installed Road pack (an old import's name) rather than none.
+        val packs = packStore.installed().filter { it.kind == PackKind.ROAD }
+        val file = (packs.firstOrNull { it.region == PackKind.ROAD_REGION } ?: packs.firstOrNull())?.file
+        if (file == null) {
+            road?.value?.close()
+            road = null
+            return null
+        }
+        road?.takeIf { it.matches(file) }?.let { return it.value }
+        road?.value?.close()
+        road = null
+        return runCatching { RoadPack.open(file) }.getOrNull()?.also { road = Opened(file, it) }
     }
 
     fun hasPack(kind: PackKind): Boolean =

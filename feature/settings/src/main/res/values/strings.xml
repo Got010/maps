@@ -207,6 +207,8 @@
     <string name="backup_network_will_none">When finished it will turn no network feature on.</string>
     <string name="backup_wifi_on">Free Wi-Fi pack switched on in Settings > Maps: it downloads with the next map update.</string>
     <string name="backup_wifi_will_on">When finished it will also switch on the free Wi-Fi pack in Settings > Maps, which downloads with the next map update.</string>
+    <string name="backup_road_on">Road pack switched on in Settings > Maps: it downloads with the next map update.</string>
+    <string name="backup_road_will_on">When finished it will also switch on the Road pack in Settings > Maps, which downloads with the next map update.</string>
     <string name="backup_net_pack_downloads">map pack downloads</string>
     <string name="backup_net_app_updates">app updates</string>
     <string name="backup_net_511">511NY traffic</string>
@@ -321,4 +323,14 @@
     <string name="wifi_pack_pending_off">Turn on Download map data, or import the file.</string>
     <string name="wifi_pack_list_name">Free Wi-Fi (all covered states)</string>
     <string name="wifi_pack_invalid">The Wi-Fi file on this phone isn\'t a readable Wi-Fi pack. The next update replaces it.</string>
+    <string name="road_pack_card">Road trip places</string>
+    <string name="road_pack_title">Road pack</string>
+    <string name="road_pack_note">Campsites, RV sites, rest areas, dump stations, water, toilets, showers, fuel and truck stops, laundromats, libraries, pharmacies, hospitals, clinics, groceries and parks in every covered state, from OpenStreetMap. %1$s</string>
+    <string name="road_pack_size">%1$d MB</string>
+    <string name="road_pack_size_unknown">size unknown</string>
+    <string name="road_pack_installed">Installed, %1$d MB.</string>
+    <string name="road_pack_pending">Downloads in the next update.</string>
+    <string name="road_pack_pending_off">Turn on Download map data, or import the file.</string>
+    <string name="road_pack_list_name">Road trip places (all covered states)</string>
+    <string name="road_pack_invalid">The Road file on this phone isn\'t a readable Road pack. The next update replaces it.</string>
 </resources>

@@ -31,7 +31,9 @@ import app.southbound.core.voice.VoiceSettings
  * bundle reads as on, the app's default; schema 8 the network group's `TRAFFIC_511VA`, `TRAFFIC_WV511` and
  * `TRAFFIC_KYTC`, which an older bundle reads as off; schema 9 the packs group's `wifi`, the Settings > Maps switch for
  * the free Wi-Fi pack, which an older bundle does not have: it reads as unset and an import leaves the switch as it is; schema 10 the
- * driving group's `state_line_cards`, Settings > Driving > State-line cards, which an older bundle reads as on, the app's default); an enum is its constant's name; a number
+ * driving group's `state_line_cards`, Settings > Driving > State-line cards, which an older bundle reads as on, the app's default;
+ * schema 11 the packs group's `road`, the Settings > Maps switch for the Road pack, which an older bundle does not have: it
+ * reads as unset and an import leaves the switch as it is); an enum is its constant's name; a number
  * must be finite and inside the range the app's own setting enforces. Export runs the same check before writing.
  */
 internal object SettingsEntry {
@@ -85,9 +87,10 @@ internal object SettingsEntry {
         "alpr_camera_alerts", "school_zone_alerts",
     )
 
-    /** The packs group: the user's regions, and from schema 9 the free Wi-Fi switch. */
+    /** The packs group: the user's regions, from schema 9 the free Wi-Fi switch, from schema 11 the Road pack's. */
     private val PACKS_KEYS_1 = setOf("regions")
-    private val PACKS_KEYS = PACKS_KEYS_1 + "wifi"
+    private val PACKS_KEYS_9 = PACKS_KEYS_1 + "wifi"
+    private val PACKS_KEYS = PACKS_KEYS_9 + "road"
     private val GROUPS = setOf("network", "route", "driving", "fuel", "voice", "packs", "updates")
 
     private val REGION_IDS: Set<String> get() = Regions.basemaps.map { it.id }.toSet()
@@ -95,6 +98,7 @@ internal object SettingsEntry {
     fun encode(s: AppSettings): ByteArray {
         check(s)
         if (s.wifi == null) invalid("the Wi-Fi switch has no value")
+        if (s.road == null) invalid("the Road switch has no value")
         return MiniJson.stringify(tree(s)).toByteArray(Charsets.UTF_8)
     }
 
@@ -106,11 +110,11 @@ internal object SettingsEntry {
      * schemas 1 to 3 neither `TRAFFIC_511PA` nor `TRAFFIC_CTROADS`, schemas 1 to 4 neither `TRAFFIC_CHART_MD` nor
      * `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven (`TRAFFIC_511WI` to `TRAFFIC_OHGO`), schemas 1 to 6
      * no `search_at_bottom`, schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
-     * schemas 1 to 8 no `wifi`, schemas 1 to 9 no `state_line_cards`.
+     * schemas 1 to 8 no `wifi`, schemas 1 to 9 no `state_line_cards`, schemas 1 to 10 no `road`.
      */
     fun count(s: AppSettings, schema: Long): Int =
         count(s) - (if (schema < 2) 1 else 0) - (if (schema < 7) 1 else 0) - (if (schema < 9) 1 else 0) -
-            (if (schema < 10) 1 else 0) -
+            (if (schema < 10) 1 else 0) - (if (schema < 11) 1 else 0) -
             NetworkFeature.entries.count { !inSchema(it, schema) }
 
     private fun tree(s: AppSettings): Map<String, Any?> = linkedMapOf(
@@ -170,17 +174,17 @@ internal object SettingsEntry {
             "alpr_camera_alerts" to s.voice.alprCameraAlerts,
             "school_zone_alerts" to s.voice.schoolZoneAlerts,
         ),
-        "packs" to linkedMapOf<String, Any?>("regions" to s.regions.sorted(), "wifi" to s.wifi),
+        "packs" to linkedMapOf<String, Any?>("regions" to s.regions.sorted(), "wifi" to s.wifi, "road" to s.road),
         "updates" to linkedMapOf<String, Any?>("allow_mobile_data" to s.allowMobileData),
     )
 
     /**
-     * Reads settings written with bundle [schema] (1 to 10; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
+     * Reads settings written with bundle [schema] (1 to 11; schema 1 has no `avoid_dot_cameras`, schemas 1 and 2 no
      * `WEATHER` toggle, schemas 1 to 3 no `TRAFFIC_511PA` or `TRAFFIC_CTROADS`, schemas 1 to 4 no
      * `TRAFFIC_CHART_MD` or `TRAFFIC_DELDOT`, schemas 1 to 5 none of schema 6's eleven Midwest toggles (`TRAFFIC_511WI` to
      * `TRAFFIC_OHGO`) and schemas 1 to 7 none of schema 8's three (`TRAFFIC_511VA`, `TRAFFIC_WV511`, `TRAFFIC_KYTC`),
      * each read as off; schemas 1 to 6 have no `search_at_bottom`, read as on; schemas 1 to 8 have no `wifi`, read as null: unset, so an import leaves the switch alone;
-     * schemas 1 to 9 have no `state_line_cards`, read as on).
+     * schemas 1 to 9 have no `state_line_cards`, read as on; schemas 1 to 10 have no `road`, read as null: unset, so an import leaves the switch alone).
      */
     fun decode(bytes: ByteArray, schema: Long = SouthboundBundle.SCHEMA): AppSettings {
         val root = Obj.of(parseJson(bytes, "settings.json"), "settings", GROUPS)
@@ -255,7 +259,7 @@ internal object SettingsEntry {
             schoolZoneAlerts = v.bool("school_zone_alerts"),
         )
 
-        val packs = root.obj("packs", if (schema >= 9) PACKS_KEYS else PACKS_KEYS_1)
+        val packs = root.obj("packs", if (schema >= 11) PACKS_KEYS else if (schema >= 9) PACKS_KEYS_9 else PACKS_KEYS_1)
         val regions = LinkedHashSet<String>()
         for (id in packs.list("regions", REGION_IDS.size)) {
             val region = id as? String ?: packs.bad("regions")
@@ -264,10 +268,12 @@ internal object SettingsEntry {
 
         // Before schema 9 there was no switch: null, so an import leaves the phone's Wi-Fi switch as it is.
         val wifi: Boolean? = if (schema >= 9) packs.bool("wifi") else null
+        // Before schema 11 there was no Road switch: null, so an import leaves the phone's Road switch as it is.
+        val road: Boolean? = if (schema >= 11) packs.bool("road") else null
 
         val allowMobile = root.obj("updates", setOf("allow_mobile_data")).bool("allow_mobile_data")
 
-        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom, wifi, stateLineCards).also { check(it) }
+        return AppSettings(network, route, night, fuel, voice, regions, allowMobile, searchAtBottom, wifi, stateLineCards, road).also { check(it) }
     }
 
     /** Range checks for settings that did not come from [decode] (an export of what the stores hold). */

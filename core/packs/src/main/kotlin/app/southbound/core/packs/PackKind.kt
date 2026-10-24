@@ -33,6 +33,13 @@ enum class PackKind(val prefix: String, val extension: String) {
      * opt-in: fetched only when the user turns on Free Wi-Fi in Settings > Maps ([WifiSelection]).
      */
     WIFI("wifi", "sqlite"),
+
+    /**
+     * SQLite database of the road-trip places from OpenStreetMap (`road-us.sqlite`: campsites, rest areas, dump stations,
+     * water, fuel and the rest; the "region" is always "us"), opt-in: fetched only when the user turns on the Road pack
+     * in Settings > Maps ([RoadSelection]).
+     */
+    ROAD("road", "sqlite"),
     ;
 
     fun fileName(region: String): String = "$prefix-$region.$extension"
@@ -44,14 +51,18 @@ enum class PackKind(val prefix: String, val extension: String) {
         /**
          * SQLite packs set `PRAGMA application_id` so the app can tell them
          * apart without opening them: "SBS1" for search, "SBT1" for transit,
-         * "SBW1" for the free Wi-Fi spots. The pipeline writes the same numbers.
+         * "SBW1" for the free Wi-Fi spots, "SBR1" for the road-trip places. The pipeline writes the same numbers.
          */
         const val SEARCH_APPLICATION_ID = 0x53425331
         const val TRANSIT_APPLICATION_ID = 0x53425431
         const val WIFI_APPLICATION_ID = 0x53425731
+        const val ROAD_APPLICATION_ID = 0x53425231
 
         /** The Wi-Fi pack has exactly one region, whatever an imported file is called. */
         const val WIFI_REGION = "us"
+
+        /** The Road pack has exactly one region too, whatever an imported file is called. */
+        const val ROAD_REGION = "us"
 
         private val PMTILES_MAGIC = "PMTiles".toByteArray(Charsets.US_ASCII)
         private const val PMTILES_VERSION: Byte = 3
@@ -86,6 +97,7 @@ enum class PackKind(val prefix: String, val extension: String) {
                         SEARCH_APPLICATION_ID -> SEARCH
                         TRANSIT_APPLICATION_ID -> TRANSIT
                         WIFI_APPLICATION_ID -> WIFI
+                        ROAD_APPLICATION_ID -> ROAD
                         else -> null
                     }
 

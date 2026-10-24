@@ -144,6 +144,49 @@ sealed interface WifiTap {
 }
 
 /**
+ * A Road pack spot (campsite, rest area, fuel...), drawn from zoom 10. [id] is the pack's spot id and comes back from a
+ * tap; [category] is the pack's category code (one of [RoadColors.KEYS]) and picks the badge.
+ */
+data class RoadPin(val id: Long, val point: MapPoint, val category: String) {
+    /** The map image for this badge: one per category. */
+    val imageName: String
+        get() = imageName(category)
+
+    companion object {
+        /** The map zoom from which single spots are drawn; below it the grid cells are. */
+        const val MIN_ZOOM = 10.0
+        private const val IMAGE_PREFIX = "southbound-road-"
+
+        fun imageName(category: String): String = IMAGE_PREFIX + category
+    }
+}
+
+/**
+ * A cell of the Road pack's grid, drawn below zoom 10 as a circle with [count] spots in it (of the categories shown).
+ * [id] names the cell; a tap zooms in on [point].
+ */
+data class RoadClusterPin(val id: String, val point: MapPoint, val count: Int)
+
+/** The Road layer: single spots from zoom 10, grid cells below it. */
+data class RoadOverlay(
+    val pins: List<RoadPin> = emptyList(),
+    val clusters: List<RoadClusterPin> = emptyList(),
+) {
+    companion object {
+        val NONE = RoadOverlay()
+    }
+}
+
+/** What a tap on the Road layer found. */
+sealed interface RoadTap {
+    /** A spot, by the pack's id. */
+    data class Spot(val id: Long) : RoadTap
+
+    /** A grid cell, at the middle of its spots. */
+    data class Cluster(val point: MapPoint) : RoadTap
+}
+
+/**
  * Where the map is looking each time the camera comes to rest: the bounds of what is visible (south, north, west,
  * east in degrees; the box round it when the map is turned) and the zoom. The Wi-Fi layer asks the pack for these.
  */
@@ -183,6 +226,8 @@ data class MapOverlays(
     val weather: WeatherOverlay = WeatherOverlay.NONE,
     /** Free Wi-Fi spots and grid cells from the Wi-Fi pack, over the routes and under the pins. */
     val wifi: WifiOverlay = WifiOverlay.NONE,
+    /** Road pack spots (camp, rest areas, fuel...) and grid cells, over the Wi-Fi layer and under the pins. */
+    val road: RoadOverlay = RoadOverlay.NONE,
 )
 
 /**
@@ -305,6 +350,21 @@ internal object OverlayGeoJson {
     fun wifiClusters(pins: List<WifiClusterPin>): String = featureCollection(
         pins.filter { it.point.isFinite && it.count > 0 && it.tierMin in WifiPin.TIERS }.map { pin ->
             """{"type":"Feature","properties":{"id":${quote(pin.id)},"count":${pin.count},"tier":${pin.tierMin},"color":"${WifiColors.hex(pin.tierMin)}","label":${quote(clusterLabel(pin.count))}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun roadPins(pins: List<RoadPin>): String = featureCollection(
+        // The table's order, so the same spots always draw in the same order; a category the app has no badge for is not drawn.
+        pins.filter { it.point.isFinite && it.category in RoadColors.KEYS }.sortedByDescending { RoadColors.KEYS.indexOf(it.category) }.map { pin ->
+            """{"type":"Feature","properties":{"id":${pin.id},"category":${quote(pin.category)},"icon":${quote(pin.imageName)}},""" +
+                """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
+        },
+    )
+
+    fun roadClusters(pins: List<RoadClusterPin>): String = featureCollection(
+        pins.filter { it.point.isFinite && it.count > 0 }.map { pin ->
+            """{"type":"Feature","properties":{"id":${quote(pin.id)},"count":${pin.count},"label":${quote(clusterLabel(pin.count))}},""" +
                 """"geometry":{"type":"Point","coordinates":${coordinate(pin.point)}}}"""
         },
     )

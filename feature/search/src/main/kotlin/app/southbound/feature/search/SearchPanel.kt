@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.RvHookup
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AssistChip
@@ -69,6 +70,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.southbound.core.map.Units
+import app.southbound.core.road.RoadAlongResult
+import app.southbound.core.road.RoadFilter
+import app.southbound.core.road.RoadPack
+import app.southbound.core.road.RoadResult
+import app.southbound.core.road.RoadSpot
 import app.southbound.core.search.LatLon
 import app.southbound.core.search.Place
 import app.southbound.core.search.PlaceCategory
@@ -85,6 +91,7 @@ import app.southbound.core.wifi.WifiTierFilter
 import java.time.LocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -145,6 +152,21 @@ fun SearchPanel(
     onPickWifi: ((WifiSpot) -> Unit)? = null,
     /** The user's own "worked" / "didn't work" marks on Wi-Fi spots, by OSM reference (they override the label and sort the list). */
     wifiMarks: Map<String, WifiMarkInfo> = emptyMap(),
+    /**
+     * The Road pack, when one is installed: adds the Road chip, which lists the nearest campsites, rest areas, fuel and
+     * the rest from the same place the other chips look. Null hides the chip.
+     */
+    road: RoadPack? = null,
+    /** A Road row was picked (a nearest one): its spot, for the sheet. */
+    onPickRoad: ((RoadSpot) -> Unit)? = null,
+    /**
+     * The route being planned, its points in order, while the panel was opened to add a stop to it; null otherwise. With
+     * it the Road list offers "Along my route": the spots beside the route, in the order they come, with the distance
+     * ahead. The route is read on the phone and never leaves it.
+     */
+    routeLine: List<LatLon>? = null,
+    /** An "along my route" row was picked: the spot, to become a stop of the route being planned. */
+    onPickRoadStop: ((RoadSpot) -> Unit)? = null,
 ) {
     // Phase 6: the chip that was tapped while unset; the next pick sets it.
     var settingSlot by remember { mutableStateOf<ShortcutSlot?>(null) }
@@ -159,6 +181,17 @@ fun SearchPanel(
     // Null while looking, then the rows (maybe none); an error shows instead of "None".
     var wifiResults by remember { mutableStateOf<List<WifiResult>?>(null) }
     var wifiFailed by remember { mutableStateOf(false) }
+    // The Road chip's list, near the user or along the route being planned, and its own category choice (kept through a
+    // rotation as the line RoadFilter.encode writes; it is view state, never stored).
+    var roadMode by rememberSaveable { mutableStateOf(false) }
+    var roadAlong by rememberSaveable { mutableStateOf(false) }
+    var roadFilterLine by rememberSaveable { mutableStateOf(RoadFilter.DEFAULT.encode()) }
+    val roadFilter = remember(roadFilterLine) { RoadFilter.decode(roadFilterLine) }
+    // Null while looking, then the rows (maybe none); an error shows instead of "None".
+    var roadResults by remember { mutableStateOf<List<RoadResult>?>(null) }
+    var roadAlongResults by remember { mutableStateOf<List<RoadAlongResult>?>(null) }
+    var roadFailed by remember { mutableStateOf(false) }
+    val roadAlongNow = roadAlong && routeLine != null
     var results by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
     // The query [results] answer: the Search key only ever opens a result for what is typed now.
     var resultsFor by remember { mutableStateOf<String?>(null) }
@@ -176,12 +209,12 @@ fun SearchPanel(
     LaunchedEffect(Unit) { focus.requestFocus() }
     // Again once there is a position: results looked up before the first fix carry no distances and rank as if far.
     // Again when the map moves to somewhere else to look (beside the search on a wide screen).
-    LaunchedEffect(query, browsing, index, near != null, area, wifiMode) {
+    LaunchedEffect(query, browsing, index, near != null, area, wifiMode, roadMode) {
         val asked = query
         val category = browsing
         val center = area ?: near
         // The Wi-Fi chip has its own list below; its name in the box is not a search.
-        if (index == null || asked.isBlank() || wifiMode || (category != null && center == null)) {
+        if (index == null || asked.isBlank() || wifiMode || roadMode || (category != null && center == null)) {
             results = emptyList()
             error = null
             resultsFor = asked
@@ -217,6 +250,29 @@ fun SearchPanel(
         }
         wifiFailed = outcome.isFailure
         wifiResults = outcome.getOrDefault(emptyList())
+    }
+    // The Road list: the nearest spots from the same place the category chips look, or the spots beside the route being
+    // planned. Again when the kinds change; a search still running when they do is stopped between route pieces.
+    LaunchedEffect(roadMode, roadFilterLine, road, near != null, area, roadAlongNow, routeLine) {
+        val center = area ?: near
+        val line = routeLine
+        roadResults = null
+        roadAlongResults = null
+        roadFailed = false
+        if (!roadMode || road == null || roadFilter.showsNothing) return@LaunchedEffect
+        if (roadAlongNow && line != null) {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching { road.alongRoute(line, ROAD_CORRIDOR_KM, roadFilter.categories, ROAD_ALONG_LIMIT, isActive = { this@withContext.isActive }) }
+            }
+            roadFailed = outcome.isFailure
+            roadAlongResults = outcome.getOrDefault(emptyList())
+        } else if (center != null) {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching { road.nearest(center, ROAD_RADIUS_KM, roadFilter.categories, ROAD_LIMIT) }
+            }
+            roadFailed = outcome.isFailure
+            roadResults = outcome.getOrDefault(emptyList())
+        }
     }
     // With the field at the bottom, dragging a list puts the keyboard away so more of it shows.
     LaunchedEffect(fieldAtBottom) {
@@ -263,6 +319,7 @@ fun SearchPanel(
                     // Typing over a chip's name searches for what is typed.
                     browsing = null
                     wifiMode = false
+                    roadMode = false
                     pickWhenReady = false
                 },
                 placeholder = { Text(stringResource(R.string.search_hint)) },
@@ -275,6 +332,7 @@ fun SearchPanel(
                             query = ""
                             browsing = null
                             wifiMode = false
+                            roadMode = false
                         }) {
                             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.search_clear))
                         }
@@ -316,6 +374,7 @@ fun SearchPanel(
                     query = label
                     browsing = category
                     wifiMode = false
+                    roadMode = false
                     pickWhenReady = false
                 },
                 onWifi = if (wifi != null) {
@@ -324,6 +383,19 @@ fun SearchPanel(
                         query = label
                         browsing = null
                         wifiMode = true
+                        roadMode = false
+                        pickWhenReady = false
+                    }
+                } else {
+                    null
+                },
+                onRoad = if (road != null) {
+                    { label ->
+                        keyboard?.hide()
+                        query = label
+                        browsing = null
+                        wifiMode = false
+                        roadMode = true
                         pickWhenReady = false
                     }
                 } else {
@@ -428,6 +500,55 @@ fun SearchPanel(
                             }
                         }
                     }
+                    roadMode && road != null -> Column(Modifier.fillMaxSize()) {
+                        RoadFilters(
+                            along = roadAlongNow,
+                            alongAvailable = routeLine != null,
+                            onAlong = { roadAlong = it },
+                            filter = roadFilter,
+                            onFilter = { roadFilterLine = it.encode() },
+                        )
+                        Box(
+                            Modifier.weight(1f).fillMaxWidth(),
+                            contentAlignment = if (fieldAtBottom) Alignment.BottomStart else Alignment.TopStart,
+                        ) {
+                            val nearRows = roadResults
+                            val alongRows = roadAlongResults
+                            when {
+                                roadFilter.showsNothing -> Message(stringResource(R.string.road_no_kinds))
+                                !roadAlongNow && (area ?: near) == null -> Message(stringResource(R.string.road_no_place))
+                                roadFailed -> Message(stringResource(R.string.road_failed))
+                                roadAlongNow -> when {
+                                    alongRows == null -> Unit
+                                    alongRows.isEmpty() -> Message(stringResource(R.string.road_none_along))
+                                    else -> LazyColumn(Modifier.fillMaxWidth(), reverseLayout = fieldAtBottom) {
+                                        items(alongRows, key = { it.spot.id }) { row ->
+                                            RoadAlongRow(row, now, onClick = {
+                                                keyboard?.hide()
+                                                onPickRoadStop?.invoke(row.spot)
+                                            })
+                                        }
+                                    }
+                                }
+                                nearRows == null -> Unit
+                                nearRows.isEmpty() -> Message(stringResource(R.string.road_none))
+                                else -> LazyColumn(Modifier.fillMaxWidth(), reverseLayout = fieldAtBottom) {
+                                    items(nearRows, key = { it.spot.id }) { row ->
+                                        // Looked for around the map: the distance is still the user's.
+                                        val distance = if (area == null) {
+                                            row.distanceMeters
+                                        } else {
+                                            near?.let { SearchRanking.distanceMeters(it, row.spot.lat, row.spot.lon) }
+                                        }
+                                        RoadRow(row, distance, now, onClick = {
+                                            keyboard?.hide()
+                                            onPickRoad?.invoke(row.spot)
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    }
                     index == null -> Message(stringResource(R.string.search_no_pack))
                     error != null -> Message(stringResource(R.string.search_failed, error!!))
                     query.isNotBlank() && results.isEmpty() && browsing == null -> Message(stringResource(R.string.search_no_results))
@@ -506,7 +627,7 @@ private fun ShortcutChips(home: Place?, work: Place?, pending: ShortcutSlot?, on
 
 /** Gas, Hotels, Food, Coffee and the rest, one tap each, in a row that scrolls sideways. */
 @Composable
-private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit, onWifi: ((String) -> Unit)?) {
+private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit, onWifi: ((String) -> Unit)?, onRoad: ((String) -> Unit)?) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -526,6 +647,15 @@ private fun CategoryChips(onTap: (PlaceCategory, String) -> Unit, onWifi: ((Stri
                 onClick = { onWifi(label) },
                 label = { Text(label) },
                 leadingIcon = { Icon(Icons.Filled.Wifi, contentDescription = null, Modifier.size(18.dp)) },
+            )
+        }
+        // After the Wi-Fi chip, and only with the Road pack installed.
+        if (onRoad != null) {
+            val label = stringResource(R.string.road_chip)
+            AssistChip(
+                onClick = { onRoad(label) },
+                label = { Text(label) },
+                leadingIcon = { Icon(Icons.Filled.RvHookup, contentDescription = null, Modifier.size(18.dp)) },
             )
         }
     }
@@ -615,3 +745,13 @@ private const val TYPING_DEBOUNCE_MS = 120L
 /** How far the Wi-Fi chip looks, as the other chips do: 30 miles. */
 private const val WIFI_RADIUS_KM = PlaceCategory.RADIUS_KM
 private const val WIFI_LIMIT = PlaceCategory.LIMIT
+
+/** How far the Road chip looks, as the other chips do: 30 miles. */
+private const val ROAD_RADIUS_KM = PlaceCategory.RADIUS_KM
+private const val ROAD_LIMIT = PlaceCategory.LIMIT
+
+/** How wide "along my route" looks to either side of the route: 5 miles. */
+private const val ROAD_CORRIDOR_KM = 8.0
+
+/** How many spots "along my route" lists: the first ones the driver meets. */
+private const val ROAD_ALONG_LIMIT = 40

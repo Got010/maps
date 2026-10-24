@@ -18,6 +18,12 @@ A free Wi-Fi layer (spots tagged free in OpenStreetMap, chains and places that u
 by how sure we are) is an opt-in pack in Settings > Maps, with a row in the map's Map options list and a Wi-Fi chip in search. Two buttons
 on a spot's sheet, "Wi-Fi worked" and "Didn't work", keep your own mark on this phone (it replaces our label for you,
 and a spot that didn't work sorts last); the marks are part of the export and never leave the phone otherwise.
+A Road layer (campsites, RV sites, rest areas, dump stations, drinking water, fuel and truck stops, and, chosen with a
+long press on its row, toilets, showers, laundromats, libraries, pharmacies, hospitals, clinics, groceries and parks, all
+from OpenStreetMap) is another opt-in pack in Settings > Maps, with a Road row in the Map options list and a Road chip in
+search: the nearest places, and, while a stop is being added to a planned route, the places along that route in the
+order you meet them, one tap to make one a stop. Everything is read on the phone; the route and your position are
+never sent anywhere.
 
 ### What each state has
 
@@ -92,7 +98,7 @@ the APK:
 | `transit-nyc.sqlite` | Subway, bus, LIRR and Metro-North schedules |
 | `voice-norman.zip` | An extra built-in voice (about 58 MB), only if you pick it in Settings > Voice |
 | `wifi-us.sqlite` | Free Wi-Fi spots in every state the app covers, from OpenStreetMap: places tagged with Wi-Fi, chains and kinds of place that usually have it (built by `make -C pipeline wifi-us`; shipped with every release from the one that merges it; the app reads it from the release that adds the Free Wi-Fi layer, B32b, so nothing in the app uses it before then) |
-| `road-us.sqlite` | Campsites, RV sites, rest areas, dump stations, water, toilets, showers, fuel and truck stops, laundromats, libraries, pharmacies, hospitals, clinics, supermarkets and parks in every state the app covers, from OpenStreetMap (built by `make -C pipeline road-us`; shipped with every release from the one that merges it; nothing in the app uses it yet) |
+| `road-us.sqlite` | Campsites, RV sites, rest areas, dump stations, water, toilets, showers, fuel and truck stops, laundromats, libraries, pharmacies, hospitals, clinics, supermarkets and parks in every state the app covers, from OpenStreetMap (built by `make -C pipeline road-us`; shipped with every release from the one that merges it; the app reads it when Settings > Maps > Road pack is on) |
 
 Load each one the same way:
 
@@ -120,7 +126,7 @@ file to Southbound the same way; it replaces the old one.
 ## Back up and restore
 
 Settings > Backup > **Export** saves your saved places, lists, recents, Home and Work, Wi-Fi marks, API keys and
-preferences to one file, sealed with a passphrase you choose (at least 12 characters, typed twice, never
+preferences (the Wi-Fi and Road pack switches among them) to one file, sealed with a passphrase you choose (at least 12 characters, typed twice, never
 stored). **Import** puts such a file back, on this phone or a new one, replacing what is there. Pick the file with
 the system file picker; Southbound asks for no storage permission. A file from another app, a wrong passphrase or
 a damaged file is refused and changes nothing. Keep the file safe: anyone with the file and the passphrase has your
@@ -192,8 +198,8 @@ Rotate with two fingers, tilt by dragging two fingers up or down, and zoom
 with one finger by double-tapping and holding, then sliding. The compass
 appears when the map isn't facing north; tap it to turn back. Panning,
 rotating or tilting away from your position puts Re-center at the top of the Map options list
-(the layers button at the bottom right, which also holds Traffic, Weather and Free Wi-Fi; a long press
-on the Free Wi-Fi row chooses its types); while navigating the map shows a Re-center pill and
+(the layers button at the bottom right, which also holds Traffic, Weather, Free Wi-Fi and Road; a long press
+on the Free Wi-Fi or Road row chooses its types); while navigating the map shows a Re-center pill and
 re-centers by itself after 10 seconds without a touch.
 Highway exits show a green sign, and the arrival card says which side of the
 street the destination is on and whether parking is listed nearby.

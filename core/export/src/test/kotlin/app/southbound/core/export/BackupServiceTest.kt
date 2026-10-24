@@ -99,7 +99,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 77, wifiMarks = 2), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 78, wifiMarks = 2), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -339,7 +339,7 @@ class BackupServiceTest {
             assertFalse(outcome.wifiTurnedOn)
             assertEquals(0, outcome.counts.wifiMarks)
             // The rest of its settings did land.
-            assertEquals(Samples.settings().copy(wifi = phoneHasItOn, stateLineCards = true), b.stores.settings)
+            assertEquals(Samples.settings().copy(wifi = phoneHasItOn, stateLineCards = true, road = false), b.stores.settings)
         }
         // A schema 9 bundle sets it exactly: on over off, off over on, and no turn-on is claimed for off.
         for ((bundleWifi, phoneWifi) in listOf(true to false, false to true, true to true, false to false)) {
@@ -369,6 +369,80 @@ class BackupServiceTest {
             import(b, export(a)) as ImportOutcome.Done
             assertEquals(on, b.stores.settings.stateLineCards)
         }
+    }
+
+    @Test
+    fun `a bundle before schema 11 leaves the Road switch as it is, schema 11 restores it exactly`() {
+        // Wave 11's lesson: an older backup lacks the setting, and "import with the default" would read as off and delete the pack.
+        val olds = listOf(
+            Triple("ten", Samples.fwxFile(Samples.schema10("0.1.80"), schema = 10), Samples.settings()),
+            Triple("nine", Samples.fwxFile(Samples.schema9("0.1.70"), schema = 9), Samples.settings().copy(stateLineCards = true)),
+            // A schema 8 bundle has no Wi-Fi value either: the phone's own (off) stays.
+            Triple("eight", Samples.fwxFile(Samples.schema8("0.1.60"), schema = 8), Samples.settings().copy(stateLineCards = true, wifi = false)),
+        )
+        for ((which, file, expected) in olds) {
+            for (phoneHasItOn in listOf(true, false)) {
+                val b = device("old-road-$which-$phoneHasItOn")
+                b.stores.settings = Samples.defaultSettings().copy(road = phoneHasItOn)
+                val outcome = import(b, file) as ImportOutcome.Done
+                // Left alone (a Road pack the phone has is not deleted by it), and not reported as turned on.
+                assertEquals(phoneHasItOn, b.stores.settings.road)
+                assertTrue(b.stores.roadWanted() == phoneHasItOn)
+                assertFalse(outcome.roadTurnedOn)
+                // The rest of its settings did land.
+                assertEquals(expected.copy(road = phoneHasItOn), b.stores.settings)
+            }
+        }
+        // A schema 11 bundle sets it exactly: on over off, off over on, and no turn-on is claimed for off.
+        for ((bundleRoad, phoneRoad) in listOf(true to false, false to true, true to true, false to false)) {
+            val a = filled("a-$bundleRoad-$phoneRoad")
+            a.stores.settings = Samples.settings().copy(road = bundleRoad)
+            val file = export(a)
+            val b = device("b-$bundleRoad-$phoneRoad")
+            b.stores.settings = Samples.defaultSettings().copy(road = phoneRoad)
+            val outcome = import(b, file) as ImportOutcome.Done
+            assertEquals(bundleRoad, b.stores.settings.road)
+            assertEquals(bundleRoad && !phoneRoad, outcome.roadTurnedOn)
+        }
+    }
+
+    @Test
+    fun `the summary says when the Road switch goes on, for a kept import before and after`() {
+        val a = filled() // Road switch on
+        val file = export(a)
+        val b = device("b") // Road switch off
+        assertEquals(false, b.stores.settings.road)
+        assertTrue((import(b, file) as ImportOutcome.Done).roadTurnedOn)
+        assertEquals(true, b.stores.settings.road)
+        // Already on: nothing to name.
+        assertFalse((import(b, file) as ImportOutcome.Done).roadTurnedOn)
+        val c = device("c")
+        c.stores.failApply = true
+        assertTrue((import(c, file) as ImportOutcome.Pending).roadTurnedOn)
+        c.stores.failApply = false
+        assertTrue((runBlocking { c.service.resume() } as ResumeOutcome.Applied).roadTurnedOn)
+        assertEquals(true, c.stores.settings.road)
+    }
+
+    @Test
+    fun `an import kept by the schema 10 version resumes over the same places and leaves the Road switch`() {
+        val entries = Samples.schema10("0.1.80")
+        val found = UserData().save(Samples.cafe, UserData.FAVORITES_ID, 7)
+        val b = device("b")
+        b.stores.places.update { found }
+        b.stores.settings = Samples.defaultSettings().copy(wifi = false, road = true)
+        // The mark of that version: the print of the places as it encoded them (with the marks field, as today).
+        val print = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(PlacesEntry.encode(found))
+            .joinToString("") { "%02x".format(it) }
+        b.journal.write(entries, print)
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertFalse((resumed as ResumeOutcome.Applied).roadTurnedOn)
+        // The Wi-Fi switch it carried landed; the Road switch it never had is the phone's own.
+        assertEquals(true, b.stores.settings.wifi)
+        assertEquals(true, b.stores.settings.road)
+        assertFalse(b.journal.exists())
     }
 
     @Test

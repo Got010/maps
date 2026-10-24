@@ -37,6 +37,12 @@ data class AppSettings(
     val wifi: Boolean?,
     /** Settings > Driving > State-line cards (schema 10; an older bundle imports with them on). */
     val stateLineCards: Boolean,
+    /**
+     * Settings > Maps > Road pack: keep the Road pack on the phone (schema 11). Null in what a schema 1 to 10 bundle
+     * read as: those bundles never knew the switch, so an import leaves it as it is on the phone (writing "off" would
+     * delete a pack the person has). An export always writes a real value, never null.
+     */
+    val road: Boolean?,
 )
 
 /**

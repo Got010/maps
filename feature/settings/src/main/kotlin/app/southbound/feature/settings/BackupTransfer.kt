@@ -41,12 +41,18 @@ internal enum class Cleanup {
 
 /** What an import came to, for the dialog. */
 internal sealed interface ImportResult {
-    data class Applied(val counts: BackupCounts, val turnedOn: List<NetworkFeature>, val wifiTurnedOn: Boolean) : ImportResult
+    data class Applied(
+        val counts: BackupCounts,
+        val turnedOn: List<NetworkFeature>,
+        val wifiTurnedOn: Boolean,
+        val roadTurnedOn: Boolean,
+    ) : ImportResult
     data class Pending(
         val counts: BackupCounts,
         val turnedOn: List<NetworkFeature>,
         val reason: String,
         val wifiTurnedOn: Boolean,
+        val roadTurnedOn: Boolean,
     ) : ImportResult
 
     /** Stopped before anything changed; [message] is the string to show. */
@@ -102,8 +108,8 @@ internal class BackupTransfer(private val context: Context, private val service:
 
     suspend fun import(uri: Uri, passphrase: CharArray): ImportResult = try {
         when (val outcome = service.import({ resolver.openInputStream(uri) ?: throw FileNotFoundException() }, passphrase)) {
-            is ImportOutcome.Done -> ImportResult.Applied(outcome.counts, outcome.turnedOn, outcome.wifiTurnedOn)
-            is ImportOutcome.Pending -> ImportResult.Pending(outcome.counts, outcome.turnedOn, outcome.reason, outcome.wifiTurnedOn)
+            is ImportOutcome.Done -> ImportResult.Applied(outcome.counts, outcome.turnedOn, outcome.wifiTurnedOn, outcome.roadTurnedOn)
+            is ImportOutcome.Pending -> ImportResult.Pending(outcome.counts, outcome.turnedOn, outcome.reason, outcome.wifiTurnedOn, outcome.roadTurnedOn)
         }
     } catch (e: CancellationException) {
         throw e

@@ -30,10 +30,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.RvHookup
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.Cloud as CloudOutlined
 import androidx.compose.material.icons.outlined.Layers as LayersOutlined
+import androidx.compose.material.icons.outlined.RvHookup as RvHookupOutlined
 import androidx.compose.material.icons.outlined.Traffic as TrafficOutlined
 import androidx.compose.material.icons.outlined.Wifi as WifiOutlined
 import androidx.compose.material3.FloatingActionButton
@@ -69,10 +71,11 @@ import app.southbound.core.map.WifiColors
 
 /**
  * The map's one floating button, "Map options", and the list it opens above itself (speed-dial style): Re-center,
- * Traffic, Weather and Free Wi-Fi, each shown under the condition the separate button it replaced had, and "This
- * state" (the card for the state the phone is in) with state-line cards on. Re-center and "This state" act and close
- * the list; a layer's row toggles it and keeps the list open so several can be set. A long press on the Free Wi-Fi row
- * opens the types chooser through [onChooseWifi]. New controls for the map join this list.
+ * Traffic, Weather, Free Wi-Fi and Road, each shown under the condition the separate button it replaced had (Road: the
+ * installed pack), and "This state" (the card for the state the phone is in) with state-line cards on. Re-center and
+ * "This state" act and close the list; a layer's row toggles it and keeps the list open so several can be set. A long
+ * press on the Free Wi-Fi row opens the types chooser through [onChooseWifi], and one on the Road row the kinds chooser
+ * through [onChooseRoad]. New controls for the map join this list.
  *
  * Open or closed is view state ([rememberSaveable]): kept through a rotation, gone with the screen. A tap outside
  * the list (a scrim that has no accessibility node, so it never traps TalkBack) or the back gesture closes it.
@@ -86,6 +89,8 @@ internal fun BoxScope.MapOptions(
     onToggleWeather: () -> Unit,
     onToggleWifi: () -> Unit,
     onChooseWifi: () -> Unit,
+    onToggleRoad: () -> Unit,
+    onChooseRoad: () -> Unit,
     onThisState: () -> Unit,
     bottomInset: Dp,
 ) {
@@ -168,6 +173,22 @@ internal fun BoxScope.MapOptions(
                                 // The chooser covers the screen; the list would only sit behind it.
                                 open = false
                                 onChooseWifi()
+                            },
+                        )
+                        MapOption.ROAD -> ToggleRow(
+                            label = stringResource(R.string.explore_options_road),
+                            on = state.roadVisible,
+                            icon = {
+                                Icon(if (state.roadVisible) Icons.Filled.RvHookup else Icons.Outlined.RvHookupOutlined, contentDescription = null)
+                            },
+                            actionLabel = stringResource(if (state.roadVisible) R.string.explore_road_hide else R.string.explore_road_show),
+                            onClick = onToggleRoad,
+                            filtered = state.roadRowFiltered,
+                            filteredDescription = stringResource(R.string.explore_road_filtered),
+                            longClickLabel = stringResource(R.string.explore_road_choose),
+                            onLongClick = {
+                                open = false
+                                onChooseRoad()
                             },
                         )
                         MapOption.THIS_STATE -> ThisStateRow {
@@ -262,12 +283,14 @@ private fun ToggleRow(
     actionLabel: String,
     onClick: () -> Unit,
     filtered: Boolean = false,
+    /** What a screen reader says while [filtered]; the Wi-Fi row's wording when not given. */
+    filteredDescription: String? = null,
     longClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
     val onText = stringResource(R.string.explore_options_on)
     val offText = stringResource(R.string.explore_options_off)
-    val filteredText = stringResource(R.string.explore_wifi_filtered)
+    val filteredText = filteredDescription ?: stringResource(R.string.explore_wifi_filtered)
     OptionRow(
         label = label,
         highlighted = on,
@@ -275,7 +298,7 @@ private fun ToggleRow(
             Box {
                 icon()
                 if (filtered) {
-                    // Some Wi-Fi types are hidden: the same gold as the main button's dot.
+                    // Some types are hidden (Road: some added or hidden): the same gold as the main button's dot.
                     Box(
                         Modifier
                             .align(Alignment.TopEnd)

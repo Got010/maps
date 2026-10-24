@@ -141,9 +141,13 @@ class PackStore(filesDir: File, externalFilesDir: File?) {
         try {
             val sha256 = copy(source, temp)
             val kind = PackKind.detect(temp) ?: throw UnrecognizedPackException()
-            // The Wi-Fi pack is one national file: a name that doesn't say so (or none) must not file it under
-            // the fallback region, where a switch-off that deletes wifi-us would never find it.
-            val region = if (kind == PackKind.WIFI) PackKind.WIFI_REGION else PackKind.regionFromName(kind, displayName) ?: fallbackRegion
+            // The Wi-Fi and Road packs are one national file each: a name that doesn't say so (or none) must not file
+            // them under the fallback region, where a switch-off that deletes wifi-us or road-us would never find it.
+            val region = when (kind) {
+                PackKind.WIFI -> PackKind.WIFI_REGION
+                PackKind.ROAD -> PackKind.ROAD_REGION
+                else -> PackKind.regionFromName(kind, displayName) ?: fallbackRegion
+            }
             return StagedPack(kind, region, temp.length(), sha256, temp)
         } catch (e: Throwable) {
             temp.delete()
