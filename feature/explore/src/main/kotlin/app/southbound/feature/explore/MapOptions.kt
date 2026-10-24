@@ -21,11 +21,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Flag
@@ -124,13 +127,22 @@ internal fun BoxScope.MapOptions(
     ) {
         AnimatedVisibility(
             visible = shown,
+            // Measured after the button, so a list taller than the screen (landscape) takes only the height that is
+            // left and the button keeps its place at the bottom.
+            modifier = Modifier.weight(1f, fill = false),
             enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
             exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
         ) {
             Column(
                 Modifier
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 4.dp)
+                    // The scroll clips to its own bounds, which would cut the rows' shadows flat at the sides: it gets
+                    // 8 dp of room on each side and bottom (the offset and the smaller gap above put the rows where
+                    // they were), and scrolls when the rows are taller than the height that is left.
+                    .offset(x = 8.dp)
                     .width(IntrinsicSize.Max)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                     .semantics {
                         isTraversalGroup = true
                         traversalIndex = 1f
