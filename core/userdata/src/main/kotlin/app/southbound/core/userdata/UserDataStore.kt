@@ -68,6 +68,16 @@ class UserDataStore(private val file: File, private val sealer: Sealer, private 
     fun markWifi(osmRef: String, worked: Boolean) = update { it.markWifi(osmRef, worked, clock()) }
     fun clearWifiMark(osmRef: String) = update { it.clearWifiMark(osmRef) }
 
+    // The trip log: each an explicit user action, so a refusal while the file is unreadable is counted and shown. A
+    // leg out of bounds throws LegRefusedException before anything is written.
+    fun addLeg(trip: String, on: String, meters: Long, mode: LegMode, from: String, to: String, edited: Boolean) =
+        update { it.addLeg(trip, on, meters, mode, from, to, edited) }
+    fun editLeg(id: Long, trip: String, on: String, meters: Long, mode: LegMode, from: String, to: String) =
+        update { it.editLeg(id, trip, on, meters, mode, from, to) }
+    fun deleteLeg(id: Long) = update { it.deleteLeg(id) }
+    fun renameTrip(trip: String, to: String) = update { it.renameTrip(trip, to) }
+    fun deleteTrip(trip: String) = update { it.deleteTrip(trip) }
+
     /**
      * Reads the file again while it is unreadable, since the failure may have been temporary
      * (a Keystore error). On success the store is loaded and saves work; otherwise it stays

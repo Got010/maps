@@ -310,6 +310,112 @@ class UserDataTest {
     }
 
     @Test
+    fun `legs round-trip through the codec and the store`() {
+        val d = UserData().save(cafe, UserData.FAVORITES_ID, 100)
+            .addLeg("Fall trip", "2026-10-24", 341_825, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+            .addLeg("Fall trip", "2026-10-25", 1_200, LegMode.WALK, "Site B", "Motel A", edited = true)
+        val json = UserDataCodec.encode(d)
+        assertTrue(
+            json.contains(
+                """"legs":[{"id":4,"trip":"Fall trip","on":"2026-10-24","meters":341825,"mode":"DRIVE","from":"Motel A","to":"Site B","edited":false},""" +
+                    """{"id":5,"trip":"Fall trip","on":"2026-10-25","meters":1200,"mode":"WALK","from":"Site B","to":"Motel A","edited":true}]""",
+            ),
+        )
+        // Right after the marks, written even when empty; the version stays 1.
+        assertTrue(json.contains(""""wifiMarks":[],"legs":[{"""))
+        assertTrue(UserDataCodec.encode(UserData()).contains(""","wifiMarks":[],"legs":[]"""))
+        assertTrue(json.startsWith("""{"version":1,"""))
+        assertEquals(d, UserDataCodec.decode(json))
+
+        val file = tmp.root.resolve("legs/places.sealed")
+        val store = UserDataStore(file, PlainSealer)
+        store.addLeg("Fall trip", "2026-10-24", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+        store.addLeg("Fall trip", "2026-10-25", 2_000, LegMode.BIKE, "Site B", "Motel A", edited = false)
+        val first = store.data.value.legs.first().id
+        store.editLeg(first, "Fall trip", "2026-10-23", 1_500, LegMode.DRIVE, "Motel A", "Site C")
+        store.renameTrip("Fall trip", "October")
+        store.deleteLeg(first + 1)
+        val back = UserDataStore(file, PlainSealer).data.value
+        assertEquals(listOf(Leg(first, "October", "2026-10-23", 1_500, LegMode.DRIVE, "Motel A", "Site C", edited = true)), back.legs)
+        store.deleteTrip("October")
+        assertTrue(UserDataStore(file, PlainSealer).data.value.legs.isEmpty())
+        // A leg out of bounds is refused before anything is written.
+        val before = file.readBytes()
+        try {
+            store.addLeg("Fall trip", "2026-02-30", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+            fail("logged a leg on 2026-02-30")
+        } catch (expected: LegRefusedException) {
+        }
+        assertTrue(before.contentEquals(file.readBytes()))
+    }
+
+    @Test
+    fun `a leg's JSON has exactly the eight fields`() {
+        val d = UserData().addLeg("Fall trip", "2026-10-24", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+        val root = app.southbound.core.network.MiniJson.parse(UserDataCodec.encode(d)) as Map<*, *>
+        val leg = (root["legs"] as List<*>).single() as Map<*, *>
+        assertEquals(listOf("id", "trip", "on", "meters", "mode", "from", "to", "edited"), leg.keys.toList())
+        // And a Leg has no other field that a later writer could add by mistake: no coordinate, place or time can ride along.
+        val fields = Leg::class.java.declaredFields.filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.isSynthetic }
+        assertEquals(setOf("id", "trip", "on", "meters", "mode", "from", "to", "edited"), fields.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `a document without legs still loads, with none, and keeps its places on the first leg`() {
+        // A document as the app wrote it before the trip log: wifiMarks, no legs field at all.
+        val old = UserDataCodec.encode(UserData().save(cafe, UserData.FAVORITES_ID, 100).markWifi("n1", true, 5)).replace(""","legs":[]""", "")
+        assertFalse(old.contains("legs"))
+        val d = UserDataCodec.decode(old)
+        assertEquals(emptyList<Leg>(), d.legs)
+        assertEquals(1, d.saved.size)
+        val file = tmp.root.resolve("old-legs/places.sealed")
+        file.parentFile!!.mkdirs()
+        file.writeBytes(PlainSealer.seal(old.toByteArray()))
+        val store = UserDataStore(file, PlainSealer)
+        assertEquals(LoadState.Loaded, store.loadState.value)
+        store.addLeg("Fall trip", "2026-10-24", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+        val back = UserDataStore(file, PlainSealer).data.value
+        assertEquals(1, back.saved.size)
+        assertEquals(1, back.wifiMarks.size)
+        // The new leg's id is past the saved place's.
+        assertEquals(d.lastId + 1, back.legs.single().id)
+        // A document with legs but no lastId takes the highest id of anything in it.
+        val noLastId = UserDataCodec.encode(back).replace(""""lastId":${back.lastId},""", "")
+        assertEquals(back.lastId, UserDataCodec.decode(noLastId).lastId)
+    }
+
+    @Test
+    fun `a broken leg makes the document unreadable, never silently dropped`() {
+        val good = UserDataCodec.encode(UserData().addLeg("Fall trip", "2026-10-24", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false))
+        for ((old, new) in listOf(
+            "\"mode\":\"DRIVE\"" to "\"mode\":\"TRANSIT\"",
+            "\"meters\":1000" to "\"meters\":\"far\"",
+            ",\"edited\":false" to "",
+            "\"trip\":\"Fall trip\"," to "",
+        )) {
+            assertTrue(old, good.contains(old))
+            try {
+                UserDataCodec.decode(good.replace(old, new))
+                fail("accepted $new")
+            } catch (expected: IllegalArgumentException) {
+            }
+        }
+        val file = tmp.root.resolve("broken/places.sealed")
+        file.parentFile!!.mkdirs()
+        file.writeBytes(good.replace("\"mode\":\"DRIVE\"", "\"mode\":\"TRANSIT\"").toByteArray())
+        val store = UserDataStore(file, PlainSealer)
+        assertTrue(store.loadState.value is LoadState.Unreadable)
+        // Every leg call is an explicit save: refused and counted, the file untouched.
+        try {
+            store.addLeg("Fall trip", "2026-10-24", 1_000, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+            fail("logged over an unreadable file")
+        } catch (expected: UserDataUnreadableException) {
+        }
+        assertEquals(1, store.refusedSaves.value)
+        assertTrue(file.readText().contains("TRANSIT"))
+    }
+
+    @Test
     fun `reload after a temporary failure ends loaded with the data`() {
         val file = tmp.root.resolve("places.sealed")
         UserDataStore(file, PlainSealer).save(cafe, UserData.FAVORITES_ID)

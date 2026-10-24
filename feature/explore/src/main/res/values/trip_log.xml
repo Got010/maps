@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Map options -->
+    <string name="explore_options_trip_log">Trip log</string>
+    <string name="explore_options_trip_log_action">Open the trip log</string>
+
+    <!-- Route preview -->
+    <string name="leg_log_this">Log this leg</string>
+    <string name="leg_logged">Logged to %1$s · %2$s mi</string>
+    <string name="leg_logged_edit">Edit</string>
+
+    <!-- The leg sheet -->
+    <string name="leg_sheet_new">Log this leg</string>
+    <string name="leg_sheet_edit">Edit leg</string>
+    <string name="leg_sheet_note">Saved on this phone only: the day, the distance and your own labels. Never where the phone went.</string>
+    <string name="leg_trip">Trip</string>
+    <string name="leg_date">Date (YYYY-MM-DD)</string>
+    <string name="leg_date_earlier">A day earlier</string>
+    <string name="leg_date_later">A day later</string>
+    <string name="leg_miles">Miles</string>
+    <string name="leg_miles_planned">Planned: %1$s mi. A change marks the leg as edited.</string>
+    <string name="leg_mode_drive">Drive</string>
+    <string name="leg_mode_walk">Walk</string>
+    <string name="leg_mode_bike">Bike</string>
+    <string name="leg_from">From</string>
+    <string name="leg_to">To</string>
+    <string name="leg_searched_chip">What I searched: %1$s</string>
+    <string name="leg_searched_note">What you searched usually names the place. Saved, it is a place name in your log, sealed like a saved place\'s name, and leaves the phone only in a CSV you share or your encrypted export.</string>
+    <string name="leg_save">Save</string>
+    <string name="leg_cancel">Cancel</string>
+    <string name="leg_counter">%1$d / %2$d</string>
+    <string name="leg_unreadable">Your saved places could not be read, so nothing new can be saved. Choose Keep trying or Start fresh in the Saved places notice first.</string>
+    <string name="leg_save_failed">The leg could not be saved. Nothing was changed. Try again.</string>
+
+    <!-- The trip log -->
+    <string name="trip_log_title">Trip log</string>
+    <string name="trip_log_note">Legs you logged from a route preview, for mileage claims: a day, a distance and your own labels.</string>
+    <string name="trip_log_empty">No legs yet. Plan a route, then tap Log this leg above Start. For a past drive, pick both ends on the map (Start here on the first), then log it and set its date.</string>
+    <string name="trip_log_totals">%1$s mi (%2$s km) · %3$s · %4$s</string>
+    <string name="trip_log_one_leg">1 leg</string>
+    <string name="trip_log_legs">%1$d legs</string>
+    <string name="trip_log_range">%1$s to %2$s</string>
+    <string name="trip_log_leg_line">%1$s · %2$s · %3$s mi</string>
+    <string name="trip_log_leg_edited">%1$s · %2$s · %3$s mi, edited</string>
+    <string name="trip_log_leg_route">%1$s → %2$s</string>
+    <string name="trip_log_expand">Show the legs of %1$s</string>
+    <string name="trip_log_collapse">Hide the legs of %1$s</string>
+    <string name="trip_log_share_csv">Share CSV</string>
+    <string name="trip_log_share_line">Share mileage line</string>
+    <string name="trip_log_save_csv">Save CSV file</string>
+    <string name="trip_log_share_csv_too_long">Too long to share as text. Use Save CSV file for this trip\'s rows.</string>
+    <string name="trip_log_share_failed">The share sheet could not open, so nothing was sent. Save CSV file writes the same rows to a file.</string>
+    <string name="trip_log_rename">Rename</string>
+    <string name="trip_log_delete">Delete</string>
+    <string name="trip_log_edit_leg">Edit this leg</string>
+    <string name="trip_log_delete_leg">Delete this leg</string>
+    <string name="trip_log_delete_leg_title">Delete this leg?</string>
+    <string name="trip_log_delete_leg_body">%1$s, %2$s. This can\'t be undone.</string>
+    <string name="trip_log_delete_trip_title">Delete %1$s?</string>
+    <string name="trip_log_delete_trip_body">All %1$s of this trip are deleted. This can\'t be undone.</string>
+    <string name="trip_log_rename_title">Rename trip</string>
+    <string name="trip_log_share_title">Share the trip log</string>
+    <string name="trip_log_saved_file">CSV file saved.</string>
+    <string name="trip_log_save_file_failed">The CSV file could not be written, and it was removed. Nothing else changed.</string>
+    <string name="trip_log_save_file_gone">That trip is no longer in the log, so nothing was saved and the empty CSV file was removed.</string>
+    <string name="trip_log_save_file_gone_left">That trip is no longer in the log, so nothing was written to the CSV file. Delete it in your files app.</string>
+    <string name="trip_log_save_file_not_removed">The CSV file could not be written. Delete the half-written file in your files app.</string>
+    <string name="trip_log_close">Close</string>
+</resources>

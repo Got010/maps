@@ -1,4 +1,4 @@
-# Export format (bundle schema 11)
+# Export format (bundle schema 12)
 
 Settings > Backup > Export writes one file with everything Southbound keeps for you; Import reads it back. The file
 is an FWX v1 container (the fieldwork program's `specs/export-container.md`): a plaintext header, then AES-256-GCM
@@ -8,7 +8,7 @@ its package line and one provenance line differ; `CodecCopyTest` fails on any ot
 against `core/export/SOURCES.sha256`), with its tests 1.2.0-r1 and the shared vectors in
 `core/export/src/test/resources/fwx-v1/`. Never edit those files here: a fix goes to the program's codec first.
 
-- **App ID** `southbound`, **schema** 11. The importer accepts schemas 1 to 11 (see "Schema history").
+- **App ID** `southbound`, **schema** 12. The importer accepts schemas 1 to 12 (see "Schema history").
 - **File name** `southbound-<yyyyMMdd-HHmmss>Z.fwx` (UTC). The header (app, schema, time) is readable without the
   passphrase; nothing else is, and the file length shows roughly how much it holds.
 - **Never in it**: the Keystore keys, the map and search packs, the fetched gas price (a cache), the downloaded voice.
@@ -20,8 +20,8 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 | Entry | Holds |
 |---|---|
-| `manifest.json` | `{"app":"southbound","schema":11,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n,"wifi_marks":n}`. Always first. `wifi_marks` (schema 9) counts the Wi-Fi marks; a schema 1 to 8 manifest has no such field. `settings` counts the values of `settings.json` (78 in schema 11). The importer checks every count against what the other entries hold. |
-| `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`, and from schema 9 `wifiMarks` (a list of `osmRef`, `worked`, `markedAt`: the user's "Wi-Fi worked" / "Didn't work" marks on free Wi-Fi spots, one per OSM reference, always present, an empty list when there are none; a schema 1 to 8 file has no such field). A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
+| `manifest.json` | `{"app":"southbound","schema":12,"app_version":"0.1.14","lists":n,"saved_places":n,"recents":n,"home":0\|1,"work":0\|1,"api_keys":n,"settings":n,"wifi_marks":n,"legs":n}`. Always first. `wifi_marks` (schema 9) counts the Wi-Fi marks; a schema 1 to 8 manifest has no such field. `legs` (schema 12) counts the trip log's legs; a schema 1 to 11 manifest has no such field. `settings` counts the values of `settings.json` (78 in schemas 11 and 12, 77 in schema 10). The importer checks every count against what the other entries hold. |
+| `places.json` | The saved places file's own JSON (`UserDataCodec`, `"version":1`): `lastId`, `lists` (`id`, `name`, `builtIn`), `saved` (`id`, `list`, `savedAt`, `place`), `recents` (`seenAt`, `place`), `home`, `work`, and from schema 9 `wifiMarks` (a list of `osmRef`, `worked`, `markedAt`: the user's "Wi-Fi worked" / "Didn't work" marks on free Wi-Fi spots, one per OSM reference, always present, an empty list when there are none; a schema 1 to 8 file has no such field), and from schema 12 `legs` (the trip log, `docs/TRIP_LOG.md`: a list of exactly `id`, `trip`, `on`, `meters`, `mode`, `from`, `to`, `edited`, always present, an empty list when there are none; no coordinate, place or time of day; a schema 1 to 11 file has no such field). A `place` is `name`, `lat`, `lon`, `address`, `category`, `osmRef`. |
 | `api-keys.json` | `{"<ApiKey name>":"<key>"}` for the keys that are set: `MTA_BUS_TIME`, `NY_511`, `GITHUB_RELEASES`, `EIA`, `OHGO` (schema 6). The keys are in the clear inside the encrypted bundle: they are secrets, and the passphrase is what protects them. |
 | `settings.json` | Seven groups, every field required, nothing else allowed: `network` (the 27 `NetworkFeature` toggles by name; schemas 1 and 2 had 8, without `WEATHER`, schema 3 had 9, without `TRAFFIC_511PA` and `TRAFFIC_CTROADS`, schema 4 had 11, without `TRAFFIC_CHART_MD` and `TRAFFIC_DELDOT`, schema 5 had 13, without the eleven Midwest toggles `TRAFFIC_511WI` to `TRAFFIC_OHGO`, and schemas 6 and 7 had 24, without `TRAFFIC_511VA`, `TRAFFIC_WV511` and `TRAFFIC_KYTC`), `route` (the 16 `RoutePrefs` fields; schema 1 had 15, without `avoid_dot_cameras`), `driving` (`night_by_sunset`, `search_at_bottom`, and from schema 10 `state_line_cards`: Settings > Driving > State-line cards; schemas 7 to 9 had the first two, schemas 1 to 6 `night_by_sunset` alone), `fuel` (`mpg`, `price_per_gallon`, `price_source`, `region`), `voice` (the 24 `VoiceSettings` fields; enums by name), `packs` (`regions`: the wanted basemap region ids, the user's own; a region got for a trip from the route preview is left out, and an import makes every region it lists the user's own; `wifi`, schema 9: the Settings > Maps switch for the free Wi-Fi pack; a schema 1 to 8 bundle has no such field and an import leaves the phone's switch as it is; `road`, schema 11: the Settings > Maps switch for the Road pack; a schema 1 to 10 bundle has no such field and an import leaves the phone's switch as it is), `updates` (`allow_mobile_data`). |
 
@@ -29,17 +29,18 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 - The header's app ID and schema are checked before the passphrase is asked for (a bundle from another app is
   refused by name), and the dialog shows the file's date as "not yet verified".
-- Import is **replace**, not merge: saved places, lists, recents, Home, Work, API keys and preferences become exactly
-  what the file holds. The dialog says so before the file and the passphrase are asked for.
+- Import is **replace**, not merge: saved places, lists, recents, Home, Work, Wi-Fi marks, the trip log, API keys and
+  preferences become exactly what the file holds. The one exception is a file from before schema 12: it has no trip log,
+  so the import keeps the phone's legs (and raises `lastId` past them) instead of emptying the log. The dialog says so before the file and the passphrase are asked for.
 - The whole file is verified first (header MAC, every chunk, the end record) and its contents are checked in memory.
   Every entry is read strictly: exactly the fields the file's schema lists (an unknown or missing field, a value of the wrong
   type, a fractional or negative number where a whole one belongs, `version` other than 1 are all refused, never
   defaulted or dropped), and a key named twice in one object is refused (the JSON reader is asked to reject
   duplicates for these entries only; the app's own readers keep their behaviour). Then: enums by name, numbers finite and inside the range the app's own setting enforces,
   strings within their bounds (place name 2,048 characters, address 4,096, category 256, OSM reference 64, list
-  name 1,024, API key 1,024; at most 500 lists, 40,000 saved places, 50 recents, 20,000 Wi-Fi marks, each mark for a different OSM reference, a mark's time not negative), unique ids, every saved place in
+  name 1,024, API key 1,024; at most 500 lists, 40,000 saved places, 50 recents, 20,000 Wi-Fi marks, each mark for a different OSM reference, a mark's time not negative; at most 5,000 trip log legs, each passing `Leg.problem`: a trip of 1 to 40 characters and labels of 1 to 80 on one line, a real `YYYY-MM-DD` day, 1 to 10,000,000 whole metres, a mode of `DRIVE`, `WALK` or `BIKE`, ids unique among the legs), unique ids, every saved place in
   a list that exists, `lastId` past every id, both built-in lists present, regions only ones Southbound knows,
-  the manifest's counts equal to what the entries hold. Entry sizes are capped (manifest 4 KiB, places 8 MiB,
+  the manifest's counts equal to what the entries hold (`lastId` past the legs' ids too). Entry sizes are capped (manifest 4 KiB, places 8 MiB,
   API keys 16 KiB, settings 64 KiB) before anything is allocated. Wrong app, wrong passphrase, a damaged or cut
   file and bad contents all stop here, with nothing changed.
 - If the saved places file exists but cannot be read, import (and export) stop with nothing changed: the
@@ -55,10 +56,14 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
   Backup; Discard drops it. Nothing is half-forgotten, and no plaintext is written to disk at any point. Finishing it re-checks that
   nothing unreadable would be overwritten, as a fresh import does. At start it also checks that the saved places are
   still the ones the import found or brings, by a digest of their `places.json` form; an import kept by a version
-  before schema 9 recorded that digest without the `wifiMarks` field, so with no marks both forms are accepted.
+  before schema 9 recorded that digest without the `wifiMarks` field, and one kept by a schema 9 to 11 version without
+  the `legs` field, so with no legs (and no marks) those forms are accepted too. A schema 1 to 11 import, which keeps the
+  phone's legs, records the digest of the places without the trip log (no legs, `lastId` 0), and its own places are
+  what applying it writes over the places now, legs kept: a leg logged after it stopped never makes it wait.
 - **The summary** after an import (and the "will turn on" line of a kept one) names every network feature the import
   switched from off to on, or says "none", and says so when the import also turns the free Wi-Fi switch (Settings >
-  Maps) or the Road pack's (Settings > Maps) on, since each downloads its pack. Its counts include the Wi-Fi marks. Features already on are not listed. If a kept import is finished after a
+  Maps) or the Road pack's (Settings > Maps) on, since each downloads its pack. Its counts include the Wi-Fi marks and the trip log's legs (for a file before schema 12 it says the phone's trip log
+  was kept). Features already on are not listed. If a kept import is finished after a
   partial apply, the list can omit ones that had already been switched on.
 - Passphrases: the writer requires at least 12 characters, typed twice; readers accept any. The passphrase is never
   stored, logged or put in saved state, and the key buffers are zeroed after use (the Compose text field's own String
@@ -79,7 +84,7 @@ Each entry is UTF-8 JSON, written in this order; all four are always present.
 
 A new entry, a new `ApiKey` or `NetworkFeature`, a new setting, or any change to an entry's fields bumps the schema;
 the importer then declares the range it supports and needs a tested migration for every older schema.
-`SouthboundBundleTest`'s "schema 11 pins what the stores hold" fails when one of those changes without the schema.
+`SouthboundBundleTest`'s "schema 12 pins what the stores hold" fails when one of those changes without the schema.
 
 ### Schema history
 
@@ -125,6 +130,13 @@ the importer then declares the range it supports and needs a tested migration fo
   off: "off" would delete a Road pack the person has, since the updater drops the pack while the switch is off (a
   schema 11 bundle restores the switch exactly, on or off, with a synchronous commit). Exports are written as schema 11.
   An import kept by the schema 10 version still resumes at start and leaves the switch alone.
+- **12** (October 2026): `places.json` gained `legs` and the manifest `legs` (the trip log, `docs/TRIP_LOG.md`: per leg a
+  trip name, a day, whole metres, a mode and the user's own From and To labels, nothing else). Both are required from
+  schema 12 and refused before it. A schema 1 to 11 bundle is read with its own fields exactly and its import keeps the
+  phone's legs, never empties the log (`BackupData.placesFor`: the bundle's places with the phone's legs, `lastId` raised
+  past them; applying it twice gives the same); a schema 12 bundle replaces them exactly. The legs also live in the saved
+  places file (`UserDataCodec`, still `"version":1`: a file without `legs` opens with none). Exports are written as
+  schema 12. An import kept by the schema 11 version still resumes at start.
 
 ## Checking an export from Termux
 

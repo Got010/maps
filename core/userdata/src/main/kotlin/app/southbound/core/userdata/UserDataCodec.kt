@@ -15,6 +15,14 @@ object UserDataCodec {
             "recents" to data.recents.map { mapOf("seenAt" to it.seenAt, "place" to place(it.place)) },
             // Written even when empty, so the export's strict reader (schema 9) always finds it. A document without it still loads.
             "wifiMarks" to data.wifiMarks.map { mapOf("osmRef" to it.osmRef, "worked" to it.worked, "markedAt" to it.markedAt) },
+            // The trip log (export schema 12), right after the marks and written even when empty, as they are. Exactly
+            // these eight fields per leg: no coordinate, place or time of day can ride along.
+            "legs" to data.legs.map {
+                mapOf(
+                    "id" to it.id, "trip" to it.trip, "on" to it.on, "meters" to it.meters, "mode" to it.mode.name,
+                    "from" to it.from, "to" to it.to, "edited" to it.edited,
+                )
+            },
         ) + listOfNotNull(
             data.home?.let { "home" to place(it) },
             data.work?.let { "work" to place(it) },
@@ -43,12 +51,27 @@ object UserDataCodec {
             val m = item as Map<*, *>
             WifiMark(m.string("osmRef"), m["worked"] as? Boolean ?: throw IllegalArgumentException("user data: no worked"), m.long("markedAt"))
         }.groupBy { it.osmRef }.values.map { marks -> marks.maxBy { it.markedAt } }
-        val lastId = (root["lastId"] as? Long) ?: maxOf(lists.maxOfOrNull { it.id } ?: 0, saved.maxOfOrNull { it.id } ?: 0)
+        // Added with the trip log without a version bump, as the marks were: absent means none.
+        val legs = (root["legs"] as? List<*>).orEmpty().map { item ->
+            val m = item as Map<*, *>
+            Leg(
+                id = m.long("id"),
+                trip = m.string("trip"),
+                on = m.string("on"),
+                meters = m.long("meters"),
+                mode = LegMode.entries.firstOrNull { it.name == m["mode"] } ?: throw IllegalArgumentException("user data: no mode"),
+                from = m.string("from"),
+                to = m.string("to"),
+                edited = m["edited"] as? Boolean ?: throw IllegalArgumentException("user data: no edited"),
+            )
+        }
+        val lastId = (root["lastId"] as? Long) ?: maxOf(lists.maxOfOrNull { it.id } ?: 0, saved.maxOfOrNull { it.id } ?: 0, legs.maxOfOrNull { it.id } ?: 0)
         return UserData(
             lists.ifEmpty { UserData.DEFAULT_LISTS }, saved, recents, lastId,
             home = root["home"]?.let(::placeRef),
             work = root["work"]?.let(::placeRef),
             wifiMarks = wifiMarks,
+            legs = legs,
         )
     }
 

@@ -1,7 +1,7 @@
 package app.southbound.feature.explore
 
 /** One row of the Map options list. The enum's order is the list's order, top to bottom. */
-internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI, ROAD, THIS_STATE }
+internal enum class MapOption { RECENTER, TRAFFIC, WEATHER, WIFI, ROAD, THIS_STATE, TRIP_LOG }
 
 /** The colour of the small dot on the Map options button. */
 internal enum class MapOptionsDot {
@@ -18,7 +18,8 @@ internal enum class MapOptionsDot {
 /**
  * What the Map options button and its list show, decided from the screen's own state and nothing else. A row is shown
  * under the condition the floating button it replaced had: a fix for Re-center, the Live-data toggle for Traffic and
- * Weather, the installed pack for Free Wi-Fi and for Road.
+ * Weather, the installed pack for Free Wi-Fi and for Road. "Trip log" is the last row, whenever the caller offers it (the
+ * map screen does, outside guidance: the log never opens during a trip).
  */
 internal data class MapOptionsState(
     val hasLocation: Boolean,
@@ -38,6 +39,8 @@ internal data class MapOptionsState(
     val roadVisible: Boolean = false,
     /** A Road kinds choice other than the default is set. */
     val roadFiltered: Boolean = false,
+    /** The trip log can be opened (not during guidance). It is no layer: it never lights the button's dot. */
+    val tripLogAvailable: Boolean = false,
 ) {
     /** The rows to show, top to bottom. */
     val rows: List<MapOption> = buildList {
@@ -47,6 +50,7 @@ internal data class MapOptionsState(
         if (wifiAvailable) add(MapOption.WIFI)
         if (roadAvailable) add(MapOption.ROAD)
         if (stateAvailable) add(MapOption.THIS_STATE)
+        if (tripLogAvailable) add(MapOption.TRIP_LOG)
     }
 
     /** True when the Re-center row says "Re-center" (the map is away from the puck) rather than "My location". */

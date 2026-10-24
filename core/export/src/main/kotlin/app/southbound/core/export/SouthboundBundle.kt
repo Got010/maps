@@ -15,7 +15,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 11 (schemas 1 to 10 are
+ * Southbound's export: an FWX v1 bundle (the codec in `fwx/`) with app ID `southbound`, schema 12 (schemas 1 to 11 are
  * still read). The entries, in
  * this order and all required: [MANIFEST], [PLACES], [API_KEYS], [SETTINGS]. docs/EXPORT.md lists what each holds.
  * The bundle is sealed with the passphrase alone, so it opens on a phone that has none of this phone's Keystore keys.
@@ -36,10 +36,12 @@ import java.util.TimeZone
  * Schema 10 (state-line cards) added the driving setting `state_line_cards`; an older bundle imports with the cards on.
  * Schema 11 (the Road pack) added `settings.json`'s `packs.road`; an older bundle leaves the Road switch as it is on the
  * phone.
+ * Schema 12 (the trip log) added `places.json`'s `legs` and the manifest's `legs` count; an older bundle keeps the
+ * phone's legs (it never empties the log), a schema 12 bundle replaces them exactly.
  */
 object SouthboundBundle {
     const val APP_ID = "southbound"
-    const val SCHEMA = 11L
+    const val SCHEMA = 12L
     val SCHEMA_RANGE = 1L..SCHEMA
 
     /** The most plaintext an import reads (spec section 4.3); the limits below add up to less. */
@@ -60,20 +62,22 @@ object SouthboundBundle {
 
     private val ENTRY_NAMES = LIMITS.keys.toList()
 
-    /** The manifest's fields in schemas 1 to 8; schema 9 adds [WIFI_MARKS] at the end. */
+    /** The manifest's fields in schemas 1 to 8; schema 9 adds [WIFI_MARKS] at the end, schema 12 [LEGS] after it. */
     private val MANIFEST_KEYS = listOf(
         "app", "schema", "app_version", "lists", "saved_places", "recents", "home", "work", "api_keys", "settings",
     )
     private const val WIFI_MARKS = "wifi_marks"
+    private const val LEGS = "legs"
 
     /**
      * Parses the manifest with exactly the fields of the schema it names: [WIFI_MARKS] is required from schema 9 on
-     * and not allowed before. A schema outside [SCHEMA_RANGE] is refused by the caller.
+     * and not allowed before, [LEGS] from schema 12 on. A schema outside [SCHEMA_RANGE] is refused by the caller.
      */
     private fun readManifest(bytes: ByteArray): Obj {
-        val manifest = Obj.of(parseJson(bytes, MANIFEST), "manifest", MANIFEST_KEYS.toSet(), setOf(WIFI_MARKS))
+        val manifest = Obj.of(parseJson(bytes, MANIFEST), "manifest", MANIFEST_KEYS.toSet(), setOf(WIFI_MARKS, LEGS))
         val schema = manifest.long("schema", 0, Long.MAX_VALUE)
         if (manifest.has(WIFI_MARKS) != (schema >= 9)) invalid("the manifest doesn't have the fields its schema lists")
+        if (manifest.has(LEGS) != (schema >= 12)) invalid("the manifest doesn't have the fields its schema lists")
         return manifest
     }
 
@@ -122,7 +126,8 @@ object SouthboundBundle {
         val userData = PlacesEntry.decode(entries.getValue(PLACES), schema)
         val keys = KeysEntry.decode(entries.getValue(API_KEYS), schema)
         val settings = SettingsEntry.decode(entries.getValue(SETTINGS), schema)
-        val data = BackupData(userData, keys, settings)
+        // Before schema 12 a bundle has no trip log: the import keeps the phone's legs instead of emptying the log.
+        val data = BackupData(userData, keys, settings, legsFromBundle = schema >= 12)
 
         manifest.string("app_version", MAX_VERSION)
         val c = data.counts()
@@ -134,6 +139,9 @@ object SouthboundBundle {
         }
         // The marks are counted from schema 9 (an older file has none and no such field).
         if (schema >= 9 && manifest.long(WIFI_MARKS, 0, Long.MAX_VALUE) != c.wifiMarks.toLong()) {
+            invalid("the contents don't match the manifest")
+        }
+        if (schema >= 12 && manifest.long(LEGS, 0, Long.MAX_VALUE) != c.legs?.toLong()) {
             invalid("the contents don't match the manifest")
         }
         return data
@@ -240,6 +248,7 @@ object SouthboundBundle {
         tree["app_version"] = version
         for ((i, name) in MANIFEST_KEYS.drop(3).withIndex()) tree[name] = values[i]
         tree[WIFI_MARKS] = counts.wifiMarks
+        tree[LEGS] = counts.legs ?: throw IllegalArgumentException("an export always carries its trip log")
         return MiniJson.stringify(tree).toByteArray(Charsets.UTF_8)
     }
 }

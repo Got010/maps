@@ -53,7 +53,15 @@ class BackupData(
     val userData: UserData,
     val apiKeys: Map<ApiKey, String>,
     val settings: AppSettings,
+    /**
+     * False for what a schema 1 to 11 bundle read as: those bundles have no trip log, so [userData]'s legs are none and
+     * an import keeps the phone's own ([placesFor]) instead of emptying the log. An export is always true.
+     */
+    val legsFromBundle: Boolean = true,
 ) {
+    /** What an import writes as the saved places over the phone's [phone]: the bundle's, keeping the phone's legs when the bundle has none to give. */
+    fun placesFor(phone: UserData): UserData = if (legsFromBundle) userData else PlacesEntry.keepLegs(userData, phone)
+
     fun counts(): BackupCounts = BackupCounts(
         lists = userData.lists.size,
         savedPlaces = userData.saved.size,
@@ -63,6 +71,7 @@ class BackupData(
         apiKeys = apiKeys.size,
         settings = SettingsEntry.count(settings),
         wifiMarks = userData.wifiMarks.size,
+        legs = if (legsFromBundle) userData.legs.size else null,
     )
 
     override fun toString(): String = "BackupData(${counts()})"
@@ -81,4 +90,6 @@ data class BackupCounts(
     val settings: Int,
     /** The user's Wi-Fi worked / didn't work marks (schema 9; 0 in an older bundle). */
     val wifiMarks: Int,
+    /** The trip log's legs (schema 12). Null for a bundle before schema 12: it has no trip log and leaves the phone's alone. */
+    val legs: Int?,
 )

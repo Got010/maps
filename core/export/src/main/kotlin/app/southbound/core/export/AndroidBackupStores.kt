@@ -85,8 +85,9 @@ class AndroidBackupStores(
      * have landed. A queued write would let the process die with the import forgotten and the data half applied.
      */
     override suspend fun apply(data: BackupData) {
-        // Throws, changing nothing, if the saved places file is unreadable (the store refuses to overwrite it).
-        userData.update(explicit = false) { data.userData }
+        // Throws, changing nothing, if the saved places file is unreadable (the store refuses to overwrite it). A bundle
+        // before schema 12 has no trip log: the phone's legs are kept (and lastId raised past them), never emptied.
+        userData.update(explicit = false) { data.placesFor(it) }
         secrets.replaceAll(data.apiKeys)
         val s = data.settings
         network.replaceAll(s.network)

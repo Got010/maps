@@ -10,6 +10,7 @@ import app.southbound.core.routing.PriceSource
 import app.southbound.core.routing.RoutePrefs
 import app.southbound.core.routing.VehicleKind
 import app.southbound.core.routing.WalkPrefs
+import app.southbound.core.userdata.LegMode
 import app.southbound.core.userdata.LoadState
 import app.southbound.core.userdata.PlaceRef
 import app.southbound.core.userdata.PlainSealer
@@ -40,6 +41,7 @@ object Samples {
 
     const val WIFI_WORKED = "n7001"
     const val WIFI_FAILED = "w7002"
+    const val TRIP = "Fall test trip"
 
     val cafe = PlaceRef(CAFE_NAME, 40.7, -74.0, "1 Main St", "cafe", "n1")
     val pin = PlaceRef("Dropped pin", 40.75, -73.98)
@@ -52,6 +54,9 @@ object Samples {
         d = d.recordRecent(pin, 400).recordRecent(cafe, 500)
         // Two Wi-Fi marks, one each way (synthetic OSM refs).
         d = d.markWifi(WIFI_WORKED, worked = true, now = 600).markWifi(WIFI_FAILED, worked = false, now = 700)
+        // Two trip log legs (made-up labels), one edited by hand.
+        d = d.addLeg(TRIP, "2026-10-24", 341_825, LegMode.DRIVE, "Motel A", "Site B", edited = false)
+            .addLeg(TRIP, "2026-10-25", 12_000, LegMode.BIKE, "Site B", "Motel A", edited = true)
         return d.withShortcut(Shortcut.HOME, home).withShortcut(Shortcut.WORK, work)
     }
 
@@ -102,10 +107,31 @@ object Samples {
 
     fun data() = BackupData(userData(), keys(), settings())
 
-    /** The entries as the schema 10 writer wrote them for [data]: today's text without schema 11's Road switch. */
+    /**
+     * The entries as the schema 11 writer wrote them for [data]: today's full-size text without schema 12's trip log (the
+     * `legs` list in `places.json`, the `legs` count in the manifest). `lastId` stays as it is, past the legs' ids: still
+     * a valid schema 11 document.
+     */
+    fun schema11(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
+        val out = linkedMapOf<String, ByteArray>()
+        val legs = app.southbound.core.userdata.UserDataCodec.encode(data.userData).let { t ->
+            t.substring(t.indexOf(",\"legs\":["), t.indexOf("]", t.indexOf(",\"legs\":[")) + 1)
+        }
+        for ((name, bytes) in SouthboundBundle.encode(data, version)) {
+            val t = String(bytes, Charsets.UTF_8)
+                .replace("\"schema\":12", "\"schema\":11")
+                .replace(",\"legs\":${data.userData.legs.size}}", "}")
+                .replace(legs, "")
+            out[name] = t.toByteArray()
+        }
+        for ((name, bytes) in out) check(!contains(bytes, "\"legs\"")) { "$name still mentions the trip log" }
+        return out
+    }
+
+    /** The entries as the schema 10 writer wrote them for [data]: schema 11's text without schema 11's Road switch. */
     fun schema10(version: String, data: BackupData = data()): LinkedHashMap<String, ByteArray> {
         val out = linkedMapOf<String, ByteArray>()
-        for ((name, bytes) in SouthboundBundle.encode(data, version)) {
+        for ((name, bytes) in schema11(version, data)) {
             val t = String(bytes, Charsets.UTF_8)
                 .replace("\"schema\":11", "\"schema\":10")
                 .replace("\"settings\":78", "\"settings\":77")
@@ -220,7 +246,8 @@ class FakeStores(dir: File, clock: () -> Long = { 1_000L }) : BackupStores {
 
     override suspend fun apply(data: BackupData) {
         applyCalls++
-        places.update(explicit = false) { data.userData }
+        // As AndroidBackupStores: a bundle before schema 12 keeps the phone's legs.
+        places.update(explicit = false) { data.placesFor(it) }
         if (failApply) throw IOException("disk full")
         keys = data.apiKeys
         if (failSettings) throw IOException("commit failed")

@@ -396,7 +396,12 @@ private fun networkLabel(feature: NetworkFeature): Int = when (feature) {
     NetworkFeature.TRAFFIC_KYTC -> R.string.backup_net_kytc
 }
 
-/** Counts only: no place, list or key name, and never a key. */
-private fun summary(resources: android.content.res.Resources, c: BackupCounts): String = resources.getString(
-    R.string.backup_summary, c.savedPlaces, c.lists, c.recents, c.home + c.work, c.apiKeys, c.settings, c.wifiMarks,
-)
+/** Counts only: no place, list, trip or key name, and never a key. */
+private fun summary(resources: android.content.res.Resources, c: BackupCounts): String {
+    val places = resources.getString(
+        R.string.backup_summary, c.savedPlaces, c.lists, c.recents, c.home + c.work, c.apiKeys, c.settings, c.wifiMarks,
+    )
+    // A file from before the trip log (schema 1 to 11) has no legs to count, and the import kept the phone's.
+    return c.legs?.let { resources.getString(R.string.backup_summary_legs, places, it) }
+        ?: resources.getString(R.string.backup_summary_legs_kept, places)
+}

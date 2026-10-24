@@ -4,6 +4,7 @@ import app.southbound.core.export.fwx.FwxError
 import app.southbound.core.export.fwx.FwxException
 import app.southbound.core.export.fwx.FwxWriter
 import app.southbound.core.network.SecretUnreadableException
+import app.southbound.core.userdata.LegMode
 import app.southbound.core.userdata.PlaceRef
 import app.southbound.core.userdata.PlainSealer
 import app.southbound.core.userdata.Sealer
@@ -65,6 +66,19 @@ class BackupServiceTest {
         error("unreachable")
     }
 
+    private fun sha(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /** A phone whose trip log holds two legs of its own (no saved places), logged after [first] other ids. */
+    private fun withLegs(name: String, first: Int = 0): Device = device(name).also { d ->
+        d.stores.places.update {
+            var u = it
+            repeat(first) { u = u.createList("pad") }
+            u.addLeg("Phone trip", "2026-11-01", 5_000, LegMode.DRIVE, "Site C", "Site D", edited = false)
+                .addLeg("Phone trip", "2026-11-02", 6_000, LegMode.WALK, "Site D", "Site C", edited = true)
+        }
+    }
+
     // ---- The round trip ----------------------------------------------------------------------------
 
     @Test
@@ -99,7 +113,7 @@ class BackupServiceTest {
             val out = ByteArrayOutputStream()
             filled("c").service.export({ out }, { ByteArrayInputStream(out.toByteArray()) }, pass)
         }
-        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 78, wifiMarks = 2), counts)
+        assertEquals(BackupCounts(lists = 3, savedPlaces = 3, recents = 2, home = 1, work = 1, apiKeys = 3, settings = 78, wifiMarks = 2, legs = 2), counts)
         assertFalse(counts.toString().contains(Samples.BUS_KEY))
     }
 
@@ -406,6 +420,178 @@ class BackupServiceTest {
         }
     }
 
+    // ---- The trip log (schema 12) --------------------------------------------------------------------------
+
+    @Test
+    fun `a schema 12 bundle replaces the legs exactly, and round trips`() {
+        val a = filled()
+        val b = withLegs("b")
+        val outcome = import(b, export(a)) as ImportOutcome.Done
+        assertEquals(Samples.userData().legs, b.stores.places.data.value.legs)
+        assertEquals(Samples.userData(), b.stores.places.data.value)
+        assertEquals(2, outcome.counts.legs)
+        // A schema 12 bundle with no legs empties the log: it says what the log was.
+        val c = withLegs("c")
+        val empty = import(c, export(device("plain"))) as ImportOutcome.Done
+        assertTrue(c.stores.places.data.value.legs.isEmpty())
+        assertEquals(0, empty.counts.legs)
+        // And back out: the restored phone exports the same trip log.
+        val again = device("again")
+        import(again, export(b))
+        assertEquals(Samples.userData().legs, again.stores.places.data.value.legs)
+    }
+
+    @Test
+    fun `a bundle before schema 12 keeps the phone's legs, with lastId past them`() {
+        val olds = listOf(
+            "eleven" to Samples.fwxFile(Samples.schema11("0.1.90"), schema = 11),
+            "ten" to Samples.fwxFile(Samples.schema10("0.1.80"), schema = 10),
+            "eight" to Samples.fwxFile(Samples.schema8("0.1.60"), schema = 8),
+        )
+        for ((which, file) in olds) {
+            // The phone's legs carry ids past everything in the bundle (lastId 8): 30 lists made before them.
+            val b = withLegs("keep-$which", first = 30)
+            val phoneLegs = b.stores.places.data.value.legs
+            assertTrue(phoneLegs.minOf { it.id } > Samples.userData().lastId)
+            val outcome = import(b, file) as ImportOutcome.Done
+            val now = b.stores.places.data.value
+            assertEquals(phoneLegs, now.legs)
+            assertEquals(phoneLegs.maxOf { it.id }, now.lastId)
+            // The bundle's places did land.
+            assertEquals(Samples.userData().saved, now.saved)
+            assertEquals(Samples.userData().lists, now.lists)
+            // The summary has no leg count for a bundle without a trip log.
+            assertNull(outcome.counts.legs)
+            // The next leg gets an id no one has had.
+            val next = b.stores.places.addLeg("Phone trip", "2026-11-03", 1_000, LegMode.DRIVE, "Site C", "Site E", edited = false)
+            assertEquals(phoneLegs.maxOf { it.id } + 1, next.legs.last().id)
+            assertEquals(3, next.legs.map { it.id }.toSet().size)
+        }
+        // A phone with no legs: none come from nowhere, and lastId is the bundle's.
+        val empty = device("keep-none")
+        import(empty, Samples.fwxFile(Samples.schema11("0.1.90"), schema = 11))
+        assertTrue(empty.stores.places.data.value.legs.isEmpty())
+        assertEquals(Samples.userData().lastId, empty.stores.places.data.value.lastId)
+        // Legs whose ids are below the bundle's lastId keep them, and lastId stays the bundle's.
+        val low = withLegs("keep-low")
+        val lowLegs = low.stores.places.data.value.legs
+        import(low, Samples.fwxFile(Samples.schema11("0.1.90"), schema = 11))
+        assertEquals(lowLegs, low.stores.places.data.value.legs)
+        assertEquals(Samples.userData().lastId, low.stores.places.data.value.lastId)
+    }
+
+    @Test
+    fun `applying an older bundle twice keeps the legs exactly once`() {
+        val b = withLegs("twice", first = 30)
+        val legs = b.stores.places.data.value.legs
+        val data = SouthboundBundle.decode(Samples.schema11("0.1.90"))
+        assertFalse(data.legsFromBundle)
+        runBlocking { b.stores.apply(data) }
+        val once = b.stores.snapshot()
+        runBlocking { b.stores.apply(data) }
+        assertEquals(once, b.stores.snapshot())
+        assertEquals(legs, b.stores.places.data.value.legs)
+    }
+
+    @Test
+    fun `a pre-12 import that dies after the places write keeps the legs exactly once on resume`() {
+        val file = Samples.fwxFile(Samples.schema11("0.1.90"), schema = 11)
+        val b = withLegs("b", first = 30)
+        val legs = b.stores.places.data.value.legs
+        b.stores.failApply = true
+        assertTrue(import(b, file) is ImportOutcome.Pending)
+        // The places landed, with the phone's legs.
+        assertEquals(legs, b.stores.places.data.value.legs)
+        b.stores.failApply = false
+        // At start: the places are the import's own (with the phone's legs), so it goes ahead.
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertEquals(legs, b.stores.places.data.value.legs)
+        assertEquals(Samples.userData().saved, b.stores.places.data.value.saved)
+        assertFalse(b.journal.exists())
+
+        // The same, with a leg logged between the stop and the start: it stays, once.
+        val c = withLegs("c", first = 30)
+        c.stores.failApply = true
+        import(c, file)
+        c.stores.places.addLeg("Phone trip", "2026-11-05", 7_000, LegMode.BIKE, "Site D", "Site E", edited = false)
+        val withNew = c.stores.places.data.value.legs
+        assertEquals(3, withNew.size)
+        c.stores.failApply = false
+        assertTrue(runBlocking { c.service.resume(automatic = true) } is ResumeOutcome.Applied)
+        assertEquals(withNew, c.stores.places.data.value.legs)
+        assertEquals(withNew.maxOf { it.id }, c.stores.places.data.value.lastId)
+    }
+
+    @Test
+    fun `a pre-12 import that stopped before the places write resumes over a leg logged since`() {
+        val file = Samples.fwxFile(Samples.schema11("0.1.90"), schema = 11)
+        val b = withLegs("b")
+        val found = b.stores.places.data.value
+        b.stores.failApply = true
+        import(b, file)
+        // As if the process stopped before the places were written, and a leg was logged after the restart.
+        b.stores.places.update(explicit = false) { found }
+        b.stores.places.addLeg("Phone trip", "2026-11-05", 7_000, LegMode.BIKE, "Site D", "Site E", edited = false)
+        val legs = b.stores.places.data.value.legs
+        b.stores.failApply = false
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertEquals(legs, b.stores.places.data.value.legs)
+        assertEquals(Samples.userData().saved, b.stores.places.data.value.saved)
+        // A place saved since still makes it wait, as before.
+        val c = withLegs("c")
+        val cFound = c.stores.places.data.value
+        c.stores.failApply = true
+        import(c, file)
+        c.stores.places.update(explicit = false) { cFound.recordRecent(Samples.pin, 9) }
+        c.stores.failApply = false
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), runBlocking { c.service.resume(automatic = true) })
+    }
+
+    @Test
+    fun `a schema 12 import never replaces a leg logged after it stopped`() {
+        val file = export(filled())
+        val b = withLegs("b")
+        val found = b.stores.places.data.value
+        b.stores.failApply = true
+        import(b, file)
+        b.stores.places.update(explicit = false) { found }
+        // A leg logged since: replacing the legs would delete it, so it waits for the person.
+        b.stores.places.addLeg("Phone trip", "2026-11-05", 7_000, LegMode.BIKE, "Site D", "Site E", edited = false)
+        b.stores.failApply = false
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), runBlocking { b.service.resume(automatic = true) })
+        assertEquals(3, b.stores.places.data.value.legs.size)
+        // Asked for in Settings, it goes ahead.
+        assertTrue(runBlocking { b.service.resume() } is ResumeOutcome.Applied)
+        assertEquals(Samples.userData(), b.stores.places.data.value)
+    }
+
+    @Test
+    fun `an import kept by the schema 11 version resumes over the same places`() {
+        val entries = Samples.schema11("0.1.90")
+        val found = UserData().save(Samples.cafe, UserData.FAVORITES_ID, 7).markWifi("n5", true, 3)
+        // That version's mark: the places as it encoded them, with the marks field and without legs.
+        val oldForm = sha(String(PlacesEntry.encode(found)).replace(",\"legs\":[]", "").toByteArray())
+        val b = device("b")
+        b.stores.places.update { found }
+        b.journal.write(entries, oldForm)
+        val resumed = runBlocking { b.service.resume(automatic = true) }
+        assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
+        assertEquals(Samples.userData().copy(legs = emptyList()), b.stores.places.data.value)
+        assertFalse(b.journal.exists())
+        // It stopped after its places landed (the old version wrote them without legs): the import's own, so it goes ahead.
+        val c = device("c")
+        c.stores.places.update { Samples.userData().copy(legs = emptyList()) }
+        c.journal.write(entries, oldForm)
+        assertTrue(runBlocking { c.service.resume(automatic = true) } is ResumeOutcome.Applied)
+        // Places changed since: it still waits.
+        val d = device("d")
+        d.stores.places.update { found.recordRecent(Samples.pin, 9) }
+        d.journal.write(entries, oldForm)
+        assertEquals(ResumeOutcome.Failed(BackupService.CHANGED_REASON, unreadable = false), runBlocking { d.service.resume(automatic = true) })
+    }
+
     @Test
     fun `the summary says when the Road switch goes on, for a kept import before and after`() {
         val a = filled() // Road switch on
@@ -431,10 +617,8 @@ class BackupServiceTest {
         val b = device("b")
         b.stores.places.update { found }
         b.stores.settings = Samples.defaultSettings().copy(wifi = false, road = true)
-        // The mark of that version: the print of the places as it encoded them (with the marks field, as today).
-        val print = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(PlacesEntry.encode(found))
-            .joinToString("") { "%02x".format(it) }
+        // The mark of that version: the print of the places as it encoded them (with the marks field, without legs).
+        val print = sha(String(PlacesEntry.encode(found)).replace(",\"legs\":[]", "").toByteArray())
         b.journal.write(entries, print)
         val resumed = runBlocking { b.service.resume(automatic = true) }
         assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
@@ -449,11 +633,12 @@ class BackupServiceTest {
     fun `an import kept by an earlier version resumes at start over the same places`() {
         // What version 8 left behind: the entries of a schema 8 bundle, and the mark = the print of the places as
         // that version encoded them (no wifiMarks field).
-        val entries = Samples.schema8("0.1.60", Samples.data().let { BackupData(it.userData.copy(wifiMarks = emptyList()), it.apiKeys, it.settings) })
+        val entries = Samples.schema8("0.1.60", Samples.data().let { BackupData(it.userData.copy(wifiMarks = emptyList(), legs = emptyList()), it.apiKeys, it.settings) })
         fun legacyPrint(d: UserData): String {
             val text = app.southbound.core.userdata.UserDataCodec.encode(d)
-            assertTrue(text.contains(",\"wifiMarks\":[]"))
-            val old = text.replace(",\"wifiMarks\":[]", "").toByteArray()
+            assertTrue(text.contains(",\"wifiMarks\":[],\"legs\":[]"))
+            // That version wrote neither field.
+            val old = text.replace(",\"wifiMarks\":[],\"legs\":[]", "").toByteArray()
             return java.security.MessageDigest.getInstance("SHA-256").digest(old).joinToString("") { "%02x".format(it) }
         }
         val found = UserData().save(Samples.cafe, UserData.FAVORITES_ID, 7)
@@ -466,14 +651,14 @@ class BackupServiceTest {
         val resumed = runBlocking { b.service.resume(automatic = true) }
         assertTrue(resumed.toString(), resumed is ResumeOutcome.Applied)
         assertFalse((resumed as ResumeOutcome.Applied).wifiTurnedOn)
-        assertEquals(Samples.userData().copy(wifiMarks = emptyList()), b.stores.places.data.value)
+        assertEquals(Samples.userData().copy(wifiMarks = emptyList(), legs = emptyList()), b.stores.places.data.value)
         // The bundle had no Wi-Fi value: the phone's switch stayed on.
         assertEquals(true, b.stores.settings.wifi)
         assertFalse(b.journal.exists())
 
         // It stopped after the places landed: they are the import's own.
         val c = device("c")
-        c.stores.places.update { Samples.userData().copy(wifiMarks = emptyList()) }
+        c.stores.places.update { Samples.userData().copy(wifiMarks = emptyList(), legs = emptyList()) }
         c.journal.write(entries, legacyPrint(found))
         assertTrue(runBlocking { c.service.resume(automatic = true) } is ResumeOutcome.Applied)
 

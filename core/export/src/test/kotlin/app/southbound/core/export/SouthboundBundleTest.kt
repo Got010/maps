@@ -6,6 +6,9 @@ import app.southbound.core.export.fwx.FwxWriter
 import app.southbound.core.network.ApiKey
 import app.southbound.core.network.NetworkFeature
 import app.southbound.core.routing.RoutePrefs
+import app.southbound.core.userdata.Leg
+import app.southbound.core.userdata.LegLog
+import app.southbound.core.userdata.LegMode
 import app.southbound.core.userdata.PlaceRef
 import app.southbound.core.userdata.UserData
 import app.southbound.core.userdata.UserDataCodec
@@ -69,8 +72,8 @@ class SouthboundBundleTest {
         val entries = SouthboundBundle.encode(Samples.data(), "0.1.14")
         assertEquals(listOf("manifest.json", "places.json", "api-keys.json", "settings.json"), entries.keys.toList())
         assertEquals(
-            """{"app":"southbound","schema":11,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
-                """"api_keys":3,"settings":78,"wifi_marks":2}""",
+            """{"app":"southbound","schema":12,"app_version":"0.1.14","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":78,"wifi_marks":2,"legs":2}""",
             text(entries, "manifest.json"),
         )
         assertTrue(text(entries, "places.json").startsWith("""{"version":1,"""))
@@ -118,7 +121,7 @@ class SouthboundBundleTest {
         // None and off round trip too: the field is always written, as an empty list.
         val none = SouthboundBundle.encode(Samples.emptyData(), "x")
         assertTrue(text(none, "places.json").contains(""""wifiMarks":[]"""))
-        assertTrue(text(none, "manifest.json").endsWith(""""wifi_marks":0}"""))
+        assertTrue(text(none, "manifest.json").endsWith(""""wifi_marks":0,"legs":0}"""))
         assertEquals(emptyList<Any>(), SouthboundBundle.decode(none).userData.wifiMarks)
         // A mark is only the spot's reference, an answer and a time: nothing else about where it was is in the file.
         assertFalse(Samples.contains(file(entries), Samples.WIFI_WORKED))
@@ -138,7 +141,7 @@ class SouthboundBundleTest {
         val bytes = file(entries)
         val header = SouthboundBundle.readHeader(ByteArrayInputStream(bytes))
         assertEquals("southbound", header.appId)
-        assertEquals(11L, header.schemaVersion)
+        assertEquals(12L, header.schemaVersion)
         assertEquals(1_791_028_800_000L, header.createdMs)
         assertFalse(header.verified)
         assertEquals(entries.mapValues { it.value.toList() }, read(bytes).mapValues { it.value.toList() })
@@ -180,10 +183,155 @@ class SouthboundBundleTest {
         }
     }
 
-    /** Samples.data() without its marks: what any bundle before schema 9 imports as. */
-    private val NO_MARKS = Samples.data().userData.copy(wifiMarks = emptyList())
+    /** Samples.data() without its marks and legs: what any bundle before schema 9 imports as. */
+    private val NO_MARKS = Samples.data().userData.copy(wifiMarks = emptyList(), legs = emptyList())
+
+    /** Samples.data() without its legs (the same lastId, past them): what a schema 9 to 11 bundle imports as. */
+    private val NO_LEGS = Samples.data().userData.copy(legs = emptyList())
 
     private fun schema8(version: String) = Samples.schema8(version)
+
+    @Test
+    fun `legs round trip through the bundle, with nothing but their eight fields`() {
+        val data = Samples.data()
+        val entries = SouthboundBundle.encode(data, "0.1.95")
+        assertTrue(
+            text(entries, "places.json").contains(
+                """"legs":[{"id":7,"trip":"${Samples.TRIP}","on":"2026-10-24","meters":341825,"mode":"DRIVE","from":"Motel A","to":"Site B","edited":false},""" +
+                    """{"id":8,"trip":"${Samples.TRIP}","on":"2026-10-25","meters":12000,"mode":"BIKE","from":"Site B","to":"Motel A","edited":true}]""",
+            ),
+        )
+        val back = SouthboundBundle.decode(read(file(entries)))
+        assertTrue(back.legsFromBundle)
+        assertEquals(data.userData.legs, back.userData.legs)
+        assertEquals(2, back.counts().legs)
+        // Sealed: the labels are not readable in the file.
+        assertFalse(Samples.contains(file(entries), Samples.TRIP))
+        assertFalse(Samples.contains(file(entries), "Motel A"))
+        // An empty log is an empty list and a zero count.
+        val none = SouthboundBundle.encode(Samples.emptyData(), "x")
+        assertTrue(text(none, "places.json").contains(""""wifiMarks":[],"legs":[]"""))
+        assertEquals(0, SouthboundBundle.decode(none).counts().legs)
+    }
+
+    @Test
+    fun `a schema 11 file still imports, with no legs and the phone's kept`() {
+        val eleven = Samples.schema11("0.1.90")
+        // Exactly what the schema 11 writer produced: the full-size manifest of that version, and places without legs.
+        assertEquals(
+            """{"app":"southbound","schema":11,"app_version":"0.1.90","lists":3,"saved_places":3,"recents":2,"home":1,"work":1,""" +
+                """"api_keys":3,"settings":78,"wifi_marks":2}""",
+            text(eleven, "manifest.json"),
+        )
+        assertTrue(text(eleven, "places.json").contains(""""lastId":8,"""))
+        val bytes = raw(*eleven.map { it.key to it.value }.toTypedArray(), schema = 11)
+        assertEquals(11L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
+        val data = SouthboundBundle.decode(read(bytes))
+        assertFalse(data.legsFromBundle)
+        assertEquals(NO_LEGS, data.userData)
+        assertEquals(Samples.data().settings, data.settings)
+        assertEquals(null, data.counts().legs)
+        // What an import writes over a phone: the bundle's places with the phone's own legs, lastId past them.
+        val phone = UserData().addLeg("Mine", "2026-11-01", 1_000, LegMode.DRIVE, "Site C", "Site D", edited = false)
+        assertEquals(NO_LEGS, data.placesFor(UserData()))
+        assertEquals(phone.legs, data.placesFor(phone).legs)
+        assertEquals(8L, data.placesFor(phone).lastId)
+        val far = UserData(lastId = 40).addLeg("Mine", "2026-11-01", 1_000, LegMode.DRIVE, "Site C", "Site D", edited = false)
+        assertEquals(41L, data.placesFor(far).lastId)
+        // A schema 12 bundle's places are written as they are, whatever the phone holds.
+        val twelve = SouthboundBundle.decode(SouthboundBundle.encode(Samples.data(), "x"))
+        assertEquals(Samples.data().userData, twelve.placesFor(far))
+    }
+
+    @Test
+    fun `schema 11 is read with its own fields exactly`() {
+        val twelve = SouthboundBundle.encode(Samples.data(), "x")
+        // Today's places or manifest, alone in an otherwise schema 11 bundle, are refused: legs before schema 12 aren't allowed.
+        fun with(entry: String) = Samples.schema11("x").also { it[entry] = twelve.getValue(entry) }
+        refuses(with("places.json"))
+        refuses(with("manifest.json").also { it["manifest.json"] = text(twelve, "manifest.json").replace("\"schema\":12", "\"schema\":11").toByteArray() })
+        // The reverse: a schema 12 bundle must have both, and they must agree.
+        refuses(mutated("places.json", ",\"legs\":[", ",\"legsX\":["))
+        refuses(mutated("manifest.json", ",\"legs\":2", ""))
+        refuses(mutated("manifest.json", "\"legs\":2", "\"legs\":3"))
+        refuses(mutated("manifest.json", "\"legs\":2", "\"legs\":1"))
+        refuses(mutated("manifest.json", "\"legs\":2", "\"legs\":\"2\""))
+        // A schema 11 header over a schema 12 body, and the other way round.
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { read(raw(*twelve.map { it.key to it.value }.toTypedArray(), schema = 11)) })
+        val eleven = Samples.schema11("x")
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { read(raw(*eleven.map { it.key to it.value }.toTypedArray(), schema = 12)) })
+    }
+
+    @Test
+    fun `legs are read strictly, each cap one over`() {
+        val first = "{\"id\":7,\"trip\":\"${Samples.TRIP}\",\"on\":\"2026-10-24\",\"meters\":341825,\"mode\":\"DRIVE\",\"from\":\"Motel A\",\"to\":\"Site B\",\"edited\":false}"
+        fun leg(field: String, value: String) = mutated("places.json", first, first.replace(Regex("\"$field\":(\"[^\"]*\"|[^,}]*)"), Regex.escapeReplacement("\"$field\":$value")))
+        // At each cap it reads.
+        SouthboundBundle.decode(leg("trip", "\"" + "t".repeat(40) + "\""))
+        SouthboundBundle.decode(leg("from", "\"" + "f".repeat(80) + "\""))
+        SouthboundBundle.decode(leg("meters", "10000000"))
+        SouthboundBundle.decode(leg("meters", "1"))
+        // One over, and every other way to be wrong.
+        refuses(leg("trip", "\"" + "t".repeat(41) + "\""))
+        refuses(leg("trip", "\"\""))
+        refuses(leg("trip", "\"two\\nlines\""))
+        refuses(leg("from", "\"" + "f".repeat(81) + "\""))
+        refuses(leg("to", "\"" + "t".repeat(81) + "\""))
+        refuses(leg("to", "\"   \""))
+        refuses(leg("from", "\"lone\\ud800surrogate\""))
+        refuses(leg("meters", "0"))
+        refuses(leg("meters", "10000001"))
+        refuses(leg("meters", "-1"))
+        refuses(leg("meters", "1.5"))
+        refuses(leg("meters", "\"far\""))
+        refuses(leg("on", "\"2026-02-30\""))
+        refuses(leg("on", "\"2026-10-24T10:00\""))
+        refuses(leg("on", "\"24/10/2026\""))
+        refuses(leg("mode", "\"TRANSIT\""))
+        refuses(leg("mode", "\"drive\""))
+        refuses(leg("edited", "0"))
+        refuses(leg("edited", "null"))
+        refuses(leg("id", "0"))
+        refuses(leg("id", "8")) // two legs with one id
+        refuses(leg("id", "9")) // past lastId 8: it would be handed out again
+        // Exactly the eight fields: an extra one (a place, a point) or a missing one is refused, never dropped or defaulted.
+        refuses(mutated("places.json", "\"edited\":false}", "\"edited\":false,\"lat\":40.7}"))
+        refuses(mutated("places.json", "\"edited\":false}", "\"edited\":false,\"place\":{}}"))
+        refuses(mutated("places.json", ",\"edited\":false}", "}"))
+        refuses(mutated("places.json", "\"meters\":341825,", ""))
+        refuses(mutated("places.json", "\"legs\":[", "\"legs\":{\"a\":["))
+        refuses(mutated("places.json", "\"trip\":\"${Samples.TRIP}\",\"on\"", "\"trip\":\"${Samples.TRIP}\",\"trip\":\"x\",\"on\""))
+    }
+
+    @Test
+    fun `5,001 legs are refused by import and export`() {
+        val legs = (1..LegLog.MAX_LEGS + 1).map { Leg(it + 2L, "t", "2026-10-24", 1_000, LegMode.DRIVE, "a", "b", false) }
+        val over = BackupData(UserData(legs = legs, lastId = legs.last().id), emptyMap(), Samples.defaultSettings())
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { SouthboundBundle.encode(over, "v") })
+        val atCap = BackupData(UserData(legs = legs.dropLast(1), lastId = legs.last().id), emptyMap(), Samples.defaultSettings())
+        val entries = SouthboundBundle.encode(atCap, "v")
+        assertEquals(LegLog.MAX_LEGS, SouthboundBundle.decode(entries).counts().legs)
+        // Written by hand past the cap, the strict reader refuses it too.
+        val extra = ",{\"id\":${legs.last().id},\"trip\":\"t\",\"on\":\"2026-10-24\",\"meters\":1000,\"mode\":\"DRIVE\",\"from\":\"a\",\"to\":\"b\",\"edited\":false}]"
+        val t = text(entries, "places.json")
+        val end = t.indexOf("]", t.indexOf("\"legs\":["))
+        entries["places.json"] = (t.substring(0, end) + extra + t.substring(end + 1)).toByteArray()
+        entries["manifest.json"] = text(entries, "manifest.json").replace("\"legs\":5000", "\"legs\":5001").toByteArray()
+        refuses(entries)
+        // Export refuses what import refuses: a leg out of bounds never reaches a file.
+        fun refused(l: Leg) = assertEquals(
+            FwxError.MALFORMED_PAYLOAD,
+            code { SouthboundBundle.encode(BackupData(UserData(legs = listOf(l), lastId = 9), emptyMap(), Samples.defaultSettings()), "v") },
+        )
+        val ok = Leg(3, "t", "2026-10-24", 1_000, LegMode.DRIVE, "a", "b", false)
+        refused(ok.copy(on = "2026-02-30"))
+        refused(ok.copy(meters = 0))
+        refused(ok.copy(trip = "t".repeat(41)))
+        refused(ok.copy(to = ""))
+        refused(ok.copy(id = 10)) // past lastId
+        val twice = BackupData(UserData(legs = listOf(ok, ok), lastId = 9), emptyMap(), Samples.defaultSettings())
+        assertEquals(FwxError.MALFORMED_PAYLOAD, code { SouthboundBundle.encode(twice, "v") })
+    }
 
     @Test
     fun `a schema 10 file still imports, with no value for the Road switch`() {
@@ -202,7 +350,7 @@ class SouthboundBundleTest {
         assertEquals(Samples.data().settings.copy(road = null), data.settings)
         assertEquals(true, data.settings.wifi)
         assertEquals(null, data.settings.road)
-        assertEquals(Samples.data().userData, data.userData)
+        assertEquals(NO_LEGS, data.userData)
         assertEquals(2, data.counts().wifiMarks)
         assertEquals(77, SettingsEntry.count(data.settings, 10))
         assertEquals(78, SettingsEntry.count(Samples.settings()))
@@ -242,7 +390,7 @@ class SouthboundBundleTest {
         assertEquals(9L, SouthboundBundle.readHeader(ByteArrayInputStream(bytes)).schemaVersion)
         val data = SouthboundBundle.decode(read(bytes))
         assertEquals(Samples.data().settings.copy(stateLineCards = true, road = null), data.settings)
-        assertEquals(Samples.data().userData, data.userData)
+        assertEquals(NO_LEGS, data.userData)
         // The reverse: the state-line cards alone in an otherwise schema 9 bundle, or missing from a schema 10 one, are refused.
         val ten = SouthboundBundle.encode(Samples.data(), "x")
         refuses(Samples.schema9("x").also { it["settings.json"] = ten.getValue("settings.json") })
@@ -280,7 +428,7 @@ class SouthboundBundleTest {
             schema8("x").also { it[entry] = text.toByteArray() }
         refuses(with("places.json"))
         refuses(with("settings.json"))
-        refuses(with("manifest.json", text(nine, "manifest.json").replace("\"schema\":11", "\"schema\":8")))
+        refuses(with("manifest.json", text(nine, "manifest.json").replace("\"schema\":12", "\"schema\":8")))
         // The reverse: a schema 9 bundle must have all three.
         refuses(mutated("places.json", ",\"wifiMarks\":[", ",\"wifiMarksX\":["))
         refuses(mutated("settings.json", ",\"wifi\":true", ""))
@@ -481,7 +629,7 @@ class SouthboundBundleTest {
 
     @Test
     fun `a newer schema is refused from the header alone`() {
-        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 12)
+        val bytes = raw("manifest.json" to "{}".toByteArray(), schema = 13)
         assertEquals(FwxError.SCHEMA_TOO_NEW, code { SouthboundBundle.readHeader(ByteArrayInputStream(bytes)) })
     }
 
@@ -543,17 +691,18 @@ class SouthboundBundleTest {
         refuses(mutated("manifest.json", "\"api_keys\":3", "\"api_keys\":2"))
         refuses(mutated("manifest.json", "\"settings\":78", "\"settings\":61"))
         refuses(mutated("manifest.json", "\"app\":\"southbound\"", "\"app\":\"prikey\""))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":12"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":13"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":11"))
         // Older settings have no state-line cards, Wi-Fi switch, Virginia, West Virginia or Kentucky toggle, search_at_bottom, avoid_dot_cameras, weather, 511PA, CTroads, CHART, DelDOT, 511WI or Travel Midwest toggle, so these settings don't fit an older manifest.
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":9"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":8"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":7"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":6"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":5"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":4"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":3"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":2"))
-        refuses(mutated("manifest.json", "\"schema\":11", "\"schema\":1"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":9"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":8"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":7"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":6"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":5"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":4"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":3"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":2"))
+        refuses(mutated("manifest.json", "\"schema\":12", "\"schema\":1"))
         refuses(mutated("manifest.json", "\"home\":1", "\"home\":true"))
         refuses(mutated("manifest.json", ",\"settings\":78", ""))
         refuses(mutated("manifest.json", "}", ",\"extra\":1}"))
@@ -570,7 +719,7 @@ class SouthboundBundleTest {
         // A saved place in a list that does not exist.
         refuses(mutated("places.json", "\"list\":5", "\"list\":77"))
         // lastId below an id in use would hand out an id twice.
-        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":2"))
+        refuses(mutated("places.json", "\"lastId\":8", "\"lastId\":2"))
         // Two lists with one id; a third built-in list; no built-in list.
         refuses(mutated("places.json", "{\"id\":5,\"name\":\"Pizza\"", "{\"id\":2,\"name\":\"Pizza\""))
         refuses(mutated("places.json", "\"name\":\"Pizza\",\"builtIn\":false", "\"name\":\"Pizza\",\"builtIn\":true"))
@@ -625,12 +774,12 @@ class SouthboundBundleTest {
     @Test
     fun `places are read strictly, never defaulted or silently dropped`() {
         // An unknown field, anywhere.
-        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6,\"extra\":1"))
+        refuses(mutated("places.json", "\"lastId\":8", "\"lastId\":8,\"extra\":1"))
         refuses(mutated("places.json", "\"osmRef\":\"n1\"", "\"osmRef\":\"n1\",\"x\":1"))
         // A schema 9 file with an unknown field in a mark, or beside the marks.
         refuses(mutated("places.json", "\"markedAt\":600", "\"markedAt\":600,\"x\":1"))
         refuses(mutated("places.json", "\"wifiMarks\":[", "\"wifiMarks2\":1,\"wifiMarks\":["))
-        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6,\"notes\":[]"))
+        refuses(mutated("places.json", "\"lastId\":8", "\"lastId\":8,\"notes\":[]"))
         refuses(mutated("places.json", "\"builtIn\":true", "\"builtIn\":true,\"x\":1"))
         refuses(mutated("places.json", "\"savedAt\":100", "\"savedAt\":100,\"x\":1"))
         // A value of the wrong type is not nulled, zeroed or coerced.
@@ -646,15 +795,15 @@ class SouthboundBundleTest {
         refuses(mutated("places.json", "\"version\":1", "\"version\":\"1\""))
         refuses(mutated("places.json", "\"savedAt\":100", "\"savedAt\":100.5"))
         refuses(mutated("places.json", "\"id\":3,", "\"id\":3.5,"))
-        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6.5"))
+        refuses(mutated("places.json", "\"lastId\":8", "\"lastId\":8.5"))
         // A missing field is not defaulted.
-        refuses(mutated("places.json", "\"lastId\":6,", ""))
+        refuses(mutated("places.json", "\"lastId\":8,", ""))
         refuses(mutated("places.json", "\"lists\":[", "\"xlists\":["))
         refuses(mutated("places.json", "\"recents\":[", "\"xrecents\":["))
         refuses(mutated("places.json", "\"address\":\"1 Main St\",", ""))
         refuses(mutated("places.json", "\"list\":1,", ""))
         // The same key twice.
-        refuses(mutated("places.json", "\"lastId\":6", "\"lastId\":6,\"lastId\":6"))
+        refuses(mutated("places.json", "\"lastId\":8", "\"lastId\":8,\"lastId\":6"))
         refuses(mutated("places.json", "\"name\":\"Pizza\"", "\"name\":\"Pizza\",\"name\":\"Other\""))
         // The unmodified text still reads.
         SouthboundBundle.decode(SouthboundBundle.encode(Samples.data(), "x"))
@@ -789,7 +938,7 @@ class SouthboundBundleTest {
 
     /** If one of these fails, the bundle's contents changed: update docs/EXPORT.md and bump the schema (with a migration). */
     @Test
-    fun `schema 11 pins what the stores hold`() {
+    fun `schema 12 pins what the stores hold`() {
         assertEquals(1, UserDataCodec.VERSION)
         assertEquals(50, UserData.MAX_RECENTS)
         assertEquals(listOf("MTA_BUS_TIME", "NY_511", "GITHUB_RELEASES", "EIA", "OHGO"), ApiKey.entries.map { it.name })
@@ -811,13 +960,17 @@ class SouthboundBundleTest {
         assertEquals(78, SettingsEntry.count(Samples.settings()))
         // AppSettings: one field per group or setting the bundle carries (schema 7 added searchAtBottom, schema 9 wifi, schema 10 stateLineCards, schema 11 road).
         assertEquals(11, fields(AppSettings::class.java))
-        // UserData: lists, saved, recents, lastId, home, work, and from schema 9 wifiMarks; a WifiMark is osmRef, worked, markedAt.
-        assertEquals(7, fields(UserData::class.java))
+        // UserData: lists, saved, recents, lastId, home, work, from schema 9 wifiMarks and from schema 12 legs; a WifiMark
+        // is osmRef, worked, markedAt; a Leg is id, trip, on, meters, mode, from, to, edited.
+        assertEquals(8, fields(UserData::class.java))
         assertEquals(3, fields(app.southbound.core.userdata.WifiMark::class.java))
-        // BackupCounts: one count per manifest field after app_version (schema 9 added wifi_marks).
-        assertEquals(8, fields(BackupCounts::class.java))
+        assertEquals(8, fields(app.southbound.core.userdata.Leg::class.java))
+        assertEquals(listOf("DRIVE", "WALK", "BIKE"), app.southbound.core.userdata.LegMode.entries.map { it.name })
+        assertEquals(5_000, app.southbound.core.userdata.LegLog.MAX_LEGS)
+        // BackupCounts: one count per manifest field after app_version (schema 9 added wifi_marks, schema 12 legs).
+        assertEquals(9, fields(BackupCounts::class.java))
         assertEquals(2, UserData.DEFAULT_LISTS.size)
-        assertEquals(1L..11L, SouthboundBundle.SCHEMA_RANGE)
+        assertEquals(1L..12L, SouthboundBundle.SCHEMA_RANGE)
     }
 
     @Test
