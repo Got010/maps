@@ -50,6 +50,16 @@ class LegDraftTest {
             assertEquals(same, 341_825L, d.copy(miles = same).meters())
             assertFalse(same, d.copy(miles = same).distanceChanged)
         }
+        // A planned distance off the tenth (341,900 m prints "212.4", which parses to 341,825): the same tenth typed
+        // another way still keeps the planned metres, so it is compared as a distance, never as the printed text.
+        val off = LegDraft.forRoute(341_900.0, LegMode.DRIVE, today, log)
+        assertEquals("212.4", off.miles)
+        assertEquals(341_900L, off.meters())
+        for (same in listOf("212.4", "212.40", "0212.4", " 212.4 ")) {
+            assertEquals(same, 341_900L, off.copy(miles = same).meters())
+            assertFalse(same, off.copy(miles = same).distanceChanged)
+        }
+        assertTrue(off.copy(miles = "212.5").distanceChanged)
         assertTrue(d.copy(miles = "212.5").distanceChanged)
         assertTrue(d.copy(miles = "212.3").distanceChanged)
         assertEquals(805L, d.copy(miles = ".5").meters())
